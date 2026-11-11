@@ -14,7 +14,7 @@ const TIPOS = [
     id: 'Nuevo', titulo: 'NUEVO',
     licencia: true,
     material: [['maillots CARRERA', 2], ['culotes', 2], ['maillot de manga larga HYDER', 1], ['par de calcetines', 1]],
-    aportacion: 0, // no paga nada al firmar: los 175 € solo si no llega al mínimo (penalización)
+    aportacion: 175, // al firmar; si no llega al mínimo, además 175 € de penalización
     tramos: [[12, 50], [17, 100], [22, 150]],
     penalizacion: 175,
   },
