@@ -13,7 +13,7 @@ const TIPOS = [
   {
     id: 'Nuevo', titulo: 'NUEVO',
     licencia: true,
-    material: [['maillots CARRERA', 2], ['culotes', 2], ['maillot de manga larga HYDER', 1], ['par de calcetines', 1]],
+    material: [['maillots CARRERA', 2], ['culotes', 2], ['maillot de manga larga HYDER', 1], ['par de calcetines aero', 1]],
     aportacion: 175, // al firmar; si no llega al mínimo, además 175 € de penalización
     tramos: [[12, 50], [17, 100], [22, 150]],
     penalizacion: 175,
@@ -21,7 +21,7 @@ const TIPOS = [
   {
     id: 'Renovacion', titulo: 'RENOVACIÓN',
     licencia: true,
-    material: [['maillot CARRERA', 1], ['culote', 1], ['par de calcetines', 1]],
+    material: [['maillot CARRERA', 1], ['culote', 1], ['par de calcetines aero', 1]],
     aportacion: 65,
     tramos: [[12, 50], [17, 100], [22, 150]],
     penalizacion: 100,
@@ -40,7 +40,7 @@ const TIPOS = [
 // El primer par de calcetines solo es gratis en nuevo y renovación (van incluidos en el material).
 const precios = (t) => [
   ['Maillot', '25 €'], ['Culote', '40 €'], ['Maillot manga larga HYDER', '45 €'],
-  ['Calcetines', t.licencia ? '15 € (1.er par gratis)' : '15 €'], ['Chaleco', '35 €'], ['Manguitos', '15 €'],
+  ['Calcetines aero (par)', t.licencia ? '1.º gratis · 2.º 15 €' : '15 €'], ['Chaleco', '35 €'], ['Manguitos', '15 €'],
   ['Camiseta interior', '20 €'], ['Gorra de patrocinadores', 'Gratis'], ['Camiseta de patrocinadores', 'Gratis'],
 ];
 
