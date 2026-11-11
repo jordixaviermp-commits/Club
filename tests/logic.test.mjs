@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalize, matchCategory, parseBulkRunners, yearSummary, csvRows, toCsv, parseCsv, importResultsCsv,
-  parseDate, extractCode, newCode, formatDate, planRosterRenewal,
+  parseDate, extractCode, newCode, formatDate, planRosterRenewal, monthGrid, addMonths,
 } from '../js/logic.js';
 
 test('normalize ignora mayúsculas y tildes', () => {
@@ -94,4 +94,14 @@ test('renovación anual de la plantilla', () => {
   assert.deepEqual(p.add, [{ name: 'Laia Serra', category: 'Sub-23' }]);
   assert.deepEqual(p.remove.map((r) => r.id), ['2']);
   assert.deepEqual(p.duplicates, ['LAIA SERRA']);
+});
+
+test('calendario mensual', () => {
+  const w = monthGrid('2027-06'); // 1 de junio de 2027 es martes
+  assert.deepEqual(w[0], [null, '2027-06-01', '2027-06-02', '2027-06-03', '2027-06-04', '2027-06-05', '2027-06-06']);
+  assert.equal(w.flat().filter(Boolean).length, 30);
+  assert.equal(w.at(-1).at(-1), null);
+  assert.equal(monthGrid('2027-02').length, 4); // febrero 2027 empieza en lunes: 4 semanas justas
+  assert.equal(addMonths('2026-12', 1), '2027-01');
+  assert.equal(addMonths('2027-01', -1), '2026-12');
 });
