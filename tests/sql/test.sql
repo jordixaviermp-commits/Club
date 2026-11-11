@@ -82,5 +82,14 @@ select import_backup((select j from bk));
 select pg_temp.check((select count(*) from runners) = 2, 'restaurar copia');
 select delete_runner('10000000-0000-0000-0000-000000000001', true);
 select pg_temp.check((select runner_name from results where race_id = :'race') = 'Corredor eliminado', 'borrar y anonimizar');
+-- carreras de varios días
+select save_race('{"name":"Volta etapas","date":"2027-06-12","end_date":"2027-06-14"}', '[]') as multi \gset
+select pg_temp.check((select end_date from races where id = :'multi') = '2027-06-14', 'carrera por etapas guarda último día');
+select save_race(jsonb_build_object('id', :'multi', 'name','Volta etapas','date','2027-06-12','end_date','2027-06-12'), '[]');
+select pg_temp.check((select end_date from races where id = :'multi') is null, 'último día igual al primero = un solo día');
+select pg_temp.expect_fail($q$select save_race('{"name":"Mal","date":"2027-06-12","end_date":"2027-06-10"}', '[]')$q$, 'fin anterior al inicio rechazado');
+select save_registration('{"name":"Reg etapas","date":"2099-07-01","end_date":"2099-07-03"}', '[]') as reg2 \gset
+select promote_registration(:'reg2') as race2 \gset
+select pg_temp.check((select end_date from races where id = :'race2') = '2099-07-03', 'pasar a resultados conserva último día');
 reset role;
 \echo TODAS LAS PRUEBAS SQL OK

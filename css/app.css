@@ -212,3 +212,5 @@ label.check input { width: 22px; height: 22px; min-height: 0; }
 .fed .row { justify-content: space-between; }
 .fed .done { color: var(--muted); font-weight: 600; font-size: .9rem; }
 label.check input { accent-color: var(--accent); }
+/* Días de carreras por etapas: barra inferior que une los días */
+.cal-cell.stage::before { content: ""; position: absolute; left: -3px; right: -3px; bottom: 1px; height: 3px; background: var(--brand-cyan); opacity: .55; }

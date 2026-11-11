@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalize, matchCategory, parseBulkRunners, yearSummary, csvRows, toCsv, parseCsv, importResultsCsv,
-  parseDate, extractCode, newCode, formatDate, planRosterRenewal, monthGrid, addMonths,
+  parseDate, extractCode, newCode, formatDate, planRosterRenewal, monthGrid, addMonths, formatRange, daysOf,
 } from '../js/logic.js';
 
 test('normalize ignora mayúsculas y tildes', () => {
@@ -54,8 +54,8 @@ test('resumen anual', () => {
 
 test('CSV ida y vuelta', () => {
   const csv = toCsv(csvRows(races.filter((r) => r.date.startsWith('2026'))));
-  assert.ok(csv.startsWith('﻿Fecha;Carrera;Lugar;Provincia;País;Modalidad;Corredor;Categoría;Puesto;Podio;Tipo de podio\r\n'));
-  assert.match(csv, /2026-05-01;Dos;;;Francia;BTT;Dani \(baja\);M50;2;Sí;General de varias pruebas/);
+  assert.ok(csv.startsWith('﻿Fecha;Fecha fin;Carrera;Lugar;Provincia;País;Modalidad;Corredor;Categoría;Puesto;Podio;Tipo de podio\r\n'));
+  assert.match(csv, /2026-05-01;;Dos;;;Francia;BTT;Dani \(baja\);M50;2;Sí;General de varias pruebas/);
   const back = importResultsCsv(csv);
   assert.deepEqual(back.errors, []);
   assert.equal(back.races.length, 2); // «Tres» no tiene participantes y no genera filas
@@ -104,4 +104,16 @@ test('calendario mensual', () => {
   assert.equal(monthGrid('2027-02').length, 4); // febrero 2027 empieza en lunes: 4 semanas justas
   assert.equal(addMonths('2026-12', 1), '2027-01');
   assert.equal(addMonths('2027-01', -1), '2026-12');
+});
+
+test('carreras de varios días', () => {
+  assert.equal(formatRange('2027-06-12', '2027-06-14'), 'sáb 12 – lun 14 jun 2027');
+  assert.equal(formatRange('2027-05-30', '2027-06-01'), 'dom 30 may – mar 1 jun 2027');
+  assert.equal(formatRange('2027-12-31', '2028-01-02', false), '31 dic 2027 – 2 ene 2028');
+  assert.equal(formatRange('2027-06-12', null), 'sáb 12 jun 2027');
+  assert.deepEqual(daysOf('2027-02-27', '2027-03-02'), ['2027-02-27', '2027-02-28', '2027-03-01', '2027-03-02']);
+  const csv = toCsv(csvRows([{ id: 'x', name: 'Volta', date: '2027-06-12', end_date: '2027-06-14', modality: 'Carretera', country: 'España',
+    results: [{ runner_name: 'Anna', position: 1, podium_type: 'general' }] }]));
+  const back = importResultsCsv(csv);
+  assert.equal(back.races[0].end_date, '2027-06-14');
 });

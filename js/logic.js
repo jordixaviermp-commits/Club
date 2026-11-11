@@ -162,7 +162,7 @@ export function yearSummary(year, races, runners) {
 
 // ---------- CSV ----------
 
-export const CSV_COLUMNS = ['Fecha', 'Carrera', 'Lugar', 'Provincia', 'País', 'Modalidad', 'Corredor',
+export const CSV_COLUMNS = ['Fecha', 'Fecha fin', 'Carrera', 'Lugar', 'Provincia', 'País', 'Modalidad', 'Corredor',
   'Categoría', 'Puesto', 'Podio', 'Tipo de podio'];
 
 /** Filas de exportación (una por participación). */
@@ -172,7 +172,7 @@ export function csvRows(races) {
   for (const r of sorted) {
     for (const res of [...(r.results || [])].sort((a, b) => (a.position ?? 9999) - (b.position ?? 9999) || byText(a.runner_name, b.runner_name))) {
       const pod = isPodium(res.position);
-      out.push([r.date, r.name, r.place || '', r.province || '', r.country || '', r.modality, res.runner_name,
+      out.push([r.date, r.end_date || '', r.name, r.place || '', r.province || '', r.country || '', r.modality, res.runner_name,
         res.category || '', res.position ?? '', pod ? 'Sí' : 'No', pod ? podiumLabel(res.podium_type) : '']);
     }
   }
@@ -246,7 +246,7 @@ export function importResultsCsv(text) {
   const head = rows[0].map(normalize);
   const col = (...names) => head.findIndex((h) => names.some((n) => h === normalize(n)));
   const ix = {
-    date: col('Fecha'), race: col('Carrera'), place: col('Lugar'), province: col('Provincia'),
+    date: col('Fecha'), end: col('Fecha fin'), race: col('Carrera'), place: col('Lugar'), province: col('Provincia'),
     country: col('País', 'Pais'), modality: col('Modalidad'), runner: col('Corredor'),
     category: col('Categoría', 'Categoria'), position: col('Puesto'), type: col('Tipo de podio', 'Tipo'),
   };
@@ -265,7 +265,8 @@ export function importResultsCsv(text) {
     const modality = matchModality(get(ix.modality));
     const key = [date, normalize(name), normalize(get(ix.place)), modality].join('|');
     if (!races.has(key)) {
-      races.set(key, { name, date, place: get(ix.place), province: get(ix.province),
+      const end = parseDate(get(ix.end));
+      races.set(key, { name, date, end_date: end && end > date ? end : null, place: get(ix.place), province: get(ix.province),
         country: ix.country >= 0 ? get(ix.country) : DEFAULT_COUNTRY, modality, notes: '', results: [] });
     }
     const runner = get(ix.runner);
@@ -339,3 +340,32 @@ export function addMonths(ym, n) {
   const d = new Date(Date.UTC(y, m - 1 + n, 1));
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
+
+// ---------- Carreras de varios días ----------
+
+/** «lun 14 jun 2027», o un intervalo: «sáb 12 – lun 14 jun 2027», «sáb 30 may – lun 1 jun 2027». */
+export function formatRange(start, end, withDay = true) {
+  if (!end || end <= start) return formatDate(start, withDay);
+  const [y1, m1] = start.split('-'), [y2, m2] = end.split('-');
+  const a = formatDate(start, withDay).split(' '), b = formatDate(end, withDay);
+  // a = [día_semana?, día, mes, año]
+  const cut = y1 !== y2 ? a.length : m1 !== m2 ? a.length - 1 : a.length - 2;
+  return `${a.slice(0, cut).join(' ')} – ${b}`;
+}
+
+/** Días (AAAA-MM-DD) entre el primero y el último, ambos incluidos (máximo 60). */
+export function daysOf(start, end) {
+  const out = [start];
+  if (!end || end <= start) return out;
+  const d = new Date(start + 'T12:00:00Z');
+  while (out.length < 60) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    const iso = d.toISOString().slice(0, 10);
+    if (iso > end) break;
+    out.push(iso);
+  }
+  return out;
+}
+
+/** Número de días de una carrera. */
+export const numDays = (start, end) => daysOf(start, end).length;

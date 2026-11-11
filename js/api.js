@@ -131,7 +131,7 @@ export function demoApi(storage = globalThis.localStorage) {
   try { admin = storage.getItem(DEMO_KEY + '-admin') === '1'; } catch { /* nada */ }
   const requireAdmin = () => { if (!admin) throw new Error('solo_direccion'); };
   const fields = (o) => ({
-    name: String(o.name || '').trim(), date: o.date, place: o.place?.trim() || null, province: o.province?.trim() || null,
+    name: String(o.name || '').trim(), date: o.date, end_date: o.end_date && o.end_date > o.date ? o.end_date : null, place: o.place?.trim() || null, province: o.province?.trim() || null,
     country: o.country?.trim() || null, modality: o.modality || 'Carretera', notes: o.notes?.trim() || null });
   const byCode = (code) => {
     const r = load().runners.find((x) => x.code === code);
