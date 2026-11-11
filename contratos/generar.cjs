@@ -6,7 +6,7 @@ const path = require('path');
 
 const COMUN = {
   temporada: 2027,
-  minimo: 10, // por debajo de este número de carreras se aplica la penalización
+  minimo: 12, // por debajo de este número de carreras se aplica la penalización
 };
 
 const TIPOS = [
