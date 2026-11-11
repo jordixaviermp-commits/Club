@@ -34,6 +34,11 @@ const S = {
 const $app = document.getElementById('app');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const opt = (value, label, sel) => `<option value="${esc(value)}"${value === sel ? ' selected' : ''}>${esc(label)}</option>`;
+/** Clase de color de una modalidad: «m-carretera», «m-btt»… (colores en css/app.css). */
+const modClass = (m) => 'm-' + normalize(m || 'Otra').replace(/[^a-z]/g, '');
+const modTag = (m) => `<span class="tag ${modClass(m)}">${esc(m)}</span>`;
+const modLegend = (mods) => `<div class="mod-legend">${MODALITIES.filter((m) => !mods || mods.includes(m))
+  .map((m) => `<span class="${modClass(m)}"><i></i>${esc(m)}</span>`).join('')}</div>`;
 const contractSelect = (attrs, sel) =>
   `<select ${attrs}>${opt('', 'Contrato: sin indicar', sel || '')}${CONTRACTS.map((c) => opt(c.id, c.label, sel)).join('')}</select>`;
 const catSelect = (attrs, sel, emptyLabel = 'Sin categoría') =>
@@ -227,9 +232,10 @@ function calendarView(regs, card, isMine = () => false) {
     const list = byDay.get(d) || [];
     const cls = ['cal-cell', list.length ? 'has' : '', d === today ? 'today' : '', d === S.calDay ? 'sel' : '',
       d < today ? 'past' : '', list.some(isMine) ? 'mine' : '', list.some((g) => g.end_date) ? 'stage' : ''].filter(Boolean).join(' ');
-    const label = `${Number(d.slice(8))} de ${MONTH_NAMES[m - 1]}${list.length ? `: ${list.map((g) => g.name).join(', ')}` : ''}`;
+    const label = `${Number(d.slice(8))} de ${MONTH_NAMES[m - 1]}${list.length ? `: ${list.map((g) => `${g.name} (${g.modality})`).join(', ')}` : ''}`;
     return list.length
-      ? `<button class="${cls}" data-act="cal-day" data-d="${d}" aria-label="${esc(label)}"><b>${Number(d.slice(8))}</b><i>${list.length > 1 ? list.length : ''}</i></button>`
+      ? `<button class="${cls}${list.length === 1 || new Set(list.map((g) => g.modality)).size === 1 ? ' ' + modClass(list[0].modality) : ' multi-mod'}" data-act="cal-day" data-d="${d}" aria-label="${esc(label)}"><b>${Number(d.slice(8))}</b>
+          <span class="dots">${list.slice(0, 4).map((g) => `<i class="${modClass(g.modality)}"></i>`).join('')}</span></button>`
       : `<span class="${cls}" aria-label="${esc(label)}"><b>${Number(d.slice(8))}</b></span>`;
   };
   return `
@@ -243,6 +249,7 @@ function calendarView(regs, card, isMine = () => false) {
         ${['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d) => `<span class="cal-dow">${d}</span>`).join('')}
         ${monthGrid(ym).flat().map(cell).join('')}
       </div>
+      ${modLegend([...new Set(regs.map((g) => g.modality))])}
       ${months.length ? `<div class="cal-months">${months.map((mm) => {
         const [yy, mo] = mm.split('-').map(Number);
         const n = regs.filter((g) => touches(g, mm)).length;
@@ -277,10 +284,10 @@ function viewRunnerHome() {
   const card = (g) => {
     const mine = g.entries.find((e) => e.runner_id === me.id);
     const open = g.date >= today;
-    return `<article class="card race">
+    return `<article class="card race ${modClass(g.modality)}">
       <div class="race-head"><div><h3>${esc(g.name)}</h3>
         <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>
-        <span class="tag">${esc(g.modality)}</span></div>
+        ${modTag(g.modality)}</div>
       ${g.notes ? `<p class="notes">${esc(g.notes)}</p>` : ''}
       <p class="count">${g.entries.length} inscrito${g.entries.length === 1 ? '' : 's'}</p>
       ${g.entries.length ? `<ul class="people">${g.entries.map((e) =>
@@ -335,9 +342,9 @@ function viewLogin() {
 function viewRegistrations() {
   const today = todayISO();
   const regs = [...S.data.registrations].sort((a, b) => a.date.localeCompare(b.date) || byName(a, b));
-  const card = (g) => `<a class="card race link-card" href="#/inscripciones/${g.id}">
+  const card = (g) => `<a class="card race link-card ${modClass(g.modality)}" href="#/inscripciones/${g.id}">
       <div class="race-head"><div><h3>${esc(g.name)}</h3>
-      <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div><span class="tag">${esc(g.modality)}</span></div>
+      <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality)}</div>
       ${g.date < today ? '<p class="warn-inline">Ya se ha disputado: pásala a resultados.</p>' : ''}
       <p class="count">${g.entries.length} inscrito${g.entries.length === 1 ? '' : 's'}${g.entries.length ? ': ' +
         esc(g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p></a>`;
@@ -391,10 +398,10 @@ function viewFed() {
     const head = ym !== month ? `<h2 class="section">${MONTH_NAMES[Number(ym.slice(5)) - 1][0].toUpperCase() + MONTH_NAMES[Number(ym.slice(5)) - 1].slice(1)} ${ym.slice(0, 4)}</h2>` : '';
     month = ym;
     const done = created.has(r.date + '|' + normalize(r.name));
-    return `${head}<article class="card race fed">
+    return `${head}<article class="card race fed ${modClass(r.modality)}">
       <div class="race-head"><div><h3>${esc(r.name)}</h3>
         <p class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div>
-        <span class="tag">${esc(r.modality)}</span></div>
+        ${modTag(r.modality)}</div>
       <p class="fed-meta"><span class="src src-${esc(r.source)}">${esc(FED_NAMES[r.source] || r.source)}</span>
         ${esc(r.discipline || '')}${r.kind === 'Ocio' ? ' · ocio' : ''}${r.info ? ` · <span class="muted">${esc(r.info)}</span>` : ''}</p>
       <div class="row">
@@ -484,9 +491,9 @@ function viewRaces() {
   const races = S.data.races.filter((r) => yearOf(r.date) === S.year).sort((a, b) => b.date.localeCompare(a.date) || byName(a, b));
   const card = (r) => {
     const pods = r.results.filter((x) => isPodium(x.position)).sort((a, b) => a.position - b.position);
-    return `<a class="card race link-card" href="#/carreras/${r.id}">
+    return `<a class="card race link-card ${modClass(r.modality)}" href="#/carreras/${r.id}">
       <div class="race-head"><div><h3>${esc(r.name)}</h3>
-      <p class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div><span class="tag">${esc(r.modality)}</span></div>
+      <p class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div>${modTag(r.modality)}</div>
       <p class="count">${r.results.length} participante${r.results.length === 1 ? '' : 's'}</p>
       ${pods.length ? `<p class="pods">${pods.map((x) => `${medal(x.position)} ${esc(x.runner_name)}${x.category ? ` <small>${esc(x.category)}</small>` : ''}`).join(' · ')}</p>` : ''}
       ${(() => { const st = podiumsOf(r.results.map((res) => ({ race: r, res }))).filter((p) => p.stage);
