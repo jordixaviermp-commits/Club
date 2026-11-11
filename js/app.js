@@ -113,8 +113,13 @@ async function onRoute() {
   if (!S.session?.isAdmin && S.code && !S.runnerData && !['entrar'].includes(view)) await loadRunner();
   S.draft = null;
   if (S.session?.isAdmin && !['vista', 'equipo'].includes(view) && S.preview) { S.preview = null; S.runnerData = null; } // salir de la vista previa
-  if (view === 'equipo' && (S.code || S.preview)) loadTeam();
-  if (view === 'federaciones' && !S.session?.isAdmin && S.code && !S.fed) loadFed();
+  { // pantallas del corredor (o de la vista previa): cargar lo que necesitan
+    const sub = S.session?.isAdmin ? (view === 'vista' ? (id || '') : null) : (S.code ? view : null);
+    if (sub !== null) {
+      if (sub === 'equipo' || (sub === '' && S.regView === 'cal' && !S.team)) loadTeam();
+      if (sub === 'federaciones' && !S.fed) loadFed();
+    }
+  }
   if (S.session?.isAdmin) {
     if (view === 'inscripciones' && id) S.draft = draftRegistration(id);
     if (view === 'carreras' && id) S.draft = draftRace(id);
@@ -143,10 +148,24 @@ const ADMIN_TABS = [
   ['datos', 'Datos', 'M12 3c-4.4 0-8 1.3-8 3v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6c0-1.7-3.6-3-8-3zM4 6c0 1.7 3.6 3 8 3s8-1.3 8-3M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3'],
 ];
 const icon = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
+// Menú de pie de página de los corredores (y de la vista previa de la dirección).
+const RUNNER_TABS = [
+  ['', 'Carreras', 'M8 2v3M16 2v3M3 9h18M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z'],
+  ['mi', 'Mi temporada', 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1'],
+  ['equipo', 'Equipo', 'M4 20V10M10 20V4M16 20v-7M22 20H2'],
+  ['federaciones', 'Federaciones', 'M5 21V4M5 4h11l-2 4 2 4H5'],
+];
+const runnerBase = () => (S.session?.isAdmin && S.preview ? '#/vista' : '#');
+const runnerHref = (sub) => (sub ? `${runnerBase()}/${sub}` : `${runnerBase()}/`);
 
-function frame(title, body, { back, actions = '' } = {}) {
+function frame(title, body, { back, actions = '', rtab = null } = {}) {
   const { view } = parseRoute();
   const admin = S.session?.isAdmin;
+  const tabs = rtab !== null
+    ? `<nav class="tabs">${RUNNER_TABS.map(([v, label, d]) =>
+      `<a href="${runnerHref(v)}" class="${v === rtab ? 'on' : ''}">${icon(d)}<span>${label}</span></a>`).join('')}</nav>`
+    : admin ? `<nav class="tabs">${ADMIN_TABS.map(([v, label, d]) =>
+      `<a href="#/${v}" class="${view === v || (!view && v === 'inscripciones') ? 'on' : ''}">${icon(d)}<span>${label}</span></a>`).join('')}</nav>` : '';
   return `
     ${api.mode === 'demo' ? `<div class="demo-bar">Modo demostración: datos de prueba guardados solo en este móvil.</div>` : ''}
     <header class="top">
@@ -154,8 +173,7 @@ function frame(title, body, { back, actions = '' } = {}) {
       <h1>${esc(title)}</h1>${actions}
     </header>
     <main>${body}</main>
-    ${admin ? `<nav class="tabs">${ADMIN_TABS.map(([v, label, d]) =>
-      `<a href="#/${v}" class="${view === v || (!view && v === 'inscripciones') ? 'on' : ''}">${icon(d)}<span>${label}</span></a>`).join('')}</nav>` : ''}`;
+    ${tabs}`;
 }
 
 function render() {
@@ -168,13 +186,13 @@ function render() {
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
       carreras: S.draft ? viewRaceEdit : viewRaces,
       resumen: viewSummary, corredores: viewRunners, datos: viewData, federaciones: viewFed, bonos: viewBonus,
-      vista: () => (S.preview && S.runnerData ? viewRunnerHome() : viewRunners()),
+      vista: () => (S.preview && S.runnerData ? runnerScreen(parseRoute().id || '') : viewRunners()),
       equipo: () => (S.preview ? viewTeam() : viewSummary()),
     }[view] || viewRegistrations)();
-  } else if (S.code && S.runnerData) html = view === 'nueva' ? viewRunnerNew() : view === 'equipo' ? viewTeam() : view === 'federaciones' ? viewFed() : viewRunnerHome();
+  } else if (S.code && S.runnerData) html = runnerScreen(view);
   else html = viewWelcome();
   $app.innerHTML = html;
-  document.body.classList.toggle('has-tabs', !!admin && view !== 'entrar');
+  document.body.classList.toggle('has-tabs', !!$app.querySelector('nav.tabs'));
 }
 
 // ======================================================================
@@ -220,30 +238,42 @@ const viewToggle = () => S.regView === 'cal'
  * Mes con las carreras marcadas y, debajo, las tarjetas de ese mes (o del día pulsado).
  * `isMine(g)` marca los días en que el corredor ya está apuntado.
  */
-function calendarView(regs, card, isMine = () => false) {
+function calendarView(regs, card, isMine = () => false, { done = [], doneCard = null } = {}) {
   const today = todayISO();
-  if (!S.calMonth) S.calMonth = (regs.find((g) => g.date >= today) || { date: today }).date.slice(0, 7);
+  // Elementos del calendario: inscripciones (próximas o ya disputadas sin resultado) y carreras con resultados.
+  const items = [
+    ...regs.map((g) => ({ g, past: g.date < today, done: false, people: (g.entries || []).length })),
+    ...done.map((r) => ({ g: r, past: true, done: true, people: (r.results || []).length })),
+  ];
+  if (!S.calMonth) S.calMonth = (regs.filter((g) => g.date >= today).sort((a, b) => a.date.localeCompare(b.date))[0] || { date: today }).date.slice(0, 7);
   const ym = S.calMonth;
   const byDay = new Map();
-  for (const g of regs) for (const d of daysOf(g.date, g.end_date)) (byDay.get(d) || byDay.set(d, []).get(d)).push(g);
+  for (const it of items) for (const d of daysOf(it.g.date, it.g.end_date)) (byDay.get(d) || byDay.set(d, []).get(d)).push(it);
   const [y, m] = ym.split('-').map(Number);
-  const touches = (g, m) => g.date.slice(0, 7) <= m && (g.end_date || g.date).slice(0, 7) >= m;
-  const inMonth = regs.filter((g) => touches(g, ym));
+  const touches = (g, mm) => g.date.slice(0, 7) <= mm && (g.end_date || g.date).slice(0, 7) >= mm;
   if (S.calDay && !S.calDay.startsWith(ym)) S.calDay = null;
-  const shown = S.calDay ? (byDay.get(S.calDay) || []) : inMonth;
-  // carreras por mes (para saltar rápido a meses con carreras)
-  const months = [...new Set(regs.flatMap((g) => daysOf(g.date, g.end_date).map((d) => d.slice(0, 7))))].sort();
+  const shown = S.calDay ? (byDay.get(S.calDay) || []) : items.filter((it) => touches(it.g, ym));
+  const shownUp = shown.filter((it) => !it.past).sort((a, b) => a.g.date.localeCompare(b.g.date));
+  const shownPast = shown.filter((it) => it.past).sort((a, b) => b.g.date.localeCompare(a.g.date));
+  const months = [...new Set(items.flatMap((it) => daysOf(it.g.date, it.g.end_date).map((d) => d.slice(0, 7))))].sort();
   const cell = (d) => {
     if (!d) return '<span class="cal-cell empty"></span>';
     const list = byDay.get(d) || [];
-    const cls = ['cal-cell', list.length ? 'has' : '', d === today ? 'today' : '', d === S.calDay ? 'sel' : '',
-      d < today ? 'past' : '', list.some(isMine) ? 'mine' : '', list.some((g) => g.end_date) ? 'stage' : ''].filter(Boolean).join(' ');
-    const label = `${Number(d.slice(8))} de ${MONTH_NAMES[m - 1]}${list.length ? `: ${list.map((g) => `${g.name} (${g.modality})`).join(', ')}` : ''}`;
+    const up = list.filter((it) => !it.past);
+    const people = list.reduce((n, it) => n + it.people, 0);
+    const mods = new Set(list.map((it) => it.g.modality));
+    const cls = ['cal-cell', list.length ? 'has' : '', list.length && !up.length ? 'past-only' : '', d === today ? 'today' : '',
+      d === S.calDay ? 'sel' : '', d < today ? 'past' : '', list.some((it) => isMine(it.g)) ? 'mine' : '',
+      list.some((it) => it.g.end_date) ? 'stage' : '', list.length ? (mods.size === 1 ? modClass(list[0].g.modality) : 'multi-mod') : '']
+      .filter(Boolean).join(' ');
+    const label = `${Number(d.slice(8))} de ${MONTH_NAMES[m - 1]}${list.length ? `: ${list.map((it) => `${it.g.name} (${it.g.modality}${it.past ? ', ya disputada' : ''}, ${it.people} del club)`).join(', ')}` : ''}`;
     return list.length
-      ? `<button class="${cls}${list.length === 1 || new Set(list.map((g) => g.modality)).size === 1 ? ' ' + modClass(list[0].modality) : ' multi-mod'}" data-act="cal-day" data-d="${d}" aria-label="${esc(label)}"><b>${Number(d.slice(8))}</b>
-          <span class="dots">${list.slice(0, 4).map((g) => `<i class="${modClass(g.modality)}"></i>`).join('')}</span></button>`
+      ? `<button class="${cls}" data-act="cal-day" data-d="${d}" aria-label="${esc(label)}"><b>${Number(d.slice(8))}</b>
+          ${people ? `<i class="cnt">${people}</i>` : ''}
+          <span class="dots">${list.slice(0, 4).map((it) => `<i class="${modClass(it.g.modality)}"></i>`).join('')}</span></button>`
       : `<span class="${cls}" aria-label="${esc(label)}"><b>${Number(d.slice(8))}</b></span>`;
   };
+  const cardOf = (it) => (it.done ? (doneCard ? doneCard(it.g) : '') : card(it.g));
   return `
     <section class="card cal">
       <div class="cal-head">
@@ -255,16 +285,18 @@ function calendarView(regs, card, isMine = () => false) {
         ${['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d) => `<span class="cal-dow">${d}</span>`).join('')}
         ${monthGrid(ym).flat().map(cell).join('')}
       </div>
-      ${modLegend([...new Set(regs.map((g) => g.modality))])}
+      ${modLegend([...new Set(items.map((it) => it.g.modality))])}
+      <div class="state-legend"><span><i class="sl-up"></i>Próxima (inscripción)</span><span><i class="sl-past"></i>Ya disputada</span><span><b class="sl-cnt">3</b> del club</span></div>
       ${months.length ? `<div class="cal-months">${months.map((mm) => {
         const [yy, mo] = mm.split('-').map(Number);
-        const n = regs.filter((g) => touches(g, mm)).length;
-        return `<button class="chip${mm === ym ? ' on' : ''}" data-act="cal-goto" data-m="${mm}">${MONTH_NAMES[mo - 1].slice(0, 3)} ${String(yy).slice(2)} · ${n}</button>`;
+        const n = items.filter((it) => touches(it.g, mm)).length;
+        return `<button class="chip${mm === ym ? ' on' : ''}${mm < today.slice(0, 7) ? ' old' : ''}" data-act="cal-goto" data-m="${mm}">${MONTH_NAMES[mo - 1].slice(0, 3)} ${String(yy).slice(2)} · ${n}</button>`;
       }).join('')}</div>` : ''}
     </section>
-    <h2 class="section">${S.calDay ? `${formatDate(S.calDay)} <button class="link small" data-act="cal-day" data-d="${S.calDay}">Ver todo el mes</button>`
-      : `${inMonth.length} carrera${inMonth.length === 1 ? '' : 's'} en ${MONTH_NAMES[m - 1]}`}</h2>
-    ${shown.length ? shown.map(card).join('') : '<p class="empty">No hay carreras este mes.</p>'}`;
+    ${S.calDay ? `<h2 class="section">${formatDate(S.calDay)} <button class="link small" data-act="cal-day" data-d="${S.calDay}">Ver todo el mes</button></h2>` : ''}
+    ${shownUp.length ? `<h2 class="section">📅 Próximas (${shownUp.length})</h2>${shownUp.map(cardOf).join('')}` : ''}
+    ${shownPast.length ? `<h2 class="section past-head">🏁 Ya disputadas (${shownPast.length})</h2>${shownPast.map(cardOf).join('')}` : ''}
+    ${!shown.length ? `<p class="empty">No hay carreras ${S.calDay ? 'este día' : 'este mes'}.</p>` : ''}`;
 }
 
 // ======================================================================
@@ -359,7 +391,7 @@ function viewRunnerNew() {
       </div>
       <button class="btn primary">Añadir y apuntarme</button>
       <p class="hint">La dirección del club podrá corregirla o borrarla si hace falta.</p>
-    </form>`, { back: '#/' });
+    </form>`, { back: runnerHref('') });
 }
 
 /** «Mis carreras»: sus carreras con resultados por temporada y las apuntadas pendientes de resultado. */
@@ -410,6 +442,33 @@ function runnerBonusCard(d) {
   </section>`;
 }
 
+function runnerScreen(sub) {
+  if (sub === 'nueva') return viewRunnerNew();
+  if (sub === 'mi') return viewRunnerMine();
+  if (sub === 'equipo') return viewTeam();
+  if (sub === 'federaciones') return viewFed();
+  return viewRunnerHome();
+}
+
+/** Aviso de la vista previa de la dirección (en todas las pantallas del corredor). */
+const previewBanner = () => (S.session?.isAdmin && S.preview ? `<p class="card warn">👁️ <b>Vista previa</b> de ${esc(S.preview.name)}: no se puede apuntar ni borrar.
+  <a href="#/corredores">Salir</a>${S.preview.sqlOk ? '' : '<br><b>⚠️ Falta ejecutar en Supabase el SQL de «Mis carreras»</b> (supabase/cambios/2026-11-11-mis-carreras.sql).'}</p>` : '');
+const runnerTitle = () => (S.session?.isAdmin && S.preview ? `Vista de ${S.preview.name}` : 'CC Monzón');
+
+/** Tarjeta de una carrera ya disputada (con resultados), para el calendario. */
+function doneRaceCard(r, { admin = false, meId = null } = {}) {
+  const res = r.results || [];
+  const pods = res.filter((x) => isPodium(x.position)).sort((a, b) => a.position - b.position);
+  const mine = res.find((x) => x.runner_id === meId);
+  const inner = `<div class="race-head"><div><h3>${esc(r.name)}</h3>
+      <p class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div>${modTag(r.modality)}</div>
+    <p class="count">🏁 Disputada · ${res.length} del club${res.length ? ': ' + esc(res.map((x) => x.runner_name).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p>
+    ${pods.length ? `<p class="pods">${pods.map((x) => `${medal(x.position)} ${esc(x.runner_name)}`).join(' · ')}</p>` : ''}
+    ${mine ? `<p class="joined-done">✓ Participaste${mine.position ? ` · ${mine.position}º` : ''}</p>` : ''}`;
+  return admin ? `<a class="card race done-race link-card ${modClass(r.modality)}" href="#/carreras/${r.id}">${inner}</a>`
+    : `<article class="card race done-race ${modClass(r.modality)}">${inner}</article>`;
+}
+
 function viewRunnerHome() {
   const d = S.runnerData, me = d.me, today = d.today || todayISO();
   const upcoming = d.registrations.filter((g) => g.date >= today);
@@ -417,12 +476,13 @@ function viewRunnerHome() {
   const card = (g) => {
     const mine = g.entries.find((e) => e.runner_id === me.id);
     const open = g.date >= today;
-    return `<article class="card race ${modClass(g.modality)}">
+    return `<article class="card race ${open ? '' : 'past-reg '}${modClass(g.modality)}">
       <div class="race-head"><div><h3>${esc(g.name)}</h3>
         <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>
         ${modTag(g.modality)}</div>
+      ${open ? '' : '<p class="state-tag">🏁 Ya disputada · pendiente de resultados</p>'}
       ${g.notes ? `<p class="notes">${esc(g.notes)}</p>` : ''}
-      <p class="count">${g.entries.length} inscrito${g.entries.length === 1 ? '' : 's'}</p>
+      <p class="count">👥 ${g.entries.length} del club</p>
       ${g.entries.length ? `<ul class="people">${g.entries.map((e) =>
         `<li class="${e.runner_id === me.id ? 'me' : ''}">${esc(e.name)}${e.category ? ` <small>${esc(e.category)}</small>` : ''}</li>`).join('')}</ul>` : ''}
       ${!open ? '' : mine
@@ -432,33 +492,36 @@ function viewRunnerHome() {
            <button class="btn primary" data-act="r-join" data-id="${g.id}">Apuntarme</button></div>`}
     </article>`;
   };
-  const isMine = (g) => g.entries.some((e) => e.runner_id === me.id);
+  const isMine = (g) => (g.entries || []).some((e) => e.runner_id === me.id) || (g.results || []).some((x) => x.runner_id === me.id);
+  const done = (S.team?.races || []).filter((r) => (r.results || []).length);
   const body = S.regView === 'cal'
-    ? calendarView(d.registrations, card, isMine)
-    : `<h2 class="section">Próximas carreras</h2>
+    ? calendarView(d.registrations, card, isMine, { done, doneCard: (r) => doneRaceCard(r, { meId: me.id }) })
+    : `<h2 class="section">Próximas carreras (${upcoming.length})</h2>
     ${upcoming.length ? upcoming.map(card).join('') : '<p class="empty">Todavía no hay carreras abiertas.</p>'}
-    ${past.length ? `<details class="past"><summary>Carreras ya disputadas pendientes de resultados (${past.length})</summary>${past.map(card).join('')}</details>` : ''}`;
-  const pv = S.session?.isAdmin && S.preview;
-  return frame(pv ? `Vista de ${S.preview.name}` : 'CC Monzón', `
-    ${pv ? `<p class="card warn">👁️ <b>Vista previa</b>: así ve la app ${esc(S.preview.name)}. Aquí no se puede apuntar ni borrar.
-      ${S.preview.sqlOk ? '' : '<br><b>⚠️ Falta ejecutar en Supabase el SQL de «Mis carreras»</b> (supabase/cambios/2026-11-11-mis-carreras.sql): por eso no sale el desplegable.'}</p>` : ''}
+    ${past.length ? `<details class="past"><summary>🏁 Ya disputadas, pendientes de resultados (${past.length})</summary>${past.map(card).join('')}</details>` : ''}`;
+  return frame(runnerTitle(), `
+    ${previewBanner()}
+    <div class="toolbar">
+      ${searchBox('runner', 'Buscar carrera o pueblo…')}
+      <button class="btn primary add-btn" data-act="r-new" aria-label="Añadir una carrera que no está" title="Añadir carrera">＋</button>
+    </div>
+    <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
+    ${body}`,
+  { rtab: '', actions: `${viewToggle()}${S.preview ? '' : '<button class="icon-btn" data-act="r-refresh" aria-label="Actualizar">↻</button>'}` });
+}
+
+/** «Mi temporada»: bono, mis carreras e instalación. */
+function viewRunnerMine() {
+  const d = S.runnerData, me = d.me;
+  S.myOpen = S.myOpen ?? true;
+  return frame(runnerTitle(), `
+    ${previewBanner()}
     <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
     ${runnerBonusCard(d)}
     ${myRacesCard(d)}
-    <a class="btn block team-btn" href="#/equipo">📊 Resumen del equipo ${new Date().getFullYear()}</a>
     ${installHint()}
-    <section class="card search-card">
-      ${searchBox('runner', 'Busca una carrera: nombre o pueblo…')}
-      <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
-      <button class="btn block add-race" data-act="r-new">+ Añadir una carrera que no está</button>
-    </section>
-    ${body}
-    <h2 class="section">Calendarios de las federaciones</h2>
-    <a class="btn block" href="#/federaciones">Ver carreras de las federaciones (catalana y aragonesa)</a>
-    ${fedLinks()}
-    <p class="center"><button class="link muted" data-act="r-forget">No soy ${esc(me.name)}</button></p>`,
-  pv ? { back: '#/corredores', actions: viewToggle() }
-    : { actions: `${viewToggle()}<button class="icon-btn" data-act="r-refresh" aria-label="Actualizar">↻</button>` });
+    ${S.preview ? '' : `<p class="center"><button class="link muted" data-act="r-forget">No soy ${esc(me.name)}</button></p>`}`,
+  { rtab: 'mi' });
 }
 
 // ======================================================================
@@ -487,32 +550,37 @@ function viewLogin() {
 function viewRegistrations() {
   const today = todayISO();
   const regs = [...S.data.registrations].sort((a, b) => a.date.localeCompare(b.date) || byName(a, b));
-  const card = (g) => `<a class="card race link-card ${modClass(g.modality)}" href="#/inscripciones/${g.id}">
+  const card = (g) => `<a class="card race link-card ${g.date < today ? 'past-reg ' : ''}${modClass(g.modality)}" href="#/inscripciones/${g.id}">
       <div class="race-head"><div><h3>${esc(g.name)}</h3>
       <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality)}</div>
-      ${g.date < today ? '<p class="warn-inline">Ya se ha disputado: pásala a resultados.</p>' : ''}
-      <p class="count">${g.entries.length} inscrito${g.entries.length === 1 ? '' : 's'}${g.entries.length ? ': ' +
+      ${g.date < today ? '<p class="state-tag">🏁 Ya disputada: pásala a resultados</p>' : ''}
+      <p class="count">👥 ${g.entries.length} del club${g.entries.length ? ': ' +
         esc(g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p>
       ${g.created_by ? `<p class="count">Añadida por ${esc(runnerById(g.created_by)?.name || 'un corredor')}</p>` : ''}</a>`;
   return frame('Inscripciones', `
-    <a class="btn primary block" href="#/inscripciones/nueva">+ Nueva inscripción</a>
-    <a class="btn block" href="#/federaciones">Carreras de las federaciones (catalana y aragonesa)</a>
-    ${fedLinks()}
-    ${searchBox('admin', 'Buscar inscripción: nombre o pueblo…')}
+    <div class="toolbar">
+      ${searchBox('admin', 'Buscar inscripción…')}
+      <a class="btn primary add-btn" href="#/inscripciones/nueva" aria-label="Nueva inscripción" title="Nueva inscripción">＋</a>
+    </div>
     <div id="reg-list">${adminRegList(card)}</div>`,
-  { actions: viewToggle() });
+  { actions: `${viewToggle()}<button class="icon-btn" data-act="insc-menu" aria-label="Más opciones" title="Más opciones">⋮</button>` });
 }
 
 let adminCard = null;
 /** Lista (o calendario) de inscripciones, filtrada por la lupa si hay texto. */
 function adminRegList(card = adminCard) {
   adminCard = card;
+  const today = todayISO();
   const all = [...S.data.registrations].sort((a, b) => a.date.localeCompare(b.date) || byName(a, b));
   const q = S.q.admin;
   const regs = normalize(q).length >= 2 ? searchRaces(q, all) : all;
   if (q && !regs.length) return `<p class="empty">Ninguna inscripción se parece a «${esc(q)}».</p>`;
-  return S.regView === 'cal' && !q ? calendarView(regs, card)
-    : regs.length ? regs.map(card).join('') : '<p class="empty">No hay inscripciones abiertas.</p>';
+  if (S.regView === 'cal' && !q) {
+    return calendarView(regs, card, () => false, { done: S.data.races, doneCard: (r) => doneRaceCard(r, { admin: true }) });
+  }
+  const up = regs.filter((g) => g.date >= today), past = regs.filter((g) => g.date < today);
+  return `${up.length ? `<h2 class="section">📅 Próximas (${up.length})</h2>${up.map(card).join('')}` : '<p class="empty">No hay inscripciones próximas.</p>'}
+    ${past.length ? `<h2 class="section past-head">🏁 Ya disputadas, pendientes de pasar a resultados (${past.length})</h2>${past.map(card).join('')}` : ''}`;
 }
 
 // ---------- Carreras de las federaciones (leídas cada semana por GitHub) ----------
@@ -542,10 +610,11 @@ async function loadFed() {
 function viewFed() {
   // También la ven los corredores: en vez de «Crear inscripción», «Apuntarme» o «Añadir y apuntarme».
   const runner = !S.session?.isAdmin && !!S.runnerData;
-  const back = runner ? '#/' : '#/inscripciones';
+  const back = runner ? null : '#/inscripciones';
+  const opts = runner ? { rtab: 'federaciones' } : { back };
   const f = S.fed;
-  if (!f || f.loading) return frame('Federaciones', '<p class="empty">Cargando calendarios…</p>', { back });
-  if (f.failed) return frame('Federaciones', `<p class="card warn">No se han podido cargar los calendarios. Revisa la conexión o usa los enlaces directos:</p>${fedLinks()}`, { back });
+  if (!f || f.loading) return frame('Federaciones', '<p class="empty">Cargando calendarios…</p>', opts);
+  if (f.failed) return frame('Federaciones', `<p class="card warn">No se han podido cargar los calendarios. Revisa la conexión o usa los enlaces directos:</p>${fedLinks()}`, opts);
   const today = todayISO();
   const clubRegs = runner ? S.runnerData.registrations : S.data.registrations;
   const created = new Set(clubRegs.concat(runner ? [] : S.data.races).map((g) => g.date + '|' + normalize(g.name)));
@@ -583,6 +652,7 @@ function viewFed() {
   }).join('');
   const updated = f.updated_at ? new Date(f.updated_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
   return frame('Federaciones', `
+    ${runner ? previewBanner() : ''}
     <div class="years" role="tablist">${[['all', 'Todas'], ['FCC', 'Catalana'], ['FAC', 'Aragonesa']].map(([v, l]) =>
       `<button class="chip${fedFilter.source === v ? ' on' : ''}" data-act="fed-source" data-v="${v}">${l}</button>`).join('')}</div>
     <div class="grid2 fed-filters">
@@ -595,7 +665,7 @@ function viewFed() {
     ${items || '<p class="empty">No hay carreras con estos filtros.</p>'}
     ${f.errors?.length ? `<p class="card warn">Aviso de la última lectura: ${esc(f.errors.join(' · '))}</p>` : ''}
     <p class="hint center">Datos de las webs de las federaciones${updated ? `, leídos el ${updated}` : ''}. Comprueba siempre los detalles en su web.</p>
-    ${fedLinks()}`, { back });
+    ${fedLinks()}`, opts);
 }
 
 function draftRegistration(id) {
@@ -792,10 +862,10 @@ function viewSummary() {
 /** Resumen del equipo para los corredores (solo lectura). */
 function viewTeam() {
   const t = S.team;
-  if (!t) return frame('Resumen del equipo', '<p class="empty">Cargando…</p>', { back: '#/' });
-  if (t.failed) return frame('Resumen del equipo', `<p class="card warn">${esc(t.failed)}</p>`, { back: '#/' });
-  return frame('Resumen del equipo', `<p class="hint">Así va el equipo de competición del CC Monzón. 💪</p>
-    ${summaryBody(t.races, t.runners, { me: S.runnerData?.me?.id })}`, { back: S.preview ? '#/vista' : '#/' });
+  if (!t) return frame('Resumen del equipo', `${previewBanner()}<p class="empty">Cargando…</p>`, { rtab: 'equipo' });
+  if (t.failed) return frame('Resumen del equipo', `${previewBanner()}<p class="card warn">${esc(t.failed)}</p>`, { rtab: 'equipo' });
+  return frame('Resumen del equipo', `${previewBanner()}<p class="hint">Así va el equipo de competición del CC Monzón. 💪</p>
+    ${summaryBody(t.races, t.runners, { me: S.runnerData?.me?.id })}`, { rtab: 'equipo' });
 }
 
 async function loadTeam() {
@@ -805,7 +875,7 @@ async function loadTeam() {
     S.team = { failed: /runner_team|PGRST202|function/i.test(String(e?.message))
       ? 'El resumen del equipo aún no está activado: la dirección tiene que ejecutar un cambio en la base de datos.' : friendlyError(e) };
   }
-  if (parseRoute().view === 'equipo') render();
+  if (S.runnerData) render();
 }
 
 // ======================================================================
@@ -1068,7 +1138,19 @@ const actions = {
       modality: r.modality, notes: `Federación ${FED_NAMES[r.source] || r.source}: ${r.url}` };
     go('#/inscripciones/nueva');
   },
-  'reg-view'() { S.regView = S.regView === 'cal' ? 'list' : 'cal'; S.calDay = null; store.set(VIEW_KEY, S.regView); render(); },
+  async 'insc-menu'() {
+    const c = await choose('Más opciones', '', [
+      { label: 'Carreras de las federaciones', value: 'fed', kind: 'primary' },
+      ...FED_CALENDARS.map((f, i) => ({ label: f.label + ' ↗', value: 'link' + i })),
+    ]);
+    if (c === 'fed') go('#/federaciones');
+    else if (c?.startsWith('link')) window.open(FED_CALENDARS[Number(c.slice(4))].url, '_blank', 'noopener,noreferrer');
+  },
+  'reg-view'() {
+    S.regView = S.regView === 'cal' ? 'list' : 'cal'; S.calDay = null; store.set(VIEW_KEY, S.regView);
+    if (S.regView === 'cal' && S.runnerData && !S.team && (S.code || S.previewCode)) loadTeam();
+    render();
+  },
   'cal-month'(el) { S.calMonth = addMonths(S.calMonth, Number(el.dataset.n)); S.calDay = null; render(); },
   'cal-goto'(el) { S.calMonth = el.dataset.m; S.calDay = null; render(); },
   'cal-day'(el) {
