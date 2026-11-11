@@ -9,6 +9,12 @@ import {
 
 const CODE_KEY = 'monzon-code';
 const VIEW_KEY = 'monzon-regview';
+const FED_CALENDARS = [
+  { label: 'Calendario Federació Catalana', url: 'https://www.ciclisme.cat/calendari/tot' },
+  { label: 'Calendario Federación Aragonesa', url: 'https://aragonciclismo.com/es/smartweb/seccion/seccion/aragon/CALENDARIO_GLOBAL' },
+];
+const fedLinks = () => `<div class="fed-links">${FED_CALENDARS.map((c) =>
+  `<a class="btn small" href="${c.url}" target="_blank" rel="noopener noreferrer">${esc(c.label)} ↗</a>`).join('')}</div>`;
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* modo privado */ } },
@@ -274,6 +280,8 @@ function viewRunnerHome() {
     <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
     ${installHint()}
     ${body}
+    <h2 class="section">Calendarios de las federaciones</h2>
+    ${fedLinks()}
     <p class="center"><button class="link muted" data-act="r-forget">No soy ${esc(me.name)}</button></p>`,
   { actions: `${viewToggle()}<button class="icon-btn" data-act="r-refresh" aria-label="Actualizar">↻</button>` });
 }
@@ -312,6 +320,7 @@ function viewRegistrations() {
         esc(g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p></a>`;
   return frame('Inscripciones', `
     <a class="btn primary block" href="#/inscripciones/nueva">+ Nueva inscripción</a>
+    ${fedLinks()}
     ${S.regView === 'cal' ? calendarView(regs, card)
       : regs.length ? regs.map(card).join('') : '<p class="empty">No hay inscripciones abiertas.</p>'}`,
   { actions: viewToggle() });
