@@ -3,7 +3,7 @@ import { CONFIG } from './config.js';
 import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName,
-  parseBulkRunners, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
+  parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
   extractCode, todayISO, formatDate,
 } from './logic.js';
 
@@ -430,6 +430,18 @@ function viewRunners() {
         <button class="btn primary">Añadir</button>
       </form>
     </details>
+    <details class="card">
+      <summary><b>↻ Renovar plantilla del año</b></summary>
+      <form class="stack" data-form="renew">
+        <p class="hint">Pega la lista completa de la nueva temporada, uno por línea («Pere Soler, M40»). Antes de cambiar nada verás un resumen:</p>
+        <ul class="hint"><li>Quien sigue <b>conserva su enlace</b> (no hay que reenviárselo). Si pones categoría, se actualiza.</li>
+          <li>Quien es nuevo se da de alta y recibe enlace.</li>
+          <li>Quien no está en la lista se da de baja: su enlace deja de funcionar, pero <b>sus resultados se conservan</b> en el historial.</li></ul>
+        <textarea name="renew" rows="6" placeholder="Pere Soler, M40&#10;Anna Puig, Élite&#10;…"></textarea>
+        <button class="btn primary">Revisar cambios</button>
+      </form>
+    </details>
+    ${runners.length ? '<button class="btn block" data-act="all-links">Copiar todos los enlaces</button>' : ''}
     <ul class="roster">${runners.map((r) => `<li>
       <div><span class="name">${esc(r.name)}</span><small class="muted">${counts.get(r.id) || 0} carreras</small></div>
       ${catSelect(`data-runner-cat="${r.id}" aria-label="Categoría habitual"`, r.category || '')}
@@ -574,6 +586,11 @@ const actions = {
     }
   },
 
+  async 'all-links'() {
+    const text = [...S.data.runners].sort(byName).map((r) => `${r.name}: ${linkFor(r.code)}`).join('\n');
+    try { await navigator.clipboard.writeText(text); toast(`${S.data.runners.length} enlaces copiados: pégalos en tus notas y envía a cada uno el suyo`); }
+    catch { download('enlaces-corredores.txt', text, 'text/plain;charset=utf-8'); }
+  },
   async backup() {
     const data = await run(() => api.exportAll());
     if (data) download(`monzon-copia-${todayISO()}.json`, JSON.stringify(data, null, 1), 'application/json');
@@ -605,6 +622,27 @@ const forms = {
     if (unknownCategory.length) notes.push(`categoría no reconocida en: ${unknownCategory.map((u) => u.name).join(', ')} (quedan sin categoría)`);
     toast(notes.join(' · '), unknownCategory.length > 0);
     render();
+  },
+  async renew(f) {
+    const plan = planRosterRenewal(f.renew.value, S.data.runners);
+    const total = plan.keep.length + plan.add.length;
+    if (!total) return toast('Pega la lista de corredores de la temporada.', true);
+    const names = (xs) => esc(xs.join(', '));
+    const catChanges = plan.keep.filter((k) => k.category);
+    const msg = `La plantilla quedará con <b>${total}</b> corredores.<br><br>` +
+      `<b>Siguen (${plan.keep.length})</b>, con el mismo enlace${catChanges.length ? `; cambian de categoría: ${names(catChanges.map((k) => `${k.runner.name} → ${k.category}`))}` : ''}.<br><br>` +
+      `<b>Altas (${plan.add.length})</b>${plan.add.length ? ': ' + names(plan.add.map((a) => a.name)) + '. Tendrás que enviarles su enlace.' : '.'}<br><br>` +
+      `<b>Bajas (${plan.remove.length})</b>${plan.remove.length ? ': ' + names(plan.remove.map((r) => r.name)) + '. Su enlace deja de funcionar; sus resultados se conservan.' : '.'}` +
+      (plan.unknownCategory.length ? `<br><br>⚠️ Categoría no reconocida (se deja como estaba): ${names(plan.unknownCategory.map((u) => `${u.name} («${u.text}»)`))}` : '') +
+      (plan.remove.length > total / 2 ? '<br><br>⚠️ Se da de baja a más de la mitad. Comprueba que has pegado la lista completa.' : '');
+    if (!await confirmAction('Renovar plantilla', msg, 'Aplicar cambios', 'primary')) return;
+    const ok = await run(async () => {
+      if (plan.add.length) await api.addRunners(plan.add);
+      for (const k of catChanges) await api.updateRunner(k.runner.id, { category: k.category });
+      for (const r of plan.remove) await api.deleteRunner(r.id, false);
+      await reload(); return true;
+    }, 'Plantilla renovada');
+    if (ok) { f.reset(); render(); }
   },
   async 'save-reg'() {
     const id = await run(saveRegistrationDraft, 'Inscripción guardada');

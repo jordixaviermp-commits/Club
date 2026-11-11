@@ -63,6 +63,26 @@ export function parseBulkRunners(text, existingNames = []) {
   return { toAdd, duplicates, unknownCategory };
 }
 
+/**
+ * Renovación anual de la plantilla: compara la lista nueva con la actual.
+ * - keep: siguen (conservan su enlace); `category` cambia solo si la lista trae una.
+ * - add: nuevos.
+ * - remove: ya no están (se dan de baja; su historial se conserva).
+ */
+export function planRosterRenewal(text, runners) {
+  const { toAdd: list, duplicates, unknownCategory } = parseBulkRunners(text, []);
+  const current = new Map(runners.map((r) => [normalize(r.name), r]));
+  const keep = [], add = [];
+  for (const item of list) {
+    const r = current.get(normalize(item.name));
+    if (r) {
+      keep.push({ runner: r, category: item.category && item.category !== r.category ? item.category : null });
+      current.delete(normalize(item.name));
+    } else add.push(item);
+  }
+  return { keep, add, remove: [...current.values()], duplicates, unknownCategory };
+}
+
 export const isPodium = (position) => Number.isInteger(position) && position >= 1 && position <= 3;
 export const yearOf = (date) => Number(String(date).slice(0, 4));
 

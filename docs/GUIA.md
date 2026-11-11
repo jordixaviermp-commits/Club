@@ -98,6 +98,8 @@ Si algún día te paso una versión nueva de este archivo, se repite este mismo 
 
 ## Mantenimiento
 
+- **Cambio de temporada (una vez al año)**: **Corredores** → **↻ Renovar plantilla del año** → pega la lista completa del nuevo año → **Revisar cambios**. Verás quién sigue, quién entra y quién sale antes de aplicar nada. Quien sigue conserva su enlace. A quien entra le envías el suyo. Quien sale deja de tener acceso, pero sus resultados se quedan en el historial.
+- **Enviar los enlaces de golpe**: **Corredores** → **Copiar todos los enlaces** copia una lista «Nombre: enlace» para que la pegues en tus notas y se la envíes a cada uno.
 - **Copia de seguridad**: una vez al mes, **Datos** → **Descargar copia completa** y guarda el archivo en tu Drive o en tu correo. Con **Restaurar copia completa** se recupera todo.
 - **Pausa de Supabase**: los proyectos gratuitos se pausan tras unos días sin uso. GitHub hace una consulta automática los lunes y los jueves para evitarlo (pestaña **Actions** → *Mantener Supabase despierto*). Si un día la app no carga datos:
   1. Entra en supabase.com, abre el proyecto y pulsa **Restore project**. No se pierde nada.
