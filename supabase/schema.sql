@@ -291,6 +291,16 @@ begin
       'config', v_cfg - 'nuevos',
       'contract', me.contract,
       'nuevo', coalesce(me.contract = 'nuevo' or (me.contract is null and v_cfg -> 'nuevos' ? me.id::text), false)),
+    -- Sus propias carreras con resultados (todas las temporadas), para su lista «Mis carreras».
+    'my_results', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'race_id', r.id, 'name', r.name, 'date', r.date, 'end_date', r.end_date, 'place', r.place,
+               'province', r.province, 'country', r.country, 'modality', r.modality, 'stages', r.stages,
+               'category', x.category, 'position', x.position, 'podium_type', x.podium_type,
+               'stage_positions', x.stage_positions)
+             order by r.date desc, r.name)
+        from results x join races r on r.id = x.race_id
+       where x.runner_id = me.id), '[]'::jsonb),
     'registrations', coalesce((
       select jsonb_agg(jsonb_build_object(
                'id', g.id, 'name', g.name, 'date', g.date, 'end_date', g.end_date, 'place', g.place,

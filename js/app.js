@@ -357,6 +357,38 @@ function viewRunnerNew() {
     </form>`, { back: '#/' });
 }
 
+/** «Mis carreras»: sus carreras con resultados por temporada y las apuntadas pendientes de resultado. */
+function myRacesCard(d) {
+  const results = d.my_results;
+  if (!results) return ''; // base de datos aún sin actualizar
+  const today = d.today || todayISO();
+  const mineReg = d.registrations.filter((g) => g.entries.some((e) => e.runner_id === d.me.id));
+  const pending = mineReg.filter((g) => g.date < today);
+  const upcoming = mineReg.filter((g) => g.date >= today);
+  const years = [...new Set([new Date().getFullYear(), ...results.map((r) => yearOf(r.date))])].sort((a, b) => b - a);
+  if (!years.includes(S.myYear)) S.myYear = years[0];
+  const list = results.filter((r) => yearOf(r.date) === S.myYear);
+  const days = list.reduce((n, r) => n + numDays(r.date, r.end_date), 0);
+  const row = (r) => {
+    const stagePods = (r.stage_positions || []).slice(0, (r.stages || []).length).map((p, i) => ({ p, n: stageName(r, i) })).filter((x) => isPodium(x.p));
+    const pos = r.position ? `${isPodium(r.position) ? medal(r.position) + ' ' : ''}${r.position}º${r.category ? ` ${esc(r.category)}` : ''}` : '<span class="muted">sin puesto</span>';
+    return `<li class="mini ${modClass(r.modality)}"><div><b>${esc(r.name)}</b>
+      <small class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''} · ${esc(r.modality)}</small>
+      ${stagePods.length ? `<small>${stagePods.map((x) => `${medal(x.p)} ${esc(x.n)}`).join(' · ')}</small>` : ''}</div>
+      <span class="pos">${pos}</span></li>`;
+  };
+  return `<details class="card my-races"${S.myOpen ? ' open' : ''} data-toggle-key="myOpen">
+    <summary><b>📋 Mis carreras ${S.myYear}</b>: ${list.length}${days !== list.length ? ` (${days} días para el bono)` : ''}</summary>
+    ${years.length > 1 ? `<div class="years">${years.map((y) => `<button class="chip${y === S.myYear ? ' on' : ''}" data-act="my-year" data-y="${y}">${y}</button>`).join('')}</div>` : ''}
+    ${list.length ? `<ul class="mini-list">${list.map(row).join('')}</ul>`
+      : `<p class="hint">Todavía no hay carreras tuyas con resultados en ${S.myYear}.</p>`}
+    ${pending.length ? `<p class="hint"><b>Apuntado, pendientes de que la dirección pase el resultado (${pending.length}):</b></p>
+      <ul class="mini-list">${pending.map((g) => miniRow(g, '<span class="done">pendiente</span>')).join('')}</ul>` : ''}
+    <p class="hint">${upcoming.length ? `Además estás apuntado a ${upcoming.length} carrera${upcoming.length === 1 ? '' : 's'} próxima${upcoming.length === 1 ? '' : 's'}.` : 'No estás apuntado a ninguna carrera próxima.'}
+      Si falta alguna carrera o un puesto, díselo a la dirección del club.</p>
+  </details>`;
+}
+
 function runnerBonusCard(d) {
   const b = d.bonus;
   if (!b) return '';
@@ -404,6 +436,7 @@ function viewRunnerHome() {
   return frame('CC Monzón', `
     <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
     ${runnerBonusCard(d)}
+    ${myRacesCard(d)}
     ${installHint()}
     <section class="card search-card">
       ${searchBox('runner', 'Busca una carrera: nombre o pueblo…')}
@@ -954,6 +987,7 @@ const actions = {
   },
   'del-person'(el) { S.draft.people.splice(Number(el.dataset.i), 1); render(); },
   year(el) { S.year = Number(el.dataset.y); render(); },
+  'my-year'(el) { S.myYear = Number(el.dataset.y); S.myOpen = true; render(); },
   'fed-source'(el) { fedFilter.source = el.dataset.v; render(); },
   'fed-create'(el) {
     const r = S.fed.races[Number(el.dataset.i)];
@@ -1289,6 +1323,8 @@ $app.addEventListener('change', async (ev) => {
   }
 });
 
+// Recordar si un desplegable estaba abierto (p. ej. «Mis carreras») al volver a pintar la pantalla.
+$app.addEventListener('toggle', (ev) => { const k = ev.target.dataset?.toggleKey; if (k) S[k] = ev.target.open; }, true);
 window.addEventListener('hashchange', onRoute);
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); S.installEvt = e; if (S.runnerData) render(); });
 

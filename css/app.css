@@ -313,3 +313,9 @@ label.check input { accent-color: var(--accent); }
 .mini-list .done { flex: none; font-size: .85rem; font-weight: 700; color: var(--muted); }
 .dup { background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 12px; padding: .6rem .7rem; }
 .dup p { font-size: .88rem; margin: .1rem 0 .3rem; }
+
+/* Mis carreras */
+.my-races > summary { cursor: pointer; }
+.my-races[open] > summary { margin-bottom: .6rem; }
+.my-races .pos { flex: none; font-weight: 700; font-size: .9rem; text-align: right; }
+.mini-list li small + small { margin-top: .1rem; }
