@@ -434,11 +434,13 @@ function runnerBonusCard(d) {
   const st = bonusStatus(b.done, cfg, c);
   const proj = bonusStatus(b.done + (b.planned || 0), cfg, c);
   return `<section class="card bonus-card"><h2>Tu bono ${b.year}</h2>
+    ${penaltyAlert(st, cfg, b.year)}
     ${bonusBar(st, cfg, b.planned || 0)}
     <p class="bonus-text">${bonusText(st)}</p>
     ${b.contract ? `<p class="hint">Contrato: ${esc(contractLabel(b.contract))}.</p>` : ''}
     ${b.planned ? `<p class="hint">Con tus ${b.planned} inscripcion${b.planned === 1 ? '' : 'es'} de ${b.year} llegarías a ${proj.count}${proj.tier ? ` (${euros(proj.amount)})` : ''}${proj.reachesMinimum ? '' : ', aún por debajo del mínimo'}.</p>` : ''}
-    <p class="hint">Tramos: ${[...cfg.tiers].sort((a, c) => a.races - c.races).map((t) => `${t.races} carreras → ${euros(t.amount)}`).join(' · ')}. Una carrera de varios días cuenta un día cada uno.</p>
+    <p class="hint">Tramos: ${[...cfg.tiers].sort((a, c) => a.races - c.races).map((t) => `${t.races} carreras → ${euros(t.amount)}`).join(' · ')}. Una carrera de varios días cuenta un día cada uno.
+      <br>Penalización si no se llega al mínimo (${cfg.minimum}): ${penaltiesLine(cfg)}.</p>
   </section>`;
 }
 
@@ -897,11 +899,32 @@ function bonusBar(st, cfg, planned = 0) {
   return `<div class="bbar" role="img" aria-label="${st.count} de ${max} carreras">
     <span class="bbar-plan" style="width:${pct(st.count + planned)}"></span>
     <span class="bbar-done ${st.reachesMinimum ? 'ok' : ''}" style="width:${pct(st.count)}"></span>
-    ${tiers.map((t) => `<i class="bbar-mark${st.count >= t.races ? ' hit' : ''}" style="left:${pct(t.races)}"><b>${t.races}</b></i>`).join('')}
+    ${tiers.map((t) => `<i class="bbar-mark${st.count >= t.races ? ' hit' : ''}${t.races === st.minimum ? ' min' : ''}" style="left:${pct(t.races)}"><b>${t.races}${t.races === st.minimum ? ' mín' : ''}</b></i>`).join('')}
+    ${st.minimum && !tiers.some((t) => t.races === st.minimum) ? `<i class="bbar-mark min${st.reachesMinimum ? ' hit' : ''}" style="left:${pct(st.minimum)}"><b>${st.minimum} mín</b></i>` : ''}
   </div>`;
 }
 
 /** Frase con la situación: tramo actual, lo que falta y la penalización. */
+const penaltiesLine = (cfg) => CONTRACTS.map((c) => `${c.label.toLowerCase()} ${euros({ ...cfg.penalty }[c.penalty] ?? 0)}`).join(' · ');
+
+/** Recuadro muy visible del mínimo del contrato y su penalización. */
+function penaltyAlert(st, cfg, year, { who = 'Te' } = {}) {
+  const end = `${year}-12-31`, today = todayISO();
+  const daysLeft = Math.max(0, Math.round((new Date(end + 'T12:00:00Z') - new Date(today + 'T12:00:00Z')) / 864e5));
+  const closed = today > end;
+  if (st.reachesMinimum) {
+    return `<div class="pen ok">✅ <b>Mínimo del contrato cumplido</b> (${st.minimum} carreras): sin penalización.</div>`;
+  }
+  if (!st.penalty) {
+    return `<div class="pen neutral">ℹ️ Mínimo del contrato: <b>${st.minimum} carreras</b> (${who.toLowerCase() === 'te' ? 'te' : 'le'} faltan ${st.missingToMinimum}).
+      Con contrato de ${esc(contractLabel(st.contract).toLowerCase())} no hay penalización.</div>`;
+  }
+  return `<div class="pen bad-box">⚠️ <b>Mínimo del contrato: ${st.minimum} carreras.</b>
+    ${who} faltan <b>${st.missingToMinimum}</b>. ${closed ? `Temporada cerrada: <b>penalización de ${euros(st.penalty)}</b>.`
+      : `Si el 31 de diciembre no ${who === 'Te' ? 'llegas' : 'llega'}, <b>penalización de ${euros(st.penalty)}</b>${st.contract ? ` (${esc(contractLabel(st.contract).toLowerCase())})` : ''}.
+    <br><small>Quedan ${daysLeft} días de temporada.</small>`}</div>`;
+}
+
 function bonusText(st, who = 'Llevas') {
   const parts = [`${who} <b>${st.count}</b> carrera${st.count === 1 ? '' : 's'}`];
   if (st.tier) parts.push(`tramo de <b>${euros(st.amount)}</b>`);
@@ -927,11 +950,14 @@ function viewBonus() {
       <div class="kpi"><b>${rows.filter((r) => !r.reachesMinimum).length}</b><span>bajo el mínimo</span></div>
       <div class="kpi"><b>${euros(totalPen)}</b><span>penalizaciones si acabara hoy</span></div>
     </div>
+    <div class="pen bad-box">⚠️ <b>Mínimo del contrato: ${cfg.minimum} carreras</b> antes del 31 de diciembre.
+      Penalización si no se llega: ${penaltiesLine(cfg)}.</div>
     <p class="hint">Cuentan las carreras con resultados de ${S.year}; una carrera de varios días cuenta un día cada uno. La parte clara de la barra suma las inscripciones de ${S.year} pendientes.</p>
     <ul class="bonus-list">${rows.map((r) => `<li>
       <div class="bonus-head"><span class="name">${esc(r.runner.name)}</span>
         ${contractSelect(`data-runner-contract="${r.runner.id}" aria-label="Tipo de contrato de ${esc(r.runner.name)}"`, r.runner.contract || (r.isNew ? 'nuevo' : ''))}</div>
       ${bonusBar(r, cfg, r.planned)}
+      ${!r.reachesMinimum && r.penalty ? `<p class="pen-chip">⚠️ Penalización ${euros(r.penalty)} si no llega a ${r.minimum}</p>` : r.reachesMinimum ? '<p class="pen-chip ok">✅ Mínimo cumplido</p>' : ''}
       <p class="bonus-text">${bonusText(r, 'Lleva')}${r.planned ? ` · <span class="muted">con sus ${r.planned} inscrita${r.planned === 1 ? '' : 's'}: ${r.projected.count}</span>` : ''}</p>
     </li>`).join('')}</ul>
     ${rows.length ? '' : '<p class="empty">No hay corredores.</p>'}
