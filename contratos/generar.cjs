@@ -14,7 +14,7 @@ const TIPOS = [
     id: 'Nuevo', titulo: 'NUEVO',
     licencia: true,
     material: [['maillots CARRERA', 2], ['culotes', 2], ['maillot de manga larga HYDER', 1], ['par de calcetines', 1]],
-    aportacion: 175,
+    aportacion: 0, // no paga nada al firmar: los 175 € solo si no llega al mínimo (penalización)
     tramos: [[12, 50], [17, 100], [22, 150]],
     penalizacion: 175,
   },
@@ -47,7 +47,9 @@ function tercera(t, y) {
     items.push('El Club tramitará la licencia del deportista en un plazo máximo de 7 días después de la firma del contrato y entrega de documentación necesaria.');
     const mat = t.material.map(([q, n]) => `${n === 1 ? ORD[1] : n} ${q}`);
     items.push(`Se entregará al deportista el siguiente material: ${mat.slice(0, -1).join(', ')} y ${mat.at(-1)} (o equivalentes de la temporada).`);
-    items.push(`El deportista aportará la cantidad de <b>${euros(t.aportacion)}</b> en concepto de licencia y equipaciones. El Club asume el resto del coste.`);
+    items.push(t.aportacion
+      ? `El deportista aportará la cantidad de <b>${euros(t.aportacion)}</b> en concepto de licencia y equipaciones. El Club asume el resto del coste.`
+      : `El Club asume el coste de la licencia y de las equipaciones. El deportista solo deberá aportar <b>${euros(t.penalizacion)}</b> en caso de no alcanzar el mínimo de participaciones establecido en la cláusula QUINTA.`);
     items.push('En caso de querer adquirir culotes adicionales, el precio unitario de los mismos es de 35€.');
   } else {
     items.push('El presente acuerdo no incluye la tramitación ni el pago de la licencia federativa por parte del Club, ni la entrega de equipaciones. El deportista deberá disponer de licencia federativa en vigor y competir con la indumentaria oficial del Club, cuyo coste correrá a su cargo.');
@@ -79,6 +81,7 @@ function quinta(t, y, min) {
   return `<div class="clause">
 <p><b>QUINTA.- Participación mínima y penalización.</b> El deportista se compromete a participar en un <b>mínimo de ${min} competiciones</b> durante la vigencia del presente acuerdo. ${cuentan}</p>
 <p>En caso de que, a la finalización del presente acuerdo, el deportista no haya alcanzado dicho mínimo, deberá abonar al Club una <b>penalización de ${euros(t.penalizacion)} (${enLetras[t.penalizacion]})</b>, en concepto de compensación por la aportación económica realizada por el Club en la licencia y las equipaciones. Dicho importe deberá abonarse en un plazo máximo de 30 días desde la finalización de la temporada, pudiendo el Club compensarlo con cualquier cantidad que tuviera pendiente de abonar al deportista.</p>
+<p>Quedará exento de esta penalización el deportista que no pueda alcanzar el mínimo a causa de una <b>lesión sufrida compitiendo en una prueba oficial representando al Club</b>, siempre que la acredite mediante informe médico y la comunique al Club en un plazo máximo de 7 días desde la prueba. Esta exención no se aplicará a lesiones o enfermedades producidas fuera de competición (entrenamientos, actividades particulares u otras causas).</p>
 </div>`;
 }
 
