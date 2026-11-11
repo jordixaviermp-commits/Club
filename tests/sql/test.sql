@@ -203,6 +203,33 @@ select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a
 insert into races (id, name, date) values ('30000000-0000-0000-0000-000000000001', 'Futura', current_date + 5);
 set role anon;
 select pg_temp.expect_fail($q$select runner_join_race('DDDDDDDDDD', '30000000-0000-0000-0000-000000000001', null)$q$, 'no se añade a resultados de una carrera futura');
+-- tipo de carrera y podios de circuito
+select runner_create_registration('DDDDDDDDDD', jsonb_build_object('name','Copa Prueba 1','date', current_date + 20), null) as cop \gset
+select runner_set_race_type('DDDDDDDDDD', :'cop', 'circuito', ' Copa Aragón XCM ');
+select pg_temp.check((select g->>'circuit' from jsonb_array_elements(runner_view('DDDDDDDDDD')->'registrations') g where g->>'id' = :'cop') = 'Copa Aragón XCM', 'tipo: el corredor marca su carrera como puntuable de un circuito');
+select pg_temp.expect_fail($q$select runner_set_race_type('CCCCCCCCCC', '$q$ || :'cop' || $q$', 'campeonato', null)$q$, 'tipo: no cambia la de otro');
+select pg_temp.expect_fail($q$select runner_set_race_type('DDDDDDDDDD', '$q$ || :'cop' || $q$', 'inventado', null)$q$, 'tipo: valor inválido');
+select runner_propose_circuit('DDDDDDDDDD', 'Copa Aragón XCM', extract(year from current_date)::int, 2, 'categoria') as cp \gset
+select pg_temp.check((runner_view('DDDDDDDDDD')->'bonus'->>'extra')::int = 0, 'circuito: pendiente no suma');
+select pg_temp.expect_fail($q$select runner_propose_circuit('DDDDDDDDDD', 'copa aragón xcm', extract(year from current_date)::int, 1, 'absoluta')$q$, 'circuito: no se repite');
+select pg_temp.expect_fail($q$select runner_propose_circuit('DDDDDDDDDD', 'Otra Copa', extract(year from current_date)::int, 4, 'absoluta')$q$, 'circuito: solo podio');
+select pg_temp.expect_fail($q$update circuit_podiums set status = 'confirmado'$q$, 'circuito: el corredor no se lo confirma');
+select runner_propose_circuit('CCCCCCCCCC', 'Open Retirado', extract(year from current_date)::int, 3, 'absoluta') as cp2 \gset
+select pg_temp.expect_fail($q$select runner_cancel_circuit('DDDDDDDDDD', '$q$ || :'cp2' || $q$')$q$, 'circuito: no retira el de otro');
+select runner_cancel_circuit('CCCCCCCCCC', :'cp2');
+reset role;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+update circuit_podiums set status = 'confirmado' where id = :'cp';
+select pg_temp.check((select count(*) from circuit_podiums) = 1, 'circuito: la dirección lo ve y el retirado ya no está');
+select promote_registration(:'cop') as copr \gset
+select pg_temp.check((select circuit from races where id = :'copr') = 'Copa Aragón XCM', 'tipo: pasar a resultados conserva el circuito');
+reset role;
+set role anon;
+select pg_temp.check((runner_view('DDDDDDDDDD')->'bonus'->>'extra')::int = 4, 'circuito: confirmado suma +4 al bono');
+select pg_temp.check(jsonb_array_length(runner_view('DDDDDDDDDD')->'circuits') = 1, 'circuito: el corredor ve el suyo');
+select pg_temp.check(jsonb_array_length(runner_view('CCCCCCCCCC')->'circuits') = 0, 'circuito: no ve los de otros');
+select pg_temp.expect_fail($q$select runner_cancel_circuit('DDDDDDDDDD', '$q$ || :'cp' || $q$')$q$, 'circuito: confirmado ya no se retira');
 -- documentos (contratos)
 reset role;
 set role authenticated;

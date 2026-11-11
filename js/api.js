@@ -3,7 +3,8 @@
 //  - Demostración, guardada solo en este navegador, para probar la app sin montar nada.
 import { newCode, todayISO, pastLimit, numDays, yearOf } from './logic.js';
 
-const TABLES = ['runners', 'registrations', 'registration_entries', 'races', 'results', 'settings'];
+const TABLES = ['runners', 'registrations', 'registration_entries', 'races', 'results', 'settings', 'circuit_podiums'];
+const OPTIONAL = new Set(['settings', 'circuit_podiums']); // tablas que pueden faltar si aún no se ha ejecutado su SQL
 
 /** Mensajes de error comprensibles. */
 export function friendlyError(e) {
@@ -13,7 +14,7 @@ export function friendlyError(e) {
   if (/puesto_no_valido/.test(msg)) return 'Pon un puesto válido (1, 2, 3…).';
   if (/otros_apuntados/.test(msg)) return 'No puedes borrarla: hay más compañeros apuntados. Pídeselo a la dirección del club.';
   if (/no_es_tuya/.test(msg)) return 'Solo puedes cambiar las carreras que has añadido tú.';
-  if (/ya_existe/.test(msg)) return 'Ya hay otra carrera con ese nombre ese mismo día.';
+  if (/ya_existe/.test(msg)) return 'Ya existe: hay otra carrera con ese nombre ese día, o ya comunicaste ese circuito.';
   if (/nombre_no_valido/.test(msg)) return 'Pon un nombre de carrera de al menos 3 letras.';
   if (/fecha_no_valida/.test(msg)) return 'Revisa las fechas: desde el 1 de enero del año pasado hasta, como mucho, dentro de dos años.';
   if (/demasiadas_carreras/.test(msg)) return 'Hoy ya has añadido muchas carreras. Si necesitas más, pídeselo a la dirección.';
@@ -25,6 +26,12 @@ export function friendlyError(e) {
   return msg || 'Error desconocido.';
 }
 
+/** Tipo de carrera y nombre del circuito, listos para guardar. */
+const typeFields = (o) => {
+  const t = ['campeonato', 'circuito'].includes(o.race_type) ? o.race_type : 'suelta';
+  return { race_type: t, circuit: t === 'circuito' ? String(o.circuit || '').trim() || null : null };
+};
+
 function nest(data) {
   const entriesBy = new Map(), resultsBy = new Map();
   for (const e of data.registration_entries) (entriesBy.get(e.registration_id) || entriesBy.set(e.registration_id, []).get(e.registration_id)).push(e);
@@ -34,6 +41,7 @@ function nest(data) {
     registrations: data.registrations.map((g) => ({ ...g, entries: entriesBy.get(g.id) || [] })),
     races: data.races.map((r) => ({ ...r, results: resultsBy.get(r.id) || [] })),
     settings: Object.fromEntries((data.settings || []).map((x) => [x.key, x.value])),
+    circuitPodiums: data.circuit_podiums || null, // null = falta el SQL de circuitos
   };
 }
 
@@ -52,7 +60,7 @@ export function supabaseApi(url, key) {
     }
   };
   const rawAll = async () => Object.fromEntries(await Promise.all(TABLES.map(async (t) => {
-    try { return [t, await all(t)]; } catch (e) { if (t === 'settings') return [t, []]; throw e; } // antes de actualizar el SQL
+    try { return [t, await all(t)]; } catch (e) { if (OPTIONAL.has(t)) return [t, t === 'settings' ? [] : null]; throw e; } // antes de actualizar el SQL
   })));
 
   return {
@@ -84,11 +92,23 @@ export function supabaseApi(url, key) {
     async regenerateCode(id) { ok(await sb.from('runners').update({ code: newCode() }).eq('id', id)); },
     async deleteRunner(id, anonymize) { ok(await sb.rpc('delete_runner', { p_id: id, p_anonymize: anonymize })); },
 
-    async saveRegistration(reg, entries) { return ok(await sb.rpc('save_registration', { p_reg: reg, p_entries: entries })); },
+    // el tipo de carrera se guarda aparte (así las funciones de guardar no cambian); si falta su SQL, se ignora
+    async saveRegistration(reg, entries) {
+      const id = ok(await sb.rpc('save_registration', { p_reg: reg, p_entries: entries }));
+      await sb.from('registrations').update(typeFields(reg)).eq('id', id);
+      return id;
+    },
     async deleteRegistration(id) { ok(await sb.from('registrations').delete().eq('id', id)); },
     async promoteRegistration(id) { return ok(await sb.rpc('promote_registration', { p_id: id })); },
 
-    async saveRace(race, results) { return ok(await sb.rpc('save_race', { p_race: race, p_results: results })); },
+    async saveRace(race, results) {
+      const id = ok(await sb.rpc('save_race', { p_race: race, p_results: results }));
+      await sb.from('races').update(typeFields(race)).eq('id', id);
+      return id;
+    },
+    async saveCircuitPodium(row) { ok(await sb.from('circuit_podiums').insert(row)); },
+    async confirmCircuitPodium(id) { ok(await sb.from('circuit_podiums').update({ status: 'confirmado' }).eq('id', id)); },
+    async deleteCircuitPodium(id) { ok(await sb.from('circuit_podiums').delete().eq('id', id)); },
     async deleteRace(id) { ok(await sb.from('races').delete().eq('id', id)); },
 
     async exportAll() { return { app: 'cc-monzon', version: 1, exported_at: new Date().toISOString(), ...(await rawAll()) }; },
@@ -107,6 +127,11 @@ export function supabaseApi(url, key) {
     async runnerJoin(code, regId, category) { ok(await sb.rpc('runner_join', { p_code: code, p_registration: regId, p_category: category || null })); },
     async runnerLeave(code, regId) { ok(await sb.rpc('runner_leave', { p_code: code, p_registration: regId })); },
     async runnerJoinRace(code, raceId, category) { ok(await sb.rpc('runner_join_race', { p_code: code, p_race: raceId, p_category: category || null })); },
+    async runnerSetType(code, id, type, circuit) { ok(await sb.rpc('runner_set_race_type', { p_code: code, p_id: id, p_type: type, p_circuit: circuit || null })); },
+    async runnerProposeCircuit(code, circuit, year, position, scope) {
+      return ok(await sb.rpc('runner_propose_circuit', { p_code: code, p_circuit: circuit, p_year: year, p_position: position, p_scope: scope }));
+    },
+    async runnerCancelCircuit(code, id) { ok(await sb.rpc('runner_cancel_circuit', { p_code: code, p_id: id })); },
   };
 }
 
@@ -164,6 +189,7 @@ export function demoApi(storage = globalThis.localStorage) {
   const fields = (o) => ({
     name: String(o.name || '').trim(), date: o.date, end_date: o.end_date && o.end_date > o.date ? o.end_date : null, place: o.place?.trim() || null, province: o.province?.trim() || null,
     country: o.country?.trim() || null, modality: o.modality || 'Carretera', notes: o.notes?.trim() || null,
+    ...(o.race_type !== undefined ? typeFields(o) : {}),
     ...(o.stages !== undefined ? { stages: o.stages?.length ? o.stages : null } : {}) });
   const byCode = (code) => {
     const r = load().runners.find((x) => x.code === code);
@@ -183,7 +209,7 @@ export function demoApi(storage = globalThis.localStorage) {
     async signOut() { admin = false; try { storage.removeItem(DEMO_KEY + '-admin'); } catch { /* nada */ } },
     async resetDemo() { mem = demoSeed(); save(); },
 
-    async loadAll() { requireAdmin(); return clone(nest(load())); },
+    async loadAll() { requireAdmin(); return clone(nest({ circuit_podiums: [], ...load() })); },
     async addRunners(list) {
       requireAdmin();
       for (const r of list) load().runners.push({ id: uuid(), name: r.name, category: r.category || null, code: newCode(), created_at: new Date().toISOString(), contract: r.contract || null });
@@ -264,6 +290,13 @@ export function demoApi(storage = globalThis.localStorage) {
       save();
     },
 
+    async saveCircuitPodium(row) {
+      requireAdmin(); const d = load(); d.circuit_podiums = d.circuit_podiums || [];
+      d.circuit_podiums.push({ id: uuid(), status: 'confirmado', by_runner: false, scope: 'categoria', created_at: new Date().toISOString(), ...row }); save();
+    },
+    async confirmCircuitPodium(id) { requireAdmin(); const c = (load().circuit_podiums || []).find((x) => x.id === id); if (c) c.status = 'confirmado'; save(); },
+    async deleteCircuitPodium(id) { requireAdmin(); const d = load(); d.circuit_podiums = (d.circuit_podiums || []).filter((x) => x.id !== id); save(); },
+
     async exportAll() { requireAdmin(); return { app: 'cc-monzon', version: 1, exported_at: new Date().toISOString(), ...clone(load()) }; },
     async importAll(data) {
       requireAdmin();
@@ -280,15 +313,18 @@ export function demoApi(storage = globalThis.localStorage) {
         my_results: d.results.filter((x) => x.runner_id === me.id).map((x) => {
           const r = d.races.find((y) => y.id === x.race_id);
           return r && { race_id: r.id, name: r.name, date: r.date, end_date: r.end_date || null, place: r.place, province: r.province,
-            country: r.country, modality: r.modality, stages: r.stages || null, category: x.category, position: x.position,
+            country: r.country, modality: r.modality, stages: r.stages || null, race_type: r.race_type || 'suelta', circuit: r.circuit || null,
+            category: x.category, position: x.position,
             podium_type: x.podium_type, stage_positions: x.stage_positions || null, self_reported: !!x.self_reported };
         }).filter(Boolean).sort((a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name)),
+        circuits: (d.circuit_podiums || []).filter((c) => c.runner_id === me.id).map(({ runner_id, created_at, ...c }) => c),
         bonus: (() => { // igual que runner_view en la base de datos
           const year = new Date().getFullYear();
           const cfg = (d.settings || []).find((x) => x.key === 'bonus')?.value?.[year] || null;
           const days = (x) => numDays(x.date, x.end_date);
           const { nuevos = [], ...pub } = cfg || {};
           return {
+            extra: (d.circuit_podiums || []).filter((c) => c.runner_id === me.id && c.year === year && c.status === 'confirmado').length * (cfg?.circuitExtra ?? 4),
             year, config: cfg ? pub : null, contract: me.contract || null,
             nuevo: me.contract === 'nuevo' || (!me.contract && nuevos.includes(me.id)),
             done: d.results.filter((x) => x.runner_id === me.id).map((x) => d.races.find((r) => r.id === x.race_id))
@@ -350,7 +386,7 @@ export function demoApi(storage = globalThis.localStorage) {
       return clone({
         runners: d.runners.map((r) => ({ id: r.id, name: r.name })).sort((a, b) => a.name.localeCompare(b.name)),
         races: d.races.map((r) => ({ id: r.id, name: r.name, date: r.date, end_date: r.end_date || null, place: r.place, province: r.province,
-          country: r.country, modality: r.modality, stages: r.stages || null,
+          country: r.country, modality: r.modality, stages: r.stages || null, race_type: r.race_type || 'suelta', circuit: r.circuit || null,
           results: d.results.filter((x) => x.race_id === r.id).map((x) => ({ runner_id: x.runner_id, runner_name: x.runner_name,
             category: x.category, position: x.position, podium_type: x.podium_type, stage_positions: x.stage_positions || null })) })),
       });
@@ -387,6 +423,25 @@ export function demoApi(storage = globalThis.localStorage) {
       if (!race || race.date > todayISO() || race.date < pastLimit()) throw new Error('inscripcion_cerrada');
       if (!d.results.some((x) => x.race_id === raceId && x.runner_id === me.id)) d.results.push({ id: uuid(), race_id: raceId, runner_id: me.id, runner_name: me.name, category: category || null, position: null, podium_type: 'suelta' });
       save();
+    },
+    async runnerSetType(code, id, type, circuit) {
+      const me = byCode(code); const g = load().registrations.find((x) => x.id === id && x.created_by === me.id);
+      if (!g) throw new Error('no_es_tuya');
+      Object.assign(g, typeFields({ race_type: type, circuit })); save();
+    },
+    async runnerProposeCircuit(code, circuit, year, position, scope) {
+      const me = byCode(code); const d = load(); d.circuit_podiums = d.circuit_podiums || [];
+      const name = String(circuit || '').replace(/\s+/g, ' ').trim();
+      if (name.length < 3) throw new Error('nombre_no_valido');
+      if (![1, 2, 3].includes(position)) throw new Error('puesto_no_valido');
+      if (d.circuit_podiums.some((c) => c.runner_id === me.id && c.year === year && c.circuit.toLowerCase() === name.toLowerCase())) throw new Error('ya_existe');
+      const row = { id: uuid(), runner_id: me.id, year, circuit: name, position, scope: scope || 'categoria', status: 'pendiente', by_runner: true, created_at: new Date().toISOString() };
+      d.circuit_podiums.push(row); save(); return row.id;
+    },
+    async runnerCancelCircuit(code, id) {
+      const me = byCode(code); const d = load();
+      if (!(d.circuit_podiums || []).some((c) => c.id === id && c.runner_id === me.id && c.status === 'pendiente')) throw new Error('no_es_tuya');
+      d.circuit_podiums = d.circuit_podiums.filter((c) => c.id !== id); save();
     },
     async runnerLeave(code, regId) {
       const me = byCode(code); const g = openReg(regId); const d = load();

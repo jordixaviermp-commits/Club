@@ -7,6 +7,13 @@ export const PODIUM_TYPES = [
   { id: 'general', label: 'General de varias pruebas' },
   { id: 'campeonato', label: 'Campeonato' },
 ];
+/** Tipo de carrera. «circuito» = puntuable de una Copa, Open, Critérium… (lleva el nombre del circuito). */
+export const RACE_TYPES = [
+  { id: 'suelta', label: 'Carrera normal' },
+  { id: 'campeonato', label: 'Campeonato' },
+  { id: 'circuito', label: 'Puntuable de un circuito (Copa, Open, Critérium…)' },
+];
+export const CIRCUIT_SCOPES = [{ id: 'categoria', label: 'De su categoría' }, { id: 'absoluta', label: 'Absoluta (scratch)' }];
 export const DEFAULT_COUNTRY = 'España';
 export const PROVINCES = [
   'A Coruña', 'Álava', 'Albacete', 'Alicante', 'Almería', 'Asturias', 'Ávila', 'Badajoz', 'Barcelona',
@@ -441,6 +448,7 @@ export const DEFAULT_BONUS = {
   // tramos propios por tipo de contrato (los que no aparecen usan `tiers`)
   tiersByContract: { renovacion_sin_licencia: [{ races: 12, amount: 100 }, { races: 17, amount: 150 }, { races: 22, amount: 200 }] },
   minimum: 12,
+  circuitExtra: 4, // carreras extra para el bono por cada podio en la general final de un circuito (cláusula NOVENA)
   penalty: { renovado: 100, nuevo: 175, sin_licencia: 0 }, // renovación sin licencia: sin penalización
   nuevos: [],
 };
@@ -496,7 +504,10 @@ export const bonusRacesOf = (race) => numDays(race.date, race.end_date);
  * Situación de un corredor: { count, minimum, reachesMinimum, penalty, amount, tier, next, missingToNext, missingToMinimum }.
  * `amount` es lo que cobra con lo hecho; `penalty`, lo que pagaría si acabara la temporada así.
  */
-export function bonusStatus(count, cfg, contract) {
+export function bonusStatus(count, cfg, contract, extra = 0) {
+  // `extra`: carreras adicionales por podios de circuito. Suben el tramo del bono, pero NO cuentan para el mínimo.
+  const raced = count;
+  count = raced + (Number(extra) || 0);
   // `contract`: id de CONTRACTS (o true/false de versiones antiguas: true = nuevo)
   const c = contract === true ? 'nuevo' : contract === false || contract == null ? 'renovacion' : contract;
   const penaltyKey = CONTRACTS.find((x) => x.id === c)?.penalty || 'renovado';
@@ -506,20 +517,23 @@ export function bonusStatus(count, cfg, contract) {
   const tier = reached.at(-1) || null;
   const next = tiers.find((t) => count < t.races) || null;
   const minimum = Number(cfg.minimum) || 0;
-  const reachesMinimum = count >= minimum;
+  const reachesMinimum = raced >= minimum;
   return {
-    count, minimum, reachesMinimum,
+    count: raced, extra: count - raced, bonusCount: count, minimum, reachesMinimum,
     penalty: reachesMinimum ? 0 : Number(pen[penaltyKey] ?? pen.renovado) || 0,
     amount: tier ? tier.amount : 0,
     tier, next,
     missingToNext: next ? next.races - count : 0,
-    missingToMinimum: reachesMinimum ? 0 : minimum - count,
+    missingToMinimum: reachesMinimum ? 0 : minimum - raced,
     isNew: c === 'nuevo', contract: c, tiers,
   };
 }
 
 /** Bonos de toda la plantilla en un año, a partir de las carreras (con resultados) y las inscripciones. */
-export function yearBonuses(year, races, registrations, runners, cfg) {
+export function yearBonuses(year, races, registrations, runners, cfg, circuitPodiums = []) {
+  const per = Number(cfg.circuitExtra ?? DEFAULT_BONUS.circuitExtra) || 0;
+  const circuits = new Map();
+  for (const c of circuitPodiums) if (c.year === year && c.status === 'confirmado') circuits.set(c.runner_id, [...(circuits.get(c.runner_id) || []), c]);
   const done = new Map(), planned = new Map();
   for (const r of races) if (yearOf(r.date) === year) for (const x of r.results || []) {
     if (x.runner_id) done.set(x.runner_id, (done.get(x.runner_id) || 0) + bonusRacesOf(r));
@@ -532,7 +546,9 @@ export function yearBonuses(year, races, registrations, runners, cfg) {
     const count = done.get(rn.id) || 0;
     const plan = planned.get(rn.id) || 0;
     const c = rn.contract || (nuevos.has(rn.id) ? 'nuevo' : null);
-    return { runner: rn, planned: plan, ...bonusStatus(count, cfg, c), projected: bonusStatus(count + plan, cfg, c) };
+    const mine = circuits.get(rn.id) || [];
+    const extra = mine.length * per;
+    return { runner: rn, planned: plan, circuits: mine, ...bonusStatus(count, cfg, c, extra), projected: bonusStatus(count + plan, cfg, c, extra) };
   }).sort((a, b) => b.count - a.count || a.runner.name.localeCompare(b.runner.name, 'es'));
 }
 

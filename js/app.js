@@ -2,7 +2,7 @@
 import { CONFIG } from './config.js';
 import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
-  CATEGORIES, MODALITIES, PODIUM_TYPES, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
+  CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
   extractCode, todayISO, pastLimit, formatDate, searchRaces, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
@@ -40,6 +40,25 @@ const modClass = (m) => 'm-' + normalize(m || 'Otra').replace(/[^a-z]/g, '');
 const modTag = (m) => `<span class="tag ${modClass(m)}">${esc(m)}</span>`;
 const modLegend = (mods) => `<div class="mod-legend">${MODALITIES.filter((m) => !mods || mods.includes(m))
   .map((m) => `<span class="${modClass(m)}"><i></i>${esc(m)}</span>`).join('')}</div>`;
+/** Etiqueta del tipo de carrera (campeonato o circuito). */
+const typeTag = (x) => (x.race_type === 'campeonato' ? '<p class="type-line"><span class="tag t-champ">🏆 Campeonato</span></p>'
+  : x.race_type === 'circuito' ? `<p class="type-line"><span class="tag t-circ">🔗 ${esc(x.circuit || 'Circuito')}</span></p>` : '');
+/** Nombres de circuitos ya usados (para sugerirlos y no escribirlos de dos maneras). */
+function circuitNames() {
+  const src = S.data && !S.preview ? [...S.data.races, ...S.data.registrations, ...(S.data.circuitPodiums || [])]
+    : [...(S.runnerData?.registrations || []), ...(S.runnerData?.my_results || []), ...(S.runnerData?.circuits || []), ...(Array.isArray(S.team?.races) ? S.team.races : [])];
+  const seen = new Map();
+  for (const x of src) { const c = String(x.circuit || '').trim(); if (c && !seen.has(normalize(c))) seen.set(normalize(c), c); }
+  return [...seen.values()].sort((a, b) => a.localeCompare(b, 'es'));
+}
+const circuitList = () => `<datalist id="dl-circuit">${circuitNames().map((c) => `<option value="${esc(c)}">`).join('')}</datalist>`;
+/** Campos «Tipo de carrera» de los formularios. `attr` = data-f (dirección) o data-rf (corredor). */
+const typeFields = (d, attr) => `
+    <label>Tipo de carrera<select ${attr}="race_type" data-retype>${RACE_TYPES.map((t) => opt(t.id, t.label, d.race_type || 'suelta')).join('')}</select></label>
+    ${d.race_type === 'circuito' ? `<label>Nombre del circuito<input ${attr}="circuit" list="dl-circuit" value="${esc(d.circuit || '')}" placeholder="Copa Aragón XCM" maxlength="120" required autocomplete="off"></label>${circuitList()}
+      <p class="hint">Escríbelo igual en todas sus pruebas. El podio en la <b>general final</b> del circuito suma carreras extra para el bono.</p>` : ''}
+    ${d.race_type === 'campeonato' ? '<p class="hint">Los podios de esta carrera se guardarán como podios de campeonato.</p>' : ''}`;
+const scopeLabel = (id) => (CIRCUIT_SCOPES.find((x) => x.id === id) || CIRCUIT_SCOPES[0]).label.toLowerCase();
 const contractSelect = (attrs, sel) =>
   `<select ${attrs}>${opt('', 'Contrato: sin indicar', sel || '')}${CONTRACTS.map((c) => opt(c.id, c.label, sel)).join('')}</select>`;
 const catSelect = (attrs, sel, emptyLabel = 'Sin categoría') =>
@@ -164,6 +183,12 @@ const RUNNER_TABS = [
 const runnerBase = () => (S.session?.isAdmin && S.preview ? '#/vista' : '#');
 const runnerHref = (sub) => (sub ? `${runnerBase()}/${sub}` : `${runnerBase()}/`);
 
+/** Campanita de la dirección: número de cosas pendientes. */
+function bellButton() {
+  const n = alertCount();
+  return `<a class="icon-btn bell${n ? ' on' : ''}" href="#/avisos" aria-label="Avisos${n ? `: ${n} pendientes` : ''}" title="Avisos">🔔${n ? `<span class="bell-n">${n}</span>` : ''}</a>`;
+}
+
 function frame(title, body, { back, actions = '', rtab = null } = {}) {
   const { view } = parseRoute();
   const admin = S.session?.isAdmin;
@@ -176,7 +201,7 @@ function frame(title, body, { back, actions = '', rtab = null } = {}) {
     ${api.mode === 'demo' ? `<div class="demo-bar">Modo demostración: datos de prueba guardados solo en este móvil.</div>` : ''}
     <header class="top">
       ${back ? `<a class="back" href="${back}" aria-label="Volver">‹</a>` : '<img class="logo" src="icons/logo.png" alt="">'}
-      <h1>${esc(title)}</h1>${actions}
+      <h1>${esc(title)}</h1>${actions}${admin && rtab === null && !back && S.data ? bellButton() : ''}
     </header>
     <main>${body}</main>
     ${tabs}`;
@@ -191,7 +216,7 @@ function render() {
     html = ({
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
       carreras: S.draft ? viewRaceEdit : viewRaces,
-      resumen: viewSummary, corredores: viewRunners, datos: viewData, federaciones: viewFed, bonos: viewBonus, docs: () => viewDocs(parseRoute().id),
+      resumen: viewSummary, corredores: viewRunners, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, docs: () => viewDocs(parseRoute().id),
       vista: () => (S.preview && S.runnerData ? runnerScreen(parseRoute().id || '') : viewRunners()),
       equipo: () => (S.preview ? viewTeam() : viewSummary()),
     }[view] || viewRegistrations)();
@@ -382,7 +407,7 @@ const isPastReg = (id) => { const g = S.runnerData?.registrations.find((x) => x.
 /** Pantalla para poner el resultado: de una inscripción (reg_) o de una carrera ya en resultados (race_). */
 const resultHref = (id) => (S.runnerData?.registrations.some((g) => g.id === id) ? `#/resultado/reg_${id}` : `#/resultado/race_${id}`);
 const emptyRunnerDraft = (pre = {}) => ({ name: '', date: '', multi: false, end_date: '', place: '', province: '', country: DEFAULT_COUNTRY,
-  modality: 'Carretera', category: S.runnerData?.me?.category || '', ...pre });
+  modality: 'Carretera', race_type: 'suelta', circuit: '', category: S.runnerData?.me?.category || '', ...pre });
 
 /** Formulario para que el corredor ponga SU resultado (una sola vez). id = «reg_<uuid>» o «race_<uuid>». */
 function viewRunnerReport(key) {
@@ -402,7 +427,7 @@ function viewRunnerReport(key) {
         <label>Categoría${catSelect('name="category"', cat || d.me.category || '', 'Categoría')}</label>
       </div>
       <label>Si es podio (1º, 2º o 3º), ¿de qué tipo?
-        <select name="podium">${PODIUM_TYPES.map((t) => opt(t.id, t.label, 'suelta')).join('')}</select></label>
+        <select name="podium">${PODIUM_TYPES.map((t) => opt(t.id, t.label, race.race_type === 'campeonato' ? 'campeonato' : 'suelta')).join('')}</select></label>
       <p class="pen bad-box">⚠️ Revísalo bien: <b>una vez enviado no podrás cambiarlo</b>. Si te equivocas, tendrá que corregirlo la dirección.</p>
       <button class="btn primary">Enviar mi resultado</button>
     </form>`, { back });
@@ -425,6 +450,7 @@ function viewRunnerNew() {
         <label>${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-rf="date" value="${esc(d.date)}" min="${pastLimit()}" required></label>
         <label>Modalidad<select data-rf="modality">${MODALITIES.map((m) => opt(m, m, d.modality)).join('')}</select></label>
       </div>
+      ${S.runnerData.circuits ? typeFields(d, 'data-rf') : ''}
       <label class="check"><input type="checkbox" data-rf-multi ${d.multi ? 'checked' : ''}> Carrera de varios días (por etapas)</label>
       ${d.multi ? `<label>Último día<input type="date" data-rf="end_date" value="${esc(d.end_date)}" min="${esc(d.date || pastLimit())}" required></label>` : ''}
       <label>Lugar<input data-rf="place" value="${esc(d.place)}" maxlength="120"></label>
@@ -501,16 +527,17 @@ function runnerBonusCard(d) {
   if (!b) return '';
   const cfg = bonusConfigFor(b.config ? { [b.year]: b.config } : {}, b.year);
   const c = b.contract || (b.nuevo ? 'nuevo' : null);
-  const st = bonusStatus(b.done, cfg, c);
-  const proj = bonusStatus(b.done + (b.planned || 0), cfg, c);
+  const st = bonusStatus(b.done, cfg, c, b.extra || 0);
+  const proj = bonusStatus(b.done + (b.planned || 0), cfg, c, b.extra || 0);
   return `<section class="card bonus-card"><h2>Tu bono ${b.year}</h2>
     ${penaltyAlert(st, cfg, b.year)}
     ${bonusBar(st, cfg, b.planned || 0)}
     <p class="bonus-text">${bonusText(st)}</p>
     ${b.contract ? `<p class="hint">Contrato: ${esc(contractLabel(b.contract))}.</p>` : ''}
-    ${b.planned ? `<p class="hint">Con tus ${b.planned} inscripcion${b.planned === 1 ? '' : 'es'} de ${b.year} llegarías a ${proj.count}${proj.tier ? ` (${euros(proj.amount)})` : ''}${proj.reachesMinimum ? '' : ', aún por debajo del mínimo'}.</p>` : ''}
+    ${b.planned ? `<p class="hint">Con tus ${b.planned} inscripcion${b.planned === 1 ? '' : 'es'} de ${b.year} llegarías a ${proj.bonusCount}${proj.tier ? ` (${euros(proj.amount)})` : ''}${proj.reachesMinimum ? '' : ', aún por debajo del mínimo'}.</p>` : ''}
     <p class="hint">Tramos${st.contract ? ` (${esc(contractLabel(st.contract).toLowerCase())})` : ''}: ${tiersLine(st.tiers)}. Una carrera de varios días cuenta un día cada uno.
-      <br>Penalización si no se llega al mínimo (${cfg.minimum}): ${penaltiesLine(cfg)}.</p>
+      <br>Penalización si no se llega al mínimo (${cfg.minimum}): ${penaltiesLine(cfg)}.
+      ${st.extra ? '<br>Las carreras extra por podio de circuito suben el tramo del bono, pero no cuentan para el mínimo.' : ''}</p>
   </section>`;
 }
 
@@ -522,7 +549,7 @@ function runnerScreen(sub) {
     const g = S.runnerData.registrations.find((x) => x.id === id && x.mine_created);
     if (!g) return frame('Editar carrera', '<p class="empty">Esta carrera no existe o no la añadiste tú.</p>', { back: runnerHref('') });
     if (S.rdraft?.id !== id) S.rdraft = emptyRunnerDraft({ id, name: g.name, date: g.date, multi: !!g.end_date, end_date: g.end_date || '',
-      place: g.place || '', province: g.province || '', country: g.country || DEFAULT_COUNTRY, modality: g.modality, notes: g.notes || '' });
+      place: g.place || '', province: g.province || '', country: g.country || DEFAULT_COUNTRY, modality: g.modality, notes: g.notes || '', race_type: g.race_type || 'suelta', circuit: g.circuit || '' });
     return viewRunnerNew();
   }
   if (sub === 'mi') return viewRunnerMine();
@@ -543,7 +570,7 @@ function doneRaceCard(r, { admin = false, meId = null } = {}) {
   const pods = res.filter((x) => isPodium(x.position)).sort((a, b) => a.position - b.position);
   const mine = res.find((x) => x.runner_id === meId);
   const inner = `<div class="race-head"><div><h3>${esc(r.name)}</h3>
-      <p class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div>${modTag(r.modality)}</div>
+      <p class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div>${modTag(r.modality)}</div>${typeTag(r)}
     <p class="count">🏁 Disputada · ${res.length} del club${res.length ? ': ' + esc(res.map((x) => x.runner_name).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p>
     ${pods.length ? `<p class="pods">${pods.map((x) => `${medal(x.position)} ${esc(x.runner_name)}`).join(' · ')}</p>` : ''}
     ${mine ? `<p class="joined-done">✓ Participaste${mine.position ? ` · ${mine.position}º` : ''}</p>` : ''}
@@ -562,7 +589,7 @@ function viewRunnerHome() {
     return `<article class="card race ${open ? '' : 'past-reg '}${modClass(g.modality)}">
       <div class="race-head"><div><h3>${esc(g.name)}</h3>
         <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>
-        ${modTag(g.modality)}</div>
+        ${modTag(g.modality)}</div>${typeTag(g)}
       ${open ? '' : `<p class="state-tag">🏁 Ya disputada · pendiente de resultados</p>
         ${mine && !S.preview ? (g.my_result ? `<p class="mine-created">📝 Tu resultado: ${g.my_result.position}º (enviado)</p>`
           : `<p class="row"><a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>
@@ -618,7 +645,8 @@ function viewRunnerContract() {
   return frame(runnerTitle(), `
     ${previewBanner()}
     ${myDocsCard()}
-    ${runnerBonusCard(S.runnerData)}`,
+    ${runnerBonusCard(S.runnerData)}
+    ${circuitsCard(S.runnerData)}`,
   { rtab: 'contrato' });
 }
 
@@ -650,7 +678,7 @@ function viewRegistrations() {
   const regs = [...S.data.registrations].sort((a, b) => a.date.localeCompare(b.date) || byName(a, b));
   const card = (g) => `<a class="card race link-card ${g.date < today ? 'past-reg ' : ''}${modClass(g.modality)}" href="#/inscripciones/${g.id}">
       <div class="race-head"><div><h3>${esc(g.name)}</h3>
-      <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality)}</div>
+      <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality)}</div>${typeTag(g)}
       ${g.date < today ? `<p class="state-tag">🏁 Ya disputada: pásala a resultados${g.entries.some((e) => e.self_position) ? ` · 📝 ${g.entries.filter((e) => e.self_position).length} de ${g.entries.length} han puesto su resultado` : ''}</p>` : ''}
       <p class="count">👥 ${g.entries.length} del club${g.entries.length ? ': ' +
         esc(g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p>
@@ -769,7 +797,7 @@ function viewFed() {
 function draftRegistration(id) {
   if (id === 'nueva') {
     const pre = S.prefill; S.prefill = null;   // viene de «Carreras de las federaciones»
-    return { kind: 'reg', id: null, name: '', date: '', place: '', province: '', country: DEFAULT_COUNTRY, modality: 'Carretera', notes: '', people: [], ...pre };
+    return { kind: 'reg', id: null, name: '', date: '', place: '', province: '', country: DEFAULT_COUNTRY, modality: 'Carretera', race_type: 'suelta', circuit: '', notes: '', people: [], ...pre };
   }
   const g = S.data.registrations.find((x) => x.id === id);
   if (!g) return null;
@@ -783,6 +811,7 @@ function raceFields(d) {
       <label>${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-f="date" value="${esc(d.date)}" required></label>
       <label>Modalidad<select data-f="modality">${MODALITIES.map((m) => opt(m, m, d.modality)).join('')}</select></label>
     </div>
+    ${typeFields(d, 'data-f')}
     <label class="check"><input type="checkbox" data-act-change="multi" ${d.multi ? 'checked' : ''}> Carrera de varios días (por etapas)</label>
     ${d.multi ? `<label>Último día<input type="date" data-f="end_date" value="${esc(d.end_date || '')}" min="${esc(d.date || '')}" required></label>` : ''}
     <label>Lugar<input data-f="place" value="${esc(d.place || '')}"></label>
@@ -821,6 +850,70 @@ function viewRegistrationEdit() {
   { back: '#/inscripciones' });
 }
 
+/** Corredor: podios en la general final de un circuito (cláusula NOVENA): los comunica y la dirección los confirma. */
+function circuitsCard(d) {
+  if (!d.circuits) return ''; // base de datos aún sin actualizar
+  const year = d.bonus?.year || new Date().getFullYear();
+  const per = d.bonus?.config?.circuitExtra ?? 4;
+  const mine = d.circuits.filter((c) => c.year >= year - 1);
+  return `<section class="card circ-card">
+    <h2>🏆 General final de un circuito</h2>
+    <p class="hint">Si acabas entre los <b>3 primeros de la clasificación general final</b> de un circuito completo (Copa, Open, Critérium…), absoluta o de tu categoría,
+      se te suman <b>+${per} carreras para el bono</b>. No vale el podio de una prueba suelta. Comunícalo aquí y la dirección lo confirmará.</p>
+    ${mine.length ? `<ul class="mini-list">${mine.map((c) => `<li><div><b>${medal(c.position)} ${esc(c.circuit)}</b>
+      <small class="muted">${c.year} · ${c.position}º · ${scopeLabel(c.scope)}</small></div>
+      ${c.status === 'confirmado' ? `<span class="extra-chip">✅ +${per} carreras</span>`
+        : `<span class="row-btns"><span class="pending-chip">⏳ Pendiente</span>${S.preview ? '' : `<button class="btn small ghost" data-act="circ-cancel" data-id="${c.id}">Retirar</button>`}</span>`}</li>`).join('')}</ul>` : ''}
+    ${S.preview ? '' : `<details${mine.length ? '' : ' open'}><summary><b>+ Comunicar un podio de circuito</b></summary>
+      <form class="stack" data-form="circ-propose">
+        <label>Circuito<input name="circuit" list="dl-circuit" placeholder="Copa Aragón XCM" minlength="3" maxlength="120" required autocomplete="off"></label>${circuitList()}
+        <div class="grid2">
+          <label>Tu puesto final<select name="position"><option value="1">1º</option><option value="2">2º</option><option value="3">3º</option></select></label>
+          <label>Clasificación<select name="scope">${CIRCUIT_SCOPES.map((x) => opt(x.id, x.label.replace('su ', 'mi '), 'categoria')).join('')}</select></label>
+        </div>
+        <label>Temporada<select name="year">${opt(String(year), String(year), String(year))}${opt(String(year - 1), String(year - 1), '')}</select></label>
+        <button class="btn primary">Enviar a la dirección</button>
+      </form></details>`}
+  </section>`;
+}
+
+// ======================================================================
+//  Avisos de la dirección (campanita)
+// ======================================================================
+
+/** Cosas pendientes de la dirección. */
+function adminAlerts() {
+  const today = todayISO();
+  return {
+    circuits: (S.data.circuitPodiums || []).filter((c) => c.status === 'pendiente'),
+    past: S.data.registrations.filter((g) => g.date < today).sort((a, b) => a.date.localeCompare(b.date)),
+    noContract: S.data.runners.filter((r) => !r.contract).sort(byName),
+  };
+}
+const alertCount = () => { const a = adminAlerts(); return a.circuits.length + a.past.length; };
+
+function viewAlerts() {
+  const a = adminAlerts();
+  const per = bonusCfg(new Date().getFullYear()).circuitExtra ?? 4;
+  const none = !a.circuits.length && !a.past.length && !a.noContract.length;
+  return frame('Avisos', `
+    ${none ? '<p class="card pen ok">✅ No tienes nada pendiente.</p>' : ''}
+    ${a.circuits.length ? `<h2 class="section">🏆 Podios de circuito por confirmar (${a.circuits.length})</h2>
+      <p class="hint">Un corredor dice que ha hecho podio en la general final de un circuito. Si lo confirmas, se le suman +${per} carreras para el bono.</p>
+      ${a.circuits.map((c) => `<article class="card"><h3>${esc(runnerById(c.runner_id)?.name || '?')}</h3>
+        <p>${medal(c.position)} <b>${c.position}º</b> en <b>${esc(c.circuit)}</b> · ${c.year} · clasificación ${scopeLabel(c.scope)}</p>
+        <div class="row"><button class="btn primary" data-act="circ-confirm" data-id="${c.id}">Confirmar (+${per})</button>
+          <button class="btn danger ghost" data-act="circ-del" data-id="${c.id}">Rechazar</button></div></article>`).join('')}` : ''}
+    ${a.past.length ? `<h2 class="section">🏁 Carreras ya disputadas por pasar a resultados (${a.past.length})</h2>
+      <p class="hint">Hasta que no las pases a resultados no cuentan para el bono ni salen en el resumen.</p>
+      <ul class="mini-list card">${a.past.map((g) => { const n = g.entries.filter((e) => e.self_position).length;
+        return `<li><div><b>${esc(g.name)}</b><small class="muted">${when(g)} · ${g.entries.length} del club${n ? ` · 📝 ${n} con resultado puesto` : ''}</small></div>
+          <a class="btn small" href="#/inscripciones/${g.id}">Abrir</a></li>`; }).join('')}</ul>` : ''}
+    ${a.noContract.length ? `<h2 class="section">📄 Corredores sin tipo de contrato (${a.noContract.length})</h2>
+      <p class="hint">Sin contrato indicado se les aplican los bonos y la penalización de renovación: ${esc(a.noContract.map((r) => r.name).join(', '))}.</p>
+      <a class="btn block" href="#/bonos">Indicarlo en Bonos</a>` : ''}`, { back: '#/inscripciones' });
+}
+
 // ======================================================================
 //  Carreras con resultados (dirección)
 // ======================================================================
@@ -835,7 +928,7 @@ function viewRaces() {
     const pods = r.results.filter((x) => isPodium(x.position)).sort((a, b) => a.position - b.position);
     return `<a class="card race link-card ${modClass(r.modality)}" href="#/carreras/${r.id}">
       <div class="race-head"><div><h3>${esc(r.name)}</h3>
-      <p class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div>${modTag(r.modality)}</div>
+      <p class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div>${modTag(r.modality)}</div>${typeTag(r)}
       <p class="count">${r.results.length} participante${r.results.length === 1 ? '' : 's'}</p>
       ${pods.length ? `<p class="pods">${pods.map((x) => `${medal(x.position)} ${esc(x.runner_name)}${x.category ? ` <small>${esc(x.category)}</small>` : ''}`).join(' · ')}</p>` : ''}
       ${(() => { const st = podiumsOf(r.results.map((res) => ({ race: r, res }))).filter((p) => p.stage);
@@ -853,7 +946,7 @@ function yearPicker(years) {
 }
 
 function draftRace(id) {
-  if (id === 'nueva') return { kind: 'race', id: null, name: '', date: '', place: '', province: '', country: DEFAULT_COUNTRY, modality: 'Carretera', notes: '', people: [], stages: [] };
+  if (id === 'nueva') return { kind: 'race', id: null, name: '', date: '', place: '', province: '', country: DEFAULT_COUNTRY, modality: 'Carretera', race_type: 'suelta', circuit: '', notes: '', people: [], stages: [] };
   const r = S.data.races.find((x) => x.id === id);
   if (!r) return null;
   const stages = (r.stages || []).map((_, i) => stageName(r, i));
@@ -990,12 +1083,14 @@ const bonusCfg = (year) => bonusConfigFor(S.data?.settings?.bonus, year);
 /** Barra de progreso con las marcas de los tramos y del mínimo. */
 function bonusBar(st, cfg, planned = 0) {
   const tiers = st.tiers || tiersFor(cfg, st.contract);
-  const max = Math.max(...tiers.map((t) => t.races), cfg.minimum || 0, st.count + planned, 1);
+  const extra = st.extra || 0, total = st.count + extra;
+  const max = Math.max(...tiers.map((t) => t.races), cfg.minimum || 0, total + planned, 1);
   const pct = (n) => `${Math.min(100, (n / max) * 100).toFixed(1)}%`;
-  return `<div class="bbar" role="img" aria-label="${st.count} de ${max} carreras">
-    <span class="bbar-plan" style="width:${pct(st.count + planned)}"></span>
+  return `<div class="bbar" role="img" aria-label="${st.count} carreras${extra ? ` más ${extra} extra por podio de circuito` : ''}, de ${max}">
+    <span class="bbar-plan" style="width:${pct(total + planned)}"></span>
+    ${extra ? `<span class="bbar-extra" style="width:${pct(total)}"></span>` : ''}
     <span class="bbar-done ${st.reachesMinimum ? 'ok' : ''}" style="width:${pct(st.count)}"></span>
-    ${tiers.map((t) => `<i class="bbar-mark${st.count >= t.races ? ' hit' : ''}${t.races === st.minimum ? ' min' : ''}" style="left:${pct(t.races)}"><b>${t.races}${t.races === st.minimum ? ' mín' : ''}</b></i>`).join('')}
+    ${tiers.map((t) => `<i class="bbar-mark${total >= t.races ? ' hit' : ''}${t.races === st.minimum ? ' min' : ''}" style="left:${pct(t.races)}"><b>${t.races}${t.races === st.minimum ? ' mín' : ''}</b></i>`).join('')}
     ${st.minimum && !tiers.some((t) => t.races === st.minimum) ? `<i class="bbar-mark min${st.reachesMinimum ? ' hit' : ''}" style="left:${pct(st.minimum)}"><b>${st.minimum} mín</b></i>` : ''}
   </div>`;
 }
@@ -1034,6 +1129,7 @@ function penaltyAlert(st, cfg, year, { who = 'Te' } = {}) {
 
 function bonusText(st, who = 'Llevas') {
   const parts = [`${who} <b>${st.count}</b> carrera${st.count === 1 ? '' : 's'}`];
+  if (st.extra) parts.push(`<span class="extra-chip">🏆 +${st.extra} por podio de circuito = <b>${st.bonusCount}</b> para el bono</span>`);
   if (st.tier) parts.push(`tramo de <b>${euros(st.amount)}</b>`);
   if (!st.reachesMinimum && st.penalty) parts.push(`<span class="bad">faltan ${st.missingToMinimum} para el mínimo (${st.minimum}) · penalización ${euros(st.penalty)}</span>`);
   else if (!st.reachesMinimum) parts.push(st.next ? `faltan ${st.missingToNext} para ${euros(st.next.amount)}` : `faltan ${st.missingToMinimum} para el mínimo (${st.minimum})`);
@@ -1046,7 +1142,7 @@ function viewBonus() {
   const years = availableYears(S.data.races);
   if (!years.includes(S.year)) S.year = years[0];
   const cfg = bonusCfg(S.year);
-  const rows = yearBonuses(S.year, S.data.races, S.data.registrations, S.data.runners, cfg);
+  const rows = yearBonuses(S.year, S.data.races, S.data.registrations, S.data.runners, cfg, S.data.circuitPodiums || []);
   const totalPay = rows.reduce((n, r) => n + r.amount, 0);
   const totalPen = rows.reduce((n, r) => n + r.penalty, 0);
   const saved = !!S.data.settings?.bonus?.[S.year];
@@ -1067,9 +1163,11 @@ function viewBonus() {
         ${contractSelect(`data-runner-contract="${r.runner.id}" aria-label="Tipo de contrato de ${esc(r.runner.name)}"`, r.runner.contract || (r.isNew ? 'nuevo' : ''))}</div>
       ${bonusBar(r, cfg, r.planned)}
       ${!r.reachesMinimum && r.penalty ? `<p class="pen-chip">⚠️ Penalización ${euros(r.penalty)} si no llega a ${r.minimum}</p>` : r.reachesMinimum ? '<p class="pen-chip ok">✅ Mínimo cumplido</p>' : ''}
-      <p class="bonus-text">${bonusText(r, 'Lleva')}${r.planned ? ` · <span class="muted">con sus ${r.planned} inscrita${r.planned === 1 ? '' : 's'}: ${r.projected.count}</span>` : ''}</p>
+      <p class="bonus-text">${bonusText(r, 'Lleva')}${r.planned ? ` · <span class="muted">con sus ${r.planned} inscrita${r.planned === 1 ? '' : 's'}: ${r.projected.bonusCount}</span>` : ''}</p>
+      ${r.circuits.length ? `<p class="hint">${r.circuits.map((c) => `${medal(c.position)} ${esc(c.circuit)}`).join(' · ')}</p>` : ''}
     </li>`).join('')}</ul>
     ${rows.length ? '' : '<p class="empty">No hay corredores.</p>'}
+    ${adminCircuits(cfg)}
     <details class="card"${saved ? '' : ' open'}>
       <summary><b>Condiciones del bono ${S.year}</b>${saved ? '' : ' <span class="muted">(sin guardar: se usan las de la temporada anterior o las del contrato 2026)</span>'}</summary>
       <form class="stack" data-form="bonus-cfg">
@@ -1079,7 +1177,7 @@ function viewBonus() {
         ${tierInputs(tiersFor(cfg, 'renovacion_sin_licencia'), 'sl_')}
         <div class="grid2">
           <label>Mínimo del contrato<input type="number" min="0" name="minimum" value="${esc(cfg.minimum)}" required></label>
-          <span></span>
+          <label>Carreras extra por podio de circuito<input type="number" min="0" name="circuit_extra" value="${esc(cfg.circuitExtra ?? 4)}" required></label>
           <label>Penalización renovación (€)<input type="number" min="0" name="pen_ren" value="${esc(cfg.penalty.renovado)}" required></label>
           <label>Penalización nuevos (€)<input type="number" min="0" name="pen_new" value="${esc(cfg.penalty.nuevo)}" required></label>
           <label>Penalización renovación sin licencia (€)<input type="number" min="0" name="pen_sl" value="${esc(cfg.penalty.sin_licencia ?? 0)}" required></label>
@@ -1089,6 +1187,31 @@ function viewBonus() {
       </form>
     </details>
     <button class="btn block" data-act="bonus-csv">Exportar bonos ${S.year} a CSV (Excel)</button>`, { back: '#/corredores' });
+}
+
+/** Dirección: podios en la general final de un circuito de la temporada (confirmar, añadir o borrar). */
+function adminCircuits(cfg) {
+  const all = S.data.circuitPodiums;
+  if (!all) return `<p class="card warn">Para los podios de circuito (cláusula 9) falta ejecutar en Supabase <code>supabase/cambios/2026-11-12-circuitos-1.sql</code> y <code>…-2.sql</code>.</p>`;
+  const list = all.filter((c) => c.year === S.year).sort((a, b) => a.circuit.localeCompare(b.circuit, 'es') || a.position - b.position);
+  const per = cfg.circuitExtra ?? 4;
+  return `<details class="card circ-card"${list.some((c) => c.status === 'pendiente') ? ' open' : ''}>
+    <summary><b>🏆 Podios en la general final de un circuito (${list.length})</b></summary>
+    <p class="hint">Cláusula 9: cada podio en la clasificación general final de un circuito completo (absoluta o de categoría) suma <b>+${per} carreras para el bono</b>. No cuentan para el mínimo.</p>
+    ${list.length ? `<ul class="mini-list">${list.map((c) => `<li><div><b>${medal(c.position)} ${esc(runnerById(c.runner_id)?.name || '?')}</b>
+      <small class="muted">${esc(c.circuit)} · ${c.position}º · ${scopeLabel(c.scope)}${c.by_runner ? ' · comunicado por el corredor' : ''}</small></div>
+      <span class="row-btns">${c.status === 'pendiente' ? `<button class="btn small primary" data-act="circ-confirm" data-id="${c.id}">Confirmar</button>` : `<span class="extra-chip">+${per}</span>`}
+      <button class="btn small danger ghost" data-act="circ-del" data-id="${c.id}" aria-label="Borrar">🗑️</button></span></li>`).join('')}</ul>` : '<p class="empty small">Ninguno todavía.</p>'}
+    <form class="stack" data-form="circ-add">
+      <label>Corredor<select name="runner" required><option value="">Elegir…</option>${[...S.data.runners].sort(byName).map((x) => opt(x.id, x.name)).join('')}</select></label>
+      <label>Circuito<input name="circuit" list="dl-circuit" placeholder="Copa Aragón XCM" minlength="3" maxlength="120" required autocomplete="off"></label>${circuitList()}
+      <div class="grid2">
+        <label>Puesto final<select name="position"><option value="1">1º</option><option value="2">2º</option><option value="3">3º</option></select></label>
+        <label>Clasificación<select name="scope">${CIRCUIT_SCOPES.map((x) => opt(x.id, x.label, 'categoria')).join('')}</select></label>
+      </div>
+      <button class="btn">Añadir podio de circuito ${S.year}</button>
+    </form>
+  </details>`;
 }
 
 function tierInputs(tiers, prefix) {
@@ -1214,7 +1337,7 @@ function viewRunners() {
   for (const r of S.data.races) for (const x of r.results) if (x.runner_id) counts.set(x.runner_id, (counts.get(x.runner_id) || 0) + 1);
   const runners = [...S.data.runners].sort(byName);
   const year = new Date().getFullYear();
-  const bonusBy = new Map(yearBonuses(year, S.data.races, S.data.registrations, S.data.runners, bonusCfg(year)).map((b) => [b.runner.id, b]));
+  const bonusBy = new Map(yearBonuses(year, S.data.races, S.data.registrations, S.data.runners, bonusCfg(year), S.data.circuitPodiums || []).map((b) => [b.runner.id, b]));
   const badge = (b) => !b ? '' : `<small class="bbadge ${b.reachesMinimum ? (b.tier ? 'ok' : '') : 'bad'}">Bono ${year}: ${b.count}/${b.next ? b.next.races : b.count}${b.tier ? ` · ${euros(b.amount)}` : ''}${b.reachesMinimum ? '' : ' · bajo mínimo'}</small>`;
   return frame(`Corredores (${runners.length})`, `
     <a class="btn block" href="#/bonos">Bonos por carreras ${year}</a>
@@ -1282,8 +1405,10 @@ function draftPayload() {
   const d = S.draft;
   const base = { id: d.id, name: cleanName(d.name), date: d.date, place: cleanName(d.place), province: cleanName(d.province),
     country: cleanName(d.country), modality: d.modality, notes: String(d.notes || '').trim(),
-    end_date: d.multi && d.end_date ? d.end_date : null };
+    end_date: d.multi && d.end_date ? d.end_date : null,
+    race_type: d.race_type || 'suelta', circuit: d.race_type === 'circuito' ? cleanName(d.circuit) : null };
   if (!base.name) throw new Error('Falta el nombre de la carrera.');
+  if (base.race_type === 'circuito' && !base.circuit) throw new Error('Falta el nombre del circuito.');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(base.date || '')) throw new Error('Falta la fecha.');
   if (d.multi && !base.end_date) throw new Error('Falta el último día de la carrera.');
   if (base.end_date && base.end_date <= base.date) throw new Error('El último día tiene que ser posterior al primero.');
@@ -1295,6 +1420,12 @@ async function saveRegistrationDraft() {
   const id = await api.saveRegistration(draftPayload(), d.people.map((p) => ({ runner_id: p.runner_id, category: p.category || null })));
   await reload();
   return id;
+}
+
+/** Guarda el tipo de una carrera creada por el corredor (si ya existía y es de otro, no se toca). */
+async function setMyRaceType(id, d) {
+  if (!S.runnerData?.circuits) return; // base de datos sin el cambio de circuitos
+  try { await api.runnerSetType(S.code, id, d.race_type || 'suelta', d.race_type === 'circuito' ? cleanName(d.circuit) : null); } catch (e) { console.warn(e); }
 }
 
 const actions = {
@@ -1492,11 +1623,20 @@ const actions = {
   'csv-year'() { download(`monzon-resultados-${S.year}.csv`, toCsv(csvRows(S.data.races.filter((r) => yearOf(r.date) === S.year))), 'text/csv;charset=utf-8'); },
   'bonus-csv'() {
     const cfg = bonusCfg(S.year);
-    const rows = yearBonuses(S.year, S.data.races, S.data.registrations, S.data.runners, cfg).map((r) => [
-      r.runner.name, contractLabel(r.contract), r.count, r.amount, r.reachesMinimum ? 'Sí' : 'No', r.penalty,
+    const rows = yearBonuses(S.year, S.data.races, S.data.registrations, S.data.runners, cfg, S.data.circuitPodiums || []).map((r) => [
+      r.runner.name, contractLabel(r.contract), r.count, r.extra, r.bonusCount, r.amount, r.reachesMinimum ? 'Sí' : 'No', r.penalty,
       r.next ? r.next.races : '', r.next ? r.missingToNext : '', r.planned, r.projected.count]);
-    download(`monzon-bonos-${S.year}.csv`, toCsv(rows, ['Corredor', 'Contrato', 'Carreras', 'Bono actual (€)', 'Llega al mínimo',
+    download(`monzon-bonos-${S.year}.csv`, toCsv(rows, ['Corredor', 'Contrato', 'Carreras', 'Extra por circuitos', 'Total para el bono', 'Bono actual (€)', 'Llega al mínimo',
       'Penalización (€)', 'Siguiente tramo', 'Faltan', 'Inscritas pendientes', 'Previsión']), 'text/csv;charset=utf-8');
+  },
+  async 'circ-confirm'(el) { await run(async () => { await api.confirmCircuitPodium(el.dataset.id); await reload(); }, 'Podio de circuito confirmado'); render(); },
+  async 'circ-del'(el) {
+    if (!await confirmAction('Quitar podio de circuito', 'Dejará de sumar carreras extra para el bono.', 'Quitar')) return;
+    await run(async () => { await api.deleteCircuitPodium(el.dataset.id); await reload(); }, 'Quitado'); render();
+  },
+  async 'circ-cancel'(el) {
+    if (!await confirmAction('Retirar', '¿Retirar este podio de circuito que comunicaste?', 'Retirar')) return;
+    await run(async () => { await api.runnerCancelCircuit(S.code, el.dataset.id); await loadRunner(); }, 'Retirado'); render();
   },
   'csv-all'() { download(`monzon-resultados-todos.csv`, toCsv(csvRows(S.data.races)), 'text/csv;charset=utf-8'); },
 };
@@ -1553,10 +1693,12 @@ const forms = {
     const d = S.rdraft;
     const name = cleanName(d.name);
     if (d.multi && !d.end_date) return toast('Falta el último día.', true);
+    if (d.race_type === 'circuito' && !cleanName(d.circuit)) return toast('Falta el nombre del circuito.', true);
     if (d.id) { // editar una carrera propia
       const ok = await run(async () => {
         await api.runnerUpdate(S.code, d.id, { name, date: d.date, end_date: d.multi ? d.end_date : null, place: cleanName(d.place),
           province: cleanName(d.province), country: d.country, modality: d.modality, notes: d.notes || '' });
+        await setMyRaceType(d.id, d);
         await loadRunner(); return true;
       }, 'Carrera actualizada');
       if (ok) { S.rdraft = null; go('#/'); }
@@ -1574,6 +1716,7 @@ const forms = {
     const id = await run(async () => {
       const newId = await api.runnerCreate(S.code, { name, date: d.date, end_date: d.multi ? d.end_date : null, place: cleanName(d.place),
         province: cleanName(d.province), country: d.country, modality: d.modality }, d.category || null);
+      if (newId && d.race_type && d.race_type !== 'suelta') await setMyRaceType(newId, d);
       await loadRunner(); return newId || true;
     }, past ? 'Carrera añadida: ahora pon tu resultado' : 'Carrera añadida y te has apuntado');
     if (id) { S.rdraft = null; S.q.runner = ''; go(past ? resultHref(id) : '#/'); }
@@ -1599,12 +1742,26 @@ const forms = {
     }, 'Documento subido');
     if (ok) render();
   },
+  async 'circ-propose'(f) {
+    const name = cleanName(f.circuit.value);
+    if (name.length < 3) return toast('Escribe el nombre del circuito.', true);
+    const ok = await run(async () => { await api.runnerProposeCircuit(S.code, name, Number(f.year.value), Number(f.position.value), f.scope.value); await loadRunner(); return true; },
+      'Enviado: la dirección tiene que confirmarlo');
+    if (ok) render();
+  },
+  async 'circ-add'(f) {
+    const name = cleanName(f.circuit.value);
+    if (!f.runner.value || name.length < 3) return toast('Elige el corredor y escribe el circuito.', true);
+    await run(async () => { await api.saveCircuitPodium({ runner_id: f.runner.value, year: S.year, circuit: name, position: Number(f.position.value), scope: f.scope.value, status: 'confirmado' }); await reload(); },
+      'Podio de circuito añadido');
+    render();
+  },
   async 'bonus-cfg'(f) {
     const main = readTiers(f, '', 'nuevo y renovación');
     if (main.error) return toast(main.error, true);
     const sl = readTiers(f, 'sl_', 'renovación sin licencia');
     if (sl.error) return toast(sl.error, true);
-    const cfg = { ...bonusCfg(S.year), tiers: main.tiers, tiersByContract: { renovacion_sin_licencia: sl.tiers }, minimum: Number(f.minimum.value),
+    const cfg = { ...bonusCfg(S.year), tiers: main.tiers, tiersByContract: { renovacion_sin_licencia: sl.tiers }, minimum: Number(f.minimum.value), circuitExtra: Number(f.circuit_extra.value),
       penalty: { renovado: Number(f.pen_ren.value), nuevo: Number(f.pen_new.value), sin_licencia: Number(f.pen_sl.value) } };
     await run(() => saveBonus(S.year, cfg), `Condiciones de ${S.year} guardadas`);
     render();
@@ -1684,7 +1841,7 @@ const fileHandlers = {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-join-go', 'r-delete-mine', 'r-join-race']);
+const RUNNER_ACTIONS = new Set(['r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel']);
 $app.addEventListener('click', (ev) => {
   const el = ev.target.closest('[data-act]');
   if (!el || !actions[el.dataset.act]) return;
@@ -1744,6 +1901,11 @@ $app.addEventListener('input', (ev) => {
 
 $app.addEventListener('change', async (ev) => {
   const t = ev.target;
+  if ('retype' in t.dataset) { // cambia el tipo de carrera: mostrar u ocultar el nombre del circuito
+    const d = t.dataset.rf ? S.rdraft : S.draft;
+    if (d) { d.race_type = t.value; render(); $app.querySelector('[list="dl-circuit"]')?.focus(); }
+    return;
+  }
   if ('rfMulti' in t.dataset && S.rdraft) {
     S.rdraft.multi = t.checked; if (!t.checked) S.rdraft.end_date = ''; render(); return;
   }
@@ -1755,7 +1917,7 @@ $app.addEventListener('change', async (ev) => {
   } else if (t.dataset.actChange === 'add-person' && t.value) {
     const r = runnerById(t.value);
     S.draft.people.push({ runner_id: r.id, runner_name: r.name, category: r.category || '', position: '',
-      podium_type: S.draft.stages?.length ? 'general' : 'suelta', stage_positions: (S.draft.stages || []).map(() => '') });
+      podium_type: S.draft.race_type === 'campeonato' ? 'campeonato' : S.draft.stages?.length ? 'general' : 'suelta', stage_positions: (S.draft.stages || []).map(() => '') });
     render();
     $app.querySelector('.edit-list li:last-child')?.scrollIntoView({ block: 'center' });
   } else if (t.dataset.fed) {
