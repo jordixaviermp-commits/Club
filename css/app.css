@@ -190,12 +190,7 @@ h2.section { scroll-margin-top: 80px; }
 .cal-cell.empty { visibility: hidden; }
 .cal-cell.past { color: var(--muted); }
 .cal-cell.today { border-color: var(--muted); }
-.cal-cell.has { background: var(--accent-2); color: var(--tag-text, var(--accent)); font-weight: 700; cursor: pointer; }
-.cal-cell.has::after { content: ""; position: absolute; bottom: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--brand-cyan); }
-.cal-cell.mine { background: var(--accent); color: var(--on-accent); }
-.cal-cell.mine::after { background: var(--on-accent); }
 .cal-cell.sel { outline: 3px solid var(--brand-cyan); outline-offset: 1px; }
-.cal-cell i { position: absolute; top: 2px; right: 4px; font-style: normal; font-size: .65rem; font-weight: 700; }
 .cal-months { display: flex; gap: .35rem; overflow-x: auto; margin-top: .7rem; padding-bottom: .2rem; }
 .cal-months .chip { min-height: 34px; padding: .25rem .7rem; font-size: .85rem; }
 .fed-links { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin: 0 0 12px; }
@@ -213,7 +208,6 @@ label.check input { width: 22px; height: 22px; min-height: 0; }
 .fed .done { color: var(--muted); font-weight: 600; font-size: .9rem; }
 label.check input { accent-color: var(--accent); }
 /* Días de carreras por etapas: barra inferior que une los días */
-.cal-cell.stage::before { content: ""; position: absolute; left: -3px; right: -3px; bottom: 1px; height: 3px; background: var(--brand-cyan); opacity: .55; }
 
 /* Etapas dentro de una carrera */
 .stages-box { border: 1px solid var(--line); border-radius: 12px; padding: .7rem .8rem; }
@@ -259,3 +253,43 @@ label.check input { accent-color: var(--accent); }
 .roster li > .roster-sel { order: 3; flex: 1 1 100%; display: grid; grid-template-columns: 1fr 1.5fr; gap: .4rem; flex-direction: initial; }
 .roster li .roster-sel select { width: 100%; min-height: 40px; padding: .35rem .5rem; font-size: .9rem; }
 .bonus-head select { max-width: 60%; }
+
+/* ---------- Colores por modalidad ----------
+   Tonos bien separados (también para daltonismo rojo-verde): Carretera azul y BTT naranja,
+   que son las más habituales, son la pareja que mejor se distingue. */
+.m-carretera  { --mc: #1f6fd1; --mct: #164f96; }
+.m-btt        { --mc: #e07800; --mct: #9a5200; }
+.m-gravel     { --mc: #0f9d8a; --mct: #0a6b5e; }
+.m-ciclocross { --mc: #8e44ad; --mct: #6a2f83; }
+.m-pista      { --mc: #d6336c; --mct: #a3214f; }
+.m-otra       { --mc: #6b7280; --mct: #4b5563; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .m-carretera  { --mc: #5b9bff; --mct: #a9cbff; }
+  :root:not([data-theme="light"]) .m-btt        { --mc: #ff9a2e; --mct: #ffc283; }
+  :root:not([data-theme="light"]) .m-gravel     { --mc: #2cc9b3; --mct: #8fe6da; }
+  :root:not([data-theme="light"]) .m-ciclocross { --mc: #c084fc; --mct: #e0c3fe; }
+  :root:not([data-theme="light"]) .m-pista      { --mc: #ff6b9a; --mct: #ffb3cb; }
+  :root:not([data-theme="light"]) .m-otra       { --mc: #9ca3af; --mct: #d1d5db; }
+}
+
+/* Etiqueta y franja lateral de las tarjetas */
+.tag[class*="m-"] { background: color-mix(in srgb, var(--mc) 16%, var(--card)); color: var(--mct); border: 1px solid color-mix(in srgb, var(--mc) 45%, transparent); }
+.card.race[class*="m-"] { border-left: 6px solid var(--mc); }
+
+/* Días del calendario: fondo y borde del color de la modalidad; un punto por carrera */
+.cal-cell.has { cursor: pointer; font-weight: 700; color: var(--text);
+  background: color-mix(in srgb, var(--mc, var(--muted)) 20%, var(--card)); border: 2px solid var(--mc, var(--muted)); }
+.cal-cell.has.multi-mod { --mc: var(--muted); background: var(--card); border-style: dashed; }
+.cal-cell .dots { position: absolute; bottom: 4px; left: 0; right: 0; display: flex; justify-content: center; gap: 3px; }
+.cal-cell .dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--mc); }
+.cal-cell.past.has { opacity: .55; }
+/* Días en que el corredor ya está apuntado: anillo grueso y ✓ */
+.cal-cell.mine { box-shadow: 0 0 0 3px var(--text); }
+.cal-cell.mine::after { content: "✓"; position: absolute; top: 1px; right: 4px; font-size: .7rem; font-weight: 800; color: var(--text); }
+/* Carreras de varios días: barra del color de la modalidad que une los días */
+.cal-cell.stage::before { content: ""; position: absolute; left: -4px; right: -4px; bottom: -3px; height: 4px; background: var(--mc, var(--brand-cyan)); border-radius: 2px; }
+
+/* Leyenda */
+.mod-legend { display: flex; flex-wrap: wrap; gap: .35rem .9rem; margin-top: .7rem; font-size: .8rem; font-weight: 600; }
+.mod-legend span { display: inline-flex; align-items: center; gap: .35rem; color: var(--text); }
+.mod-legend i { width: 12px; height: 12px; border-radius: 3px; background: var(--mc); }
