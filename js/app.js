@@ -114,6 +114,7 @@ async function onRoute() {
   S.draft = null;
   if (S.session?.isAdmin && !['vista', 'equipo'].includes(view) && S.preview) { S.preview = null; S.runnerData = null; } // salir de la vista previa
   if (view === 'equipo' && (S.code || S.preview)) loadTeam();
+  if (view === 'federaciones' && !S.session?.isAdmin && S.code && !S.fed) loadFed();
   if (S.session?.isAdmin) {
     if (view === 'inscripciones' && id) S.draft = draftRegistration(id);
     if (view === 'carreras' && id) S.draft = draftRace(id);
@@ -170,7 +171,7 @@ function render() {
       vista: () => (S.preview && S.runnerData ? viewRunnerHome() : viewRunners()),
       equipo: () => (S.preview ? viewTeam() : viewSummary()),
     }[view] || viewRegistrations)();
-  } else if (S.code && S.runnerData) html = view === 'nueva' ? viewRunnerNew() : view === 'equipo' ? viewTeam() : viewRunnerHome();
+  } else if (S.code && S.runnerData) html = view === 'nueva' ? viewRunnerNew() : view === 'equipo' ? viewTeam() : view === 'federaciones' ? viewFed() : viewRunnerHome();
   else html = viewWelcome();
   $app.innerHTML = html;
   document.body.classList.toggle('has-tabs', !!admin && view !== 'entrar');
@@ -453,6 +454,7 @@ function viewRunnerHome() {
     </section>
     ${body}
     <h2 class="section">Calendarios de las federaciones</h2>
+    <a class="btn block" href="#/federaciones">Ver carreras de las federaciones (catalana y aragonesa)</a>
     ${fedLinks()}
     <p class="center"><button class="link muted" data-act="r-forget">No soy ${esc(me.name)}</button></p>`,
   pv ? { back: '#/corredores', actions: viewToggle() }
@@ -538,11 +540,26 @@ async function loadFed() {
 }
 
 function viewFed() {
+  // También la ven los corredores: en vez de «Crear inscripción», «Apuntarme» o «Añadir y apuntarme».
+  const runner = !S.session?.isAdmin && !!S.runnerData;
+  const back = runner ? '#/' : '#/inscripciones';
   const f = S.fed;
-  if (!f || f.loading) return frame('Federaciones', '<p class="empty">Cargando calendarios…</p>', { back: '#/inscripciones' });
-  if (f.failed) return frame('Federaciones', `<p class="card warn">No se han podido cargar los calendarios. Revisa la conexión o usa los enlaces directos:</p>${fedLinks()}`, { back: '#/inscripciones' });
+  if (!f || f.loading) return frame('Federaciones', '<p class="empty">Cargando calendarios…</p>', { back });
+  if (f.failed) return frame('Federaciones', `<p class="card warn">No se han podido cargar los calendarios. Revisa la conexión o usa los enlaces directos:</p>${fedLinks()}`, { back });
   const today = todayISO();
-  const created = new Set(S.data.registrations.concat(S.data.races).map((g) => g.date + '|' + normalize(g.name)));
+  const clubRegs = runner ? S.runnerData.registrations : S.data.registrations;
+  const created = new Set(clubRegs.concat(runner ? [] : S.data.races).map((g) => g.date + '|' + normalize(g.name)));
+  const regByKey = new Map(clubRegs.map((g) => [g.date + '|' + normalize(g.name), g]));
+  const meId = S.runnerData?.me?.id;
+  const action = (r) => {
+    const key = r.date + '|' + normalize(r.name);
+    if (!runner) return created.has(key) ? '<span class="done">✓ Ya está en la app</span>'
+      : `<button class="btn primary small" data-act="fed-create" data-i="${f.races.indexOf(r)}">Crear inscripción</button>`;
+    const g = regByKey.get(key);
+    if (g) return g.entries.some((e) => e.runner_id === meId) ? '<span class="done">✓ Apuntado</span>'
+      : `<button class="btn primary small" data-act="r-join" data-id="${g.id}">Apuntarme</button>`;
+    return `<button class="btn primary small" data-act="r-new-fed" data-i="${f.races.indexOf(r)}">Añadir y apuntarme</button>`;
+  };
   const list = f.races.filter((r) => r.date >= today
     && (fedFilter.source === 'all' || r.source === fedFilter.source)
     && (fedFilter.modality === 'all' || r.modality === fedFilter.modality)
@@ -553,7 +570,6 @@ function viewFed() {
     const ym = r.date.slice(0, 7);
     const head = ym !== month ? `<h2 class="section">${MONTH_NAMES[Number(ym.slice(5)) - 1][0].toUpperCase() + MONTH_NAMES[Number(ym.slice(5)) - 1].slice(1)} ${ym.slice(0, 4)}</h2>` : '';
     month = ym;
-    const done = created.has(r.date + '|' + normalize(r.name));
     return `${head}<article class="card race fed ${modClass(r.modality)}">
       <div class="race-head"><div><h3>${esc(r.name)}</h3>
         <p class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div>
@@ -562,8 +578,7 @@ function viewFed() {
         ${esc(r.discipline || '')}${r.kind === 'Ocio' ? ' · ocio' : ''}${r.info ? ` · <span class="muted">${esc(r.info)}</span>` : ''}</p>
       <div class="row">
         <a class="btn small" href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">Ver en la web ↗</a>
-        ${done ? '<span class="done">✓ Ya está en la app</span>'
-          : `<button class="btn primary small" data-act="fed-create" data-i="${f.races.indexOf(r)}">Crear inscripción</button>`}
+        ${action(r)}
       </div></article>`;
   }).join('');
   const updated = f.updated_at ? new Date(f.updated_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
@@ -574,11 +589,13 @@ function viewFed() {
       <label>Modalidad<select data-fed="modality">${opt('all', 'Todas', fedFilter.modality)}${mods.map((m) => opt(m, m, fedFilter.modality)).join('')}</select></label>
       <label class="check"><input type="checkbox" data-fed="leisure" ${fedFilter.leisure ? 'checked' : ''}> Incluir ocio y marchas</label>
     </div>
-    <p class="hint">${list.length} carrera${list.length === 1 ? '' : 's'}. Pulsa «Crear inscripción» para añadirla con nombre, fecha y lugar ya rellenados.</p>
+    <p class="hint">${list.length} carrera${list.length === 1 ? '' : 's'}. ${runner
+      ? 'Si ya está en el club, pulsa «Apuntarme». Si no, «Añadir y apuntarme» la crea con los datos ya rellenados.'
+      : 'Pulsa «Crear inscripción» para añadirla con nombre, fecha y lugar ya rellenados.'}</p>
     ${items || '<p class="empty">No hay carreras con estos filtros.</p>'}
     ${f.errors?.length ? `<p class="card warn">Aviso de la última lectura: ${esc(f.errors.join(' · '))}</p>` : ''}
     <p class="hint center">Datos de las webs de las federaciones${updated ? `, leídos el ${updated}` : ''}. Comprueba siempre los detalles en su web.</p>
-    ${fedLinks()}`, { back: '#/inscripciones' });
+    ${fedLinks()}`, { back });
 }
 
 function draftRegistration(id) {
