@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  extractCode, todayISO, formatDate, MONTH_NAMES, monthGrid, addMonths,
+  extractCode, todayISO, formatDate, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -39,6 +39,8 @@ const catSelect = (attrs, sel, emptyLabel = 'Sin categoría') =>
 const byName = (a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' });
 const runnerById = (id) => S.data?.runners.find((r) => r.id === id);
 const linkFor = (code) => `${location.origin}${location.pathname}#/c/${code}`;
+/** Fecha de una carrera: un día, o «sáb 12 – lun 14 jun 2027 · 3 días» si es por etapas. */
+const when = (x) => x.end_date && x.end_date > x.date ? `${formatRange(x.date, x.end_date)} · ${numDays(x.date, x.end_date)} días` : formatDate(x.date);
 const place = (x) => [x.place, x.province, x.country && x.country !== DEFAULT_COUNTRY ? x.country : ''].filter(Boolean).join(' · ');
 
 // ---------- utilidades de interfaz ----------
@@ -210,18 +212,19 @@ function calendarView(regs, card, isMine = () => false) {
   if (!S.calMonth) S.calMonth = (regs.find((g) => g.date >= today) || { date: today }).date.slice(0, 7);
   const ym = S.calMonth;
   const byDay = new Map();
-  for (const g of regs) (byDay.get(g.date) || byDay.set(g.date, []).get(g.date)).push(g);
+  for (const g of regs) for (const d of daysOf(g.date, g.end_date)) (byDay.get(d) || byDay.set(d, []).get(d)).push(g);
   const [y, m] = ym.split('-').map(Number);
-  const inMonth = regs.filter((g) => g.date.startsWith(ym));
+  const touches = (g, m) => g.date.slice(0, 7) <= m && (g.end_date || g.date).slice(0, 7) >= m;
+  const inMonth = regs.filter((g) => touches(g, ym));
   if (S.calDay && !S.calDay.startsWith(ym)) S.calDay = null;
   const shown = S.calDay ? (byDay.get(S.calDay) || []) : inMonth;
   // carreras por mes (para saltar rápido a meses con carreras)
-  const months = [...new Set(regs.map((g) => g.date.slice(0, 7)))].sort();
+  const months = [...new Set(regs.flatMap((g) => daysOf(g.date, g.end_date).map((d) => d.slice(0, 7))))].sort();
   const cell = (d) => {
     if (!d) return '<span class="cal-cell empty"></span>';
     const list = byDay.get(d) || [];
     const cls = ['cal-cell', list.length ? 'has' : '', d === today ? 'today' : '', d === S.calDay ? 'sel' : '',
-      d < today ? 'past' : '', list.some(isMine) ? 'mine' : ''].filter(Boolean).join(' ');
+      d < today ? 'past' : '', list.some(isMine) ? 'mine' : '', list.some((g) => g.end_date) ? 'stage' : ''].filter(Boolean).join(' ');
     const label = `${Number(d.slice(8))} de ${MONTH_NAMES[m - 1]}${list.length ? `: ${list.map((g) => g.name).join(', ')}` : ''}`;
     return list.length
       ? `<button class="${cls}" data-act="cal-day" data-d="${d}" aria-label="${esc(label)}"><b>${Number(d.slice(8))}</b><i>${list.length > 1 ? list.length : ''}</i></button>`
@@ -240,7 +243,7 @@ function calendarView(regs, card, isMine = () => false) {
       </div>
       ${months.length ? `<div class="cal-months">${months.map((mm) => {
         const [yy, mo] = mm.split('-').map(Number);
-        const n = regs.filter((g) => g.date.startsWith(mm)).length;
+        const n = regs.filter((g) => touches(g, mm)).length;
         return `<button class="chip${mm === ym ? ' on' : ''}" data-act="cal-goto" data-m="${mm}">${MONTH_NAMES[mo - 1].slice(0, 3)} ${String(yy).slice(2)} · ${n}</button>`;
       }).join('')}</div>` : ''}
     </section>
@@ -258,7 +261,7 @@ function viewRunnerHome() {
     const open = g.date >= today;
     return `<article class="card race">
       <div class="race-head"><div><h3>${esc(g.name)}</h3>
-        <p class="muted">${formatDate(g.date)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>
+        <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>
         <span class="tag">${esc(g.modality)}</span></div>
       ${g.notes ? `<p class="notes">${esc(g.notes)}</p>` : ''}
       <p class="count">${g.entries.length} inscrito${g.entries.length === 1 ? '' : 's'}</p>
@@ -315,7 +318,7 @@ function viewRegistrations() {
   const regs = [...S.data.registrations].sort((a, b) => a.date.localeCompare(b.date) || byName(a, b));
   const card = (g) => `<a class="card race link-card" href="#/inscripciones/${g.id}">
       <div class="race-head"><div><h3>${esc(g.name)}</h3>
-      <p class="muted">${formatDate(g.date)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div><span class="tag">${esc(g.modality)}</span></div>
+      <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div><span class="tag">${esc(g.modality)}</span></div>
       ${g.date < today ? '<p class="warn-inline">Ya se ha disputado: pásala a resultados.</p>' : ''}
       <p class="count">${g.entries.length} inscrito${g.entries.length === 1 ? '' : 's'}${g.entries.length ? ': ' +
         esc(g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p></a>`;
@@ -371,7 +374,7 @@ function viewFed() {
     const done = created.has(r.date + '|' + normalize(r.name));
     return `${head}<article class="card race fed">
       <div class="race-head"><div><h3>${esc(r.name)}</h3>
-        <p class="muted">${formatDate(r.date)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div>
+        <p class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div>
         <span class="tag">${esc(r.modality)}</span></div>
       <p class="fed-meta"><span class="src src-${esc(r.source)}">${esc(FED_NAMES[r.source] || r.source)}</span>
         ${esc(r.discipline || '')}${r.kind === 'Ocio' ? ' · ocio' : ''}${r.info ? ` · <span class="muted">${esc(r.info)}</span>` : ''}</p>
@@ -403,16 +406,18 @@ function draftRegistration(id) {
   }
   const g = S.data.registrations.find((x) => x.id === id);
   if (!g) return null;
-  return { kind: 'reg', ...g, people: g.entries.map((e) => ({ runner_id: e.runner_id, runner_name: runnerById(e.runner_id)?.name || '?', category: e.category || '' })).sort((a, b) => a.runner_name.localeCompare(b.runner_name, 'es')) };
+  return { kind: 'reg', ...g, multi: !!g.end_date, people: g.entries.map((e) => ({ runner_id: e.runner_id, runner_name: runnerById(e.runner_id)?.name || '?', category: e.category || '' })).sort((a, b) => a.runner_name.localeCompare(b.runner_name, 'es')) };
 }
 
 function raceFields(d) {
   return `
     <label>Nombre<input data-f="name" value="${esc(d.name)}" required></label>
     <div class="grid2">
-      <label>Fecha<input type="date" data-f="date" value="${esc(d.date)}" required></label>
+      <label>${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-f="date" value="${esc(d.date)}" required></label>
       <label>Modalidad<select data-f="modality">${MODALITIES.map((m) => opt(m, m, d.modality)).join('')}</select></label>
     </div>
+    <label class="check"><input type="checkbox" data-act-change="multi" ${d.multi ? 'checked' : ''}> Carrera de varios días (por etapas)</label>
+    ${d.multi ? `<label>Último día<input type="date" data-f="end_date" value="${esc(d.end_date || '')}" min="${esc(d.date || '')}" required></label>` : ''}
     <label>Lugar<input data-f="place" value="${esc(d.place || '')}"></label>
     <div class="grid2">
       <label>Provincia<input data-f="province" list="dl-prov" value="${esc(d.province || '')}" autocomplete="off"></label>
@@ -462,7 +467,7 @@ function viewRaces() {
     const pods = r.results.filter((x) => isPodium(x.position)).sort((a, b) => a.position - b.position);
     return `<a class="card race link-card" href="#/carreras/${r.id}">
       <div class="race-head"><div><h3>${esc(r.name)}</h3>
-      <p class="muted">${formatDate(r.date)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div><span class="tag">${esc(r.modality)}</span></div>
+      <p class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div><span class="tag">${esc(r.modality)}</span></div>
       <p class="count">${r.results.length} participante${r.results.length === 1 ? '' : 's'}</p>
       ${pods.length ? `<p class="pods">${pods.map((x) => `${medal(x.position)} ${esc(x.runner_name)}${x.category ? ` <small>${esc(x.category)}</small>` : ''}`).join(' · ')}</p>` : ''}</a>`;
   };
@@ -481,7 +486,7 @@ function draftRace(id) {
   if (id === 'nueva') return { kind: 'race', id: null, name: '', date: '', place: '', province: '', country: DEFAULT_COUNTRY, modality: 'Carretera', notes: '', people: [] };
   const r = S.data.races.find((x) => x.id === id);
   if (!r) return null;
-  return { kind: 'race', ...r, people: r.results.map((x) => ({ runner_id: x.runner_id, runner_name: x.runner_name, category: x.category || '',
+  return { kind: 'race', ...r, multi: !!r.end_date, people: r.results.map((x) => ({ runner_id: x.runner_id, runner_name: x.runner_name, category: x.category || '',
     position: x.position ?? '', podium_type: x.podium_type || 'suelta' }))
     .sort((a, b) => (a.position || 9999) - (b.position || 9999) || a.runner_name.localeCompare(b.runner_name, 'es')) };
 }
@@ -540,7 +545,7 @@ function viewSummary() {
         ${table(['Provincia', 'Carreras'], s.provinces.map((c) => `<tr><td>${esc(c.name)}</td><td>${c.races}</td></tr>`), 'num')}
       </div>
       ${s.missingPlace.length ? `<div class="warn"><b>Faltan datos en ${s.missingPlace.length} carrera${s.missingPlace.length === 1 ? '' : 's'}:</b>
-        <ul>${s.missingPlace.map((m) => `<li><a href="#/carreras/${m.id}">${esc(m.name)}</a> (${formatDate(m.date, false)}): sin ${m.missing.join(' ni ')}</li>`).join('')}</ul></div>` : ''}
+        <ul>${s.missingPlace.map((m) => `<li><a href="#/carreras/${m.id}">${esc(m.name)}</a> (${formatRange(m.date, m.end_date, false)}): sin ${m.missing.join(' ni ')}</li>`).join('')}</ul></div>` : ''}
     </section>
 
     <section class="card"><h2>Participaciones por corredor</h2>
@@ -627,9 +632,12 @@ function viewData() {
 function draftPayload() {
   const d = S.draft;
   const base = { id: d.id, name: cleanName(d.name), date: d.date, place: cleanName(d.place), province: cleanName(d.province),
-    country: cleanName(d.country), modality: d.modality, notes: String(d.notes || '').trim() };
+    country: cleanName(d.country), modality: d.modality, notes: String(d.notes || '').trim(),
+    end_date: d.multi && d.end_date ? d.end_date : null };
   if (!base.name) throw new Error('Falta el nombre de la carrera.');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(base.date || '')) throw new Error('Falta la fecha.');
+  if (d.multi && !base.end_date) throw new Error('Falta el último día de la carrera.');
+  if (base.end_date && base.end_date <= base.date) throw new Error('El último día tiene que ser posterior al primero.');
   return base;
 }
 
@@ -899,7 +907,12 @@ $app.addEventListener('input', (ev) => {
 
 $app.addEventListener('change', async (ev) => {
   const t = ev.target;
-  if (t.dataset.actChange === 'add-person' && t.value) {
+  if (t.dataset.actChange === 'multi') {
+    S.draft.multi = t.checked;
+    if (!t.checked) S.draft.end_date = '';
+    render();
+    $app.querySelector('[data-f="end_date"]')?.focus();
+  } else if (t.dataset.actChange === 'add-person' && t.value) {
     const r = runnerById(t.value);
     S.draft.people.push({ runner_id: r.id, runner_name: r.name, category: r.category || '', position: '', podium_type: 'suelta' });
     render();

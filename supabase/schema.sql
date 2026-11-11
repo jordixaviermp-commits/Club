@@ -64,6 +64,14 @@ create index if not exists results_race_idx on public.results(race_id);
 create index if not exists results_runner_idx on public.results(runner_id);
 create index if not exists entries_runner_idx on public.registration_entries(runner_id);
 
+-- Carreras de varios días (por etapas): último día. Vacío = carrera de un solo día.
+alter table public.registrations add column if not exists end_date date;
+alter table public.races         add column if not exists end_date date;
+alter table public.registrations drop constraint if exists registrations_end_date_check;
+alter table public.registrations add constraint registrations_end_date_check check (end_date is null or end_date > date);
+alter table public.races drop constraint if exists races_end_date_check;
+alter table public.races add constraint races_end_date_check check (end_date is null or end_date > date);
+
 create table if not exists public.admins (                 -- quién es dirección
   user_id uuid primary key
 );
@@ -114,13 +122,15 @@ declare v_id uuid := nullif(p_reg->>'id','')::uuid;
 begin
   perform public.require_admin();
   if v_id is null then
-    insert into registrations (name, date, place, province, country, modality, notes)
-    values (btrim(p_reg->>'name'), (p_reg->>'date')::date, nullif(btrim(p_reg->>'place'),''),
+    insert into registrations (name, date, end_date, place, province, country, modality, notes)
+    values (btrim(p_reg->>'name'), (p_reg->>'date')::date,
+            nullif(nullif(p_reg->>'end_date',''), p_reg->>'date')::date, nullif(btrim(p_reg->>'place'),''),
             nullif(btrim(p_reg->>'province'),''), nullif(btrim(p_reg->>'country'),''),
             coalesce(nullif(p_reg->>'modality',''),'Carretera'), nullif(btrim(p_reg->>'notes'),''))
     returning id into v_id;
   else
     update registrations set name = btrim(p_reg->>'name'), date = (p_reg->>'date')::date,
+      end_date = nullif(nullif(p_reg->>'end_date',''), p_reg->>'date')::date,
       place = nullif(btrim(p_reg->>'place'),''), province = nullif(btrim(p_reg->>'province'),''),
       country = nullif(btrim(p_reg->>'country'),''),
       modality = coalesce(nullif(p_reg->>'modality',''),'Carretera'),
@@ -146,13 +156,15 @@ declare v_id uuid := nullif(p_race->>'id','')::uuid;
 begin
   perform public.require_admin();
   if v_id is null then
-    insert into races (name, date, place, province, country, modality, notes)
-    values (btrim(p_race->>'name'), (p_race->>'date')::date, nullif(btrim(p_race->>'place'),''),
+    insert into races (name, date, end_date, place, province, country, modality, notes)
+    values (btrim(p_race->>'name'), (p_race->>'date')::date,
+            nullif(nullif(p_race->>'end_date',''), p_race->>'date')::date, nullif(btrim(p_race->>'place'),''),
             nullif(btrim(p_race->>'province'),''), nullif(btrim(p_race->>'country'),''),
             coalesce(nullif(p_race->>'modality',''),'Carretera'), nullif(btrim(p_race->>'notes'),''))
     returning id into v_id;
   else
     update races set name = btrim(p_race->>'name'), date = (p_race->>'date')::date,
+      end_date = nullif(nullif(p_race->>'end_date',''), p_race->>'date')::date,
       place = nullif(btrim(p_race->>'place'),''), province = nullif(btrim(p_race->>'province'),''),
       country = nullif(btrim(p_race->>'country'),''),
       modality = coalesce(nullif(p_race->>'modality',''),'Carretera'),
@@ -175,8 +187,8 @@ returns uuid language plpgsql set search_path = public as $$
 declare v_race uuid;
 begin
   perform public.require_admin();
-  insert into races (name, date, place, province, country, modality, notes)
-  select name, date, place, province, country, modality, notes from registrations where id = p_id
+  insert into races (name, date, end_date, place, province, country, modality, notes)
+  select name, date, end_date, place, province, country, modality, notes from registrations where id = p_id
   returning id into v_race;
   if v_race is null then raise exception 'no_existe'; end if;
   insert into results (race_id, runner_id, runner_name, category)
@@ -231,7 +243,7 @@ begin
     'today', current_date,
     'registrations', coalesce((
       select jsonb_agg(jsonb_build_object(
-               'id', g.id, 'name', g.name, 'date', g.date, 'place', g.place,
+               'id', g.id, 'name', g.name, 'date', g.date, 'end_date', g.end_date, 'place', g.place,
                'province', g.province, 'country', g.country, 'modality', g.modality, 'notes', g.notes,
                'entries', coalesce((
                   select jsonb_agg(jsonb_build_object('runner_id', r.id, 'name', r.name, 'category', e.category)
