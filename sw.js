@@ -1,8 +1,8 @@
 // Service worker: permite instalar la app y abrirla sin cobertura (muestra la última versión guardada).
 // Los datos siempre se piden en vivo a Supabase; aquí solo se guardan los archivos de la app.
-const CACHE = 'hinaco-v1';
+const CACHE = 'monzon-v3';
 const SHELL = ['./', 'index.html', 'css/app.css', 'js/app.js', 'js/api.js', 'js/logic.js', 'js/config.js',
-  'js/vendor/supabase-2.117.3.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png'];
+  'js/vendor/supabase-2.117.3.js', 'manifest.webmanifest', 'icons/logo.png', 'icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

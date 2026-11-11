@@ -70,7 +70,7 @@ export function supabaseApi(url, key) {
     async saveRace(race, results) { return ok(await sb.rpc('save_race', { p_race: race, p_results: results })); },
     async deleteRace(id) { ok(await sb.from('races').delete().eq('id', id)); },
 
-    async exportAll() { return { app: 'cc-hinaco-prats', version: 1, exported_at: new Date().toISOString(), ...(await rawAll()) }; },
+    async exportAll() { return { app: 'cc-monzon', version: 1, exported_at: new Date().toISOString(), ...(await rawAll()) }; },
     async importAll(data) { ok(await sb.rpc('import_backup', { p: data })); },
 
     async runnerView(code) { return ok(await sb.rpc('runner_view', { p_code: code })); },
@@ -82,7 +82,7 @@ export function supabaseApi(url, key) {
 // ======================================================================
 //  Demostración (localStorage). Imita las reglas de la base de datos.
 // ======================================================================
-const DEMO_KEY = 'hinaco-demo-v1';
+const DEMO_KEY = 'monzon-demo-v1';
 const uuid = () => globalThis.crypto.randomUUID();
 
 function demoSeed() {
@@ -213,7 +213,7 @@ export function demoApi(storage = globalThis.localStorage) {
       save();
     },
 
-    async exportAll() { requireAdmin(); return { app: 'cc-hinaco-prats', version: 1, exported_at: new Date().toISOString(), ...clone(load()) }; },
+    async exportAll() { requireAdmin(); return { app: 'cc-monzon', version: 1, exported_at: new Date().toISOString(), ...clone(load()) }; },
     async importAll(data) {
       requireAdmin();
       mem = Object.fromEntries(TABLES.map((t) => [t, clone(data[t] || [])]));

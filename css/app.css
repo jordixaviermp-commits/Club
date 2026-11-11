@@ -1,21 +1,25 @@
+/* Colores del Club Ciclista Monzón: azul pizarra #284556 y cian #00cfff */
 :root {
-  --bg: #f3f5f4; --card: #ffffff; --text: #18211f; --muted: #5f6b68; --line: #dfe5e3;
-  --accent: #0f5c4d; --accent-2: #e7f2ef; --on-accent: #ffffff;
+  --bg: #f2f5f7; --card: #ffffff; --text: #18211f; --muted: #5f6b68; --line: #dfe5e3;
+  --accent: #284556; --accent-2: #e2f6fd; --on-accent: #ffffff; --brand-cyan: #00a9d6;
+  --kpi: #0a7fa6; --tag-text: #0a6f8f;
   --danger: #b42318; --warn-bg: #fff6e0; --warn-line: #f0c36d; --gold: #c9a227;
   --radius: 14px; --tabs-h: 64px;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0f1413; --card: #18201e; --text: #e8eeec; --muted: #9aa8a4; --line: #2b3633;
-    --accent: #3fb59b; --accent-2: #1d3530; --on-accent: #06221c;
+    --bg: #0e151a; --card: #172129; --text: #e7eef2; --muted: #98a8b2; --line: #2a3843;
+    --accent: #2cc6f2; --accent-2: #15303d; --on-accent: #062230; --brand-cyan: #2cc6f2;
+    --kpi: #2cc6f2; --tag-text: #7fdcf7;
     --danger: #ff7a6b; --warn-bg: #2f2814; --warn-line: #6b5520;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0f1413; --card: #18201e; --text: #e8eeec; --muted: #9aa8a4; --line: #2b3633;
-  --accent: #3fb59b; --accent-2: #1d3530; --on-accent: #06221c;
+  --bg: #0e151a; --card: #172129; --text: #e7eef2; --muted: #98a8b2; --line: #2a3843;
+  --accent: #2cc6f2; --accent-2: #15303d; --on-accent: #062230; --brand-cyan: #2cc6f2;
+  --kpi: #2cc6f2; --tag-text: #7fdcf7;
   --danger: #ff7a6b; --warn-bg: #2f2814; --warn-line: #6b5520;
   color-scheme: dark;
 }
@@ -47,25 +51,25 @@ header.top {
   padding: calc(.6rem + env(safe-area-inset-top)) 16px .6rem; background: var(--card); border-bottom: 1px solid var(--line);
 }
 header.top h1 { font-size: 1.15rem; margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.logo { width: 32px; height: 32px; border-radius: 8px; }
+.logo { width: 34px; height: 34px; border-radius: 50%; }
 .back { font-size: 2rem; line-height: 1; text-decoration: none; padding: 0 .4rem 0 0; }
 main { max-width: 720px; margin: 0 auto; padding: 16px; }
 
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin: 0 0 12px; }
 .card.center { padding: 24px 16px; }
-.hero-logo { width: 84px; height: 84px; border-radius: 20px; margin-bottom: .8rem; }
+.hero-logo { width: 120px; height: 120px; border-radius: 50%; margin-bottom: .8rem; }
 .link-card { display: block; color: inherit; text-decoration: none; }
 .link-card:active { background: var(--accent-2); }
 .race-head { display: flex; gap: .6rem; justify-content: space-between; align-items: flex-start; }
 .race-head h3 { margin-bottom: .15rem; }
 .race-head p { margin: 0; font-size: .9rem; }
-.tag { flex: none; font-size: .75rem; font-weight: 600; padding: .15rem .55rem; border-radius: 999px; background: var(--accent-2); color: var(--accent); }
+.tag { flex: none; font-size: .75rem; font-weight: 600; padding: .15rem .55rem; border-radius: 999px; background: var(--accent-2); color: var(--tag-text, var(--accent)); }
 .count { margin: .5rem 0 0; font-size: .9rem; color: var(--muted); }
 .pods { margin: .35rem 0 0; font-size: .9rem; }
 .notes { font-size: .9rem; white-space: pre-line; margin: .5rem 0 0; }
 .people { list-style: none; padding: 0; margin: .4rem 0 0; display: flex; flex-wrap: wrap; gap: .35rem; }
 .people li { background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: .15rem .6rem; font-size: .88rem; }
-.people li.me { background: var(--accent-2); border-color: var(--accent); font-weight: 600; }
+.people li.me { background: var(--accent-2); border-color: var(--brand-cyan); font-weight: 600; }
 .people small { color: var(--muted); }
 .hello { font-size: 1.1rem; }
 .section { margin: 1rem 0 .6rem; }
@@ -133,7 +137,7 @@ header .icon-btn { border: 0; }
 .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: .5rem; margin-bottom: 12px; }
 @media (max-width: 420px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
 .kpi { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: .7rem; text-align: center; }
-.kpi b { display: block; font-size: 1.7rem; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--accent); }
+.kpi b { display: block; font-size: 1.7rem; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--kpi, var(--accent)); }
 .kpi span { font-size: .8rem; color: var(--muted); }
 .table-wrap { overflow-x: auto; margin: 0 -4px; }
 table { border-collapse: collapse; width: 100%; font-size: .9rem; }

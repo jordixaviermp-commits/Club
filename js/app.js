@@ -3,11 +3,11 @@ import { CONFIG } from './config.js';
 import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName,
-  parseBulkRunners, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
+  parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
   extractCode, todayISO, formatDate,
 } from './logic.js';
 
-const CODE_KEY = 'hinaco-code';
+const CODE_KEY = 'monzon-code';
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* modo privado */ } },
@@ -128,7 +128,7 @@ function frame(title, body, { back, actions = '' } = {}) {
   return `
     ${api.mode === 'demo' ? `<div class="demo-bar">Modo demostración: datos de prueba guardados solo en este móvil.</div>` : ''}
     <header class="top">
-      ${back ? `<a class="back" href="${back}" aria-label="Volver">‹</a>` : '<img class="logo" src="icons/icon.svg" alt="">'}
+      ${back ? `<a class="back" href="${back}" aria-label="Volver">‹</a>` : '<img class="logo" src="icons/logo.png" alt="">'}
       <h1>${esc(title)}</h1>${actions}
     </header>
     <main>${body}</main>
@@ -167,9 +167,9 @@ function installHint() {
 }
 
 function viewWelcome() {
-  return frame('CC Hinaco Prats', `
+  return frame('CC Monzón', `
     <section class="card center">
-      <img src="icons/icon.svg" alt="" class="hero-logo">
+      <img src="icons/logo.png" alt="" class="hero-logo">
       <h2>Carreras del club</h2>
       <p>Abre el <b>enlace personal</b> que te ha enviado la dirección del club por WhatsApp.</p>
       <p class="muted">Si has instalado la app en el móvil y te pide el enlace, pégalo aquí (solo hace falta una vez):</p>
@@ -206,7 +206,7 @@ function viewRunnerHome() {
            <button class="btn primary" data-act="r-join" data-id="${g.id}">Apuntarme</button></div>`}
     </article>`;
   };
-  return frame('CC Hinaco Prats', `
+  return frame('CC Monzón', `
     <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
     ${installHint()}
     <h2 class="section">Próximas carreras</h2>
@@ -430,6 +430,18 @@ function viewRunners() {
         <button class="btn primary">Añadir</button>
       </form>
     </details>
+    <details class="card">
+      <summary><b>↻ Renovar plantilla del año</b></summary>
+      <form class="stack" data-form="renew">
+        <p class="hint">Pega la lista completa de la nueva temporada, uno por línea («Pere Soler, M40»). Antes de cambiar nada verás un resumen:</p>
+        <ul class="hint"><li>Quien sigue <b>conserva su enlace</b> (no hay que reenviárselo). Si pones categoría, se actualiza.</li>
+          <li>Quien es nuevo se da de alta y recibe enlace.</li>
+          <li>Quien no está en la lista se da de baja: su enlace deja de funcionar, pero <b>sus resultados se conservan</b> en el historial.</li></ul>
+        <textarea name="renew" rows="6" placeholder="Pere Soler, M40&#10;Anna Puig, Élite&#10;…"></textarea>
+        <button class="btn primary">Revisar cambios</button>
+      </form>
+    </details>
+    ${runners.length ? '<button class="btn block" data-act="all-links">Copiar todos los enlaces</button>' : ''}
     <ul class="roster">${runners.map((r) => `<li>
       <div><span class="name">${esc(r.name)}</span><small class="muted">${counts.get(r.id) || 0} carreras</small></div>
       ${catSelect(`data-runner-cat="${r.id}" aria-label="Categoría habitual"`, r.category || '')}
@@ -543,7 +555,7 @@ const actions = {
     ]);
     if (!choice) return;
     if (choice === 'wa') {
-      const msg = `Hola ${r.name}! Este es tu enlace personal para ver las carreras del CC Hinaco Prats y apuntarte:\n${link}\n\nEs solo tuyo: no lo reenvíes. Consejo: ábrelo y añádelo a la pantalla de inicio.`;
+      const msg = `Hola ${r.name}! Este es tu enlace personal para ver las carreras del Club Ciclista Monzón y apuntarte:\n${link}\n\nEs solo tuyo: no lo reenvíes. Consejo: ábrelo y añádelo a la pantalla de inicio.`;
       window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
     } else if (choice === 'copy') {
       try { await navigator.clipboard.writeText(link); toast('Enlace copiado'); } catch { prompt('Copia el enlace:', link); }
@@ -574,12 +586,17 @@ const actions = {
     }
   },
 
+  async 'all-links'() {
+    const text = [...S.data.runners].sort(byName).map((r) => `${r.name}: ${linkFor(r.code)}`).join('\n');
+    try { await navigator.clipboard.writeText(text); toast(`${S.data.runners.length} enlaces copiados: pégalos en tus notas y envía a cada uno el suyo`); }
+    catch { download('enlaces-corredores.txt', text, 'text/plain;charset=utf-8'); }
+  },
   async backup() {
     const data = await run(() => api.exportAll());
-    if (data) download(`hinaco-copia-${todayISO()}.json`, JSON.stringify(data, null, 1), 'application/json');
+    if (data) download(`monzon-copia-${todayISO()}.json`, JSON.stringify(data, null, 1), 'application/json');
   },
-  'csv-year'() { download(`hinaco-resultados-${S.year}.csv`, toCsv(csvRows(S.data.races.filter((r) => yearOf(r.date) === S.year))), 'text/csv;charset=utf-8'); },
-  'csv-all'() { download(`hinaco-resultados-todos.csv`, toCsv(csvRows(S.data.races)), 'text/csv;charset=utf-8'); },
+  'csv-year'() { download(`monzon-resultados-${S.year}.csv`, toCsv(csvRows(S.data.races.filter((r) => yearOf(r.date) === S.year))), 'text/csv;charset=utf-8'); },
+  'csv-all'() { download(`monzon-resultados-todos.csv`, toCsv(csvRows(S.data.races)), 'text/csv;charset=utf-8'); },
 };
 
 const forms = {
@@ -605,6 +622,27 @@ const forms = {
     if (unknownCategory.length) notes.push(`categoría no reconocida en: ${unknownCategory.map((u) => u.name).join(', ')} (quedan sin categoría)`);
     toast(notes.join(' · '), unknownCategory.length > 0);
     render();
+  },
+  async renew(f) {
+    const plan = planRosterRenewal(f.renew.value, S.data.runners);
+    const total = plan.keep.length + plan.add.length;
+    if (!total) return toast('Pega la lista de corredores de la temporada.', true);
+    const names = (xs) => esc(xs.join(', '));
+    const catChanges = plan.keep.filter((k) => k.category);
+    const msg = `La plantilla quedará con <b>${total}</b> corredores.<br><br>` +
+      `<b>Siguen (${plan.keep.length})</b>, con el mismo enlace${catChanges.length ? `; cambian de categoría: ${names(catChanges.map((k) => `${k.runner.name} → ${k.category}`))}` : ''}.<br><br>` +
+      `<b>Altas (${plan.add.length})</b>${plan.add.length ? ': ' + names(plan.add.map((a) => a.name)) + '. Tendrás que enviarles su enlace.' : '.'}<br><br>` +
+      `<b>Bajas (${plan.remove.length})</b>${plan.remove.length ? ': ' + names(plan.remove.map((r) => r.name)) + '. Su enlace deja de funcionar; sus resultados se conservan.' : '.'}` +
+      (plan.unknownCategory.length ? `<br><br>⚠️ Categoría no reconocida (se deja como estaba): ${names(plan.unknownCategory.map((u) => `${u.name} («${u.text}»)`))}` : '') +
+      (plan.remove.length > total / 2 ? '<br><br>⚠️ Se da de baja a más de la mitad. Comprueba que has pegado la lista completa.' : '');
+    if (!await confirmAction('Renovar plantilla', msg, 'Aplicar cambios', 'primary')) return;
+    const ok = await run(async () => {
+      if (plan.add.length) await api.addRunners(plan.add);
+      for (const k of catChanges) await api.updateRunner(k.runner.id, { category: k.category });
+      for (const r of plan.remove) await api.deleteRunner(r.id, false);
+      await reload(); return true;
+    }, 'Plantilla renovada');
+    if (ok) { f.reset(); render(); }
   },
   async 'save-reg'() {
     const id = await run(saveRegistrationDraft, 'Inscripción guardada');

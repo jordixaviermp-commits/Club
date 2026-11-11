@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalize, matchCategory, parseBulkRunners, yearSummary, csvRows, toCsv, parseCsv, importResultsCsv,
-  parseDate, extractCode, newCode, formatDate,
+  parseDate, extractCode, newCode, formatDate, planRosterRenewal,
 } from '../js/logic.js';
 
 test('normalize ignora mayúsculas y tildes', () => {
@@ -85,4 +85,13 @@ test('fechas y códigos', () => {
   assert.equal(extractCode(`https://x.github.io/Club/#/c/${c}`), c);
   assert.equal(extractCode(c.toLowerCase()), c);
   assert.equal(extractCode('hola'), null);
+});
+
+test('renovación anual de la plantilla', () => {
+  const cur = [{ id: '1', name: 'Pere Soler', category: 'M40' }, { id: '2', name: 'Anna Puig', category: 'Élite' }, { id: '3', name: 'Joan Vila', category: null }];
+  const p = planRosterRenewal('pere soler, M50\nJoan Vila\nLaia Serra, Sub-23\nLAIA SERRA', cur);
+  assert.deepEqual(p.keep.map((k) => [k.runner.id, k.category]), [['1', 'M50'], ['3', null]]);
+  assert.deepEqual(p.add, [{ name: 'Laia Serra', category: 'Sub-23' }]);
+  assert.deepEqual(p.remove.map((r) => r.id), ['2']);
+  assert.deepEqual(p.duplicates, ['LAIA SERRA']);
 });

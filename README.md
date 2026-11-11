@@ -1,4 +1,4 @@
-# Carreras del CC Hinaco Prats
+# Carreras del Club Ciclista Monzón
 
 App web instalable en el móvil para que la dirección del club gestione inscripciones, resultados, podios y el resumen anual, y para que los corredores vean las inscripciones y se apunten con un enlace personal (sin contraseña).
 
