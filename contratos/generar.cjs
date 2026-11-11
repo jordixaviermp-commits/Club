@@ -13,7 +13,7 @@ const TIPOS = [
   {
     id: 'Nuevo', titulo: 'NUEVO',
     licencia: true,
-    material: [['maillots CARRERA', 2], ['culotes', 2], ['maillot de manga larga HYDER', 1], ['par de calcetines aero', 1]],
+    material: [['maillots CARRERA', 2], ['culotes', 2], ['maillot de manga larga HYDER', 1], ['par de calcetines aero', 1], ['gorra y una camiseta de patrocinadores', 'una']],
     aportacion: 175, // al firmar; si no llega al mínimo, además 175 € de penalización
     tramos: [[12, 50], [17, 100], [22, 150]],
     penalizacion: 175,
@@ -21,7 +21,7 @@ const TIPOS = [
   {
     id: 'Renovacion', titulo: 'RENOVACIÓN',
     licencia: true,
-    material: [['maillot CARRERA', 1], ['culote', 1], ['par de calcetines aero', 1]],
+    material: [['maillot CARRERA', 1], ['culote', 1]], // sin calcetines gratis
     aportacion: 65,
     tramos: [[12, 50], [17, 100], [22, 150]],
     penalizacion: 100,
