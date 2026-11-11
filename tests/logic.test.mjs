@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalize, matchCategory, parseBulkRunners, yearSummary, csvRows, toCsv, parseCsv, importResultsCsv,
-  parseDate, extractCode, newCode, formatDate, planRosterRenewal, monthGrid, addMonths, formatRange, daysOf, podiumsOf, bonusStatus, bonusConfigFor, yearBonuses, DEFAULT_BONUS, matchContract,
+  parseDate, extractCode, newCode, formatDate, planRosterRenewal, monthGrid, addMonths, formatRange, daysOf, podiumsOf, bonusStatus, bonusConfigFor, yearBonuses, DEFAULT_BONUS, matchContract, searchRaces,
 } from '../js/logic.js';
 
 test('normalize ignora mayúsculas y tildes', () => {
@@ -194,4 +194,25 @@ test('alta y renovación con tipo de contrato', () => {
   const plan = planRosterRenewal('Ana\nBea, renovación sin licencia\nCris', [
     { id: '1', name: 'Ana', contract: 'nuevo' }, { id: '2', name: 'Bea', contract: 'renovacion' }, { id: '3', name: 'Cris', contract: 'renovacion_sin_licencia' }]);
   assert.deepEqual(plan.keep.map((k) => [k.runner.id, k.contract]), [['1', 'renovacion'], ['2', 'renovacion_sin_licencia'], ['3', null]]);
+});
+
+test('buscador de carreras', () => {
+  const races = [
+    { name: 'Volta a la Cerdanya', date: '2027-06-14', place: 'Puigcerdà', province: 'Girona' },
+    { name: 'BTT Les Garrigues', date: '2027-02-22', place: 'Les Borges Blanques', province: 'Lleida' },
+    { name: 'Trofeu de Tardor', date: '2027-10-12', place: 'Reus', province: 'Tarragona' },
+    { name: 'Marxa del Montseny', date: '2027-03-09', place: 'Sant Celoni', province: 'Barcelona' },
+  ];
+  const names = (q) => searchRaces(q, races).map((r) => r.name);
+  assert.deepEqual(names('cerdanya'), ['Volta a la Cerdanya']);
+  assert.deepEqual(names('volta cerdaña'), ['Volta a la Cerdanya']); // sin tildes y con una palabra que no acaba igual
+  assert.deepEqual(names('garrig'), ['BTT Les Garrigues']);
+  assert.deepEqual(names('borges'), ['BTT Les Garrigues']); // por el lugar
+  assert.deepEqual(names('MONTSENY'), ['Marxa del Montseny']);
+  assert.deepEqual(names('trofeu'), []); // palabra genérica sola: no saca nada
+  assert.deepEqual(names('trofeu tardor'), ['Trofeu de Tardor']);
+  assert.deepEqual(names(''), []);
+  assert.deepEqual(names('xyz'), []);
+  assert.deepEqual(names('BTT Garrigues'), ['BTT Les Garrigues']);
+  assert.deepEqual(searchRaces('BTT Garrigues', [{ name: 'Open Escolar BTT Cambrils', date: '2026-11-14' }]), []); // «BTT» sola no basta
 });
