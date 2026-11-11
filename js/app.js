@@ -128,7 +128,7 @@ function frame(title, body, { back, actions = '' } = {}) {
   return `
     ${api.mode === 'demo' ? `<div class="demo-bar">Modo demostración: datos de prueba guardados solo en este móvil.</div>` : ''}
     <header class="top">
-      ${back ? `<a class="back" href="${back}" aria-label="Volver">‹</a>` : '<img class="logo" src="icons/icon.svg" alt="">'}
+      ${back ? `<a class="back" href="${back}" aria-label="Volver">‹</a>` : '<img class="logo" src="icons/logo.png" alt="">'}
       <h1>${esc(title)}</h1>${actions}
     </header>
     <main>${body}</main>
@@ -169,7 +169,7 @@ function installHint() {
 function viewWelcome() {
   return frame('CC Hinaco Prats', `
     <section class="card center">
-      <img src="icons/icon.svg" alt="" class="hero-logo">
+      <img src="icons/logo.png" alt="" class="hero-logo">
       <h2>Carreras del club</h2>
       <p>Abre el <b>enlace personal</b> que te ha enviado la dirección del club por WhatsApp.</p>
       <p class="muted">Si has instalado la app en el móvil y te pide el enlace, pégalo aquí (solo hace falta una vez):</p>
