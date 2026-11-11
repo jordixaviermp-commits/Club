@@ -172,3 +172,29 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .podium-list li { display: flex; gap: .6rem; padding: .55rem 0; border-bottom: 1px solid var(--line); font-size: .92rem; }
 .podium-list li:last-child { border-bottom: 0; }
 .podium-list .medal { font-size: 1.4rem; line-height: 1.2; }
+
+/* Calendario de inscripciones */
+header .icon-btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; vertical-align: middle; }
+h2.section { scroll-margin-top: 80px; }
+.link.small { font-size: .85rem; padding: 0 .3rem; }
+.cal { padding: 12px; }
+.cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: .5rem; }
+.cal-head h2 { margin: 0; font-size: 1.1rem; }
+.cal-head .icon-btn { font-size: 1.6rem; line-height: 1; border: 0; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-dow { text-align: center; font-size: .72rem; font-weight: 700; color: var(--muted); padding: .2rem 0; }
+.cal-cell {
+  position: relative; aspect-ratio: 1 / 1; min-height: 40px; display: flex; align-items: center; justify-content: center;
+  border-radius: 10px; font: inherit; font-size: .95rem; color: var(--text); background: transparent; border: 1px solid transparent; padding: 0;
+}
+.cal-cell.empty { visibility: hidden; }
+.cal-cell.past { color: var(--muted); }
+.cal-cell.today { border-color: var(--muted); }
+.cal-cell.has { background: var(--accent-2); color: var(--tag-text, var(--accent)); font-weight: 700; cursor: pointer; }
+.cal-cell.has::after { content: ""; position: absolute; bottom: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--brand-cyan); }
+.cal-cell.mine { background: var(--accent); color: var(--on-accent); }
+.cal-cell.mine::after { background: var(--on-accent); }
+.cal-cell.sel { outline: 3px solid var(--brand-cyan); outline-offset: 1px; }
+.cal-cell i { position: absolute; top: 2px; right: 4px; font-style: normal; font-size: .65rem; font-weight: 700; }
+.cal-months { display: flex; gap: .35rem; overflow-x: auto; margin-top: .7rem; padding-bottom: .2rem; }
+.cal-months .chip { min-height: 34px; padding: .25rem .7rem; font-size: .85rem; }

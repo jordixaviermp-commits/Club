@@ -314,3 +314,28 @@ export function formatDate(iso, withDay = true) {
   const wd = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
   return `${withDay ? DAYS[wd] + ' ' : ''}${d} ${MONTHS[m - 1]} ${y}`;
 }
+
+// ---------- Calendario ----------
+
+export const MONTH_NAMES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto',
+  'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+/** Semanas (de lunes a domingo) del mes «AAAA-MM»; los huecos fuera del mes son null. */
+export function monthGrid(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  const first = (new Date(Date.UTC(y, m - 1, 1)).getUTCDay() + 6) % 7; // 0 = lunes
+  const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const cells = [...Array(first).fill(null),
+    ...Array.from({ length: days }, (_, i) => `${ym}-${String(i + 1).padStart(2, '0')}`)];
+  while (cells.length % 7) cells.push(null);
+  const weeks = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+  return weeks;
+}
+
+/** Suma `n` meses a «AAAA-MM». */
+export function addMonths(ym, n) {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + n, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
