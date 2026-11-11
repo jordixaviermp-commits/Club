@@ -11,6 +11,6 @@
 //  clave «secret» / «service_role».
 // ====================================================================
 export const CONFIG = {
-  SUPABASE_URL: '',   // p. ej. 'https://abcdefgh.supabase.co'
-  SUPABASE_KEY: '',   // p. ej. 'sb_publishable_...' o 'eyJhbGciOi...'
+  SUPABASE_URL: 'https://cfecqvgzgsgekvskjjkj.supabase.co',
+  SUPABASE_KEY: 'sb_publishable_NUC7LWKuR2mqamubbKRk3Q_2xzlEu7h',
 };
