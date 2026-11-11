@@ -105,6 +105,7 @@ async function onRoute() {
   if (S.session?.isAdmin) {
     if (view === 'inscripciones' && id) S.draft = draftRegistration(id);
     if (view === 'carreras' && id) S.draft = draftRace(id);
+    if (view === 'federaciones' && !S.fed) loadFed();
   }
   render();
   window.scrollTo(0, 0);
@@ -153,7 +154,7 @@ function render() {
     html = ({
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
       carreras: S.draft ? viewRaceEdit : viewRaces,
-      resumen: viewSummary, corredores: viewRunners, datos: viewData,
+      resumen: viewSummary, corredores: viewRunners, datos: viewData, federaciones: viewFed,
     }[view] || viewRegistrations)();
   } else if (S.code && S.runnerData) html = viewRunnerHome();
   else html = viewWelcome();
@@ -320,14 +321,86 @@ function viewRegistrations() {
         esc(g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p></a>`;
   return frame('Inscripciones', `
     <a class="btn primary block" href="#/inscripciones/nueva">+ Nueva inscripción</a>
+    <a class="btn block" href="#/federaciones">Carreras de las federaciones (catalana y aragonesa)</a>
     ${fedLinks()}
     ${S.regView === 'cal' ? calendarView(regs, card)
       : regs.length ? regs.map(card).join('') : '<p class="empty">No hay inscripciones abiertas.</p>'}`,
   { actions: viewToggle() });
 }
 
+// ---------- Carreras de las federaciones (leídas cada semana por GitHub) ----------
+
+const FED_DATA_URLS = [
+  // el archivo del repositorio está siempre al día; la copia publicada con la app, de respaldo
+  'https://raw.githubusercontent.com/jordixaviermp-commits/Club/main/data/calendarios.json',
+  'data/calendarios.json',
+];
+const FED_NAMES = { FCC: 'Catalana', FAC: 'Aragonesa' };
+const fedFilter = { source: 'all', modality: 'all', leisure: false };
+
+async function loadFed() {
+  S.fed = { loading: true };
+  for (const url of FED_DATA_URLS) {
+    try {
+      const res = await fetch(url, { cache: 'no-cache' });
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (Array.isArray(data.races)) { S.fed = data; break; }
+    } catch { /* probar la siguiente */ }
+  }
+  if (S.fed.loading) S.fed = { failed: true };
+  if (parseRoute().view === 'federaciones') render();
+}
+
+function viewFed() {
+  const f = S.fed;
+  if (!f || f.loading) return frame('Federaciones', '<p class="empty">Cargando calendarios…</p>', { back: '#/inscripciones' });
+  if (f.failed) return frame('Federaciones', `<p class="card warn">No se han podido cargar los calendarios. Revisa la conexión o usa los enlaces directos:</p>${fedLinks()}`, { back: '#/inscripciones' });
+  const today = todayISO();
+  const created = new Set(S.data.registrations.concat(S.data.races).map((g) => g.date + '|' + normalize(g.name)));
+  const list = f.races.filter((r) => r.date >= today
+    && (fedFilter.source === 'all' || r.source === fedFilter.source)
+    && (fedFilter.modality === 'all' || r.modality === fedFilter.modality)
+    && (fedFilter.leisure || r.kind !== 'Ocio'));
+  const mods = MODALITIES.filter((m) => f.races.some((r) => r.modality === m));
+  let month = '';
+  const items = list.map((r, i) => {
+    const ym = r.date.slice(0, 7);
+    const head = ym !== month ? `<h2 class="section">${MONTH_NAMES[Number(ym.slice(5)) - 1][0].toUpperCase() + MONTH_NAMES[Number(ym.slice(5)) - 1].slice(1)} ${ym.slice(0, 4)}</h2>` : '';
+    month = ym;
+    const done = created.has(r.date + '|' + normalize(r.name));
+    return `${head}<article class="card race fed">
+      <div class="race-head"><div><h3>${esc(r.name)}</h3>
+        <p class="muted">${formatDate(r.date)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div>
+        <span class="tag">${esc(r.modality)}</span></div>
+      <p class="fed-meta"><span class="src src-${esc(r.source)}">${esc(FED_NAMES[r.source] || r.source)}</span>
+        ${esc(r.discipline || '')}${r.kind === 'Ocio' ? ' · ocio' : ''}${r.info ? ` · <span class="muted">${esc(r.info)}</span>` : ''}</p>
+      <div class="row">
+        <a class="btn small" href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">Ver en la web ↗</a>
+        ${done ? '<span class="done">✓ Ya está en la app</span>'
+          : `<button class="btn primary small" data-act="fed-create" data-i="${f.races.indexOf(r)}">Crear inscripción</button>`}
+      </div></article>`;
+  }).join('');
+  const updated = f.updated_at ? new Date(f.updated_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+  return frame('Federaciones', `
+    <div class="years" role="tablist">${[['all', 'Todas'], ['FCC', 'Catalana'], ['FAC', 'Aragonesa']].map(([v, l]) =>
+      `<button class="chip${fedFilter.source === v ? ' on' : ''}" data-act="fed-source" data-v="${v}">${l}</button>`).join('')}</div>
+    <div class="grid2 fed-filters">
+      <label>Modalidad<select data-fed="modality">${opt('all', 'Todas', fedFilter.modality)}${mods.map((m) => opt(m, m, fedFilter.modality)).join('')}</select></label>
+      <label class="check"><input type="checkbox" data-fed="leisure" ${fedFilter.leisure ? 'checked' : ''}> Incluir ocio y marchas</label>
+    </div>
+    <p class="hint">${list.length} carrera${list.length === 1 ? '' : 's'}. Pulsa «Crear inscripción» para añadirla con nombre, fecha y lugar ya rellenados.</p>
+    ${items || '<p class="empty">No hay carreras con estos filtros.</p>'}
+    ${f.errors?.length ? `<p class="card warn">Aviso de la última lectura: ${esc(f.errors.join(' · '))}</p>` : ''}
+    <p class="hint center">Datos de las webs de las federaciones${updated ? `, leídos el ${updated}` : ''}. Comprueba siempre los detalles en su web.</p>
+    ${fedLinks()}`, { back: '#/inscripciones' });
+}
+
 function draftRegistration(id) {
-  if (id === 'nueva') return { kind: 'reg', id: null, name: '', date: '', place: '', province: '', country: DEFAULT_COUNTRY, modality: 'Carretera', notes: '', people: [] };
+  if (id === 'nueva') {
+    const pre = S.prefill; S.prefill = null;   // viene de «Carreras de las federaciones»
+    return { kind: 'reg', id: null, name: '', date: '', place: '', province: '', country: DEFAULT_COUNTRY, modality: 'Carretera', notes: '', people: [], ...pre };
+  }
   const g = S.data.registrations.find((x) => x.id === id);
   if (!g) return null;
   return { kind: 'reg', ...g, people: g.entries.map((e) => ({ runner_id: e.runner_id, runner_name: runnerById(e.runner_id)?.name || '?', category: e.category || '' })).sort((a, b) => a.runner_name.localeCompare(b.runner_name, 'es')) };
@@ -596,6 +669,13 @@ const actions = {
   // listas de inscritos / participantes
   'del-person'(el) { S.draft.people.splice(Number(el.dataset.i), 1); render(); },
   year(el) { S.year = Number(el.dataset.y); render(); },
+  'fed-source'(el) { fedFilter.source = el.dataset.v; render(); },
+  'fed-create'(el) {
+    const r = S.fed.races[Number(el.dataset.i)];
+    S.prefill = { name: r.name, date: r.date, place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY,
+      modality: r.modality, notes: `Federación ${FED_NAMES[r.source] || r.source}: ${r.url}` };
+    go('#/inscripciones/nueva');
+  },
   'reg-view'() { S.regView = S.regView === 'cal' ? 'list' : 'cal'; S.calDay = null; store.set(VIEW_KEY, S.regView); render(); },
   'cal-month'(el) { S.calMonth = addMonths(S.calMonth, Number(el.dataset.n)); S.calDay = null; render(); },
   'cal-goto'(el) { S.calMonth = el.dataset.m; S.calDay = null; render(); },
@@ -824,6 +904,8 @@ $app.addEventListener('change', async (ev) => {
     S.draft.people.push({ runner_id: r.id, runner_name: r.name, category: r.category || '', position: '', podium_type: 'suelta' });
     render();
     $app.querySelector('.edit-list li:last-child')?.scrollIntoView({ block: 'center' });
+  } else if (t.dataset.fed) {
+    fedFilter[t.dataset.fed] = t.type === 'checkbox' ? t.checked : t.value; render();
   } else if (t.dataset.runnerCat) {
     const id = t.dataset.runnerCat;
     await run(async () => { await api.updateRunner(id, { category: t.value || null }); runnerById(id).category = t.value || null; }, 'Categoría guardada');

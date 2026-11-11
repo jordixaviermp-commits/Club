@@ -1,0 +1,32 @@
+# Lee cada semana los calendarios de la Federació Catalana y de la Federación
+# Aragonesa de ciclismo y guarda las carreras en data/calendarios.json, que la
+# app muestra en Inscripciones → «Carreras de las federaciones».
+name: Actualizar calendarios de las federaciones
+on:
+  schedule:
+    - cron: '23 4 * * 1,4'   # lunes y jueves, 04:23 UTC
+  workflow_dispatch: {}
+permissions:
+  contents: write
+concurrency:
+  group: calendarios
+  cancel-in-progress: false
+jobs:
+  actualizar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Leer calendarios
+        run: node scripts/calendarios.mjs
+      - name: Guardar si hay cambios
+        run: |
+          if git diff --quiet -- data/calendarios.json && [ -z "$(git ls-files --others -- data/calendarios.json)" ]; then
+            echo "Sin cambios"; exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/calendarios.json
+          git commit -m "Calendarios de las federaciones actualizados"
+          git push
