@@ -359,3 +359,21 @@ h2.section.past-head { color: var(--muted); margin-top: 1.4rem; }
 .sl-past { border: 2px dashed var(--muted); }
 .sl-cnt { min-width: 18px; height: 18px; border-radius: 9px; background: var(--text); color: var(--bg); font-size: .68rem; text-align: center; line-height: 18px; padding: 0 4px; }
 .cal-months .chip.old { opacity: .6; }
+
+/* Aviso del mínimo del contrato y su penalización */
+.pen { border-radius: 12px; padding: .6rem .8rem; margin: .5rem 0 .2rem; font-size: .92rem; line-height: 1.35; border: 2px solid; }
+.pen.bad-box { background: color-mix(in srgb, var(--danger) 14%, var(--card)); border-color: var(--danger); color: var(--text); }
+.pen.bad-box b { color: var(--danger); }
+.pen.ok { background: color-mix(in srgb, #1e9e4a 14%, var(--card)); border-color: #1e9e4a; }
+.pen.neutral { background: var(--bg); border-color: var(--line); }
+.pen small { color: var(--muted); }
+.pen-chip { display: inline-block; margin: .3rem 0 0; padding: .1rem .55rem; border-radius: 999px; font-size: .78rem; font-weight: 700;
+  background: color-mix(in srgb, var(--danger) 15%, var(--card)); color: var(--danger); }
+.pen-chip.ok { background: color-mix(in srgb, #1e9e4a 15%, var(--card)); color: #1e9e4a; }
+/* Marca del mínimo en la barra */
+.bbar-mark.min { background: var(--danger); width: 3px; opacity: 1; }
+.bbar-mark.min b { color: var(--danger); font-weight: 800; }
+.bbar-mark.min.hit { background: #1e9e4a; }
+.bbar-mark.min.hit b { color: #1e9e4a; }
+.bbar-mark b { white-space: nowrap; }
+.pen + .bbar { margin-top: 1.6rem; }
