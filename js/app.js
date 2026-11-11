@@ -369,6 +369,30 @@ function dupSuggestions(name, regs, forRunner) {
 const emptyRunnerDraft = (pre = {}) => ({ name: '', date: '', multi: false, end_date: '', place: '', province: '', country: DEFAULT_COUNTRY,
   modality: 'Carretera', category: S.runnerData?.me?.category || '', ...pre });
 
+/** Formulario para que el corredor ponga SU resultado (una sola vez). id = «reg_<uuid>» o «race_<uuid>». */
+function viewRunnerReport(key) {
+  const d = S.runnerData;
+  const [kind, id] = [key.slice(0, key.indexOf('_')), key.slice(key.indexOf('_') + 1)];
+  const race = kind === 'reg' ? d.registrations.find((g) => g.id === id) : (d.my_results || []).find((r) => r.race_id === id);
+  const back = runnerHref('mi');
+  if (!race) return frame('Mi resultado', '<p class="empty">No se encuentra esta carrera.</p>', { back });
+  const already = kind === 'reg' ? race.my_result : race.position;
+  if (already) return frame('Mi resultado', `<p class="card">Ya pusiste tu resultado en <b>${esc(race.name)}</b>. Si hay que corregirlo, pídeselo a la dirección.</p>`, { back });
+  const cat = kind === 'reg' ? race.entries.find((e) => e.runner_id === d.me.id)?.category : race.category;
+  return frame('Mi resultado', `
+    <form class="card stack" data-form="r-report" data-kind="${kind}" data-id="${id}">
+      <div><h3>${esc(race.name)}</h3><p class="muted">${when(race)}${place(race) ? ' · ' + esc(place(race)) : ''} · ${esc(race.modality)}</p></div>
+      <div class="grid2">
+        <label>Tu puesto<input type="number" name="position" inputmode="numeric" min="1" max="999" required autofocus></label>
+        <label>Categoría${catSelect('name="category"', cat || d.me.category || '', 'Categoría')}</label>
+      </div>
+      <label>Si es podio (1º, 2º o 3º), ¿de qué tipo?
+        <select name="podium">${PODIUM_TYPES.map((t) => opt(t.id, t.label, 'suelta')).join('')}</select></label>
+      <p class="pen bad-box">⚠️ Revísalo bien: <b>una vez enviado no podrás cambiarlo</b>. Si te equivocas, tendrá que corregirlo la dirección.</p>
+      <button class="btn primary">Enviar mi resultado</button>
+    </form>`, { back });
+}
+
 function viewRunnerNew() {
   if (!S.rdraft) S.rdraft = emptyRunnerDraft({ name: S.q.runner || '' });
   const d = S.rdraft;
@@ -416,7 +440,8 @@ function myRacesCard(d) {
   const days = list.reduce((n, r) => n + numDays(r.date, r.end_date), 0);
   const row = (r) => {
     const stagePods = (r.stage_positions || []).slice(0, (r.stages || []).length).map((p, i) => ({ p, n: stageName(r, i) })).filter((x) => isPodium(x.p));
-    const pos = r.position ? `${isPodium(r.position) ? medal(r.position) + ' ' : ''}${r.position}º${r.category ? ` ${esc(r.category)}` : ''}` : '<span class="muted">sin puesto</span>';
+    const pos = r.position ? `${isPodium(r.position) ? medal(r.position) + ' ' : ''}${r.position}º${r.category ? ` ${esc(r.category)}` : ''}${r.self_reported ? '<br><small class="self-res">📝 puesto por ti</small>' : ''}`
+      : (S.preview ? '<span class="muted">sin puesto</span>' : `<a class="btn primary small" href="#/resultado/race_${r.race_id}">Poner mi puesto</a>`);
     return `<li class="mini ${modClass(r.modality)}"><div><b>${esc(r.name)}</b>
       <small class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''} · ${esc(r.modality)}</small>
       ${stagePods.length ? `<small>${stagePods.map((x) => `${medal(x.p)} ${esc(x.n)}`).join(' · ')}</small>` : ''}</div>
@@ -441,8 +466,10 @@ function myRacesCard(d) {
 
   ${pending.length ? `<section class="card season-block pend-block">
     <h2>🏁 Ya corridas, pendientes de resultado <small>(${pending.length})</small></h2>
-    <p class="hint">Estabas apuntado y ya se han disputado. Cuentan para el bono cuando la dirección pase el resultado.</p>
-    <ul class="mini-list">${pending.map((g) => miniRow(g, '<span class="badge-pend">pendiente</span>')).join('')}</ul>
+    <p class="hint">Estabas apuntado y ya se han disputado. Pon tu resultado (una sola vez); cuentan para el bono cuando la dirección las pase a resultados.</p>
+    <ul class="mini-list">${pending.map((g) => miniRow(g, g.my_result
+      ? `<span class="badge-sent">📝 ${g.my_result.position}º enviado</span>`
+      : (S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>`))).join('')}</ul>
   </section>` : ''}
 
   <section class="card season-block done-block">
@@ -474,6 +501,7 @@ function runnerBonusCard(d) {
 
 function runnerScreen(sub) {
   if (sub === 'nueva') return viewRunnerNew();
+  if (sub === 'resultado') return viewRunnerReport(parseRoute().id || '');
   if (sub === 'editar') {
     const id = parseRoute().id;
     const g = S.runnerData.registrations.find((x) => x.id === id && x.mine_created);
@@ -518,7 +546,9 @@ function viewRunnerHome() {
       <div class="race-head"><div><h3>${esc(g.name)}</h3>
         <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>
         ${modTag(g.modality)}</div>
-      ${open ? '' : '<p class="state-tag">🏁 Ya disputada · pendiente de resultados</p>'}
+      ${open ? '' : `<p class="state-tag">🏁 Ya disputada · pendiente de resultados</p>
+        ${mine && !S.preview ? (g.my_result ? `<p class="mine-created">📝 Tu resultado: ${g.my_result.position}º (enviado)</p>`
+          : `<p><a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a></p>`) : ''}`}
       ${g.mine_created && !S.preview ? `<p class="mine-created">Añadida por ti · <a href="#/editar/${g.id}">✏️ Editar o borrar</a></p>` : ''}
       ${g.notes ? `<p class="notes">${esc(g.notes)}</p>` : ''}
       <p class="count">👥 ${g.entries.length} del club</p>
@@ -591,7 +621,7 @@ function viewRegistrations() {
   const card = (g) => `<a class="card race link-card ${g.date < today ? 'past-reg ' : ''}${modClass(g.modality)}" href="#/inscripciones/${g.id}">
       <div class="race-head"><div><h3>${esc(g.name)}</h3>
       <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality)}</div>
-      ${g.date < today ? '<p class="state-tag">🏁 Ya disputada: pásala a resultados</p>' : ''}
+      ${g.date < today ? `<p class="state-tag">🏁 Ya disputada: pásala a resultados${g.entries.some((e) => e.self_position) ? ` · 📝 ${g.entries.filter((e) => e.self_position).length} de ${g.entries.length} han puesto su resultado` : ''}</p>` : ''}
       <p class="count">👥 ${g.entries.length} del club${g.entries.length ? ': ' +
         esc(g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p>
       ${g.created_by ? `<p class="count">Añadida por ${esc(runnerById(g.created_by)?.name || 'un corredor')}</p>` : ''}</a>`;
@@ -713,7 +743,7 @@ function draftRegistration(id) {
   }
   const g = S.data.registrations.find((x) => x.id === id);
   if (!g) return null;
-  return { kind: 'reg', ...g, multi: !!g.end_date, people: g.entries.map((e) => ({ runner_id: e.runner_id, runner_name: runnerById(e.runner_id)?.name || '?', category: e.category || '' })).sort((a, b) => a.runner_name.localeCompare(b.runner_name, 'es')) };
+  return { kind: 'reg', ...g, multi: !!g.end_date, people: g.entries.map((e) => ({ runner_id: e.runner_id, runner_name: runnerById(e.runner_id)?.name || '?', category: e.category || '', self_position: e.self_position || null })).sort((a, b) => a.runner_name.localeCompare(b.runner_name, 'es')) };
 }
 
 function raceFields(d) {
@@ -749,7 +779,7 @@ function viewRegistrationEdit() {
       <label>Notas<textarea data-f="notes" rows="2">${esc(d.notes || '')}</textarea></label>
       <h3>Inscritos (${d.people.length})</h3>
       <ul class="edit-list">${d.people.map((p, i) => `<li>
-        <span class="name">${esc(p.runner_name)}</span>
+        <span class="name">${esc(p.runner_name)}${p.self_position ? ` <small class="self-res">📝 puso ${p.self_position}º</small>` : ''}</span>
         ${catSelect(`data-p="${i}" data-pf="category" aria-label="Categoría"`, p.category)}
         <button type="button" class="icon-btn" data-act="del-person" data-i="${i}" aria-label="Quitar">✕</button></li>`).join('')}</ul>
       ${addRunnerSelect(d)}
@@ -798,7 +828,7 @@ function draftRace(id) {
   if (!r) return null;
   const stages = (r.stages || []).map((_, i) => stageName(r, i));
   return { kind: 'race', ...r, stages, multi: !!r.end_date, people: r.results.map((x) => ({ runner_id: x.runner_id, runner_name: x.runner_name, category: x.category || '',
-    position: x.position ?? '', podium_type: x.podium_type || 'suelta',
+    position: x.position ?? '', podium_type: x.podium_type || 'suelta', self_reported: !!x.self_reported, origPosition: x.position ?? '',
     stage_positions: stages.map((_, i) => x.stage_positions?.[i] ?? '') }))
     .sort((a, b) => (a.position || 9999) - (b.position || 9999) || a.runner_name.localeCompare(b.runner_name, 'es')) };
 }
@@ -826,7 +856,7 @@ function viewRaceEdit() {
       <ul class="edit-list results">${d.people.map((p, i) => {
         const pod = isPodium(Number(p.position));
         return `<li>
-        <span class="name">${esc(p.runner_name)}${p.runner_id ? '' : ' <small class="muted">(ya no está en la plantilla)</small>'}</span>
+        <span class="name">${esc(p.runner_name)}${p.runner_id ? '' : ' <small class="muted">(ya no está en la plantilla)</small>'}${p.self_reported ? ' <small class="self-res">📝 puesto por el corredor</small>' : ''}</span>
         <button type="button" class="icon-btn" data-act="del-person" data-i="${i}" aria-label="Quitar">✕</button>
         <div class="res-fields">
           ${catSelect(`data-p="${i}" data-pf="category" aria-label="Categoría"`, p.category)}
@@ -1393,6 +1423,16 @@ const forms = {
     }, 'Carrera añadida y te has apuntado');
     if (ok) { S.rdraft = null; S.q.runner = ''; go('#/'); }
   },
+  async 'r-report'(f) {
+    const position = Number(f.position.value);
+    if (!Number.isInteger(position) || position < 1) return toast('Pon un puesto válido (1, 2, 3…).', true);
+    const cat = f.category.value || null, pod = f.podium.value;
+    const txt = `${position}º${cat ? ' en ' + cat : ''}${position <= 3 ? ` · ${podiumLabel(pod)}` : ''}`;
+    if (!await confirmAction('Enviar resultado', `Vas a enviar: <b>${esc(txt)}</b>.<br>Después no podrás cambiarlo.`, 'Enviar', 'primary')) return;
+    const ok = await run(async () => { await api.runnerReport(S.code, f.dataset.kind, f.dataset.id, position, cat, pod); await loadRunner(); return true; },
+      position <= 3 ? `${medal(position)} ¡Enhorabuena! Resultado enviado` : 'Resultado enviado');
+    if (ok) go(runnerHref('mi'));
+  },
   async 'bonus-cfg'(f) {
     const tiers = [0, 1, 2, 3].map((i) => ({ races: Number(f['r' + i].value), amount: Number(f['a' + i].value) }))
       .filter((t) => t.races > 0);
@@ -1423,7 +1463,8 @@ const forms = {
         });
         return { runner_id: p.runner_id, runner_name: p.runner_name, category: p.category || null, position,
           podium_type: isPodium(position) ? p.podium_type || 'suelta' : 'suelta',
-          stage_positions: stage_positions.some((x) => x !== null) ? stage_positions : null };
+          stage_positions: stage_positions.some((x) => x !== null) ? stage_positions : null,
+          self_reported: !!p.self_reported && String(p.position) === String(p.origPosition) };
       });
       race.stages = d.stages.length ? d.stages.map((n, j) => cleanName(n) || `Etapa ${j + 1}`) : null;
       const r = await api.saveRace(race, results); await reload(); return r;

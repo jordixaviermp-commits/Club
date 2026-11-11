@@ -396,3 +396,6 @@ h2.section.past-head { color: var(--muted); margin-top: 1.4rem; }
 .empty.small { padding: .6rem 0; font-size: .9rem; }
 .mine-created { font-size: .82rem; margin: .45rem 0 0; color: var(--muted); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .sc.done { color: #6fd08f; } }
+/* Resultado puesto por el corredor */
+.self-res { color: var(--tag-text, var(--accent)); font-weight: 600; }
+.badge-sent { flex: none; font-size: .78rem; font-weight: 700; padding: .15rem .5rem; border-radius: 999px; background: color-mix(in srgb, #1e9e4a 15%, var(--card)); color: #1e8a43; }

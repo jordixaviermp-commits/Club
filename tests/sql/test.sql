@@ -150,6 +150,29 @@ select pg_temp.expect_fail($q$select runner_delete_registration('BBBBBBBBBB', '$
 select runner_leave('CCCCCCCCCC', :'nueva');
 select runner_delete_registration('BBBBBBBBBB', :'nueva');
 select pg_temp.check(runner_view('BBBBBBBBBB')::text not like '%Marxa Nova Editada%', 'borra la suya si va solo');
+-- resultado propio
+reset role;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+insert into registrations (id, name, date) values ('20000000-0000-0000-0000-000000000050', 'Ayer', current_date - 1);
+insert into registration_entries (registration_id, runner_id) values ('20000000-0000-0000-0000-000000000050', '10000000-0000-0000-0000-000000000002'),
+  ('20000000-0000-0000-0000-000000000050', '10000000-0000-0000-0000-000000000003');
+set role anon;
+select runner_report_result('BBBBBBBBBB', 'reg', '20000000-0000-0000-0000-000000000050', 2, 'Élite', 'campeonato');
+select pg_temp.expect_fail($q$select runner_report_result('BBBBBBBBBB', 'reg', '20000000-0000-0000-0000-000000000050', 1, null, null)$q$, 'no puede corregir su resultado');
+select pg_temp.expect_fail($q$select runner_report_result('BBBBBBBBBB', 'reg', '20000000-0000-0000-0000-000000000009', 1, null, null)$q$, 'no pone resultado donde no está apuntado');
+select pg_temp.check((select (g->'my_result'->>'position')::int from jsonb_array_elements(runner_view('BBBBBBBBBB')->'registrations') g where g->>'id' = '20000000-0000-0000-0000-000000000050') = 2, 've su resultado enviado');
+reset role;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+select promote_registration('20000000-0000-0000-0000-000000000050') as rp \gset
+select pg_temp.check((select position from results where race_id = :'rp' and runner_id = '10000000-0000-0000-0000-000000000002') = 2, 'pasar a resultados copia su puesto');
+select pg_temp.check((select podium_type from results where race_id = :'rp' and runner_id = '10000000-0000-0000-0000-000000000002') = 'campeonato', 'y su tipo de podio');
+select pg_temp.check((select self_reported from results where race_id = :'rp' and runner_id = '10000000-0000-0000-0000-000000000002'), 'marcado como puesto por el corredor');
+reset role;
+set role anon;
+select runner_report_result('CCCCCCCCCC', 'race', :'rp', 7, null, null);
+select pg_temp.expect_fail($q$select runner_report_result('CCCCCCCCCC', 'race', '$q$ || :'rp' || $q$', 1, null, null)$q$, 'en carrera ya en resultados tampoco corrige');
+select pg_temp.expect_fail($q$select runner_report_result('BBBBBBBBBB', 'race', '$q$ || :'rp' || $q$', 1, null, null)$q$, 'no cambia un puesto ya puesto');
 select pg_temp.check(jsonb_array_length(runner_view('BBBBBBBBBB')->'my_results') >= 1, 'mis carreras: ve sus resultados');
 select pg_temp.check((runner_view('BBBBBBBBBB')->'my_results')::text not like '%Pere Soler%', 'mis carreras: solo las suyas');
 select pg_temp.check(jsonb_array_length(runner_team('BBBBBBBBBB')->'races') >= 1, 'resumen equipo: ve las carreras del equipo');
