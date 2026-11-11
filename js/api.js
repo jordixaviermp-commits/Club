@@ -82,6 +82,7 @@ export function supabaseApi(url, key) {
     async importAll(data) { ok(await sb.rpc('import_backup', { p: data })); },
 
     async runnerView(code) { return ok(await sb.rpc('runner_view', { p_code: code })); },
+    async runnerTeam(code) { return ok(await sb.rpc('runner_team', { p_code: code })); },
     async runnerCreate(code, reg, category) { return ok(await sb.rpc('runner_create_registration', { p_code: code, p_reg: reg, p_category: category || null })); },
     async runnerJoin(code, regId, category) { ok(await sb.rpc('runner_join', { p_code: code, p_registration: regId, p_category: category || null })); },
     async runnerLeave(code, regId) { ok(await sb.rpc('runner_leave', { p_code: code, p_registration: regId })); },
@@ -265,6 +266,16 @@ export function demoApi(storage = globalThis.localStorage) {
             return { runner_id: e.runner_id, name: rn?.name, category: e.category };
           }).sort((a, b) => a.name.localeCompare(b.name)),
         })),
+      });
+    },
+    async runnerTeam(code) {
+      byCode(code); const d = load();
+      return clone({
+        runners: d.runners.map((r) => ({ id: r.id, name: r.name })).sort((a, b) => a.name.localeCompare(b.name)),
+        races: d.races.map((r) => ({ id: r.id, name: r.name, date: r.date, end_date: r.end_date || null, place: r.place, province: r.province,
+          country: r.country, modality: r.modality, stages: r.stages || null,
+          results: d.results.filter((x) => x.race_id === r.id).map((x) => ({ runner_id: x.runner_id, runner_name: x.runner_name,
+            category: x.category, position: x.position, podium_type: x.podium_type, stage_positions: x.stage_positions || null })) })),
       });
     },
     async runnerCreate(code, reg, category) {

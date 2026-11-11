@@ -325,3 +325,8 @@ label.check input { accent-color: var(--accent); }
 .runner-races > summary { cursor: pointer; font-size: .85rem; color: var(--muted); padding: .2rem 0; }
 .runner-races[open] > summary { margin-bottom: .4rem; }
 .mini-list .pos { flex: none; font-weight: 700; text-decoration: none; color: var(--text); }
+
+/* Resumen del equipo */
+.team-btn { font-size: 1.02rem; }
+tr.me-row td { background: color-mix(in srgb, var(--brand-cyan) 18%, transparent); font-weight: 700; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--mc); margin-right: .4rem; vertical-align: middle; }

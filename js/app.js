@@ -112,7 +112,8 @@ async function onRoute() {
   if (S.session?.isAdmin && !S.data) await run(reload);
   if (!S.session?.isAdmin && S.code && !S.runnerData && !['entrar'].includes(view)) await loadRunner();
   S.draft = null;
-  if (S.session?.isAdmin && view !== 'vista' && S.preview) { S.preview = null; S.runnerData = null; } // salir de la vista previa
+  if (S.session?.isAdmin && !['vista', 'equipo'].includes(view) && S.preview) { S.preview = null; S.runnerData = null; } // salir de la vista previa
+  if (view === 'equipo' && (S.code || S.preview)) loadTeam();
   if (S.session?.isAdmin) {
     if (view === 'inscripciones' && id) S.draft = draftRegistration(id);
     if (view === 'carreras' && id) S.draft = draftRace(id);
@@ -167,8 +168,9 @@ function render() {
       carreras: S.draft ? viewRaceEdit : viewRaces,
       resumen: viewSummary, corredores: viewRunners, datos: viewData, federaciones: viewFed, bonos: viewBonus,
       vista: () => (S.preview && S.runnerData ? viewRunnerHome() : viewRunners()),
+      equipo: () => (S.preview ? viewTeam() : viewSummary()),
     }[view] || viewRegistrations)();
-  } else if (S.code && S.runnerData) html = view === 'nueva' ? viewRunnerNew() : viewRunnerHome();
+  } else if (S.code && S.runnerData) html = view === 'nueva' ? viewRunnerNew() : view === 'equipo' ? viewTeam() : viewRunnerHome();
   else html = viewWelcome();
   $app.innerHTML = html;
   document.body.classList.toggle('has-tabs', !!admin && view !== 'entrar');
@@ -442,6 +444,7 @@ function viewRunnerHome() {
     <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
     ${runnerBonusCard(d)}
     ${myRacesCard(d)}
+    <a class="btn block team-btn" href="#/equipo">📊 Resumen del equipo ${new Date().getFullYear()}</a>
     ${installHint()}
     <section class="card search-card">
       ${searchBox('runner', 'Busca una carrera: nombre o pueblo…')}
@@ -721,44 +724,71 @@ function viewRaceEdit() {
 //  Resumen anual
 // ======================================================================
 
-function viewSummary() {
-  const years = availableYears(S.data.races);
+/**
+ * Contenido del resumen anual. `admin`: enlaces a las carreras, avisos de datos que faltan y CSV.
+ * `me`: id del corredor que mira (se resalta su fila).
+ */
+function summaryBody(races, runners, { admin = false, me = null } = {}) {
+  const years = availableYears(races);
   if (!years.includes(S.year)) S.year = years[0];
-  const s = yearSummary(S.year, S.data.races, S.data.runners);
+  const s = yearSummary(S.year, races, runners);
   const kpi = (n, label) => `<div class="kpi"><b>${n}</b><span>${label}</span></div>`;
   const table = (head, rows, cls = '') => `<div class="table-wrap"><table class="${cls}"><thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead>
     <tbody>${rows.length ? rows.join('') : `<tr><td colspan="${head.length}" class="muted">Sin datos</td></tr>`}</tbody></table></div>`;
-  return frame('Resumen anual', `
+  const raceLink = (id, name) => admin ? `<a href="#/carreras/${id}">${esc(name)}</a>` : `<b>${esc(name)}</b>`;
+  return `
     ${yearPicker(years)}
     <div class="kpis">${kpi(s.totals.races, 'carreras')}${kpi(s.totals.runners, 'corredores')}${kpi(s.totals.podiums, 'podios')}${kpi(s.totals.wins, 'victorias')}</div>
 
     <section class="card"><h2>Por modalidad</h2>
       ${table(['Modalidad', 'Carreras', 'Particip.', 'Podios'], s.byModality.map((m) =>
-        `<tr><td>${esc(m.modality)}</td><td>${m.races}</td><td>${m.participations}</td><td>${m.podiums}</td></tr>`), 'num')}</section>
+        `<tr><td><span class="dot ${modClass(m.modality)}"></span>${esc(m.modality)}</td><td>${m.races}</td><td>${m.participations}</td><td>${m.podiums}</td></tr>`), 'num')}</section>
 
     <section class="card"><h2>Dónde se ha competido</h2>
       <div class="grid2 top-align">
         ${table(['País', 'Carreras'], s.countries.map((c) => `<tr><td>${esc(c.name)}</td><td>${c.races}</td></tr>`), 'num')}
         ${table(['Provincia', 'Carreras'], s.provinces.map((c) => `<tr><td>${esc(c.name)}</td><td>${c.races}</td></tr>`), 'num')}
       </div>
-      ${s.missingPlace.length ? `<div class="warn"><b>Faltan datos en ${s.missingPlace.length} carrera${s.missingPlace.length === 1 ? '' : 's'}:</b>
+      ${admin && s.missingPlace.length ? `<div class="warn"><b>Faltan datos en ${s.missingPlace.length} carrera${s.missingPlace.length === 1 ? '' : 's'}:</b>
         <ul>${s.missingPlace.map((m) => `<li><a href="#/carreras/${m.id}">${esc(m.name)}</a> (${formatRange(m.date, m.end_date, false)}): sin ${m.missing.join(' ni ')}</li>`).join('')}</ul></div>` : ''}
     </section>
 
     <section class="card"><h2>Participaciones por corredor</h2>
       ${table(['Corredor', 'Carr.', 'Carret.', 'BTT', '1º', '2º', '3º'], s.perRunner.map((r) =>
-        `<tr class="${r.races ? '' : 'zero'}"><td>${esc(r.name)}${r.current ? '' : ' <small class="muted">(baja)</small>'}</td><td>${r.races}</td><td>${r.road}</td><td>${r.btt}</td><td>${r.p1}</td><td>${r.p2}</td><td>${r.p3}</td></tr>`), 'num')}</section>
+        `<tr class="${r.races ? '' : 'zero'}${me && r.key === me ? ' me-row' : ''}"><td>${esc(r.name)}${r.current ? '' : ' <small class="muted">(baja)</small>'}</td><td>${r.races}</td><td>${r.road}</td><td>${r.btt}</td><td>${r.p1}</td><td>${r.p2}</td><td>${r.p3}</td></tr>`), 'num')}</section>
 
     <section class="card"><h2>Podios por tipo</h2>
       ${table(['Tipo', 'Podios', 'Victorias'], s.byPodiumType.map((t) => `<tr><td>${esc(t.label)}</td><td>${t.podiums}</td><td>${t.wins}</td></tr>`), 'num')}
       <h3>Podios del año</h3>
       ${s.podiumList.length ? `<ul class="podium-list">${s.podiumList.map((p) => `<li><span class="medal">${medal(p.position)}</span><div>
         <b>${esc(p.runner)}</b>${p.category ? ` <small class="muted">${esc(p.category)}</small>` : ''} · ${p.position}º
-        <br><a href="#/carreras/${p.raceId}">${esc(p.race)}</a> <span class="muted">· ${formatDate(p.date, false)} · ${esc(podiumLabel(p.type))}${p.stage ? ': ' + esc(p.stage) : ''}</span></div></li>`).join('')}</ul>`
+        <br>${raceLink(p.raceId, p.race)} <span class="muted">· ${formatDate(p.date, false)} · ${esc(podiumLabel(p.type))}${p.stage ? ': ' + esc(p.stage) : ''}</span></div></li>`).join('')}</ul>`
         : '<p class="muted">Sin podios este año.</p>'}
     </section>
+    ${admin ? `<button class="btn block" data-act="csv-year">Exportar ${S.year} a CSV (Excel)</button>` : ''}`;
+}
 
-    <button class="btn block" data-act="csv-year">Exportar ${S.year} a CSV (Excel)</button>`);
+function viewSummary() {
+  return frame('Resumen anual', summaryBody(S.data.races, S.data.runners, { admin: true }));
+}
+
+/** Resumen del equipo para los corredores (solo lectura). */
+function viewTeam() {
+  const t = S.team;
+  if (!t) return frame('Resumen del equipo', '<p class="empty">Cargando…</p>', { back: '#/' });
+  if (t.failed) return frame('Resumen del equipo', `<p class="card warn">${esc(t.failed)}</p>`, { back: '#/' });
+  return frame('Resumen del equipo', `<p class="hint">Así va el equipo de competición del CC Monzón. 💪</p>
+    ${summaryBody(t.races, t.runners, { me: S.runnerData?.me?.id })}`, { back: S.preview ? '#/vista' : '#/' });
+}
+
+async function loadTeam() {
+  S.team = null;
+  try { S.team = await api.runnerTeam(S.code || S.previewCode); }
+  catch (e) {
+    S.team = { failed: /runner_team|PGRST202|function/i.test(String(e?.message))
+      ? 'El resumen del equipo aún no está activado: la dirección tiene que ejecutar un cambio en la base de datos.' : friendlyError(e) };
+  }
+  if (parseRoute().view === 'equipo') render();
 }
 
 // ======================================================================
@@ -1068,7 +1098,7 @@ const actions = {
     } else if (choice === 'preview') {
       const view = await run(() => api.runnerView(r.code));
       if (!view) return;
-      S.preview = { name: r.name, sqlOk: Array.isArray(view.my_results) };
+      S.preview = { name: r.name, sqlOk: Array.isArray(view.my_results) }; S.previewCode = r.code;
       S.runnerData = view; S.myOpen = true;
       go('#/vista');
     } else if (choice === 'open') {
