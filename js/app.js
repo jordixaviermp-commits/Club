@@ -369,17 +369,45 @@ function dupSuggestions(name, regs, forRunner) {
 const emptyRunnerDraft = (pre = {}) => ({ name: '', date: '', multi: false, end_date: '', place: '', province: '', country: DEFAULT_COUNTRY,
   modality: 'Carretera', category: S.runnerData?.me?.category || '', ...pre });
 
+/** Formulario para que el corredor ponga SU resultado (una sola vez). id = «reg_<uuid>» o «race_<uuid>». */
+function viewRunnerReport(key) {
+  const d = S.runnerData;
+  const [kind, id] = [key.slice(0, key.indexOf('_')), key.slice(key.indexOf('_') + 1)];
+  const race = kind === 'reg' ? d.registrations.find((g) => g.id === id) : (d.my_results || []).find((r) => r.race_id === id);
+  const back = runnerHref('mi');
+  if (!race) return frame('Mi resultado', '<p class="empty">No se encuentra esta carrera.</p>', { back });
+  const already = kind === 'reg' ? race.my_result : race.position;
+  if (already) return frame('Mi resultado', `<p class="card">Ya pusiste tu resultado en <b>${esc(race.name)}</b>. Si hay que corregirlo, pídeselo a la dirección.</p>`, { back });
+  const cat = kind === 'reg' ? race.entries.find((e) => e.runner_id === d.me.id)?.category : race.category;
+  return frame('Mi resultado', `
+    <form class="card stack" data-form="r-report" data-kind="${kind}" data-id="${id}">
+      <div><h3>${esc(race.name)}</h3><p class="muted">${when(race)}${place(race) ? ' · ' + esc(place(race)) : ''} · ${esc(race.modality)}</p></div>
+      <div class="grid2">
+        <label>Tu puesto<input type="number" name="position" inputmode="numeric" min="1" max="999" required autofocus></label>
+        <label>Categoría${catSelect('name="category"', cat || d.me.category || '', 'Categoría')}</label>
+      </div>
+      <label>Si es podio (1º, 2º o 3º), ¿de qué tipo?
+        <select name="podium">${PODIUM_TYPES.map((t) => opt(t.id, t.label, 'suelta')).join('')}</select></label>
+      <p class="pen bad-box">⚠️ Revísalo bien: <b>una vez enviado no podrás cambiarlo</b>. Si te equivocas, tendrá que corregirlo la dirección.</p>
+      <button class="btn primary">Enviar mi resultado</button>
+    </form>`, { back });
+}
+
 function viewRunnerNew() {
   if (!S.rdraft) S.rdraft = emptyRunnerDraft({ name: S.q.runner || '' });
   const d = S.rdraft;
-  if (!S.fed) loadFed().then(() => updateSearch('rname'));
-  return frame('Añadir carrera', `
+  const editing = !!d.id;
+  const reg = editing ? S.runnerData.registrations.find((x) => x.id === d.id) : null;
+  const others = reg ? reg.entries.filter((e) => e.runner_id !== S.runnerData.me.id).length : 0;
+  if (!S.fed && !editing) loadFed().then(() => updateSearch('rname'));
+  return frame(editing ? 'Editar mi carrera' : 'Añadir carrera', `
     <form class="card stack" data-form="r-create">
-      <p class="hint">Escribe el nombre: si ya existe en el club o en el calendario de las federaciones te saldrá aquí debajo, para no duplicarla.</p>
+      <p class="hint">${editing ? 'Puedes corregir los datos de esta carrera porque la añadiste tú. Los resultados y podios los pone la dirección.'
+        : 'Escribe el nombre: si ya existe en el club o en el calendario de las federaciones te saldrá aquí debajo, para no duplicarla.'}</p>
       <label>Nombre de la carrera<input data-rf="name" value="${esc(d.name)}" required minlength="3" maxlength="120" autocomplete="off"></label>
-      <div id="dup-list">${dupSuggestions(d.name, S.runnerData.registrations, true)}</div>
+      <div id="dup-list">${editing ? '' : dupSuggestions(d.name, S.runnerData.registrations, true)}</div>
       <div class="grid2">
-        <label>${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-rf="date" value="${esc(d.date)}" min="${todayISO()}" required></label>
+        <label>${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-rf="date" value="${esc(d.date)}" ${editing ? '' : `min="${todayISO()}"`} required></label>
         <label>Modalidad<select data-rf="modality">${MODALITIES.map((m) => opt(m, m, d.modality)).join('')}</select></label>
       </div>
       <label class="check"><input type="checkbox" data-rf-multi ${d.multi ? 'checked' : ''}> Carrera de varios días (por etapas)</label>
@@ -387,11 +415,15 @@ function viewRunnerNew() {
       <label>Lugar<input data-rf="place" value="${esc(d.place)}" maxlength="120"></label>
       <div class="grid2">
         <label>Provincia<input data-rf="province" list="dl-prov" value="${esc(d.province)}" autocomplete="off"></label>
-        <label>Tu categoría${catSelect('data-rf="category"', d.category, 'Categoría')}</label>
+        ${editing ? '<span></span>' : `<label>Tu categoría${catSelect('data-rf="category"', d.category, 'Categoría')}</label>`}
       </div>
-      <button class="btn primary">Añadir y apuntarme</button>
+      ${editing ? `<label>Notas<textarea data-rf="notes" rows="2" maxlength="500">${esc(d.notes || '')}</textarea></label>` : ''}
+      <button class="btn primary">${editing ? 'Guardar cambios' : 'Añadir y apuntarme'}</button>
       <p class="hint">La dirección del club podrá corregirla o borrarla si hace falta.</p>
-    </form>`, { back: runnerHref('') });
+    </form>
+    ${editing ? (others
+      ? `<p class="card hint">🗑️ No puedes borrarla: hay ${others} compañero${others === 1 ? '' : 's'} más apuntado${others === 1 ? '' : 's'}. Si hay que quitarla, pídeselo a la dirección del club.</p>`
+      : '<button class="btn danger ghost block" data-act="r-delete-mine">🗑️ Borrar esta carrera</button>') : ''}`, { back: runnerHref('') });
 }
 
 /** «Mis carreras»: sus carreras con resultados por temporada y las apuntadas pendientes de resultado. */
@@ -401,29 +433,52 @@ function myRacesCard(d) {
   const today = d.today || todayISO();
   const mineReg = d.registrations.filter((g) => g.entries.some((e) => e.runner_id === d.me.id));
   const pending = mineReg.filter((g) => g.date < today);
-  const upcoming = mineReg.filter((g) => g.date >= today);
+  const upcoming = mineReg.filter((g) => g.date >= today).sort((a, b) => a.date.localeCompare(b.date));
   const years = [...new Set([new Date().getFullYear(), ...results.map((r) => yearOf(r.date))])].sort((a, b) => b - a);
   if (!years.includes(S.myYear)) S.myYear = years[0];
   const list = results.filter((r) => yearOf(r.date) === S.myYear);
   const days = list.reduce((n, r) => n + numDays(r.date, r.end_date), 0);
   const row = (r) => {
     const stagePods = (r.stage_positions || []).slice(0, (r.stages || []).length).map((p, i) => ({ p, n: stageName(r, i) })).filter((x) => isPodium(x.p));
-    const pos = r.position ? `${isPodium(r.position) ? medal(r.position) + ' ' : ''}${r.position}º${r.category ? ` ${esc(r.category)}` : ''}` : '<span class="muted">sin puesto</span>';
+    const pos = r.position ? `${isPodium(r.position) ? medal(r.position) + ' ' : ''}${r.position}º${r.category ? ` ${esc(r.category)}` : ''}${r.self_reported ? '<br><small class="self-res">📝 puesto por ti</small>' : ''}`
+      : (S.preview ? '<span class="muted">sin puesto</span>' : `<a class="btn primary small" href="#/resultado/race_${r.race_id}">Poner mi puesto</a>`);
     return `<li class="mini ${modClass(r.modality)}"><div><b>${esc(r.name)}</b>
       <small class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''} · ${esc(r.modality)}</small>
       ${stagePods.length ? `<small>${stagePods.map((x) => `${medal(x.p)} ${esc(x.n)}`).join(' · ')}</small>` : ''}</div>
       <span class="pos">${pos}</span></li>`;
   };
-  return `<details class="card my-races"${S.myOpen ? ' open' : ''} data-toggle-key="myOpen">
-    <summary><b>📋 Mis carreras ${S.myYear}</b>: ${list.length}${days !== list.length ? ` (${days} días para el bono)` : ''}</summary>
+  const myCat = (g) => g.entries.find((e) => e.runner_id === d.me.id)?.category;
+  const dleft = (g) => { const n = Math.round((new Date(g.date + 'T12:00:00Z') - new Date(today + 'T12:00:00Z')) / 864e5);
+    return n === 0 ? 'hoy' : n === 1 ? 'mañana' : `en ${n} días`; };
+  return `
+  <div class="season-chips">
+    <span class="sc done">✅ ${list.length} hecha${list.length === 1 ? '' : 's'}</span>
+    <span class="sc pend">🏁 ${pending.length} pendiente${pending.length === 1 ? '' : 's'}</span>
+    <span class="sc next">📅 ${upcoming.length} próxima${upcoming.length === 1 ? '' : 's'}</span>
+  </div>
+
+  <section class="card season-block next-block">
+    <h2>📅 Mis próximas inscripciones <small>(${upcoming.length})</small></h2>
+    <p class="hint">Carreras a las que estás apuntado y que aún no se han corrido.</p>
+    ${upcoming.length ? `<ul class="mini-list">${upcoming.map((g) => miniRow(g, `<span class="badge-next">${dleft(g)}${myCat(g) ? ` · ${esc(myCat(g))}` : ''}</span>`)).join('')}</ul>`
+      : '<p class="empty small">No estás apuntado a ninguna. Búscalas en la pestaña Carreras.</p>'}
+  </section>
+
+  ${pending.length ? `<section class="card season-block pend-block">
+    <h2>🏁 Ya corridas, pendientes de resultado <small>(${pending.length})</small></h2>
+    <p class="hint">Estabas apuntado y ya se han disputado. Pon tu resultado (una sola vez); cuentan para el bono cuando la dirección las pase a resultados.</p>
+    <ul class="mini-list">${pending.map((g) => miniRow(g, g.my_result
+      ? `<span class="badge-sent">📝 ${g.my_result.position}º enviado</span>`
+      : (S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>`))).join('')}</ul>
+  </section>` : ''}
+
+  <section class="card season-block done-block">
+    <h2>✅ Carreras hechas ${S.myYear} <small>(${list.length}${days !== list.length ? ` · ${days} días para el bono` : ''})</small></h2>
     ${years.length > 1 ? `<div class="years">${years.map((y) => `<button class="chip${y === S.myYear ? ' on' : ''}" data-act="my-year" data-y="${y}">${y}</button>`).join('')}</div>` : ''}
     ${list.length ? `<ul class="mini-list">${list.map(row).join('')}</ul>`
-      : `<p class="hint">Todavía no hay carreras tuyas con resultados en ${S.myYear}.</p>`}
-    ${pending.length ? `<p class="hint"><b>Apuntado, pendientes de que la dirección pase el resultado (${pending.length}):</b></p>
-      <ul class="mini-list">${pending.map((g) => miniRow(g, '<span class="done">pendiente</span>')).join('')}</ul>` : ''}
-    <p class="hint">${upcoming.length ? `Además estás apuntado a ${upcoming.length} carrera${upcoming.length === 1 ? '' : 's'} próxima${upcoming.length === 1 ? '' : 's'}.` : 'No estás apuntado a ninguna carrera próxima.'}
-      Si falta alguna carrera o un puesto, díselo a la dirección del club.</p>
-  </details>`;
+      : `<p class="empty small">Todavía no hay carreras tuyas con resultado en ${S.myYear}.</p>`}
+    <p class="hint">Si falta alguna carrera o un puesto, díselo a la dirección del club.</p>
+  </section>`;
 }
 
 function runnerBonusCard(d) {
@@ -446,6 +501,15 @@ function runnerBonusCard(d) {
 
 function runnerScreen(sub) {
   if (sub === 'nueva') return viewRunnerNew();
+  if (sub === 'resultado') return viewRunnerReport(parseRoute().id || '');
+  if (sub === 'editar') {
+    const id = parseRoute().id;
+    const g = S.runnerData.registrations.find((x) => x.id === id && x.mine_created);
+    if (!g) return frame('Editar carrera', '<p class="empty">Esta carrera no existe o no la añadiste tú.</p>', { back: runnerHref('') });
+    if (S.rdraft?.id !== id) S.rdraft = emptyRunnerDraft({ id, name: g.name, date: g.date, multi: !!g.end_date, end_date: g.end_date || '',
+      place: g.place || '', province: g.province || '', country: g.country || DEFAULT_COUNTRY, modality: g.modality, notes: g.notes || '' });
+    return viewRunnerNew();
+  }
   if (sub === 'mi') return viewRunnerMine();
   if (sub === 'equipo') return viewTeam();
   if (sub === 'federaciones') return viewFed();
@@ -482,7 +546,10 @@ function viewRunnerHome() {
       <div class="race-head"><div><h3>${esc(g.name)}</h3>
         <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>
         ${modTag(g.modality)}</div>
-      ${open ? '' : '<p class="state-tag">🏁 Ya disputada · pendiente de resultados</p>'}
+      ${open ? '' : `<p class="state-tag">🏁 Ya disputada · pendiente de resultados</p>
+        ${mine && !S.preview ? (g.my_result ? `<p class="mine-created">📝 Tu resultado: ${g.my_result.position}º (enviado)</p>`
+          : `<p><a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a></p>`) : ''}`}
+      ${g.mine_created && !S.preview ? `<p class="mine-created">Añadida por ti · <a href="#/editar/${g.id}">✏️ Editar o borrar</a></p>` : ''}
       ${g.notes ? `<p class="notes">${esc(g.notes)}</p>` : ''}
       <p class="count">👥 ${g.entries.length} del club</p>
       ${g.entries.length ? `<ul class="people">${g.entries.map((e) =>
@@ -515,7 +582,6 @@ function viewRunnerHome() {
 /** «Mi temporada»: bono, mis carreras e instalación. */
 function viewRunnerMine() {
   const d = S.runnerData, me = d.me;
-  S.myOpen = S.myOpen ?? true;
   return frame(runnerTitle(), `
     ${previewBanner()}
     <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
@@ -555,7 +621,7 @@ function viewRegistrations() {
   const card = (g) => `<a class="card race link-card ${g.date < today ? 'past-reg ' : ''}${modClass(g.modality)}" href="#/inscripciones/${g.id}">
       <div class="race-head"><div><h3>${esc(g.name)}</h3>
       <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality)}</div>
-      ${g.date < today ? '<p class="state-tag">🏁 Ya disputada: pásala a resultados</p>' : ''}
+      ${g.date < today ? `<p class="state-tag">🏁 Ya disputada: pásala a resultados${g.entries.some((e) => e.self_position) ? ` · 📝 ${g.entries.filter((e) => e.self_position).length} de ${g.entries.length} han puesto su resultado` : ''}</p>` : ''}
       <p class="count">👥 ${g.entries.length} del club${g.entries.length ? ': ' +
         esc(g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p>
       ${g.created_by ? `<p class="count">Añadida por ${esc(runnerById(g.created_by)?.name || 'un corredor')}</p>` : ''}</a>`;
@@ -677,7 +743,7 @@ function draftRegistration(id) {
   }
   const g = S.data.registrations.find((x) => x.id === id);
   if (!g) return null;
-  return { kind: 'reg', ...g, multi: !!g.end_date, people: g.entries.map((e) => ({ runner_id: e.runner_id, runner_name: runnerById(e.runner_id)?.name || '?', category: e.category || '' })).sort((a, b) => a.runner_name.localeCompare(b.runner_name, 'es')) };
+  return { kind: 'reg', ...g, multi: !!g.end_date, people: g.entries.map((e) => ({ runner_id: e.runner_id, runner_name: runnerById(e.runner_id)?.name || '?', category: e.category || '', self_position: e.self_position || null })).sort((a, b) => a.runner_name.localeCompare(b.runner_name, 'es')) };
 }
 
 function raceFields(d) {
@@ -713,7 +779,7 @@ function viewRegistrationEdit() {
       <label>Notas<textarea data-f="notes" rows="2">${esc(d.notes || '')}</textarea></label>
       <h3>Inscritos (${d.people.length})</h3>
       <ul class="edit-list">${d.people.map((p, i) => `<li>
-        <span class="name">${esc(p.runner_name)}</span>
+        <span class="name">${esc(p.runner_name)}${p.self_position ? ` <small class="self-res">📝 puso ${p.self_position}º</small>` : ''}</span>
         ${catSelect(`data-p="${i}" data-pf="category" aria-label="Categoría"`, p.category)}
         <button type="button" class="icon-btn" data-act="del-person" data-i="${i}" aria-label="Quitar">✕</button></li>`).join('')}</ul>
       ${addRunnerSelect(d)}
@@ -762,7 +828,7 @@ function draftRace(id) {
   if (!r) return null;
   const stages = (r.stages || []).map((_, i) => stageName(r, i));
   return { kind: 'race', ...r, stages, multi: !!r.end_date, people: r.results.map((x) => ({ runner_id: x.runner_id, runner_name: x.runner_name, category: x.category || '',
-    position: x.position ?? '', podium_type: x.podium_type || 'suelta',
+    position: x.position ?? '', podium_type: x.podium_type || 'suelta', self_reported: !!x.self_reported, origPosition: x.position ?? '',
     stage_positions: stages.map((_, i) => x.stage_positions?.[i] ?? '') }))
     .sort((a, b) => (a.position || 9999) - (b.position || 9999) || a.runner_name.localeCompare(b.runner_name, 'es')) };
 }
@@ -790,7 +856,7 @@ function viewRaceEdit() {
       <ul class="edit-list results">${d.people.map((p, i) => {
         const pod = isPodium(Number(p.position));
         return `<li>
-        <span class="name">${esc(p.runner_name)}${p.runner_id ? '' : ' <small class="muted">(ya no está en la plantilla)</small>'}</span>
+        <span class="name">${esc(p.runner_name)}${p.runner_id ? '' : ' <small class="muted">(ya no está en la plantilla)</small>'}${p.self_reported ? ' <small class="self-res">📝 puesto por el corredor</small>' : ''}</span>
         <button type="button" class="icon-btn" data-act="del-person" data-i="${i}" aria-label="Quitar">✕</button>
         <div class="res-fields">
           ${catSelect(`data-p="${i}" data-pf="category" aria-label="Categoría"`, p.category)}
@@ -1104,6 +1170,12 @@ const actions = {
   async logout() { await api.signOut(); S.session = null; S.data = null; go('#/'); },
 
   // corredor
+  async 'r-delete-mine'() {
+    const d = S.rdraft;
+    if (!await confirmAction('Borrar carrera', `Se borrará «${esc(d.name)}» y tu inscripción en ella.`, 'Borrar')) return;
+    const ok = await run(async () => { await api.runnerDelete(S.code, d.id); await loadRunner(); return true; }, 'Carrera borrada');
+    if (ok) { S.rdraft = null; go('#/'); }
+  },
   async 'r-new'() { S.rdraft = null; if (!S.fed) loadFed(); go('#/nueva'); },
   async 'r-new-fed'(el) {
     const r = S.fed.races[Number(el.dataset.i)];
@@ -1327,6 +1399,15 @@ const forms = {
     const d = S.rdraft;
     const name = cleanName(d.name);
     if (d.multi && !d.end_date) return toast('Falta el último día.', true);
+    if (d.id) { // editar una carrera propia
+      const ok = await run(async () => {
+        await api.runnerUpdate(S.code, d.id, { name, date: d.date, end_date: d.multi ? d.end_date : null, place: cleanName(d.place),
+          province: cleanName(d.province), country: d.country, modality: d.modality, notes: d.notes || '' });
+        await loadRunner(); return true;
+      }, 'Carrera actualizada');
+      if (ok) { S.rdraft = null; go('#/'); }
+      return;
+    }
     // última comprobación: misma fecha y nombre parecido → ofrecer apuntarse a esa
     const same = searchRaces(name, S.runnerData.registrations.filter((g) => g.date === d.date))[0];
     if (same) {
@@ -1341,6 +1422,16 @@ const forms = {
       await loadRunner(); return true;
     }, 'Carrera añadida y te has apuntado');
     if (ok) { S.rdraft = null; S.q.runner = ''; go('#/'); }
+  },
+  async 'r-report'(f) {
+    const position = Number(f.position.value);
+    if (!Number.isInteger(position) || position < 1) return toast('Pon un puesto válido (1, 2, 3…).', true);
+    const cat = f.category.value || null, pod = f.podium.value;
+    const txt = `${position}º${cat ? ' en ' + cat : ''}${position <= 3 ? ` · ${podiumLabel(pod)}` : ''}`;
+    if (!await confirmAction('Enviar resultado', `Vas a enviar: <b>${esc(txt)}</b>.<br>Después no podrás cambiarlo.`, 'Enviar', 'primary')) return;
+    const ok = await run(async () => { await api.runnerReport(S.code, f.dataset.kind, f.dataset.id, position, cat, pod); await loadRunner(); return true; },
+      position <= 3 ? `${medal(position)} ¡Enhorabuena! Resultado enviado` : 'Resultado enviado');
+    if (ok) go(runnerHref('mi'));
   },
   async 'bonus-cfg'(f) {
     const tiers = [0, 1, 2, 3].map((i) => ({ races: Number(f['r' + i].value), amount: Number(f['a' + i].value) }))
@@ -1372,7 +1463,8 @@ const forms = {
         });
         return { runner_id: p.runner_id, runner_name: p.runner_name, category: p.category || null, position,
           podium_type: isPodium(position) ? p.podium_type || 'suelta' : 'suelta',
-          stage_positions: stage_positions.some((x) => x !== null) ? stage_positions : null };
+          stage_positions: stage_positions.some((x) => x !== null) ? stage_positions : null,
+          self_reported: !!p.self_reported && String(p.position) === String(p.origPosition) };
       });
       race.stages = d.stages.length ? d.stages.map((n, j) => cleanName(n) || `Etapa ${j + 1}`) : null;
       const r = await api.saveRace(race, results); await reload(); return r;
@@ -1426,7 +1518,7 @@ const fileHandlers = {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-join-go']);
+const RUNNER_ACTIONS = new Set(['r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-join-go', 'r-delete-mine']);
 $app.addEventListener('click', (ev) => {
   const el = ev.target.closest('[data-act]');
   if (!el || !actions[el.dataset.act]) return;
