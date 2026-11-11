@@ -37,9 +37,10 @@ const TIPOS = [
 ];
 
 // Precios del material del Club para la temporada (compras adicionales a lo incluido en el contrato)
-const PRECIOS = [
+// El primer par de calcetines solo es gratis en nuevo y renovación (van incluidos en el material).
+const precios = (t) => [
   ['Maillot', '25 €'], ['Culote', '40 €'], ['Maillot manga larga HYDER', '45 €'],
-  ['Calcetines', '5 € (1 par gratis)'], ['Chaleco', '35 €'], ['Manguitos', '15 €'],
+  ['Calcetines', t.licencia ? '15 € (1.er par gratis)' : '15 €'], ['Chaleco', '35 €'], ['Manguitos', '15 €'],
   ['Camiseta interior', '20 €'], ['Gorra de patrocinadores', 'Gratis'], ['Camiseta de patrocinadores', 'Gratis'],
 ];
 
@@ -62,15 +63,15 @@ function tercera(t, y) {
     items.push('El presente acuerdo no incluye la tramitación ni el pago de la licencia federativa por parte del Club, ni la entrega de equipaciones. El deportista deberá disponer de licencia federativa en vigor y competir con la indumentaria oficial del Club, cuyo coste correrá a su cargo.');
     items.push(`El deportista podrá adquirir las prendas del Club a los precios de la temporada ${y} indicados a continuación.`);
   }
-  const precios = `<table class="precios"><tr><th colspan="4">Precios ${y} del material del Club</th></tr>
-${PRECIOS.reduce((rows, p, i) => (i % 2 ? rows[rows.length - 1].push(p) : rows.push([p]), rows), [])
+  const tablaPrecios = `<table class="precios"><tr><th colspan="4">Precios ${y} del material del Club</th></tr>
+${precios(t).reduce((rows, p, i) => (i % 2 ? rows[rows.length - 1].push(p) : rows.push([p]), rows), [])
   .map((r) => `<tr>${r.map(([n, e]) => `<td>${n}</td><td class="n">${e}</td>`).join('')}${r.length < 2 ? '<td></td><td></td>' : ''}</tr>`).join('\n')}
 </table>`;
   items.push(`Se ayudará económicamente al corredor según el número de pruebas realizadas durante la temporada ${y}. Siendo la bonificación:`);
   return `<div>
 <p><b>TERCERA.- Condiciones contractuales:</b></p>
 <ul>${items.slice(0, -1).map((i) => `<li>${i}</li>`).join('\n')}</ul>
-${precios}
+${tablaPrecios}
 <ul><li>${items.at(-1)}</li></ul>
 <table>
 <tr><th>Objetivo de Temporada</th><th>Bonificación</th></tr>
