@@ -319,3 +319,9 @@ label.check input { accent-color: var(--accent); }
 .my-races[open] > summary { margin-bottom: .6rem; }
 .my-races .pos { flex: none; font-weight: 700; font-size: .9rem; text-align: right; }
 .mini-list li small + small { margin-top: .1rem; }
+
+/* Plantilla: desplegable de carreras de cada corredor */
+.roster li > .runner-races { order: 4; flex: 1 1 100%; display: block; }
+.runner-races > summary { cursor: pointer; font-size: .85rem; color: var(--muted); padding: .2rem 0; }
+.runner-races[open] > summary { margin-bottom: .4rem; }
+.mini-list .pos { flex: none; font-weight: 700; text-decoration: none; color: var(--text); }

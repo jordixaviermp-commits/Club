@@ -112,6 +112,7 @@ async function onRoute() {
   if (S.session?.isAdmin && !S.data) await run(reload);
   if (!S.session?.isAdmin && S.code && !S.runnerData && !['entrar'].includes(view)) await loadRunner();
   S.draft = null;
+  if (S.session?.isAdmin && view !== 'vista' && S.preview) { S.preview = null; S.runnerData = null; } // salir de la vista previa
   if (S.session?.isAdmin) {
     if (view === 'inscripciones' && id) S.draft = draftRegistration(id);
     if (view === 'carreras' && id) S.draft = draftRace(id);
@@ -165,6 +166,7 @@ function render() {
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
       carreras: S.draft ? viewRaceEdit : viewRaces,
       resumen: viewSummary, corredores: viewRunners, datos: viewData, federaciones: viewFed, bonos: viewBonus,
+      vista: () => (S.preview && S.runnerData ? viewRunnerHome() : viewRunners()),
     }[view] || viewRegistrations)();
   } else if (S.code && S.runnerData) html = view === 'nueva' ? viewRunnerNew() : viewRunnerHome();
   else html = viewWelcome();
@@ -433,7 +435,10 @@ function viewRunnerHome() {
     : `<h2 class="section">Próximas carreras</h2>
     ${upcoming.length ? upcoming.map(card).join('') : '<p class="empty">Todavía no hay carreras abiertas.</p>'}
     ${past.length ? `<details class="past"><summary>Carreras ya disputadas pendientes de resultados (${past.length})</summary>${past.map(card).join('')}</details>` : ''}`;
-  return frame('CC Monzón', `
+  const pv = S.session?.isAdmin && S.preview;
+  return frame(pv ? `Vista de ${S.preview.name}` : 'CC Monzón', `
+    ${pv ? `<p class="card warn">👁️ <b>Vista previa</b>: así ve la app ${esc(S.preview.name)}. Aquí no se puede apuntar ni borrar.
+      ${S.preview.sqlOk ? '' : '<br><b>⚠️ Falta ejecutar en Supabase el SQL de «Mis carreras»</b> (supabase/cambios/2026-11-11-mis-carreras.sql): por eso no sale el desplegable.'}</p>` : ''}
     <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
     ${runnerBonusCard(d)}
     ${myRacesCard(d)}
@@ -447,7 +452,8 @@ function viewRunnerHome() {
     <h2 class="section">Calendarios de las federaciones</h2>
     ${fedLinks()}
     <p class="center"><button class="link muted" data-act="r-forget">No soy ${esc(me.name)}</button></p>`,
-  { actions: `${viewToggle()}<button class="icon-btn" data-act="r-refresh" aria-label="Actualizar">↻</button>` });
+  pv ? { back: '#/corredores', actions: viewToggle() }
+    : { actions: `${viewToggle()}<button class="icon-btn" data-act="r-refresh" aria-label="Actualizar">↻</button>` });
 }
 
 // ======================================================================
@@ -838,6 +844,25 @@ async function saveBonus(year, cfg) {
   await reload();
 }
 
+/** Desplegable en la plantilla: carreras de un corredor en el año e inscripciones. */
+function adminRunnerRaces(r, year) {
+  const today = todayISO();
+  const races = S.data.races.filter((x) => yearOf(x.date) === year && x.results.some((y) => y.runner_id === r.id))
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const regs = S.data.registrations.filter((g) => g.entries.some((e) => e.runner_id === r.id)).sort((a, b) => a.date.localeCompare(b.date));
+  const pending = regs.filter((g) => g.date < today), upcoming = regs.filter((g) => g.date >= today);
+  const days = races.reduce((n, x) => n + numDays(x.date, x.end_date), 0);
+  const key = 'rr-' + r.id;
+  const res = (x) => { const y = x.results.find((z) => z.runner_id === r.id);
+    return y.position ? `${isPodium(y.position) ? medal(y.position) + ' ' : ''}${y.position}º` : '<span class="muted">sin puesto</span>'; };
+  return `<details class="runner-races"${S.open?.[key] ? ' open' : ''} data-open-key="${key}">
+    <summary>Carreras ${year}: <b>${races.length}</b>${days !== races.length ? ` (${days} días)` : ''} · apuntado a ${upcoming.length} próxima${upcoming.length === 1 ? '' : 's'}${pending.length ? ` · <span class="bad">${pending.length} sin resultado</span>` : ''}</summary>
+    ${races.length ? `<ul class="mini-list">${races.map((x) => miniRow(x, `<a class="pos" href="#/carreras/${x.id}">${res(x)}</a>`)).join('')}</ul>` : `<p class="hint">Sin carreras con resultados en ${year}.</p>`}
+    ${pending.length ? `<p class="hint"><b>Ya disputadas, pendientes de pasar a resultados:</b></p><ul class="mini-list">${pending.map((g) => miniRow(g, `<a class="btn small" href="#/inscripciones/${g.id}">Abrir</a>`)).join('')}</ul>` : ''}
+    ${upcoming.length ? `<p class="hint"><b>Próximas:</b></p><ul class="mini-list">${upcoming.map((g) => miniRow(g, `<a class="btn small" href="#/inscripciones/${g.id}">Abrir</a>`)).join('')}</ul>` : ''}
+  </details>`;
+}
+
 function viewRunners() {
   const counts = new Map();
   for (const r of S.data.races) for (const x of r.results) if (x.runner_id) counts.set(x.runner_id, (counts.get(x.runner_id) || 0) + 1);
@@ -873,7 +898,8 @@ function viewRunners() {
         ${catSelect(`data-runner-cat="${r.id}" aria-label="Categoría habitual de ${esc(r.name)}"`, r.category || '')}
         ${contractSelect(`data-runner-contract="${r.id}" aria-label="Tipo de contrato de ${esc(r.name)}"`, r.contract || '')}
       </div>
-      <button class="icon-btn" data-act="runner-menu" data-id="${r.id}" aria-label="Opciones de ${esc(r.name)}">⋯</button></li>`).join('')}</ul>
+      <button class="icon-btn" data-act="runner-menu" data-id="${r.id}" aria-label="Opciones de ${esc(r.name)}">⋯</button>
+      ${adminRunnerRaces(r, year)}</li>`).join('')}</ul>
     ${runners.length ? '' : '<p class="empty">Todavía no hay corredores.</p>'}`);
 }
 
@@ -1026,6 +1052,7 @@ const actions = {
     const choice = await choose(r.name, `Enlace personal: <code class="break">${esc(link)}</code>`, [
       { label: 'Enviar enlace por WhatsApp', value: 'wa', kind: 'primary' },
       { label: 'Copiar enlace', value: 'copy' },
+      { label: 'Ver su pantalla (vista previa)', value: 'preview' },
       ...(api.mode === 'demo' ? [{ label: 'Abrir su pantalla (demo)', value: 'open' }] : []),
       { label: 'Cambiar nombre', value: 'rename' },
       { label: 'Crear enlace nuevo (anula el anterior)', value: 'regen' },
@@ -1038,6 +1065,12 @@ const actions = {
       window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
     } else if (choice === 'copy') {
       try { await navigator.clipboard.writeText(link); toast('Enlace copiado'); } catch { prompt('Copia el enlace:', link); }
+    } else if (choice === 'preview') {
+      const view = await run(() => api.runnerView(r.code));
+      if (!view) return;
+      S.preview = { name: r.name, sqlOk: Array.isArray(view.my_results) };
+      S.runnerData = view; S.myOpen = true;
+      go('#/vista');
     } else if (choice === 'open') {
       await api.signOut(); S.session = null; S.data = null; go('#/c/' + r.code);
     } else if (choice === 'rename') {
@@ -1238,10 +1271,14 @@ const fileHandlers = {
 
 // ---------- eventos (delegados) ----------
 
+const RUNNER_ACTIONS = new Set(['r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-join-go']);
 $app.addEventListener('click', (ev) => {
   const el = ev.target.closest('[data-act]');
   if (!el || !actions[el.dataset.act]) return;
   ev.preventDefault();
+  if (S.preview && parseRoute().view === 'vista' && RUNNER_ACTIONS.has(el.dataset.act)) {
+    toast('Vista previa: aquí no se puede apuntar ni cambiar nada.', true); return;
+  }
   actions[el.dataset.act](el);
 });
 
@@ -1324,7 +1361,10 @@ $app.addEventListener('change', async (ev) => {
 });
 
 // Recordar si un desplegable estaba abierto (p. ej. «Mis carreras») al volver a pintar la pantalla.
-$app.addEventListener('toggle', (ev) => { const k = ev.target.dataset?.toggleKey; if (k) S[k] = ev.target.open; }, true);
+$app.addEventListener('toggle', (ev) => {
+  const k = ev.target.dataset?.toggleKey; if (k) S[k] = ev.target.open;
+  const o = ev.target.dataset?.openKey; if (o) (S.open ||= {})[o] = ev.target.open;
+}, true);
 window.addEventListener('hashchange', onRoute);
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); S.installEvt = e; if (S.runnerData) render(); });
 
