@@ -22,7 +22,7 @@ La app son archivos que GitHub sirve gratis como página web. Esos archivos no c
 
 1. Entra en **https://supabase.com** → **Start your project** → **Continue with GitHub** (así no creas otra contraseña).
 2. **New project**:
-   - **Name**: `hinaco-prats`
+   - **Name**: `cc-monzon`
    - **Database Password**: pulsa *Generate a password* y **guárdala** en tus notas. Casi nunca hará falta, pero no se puede recuperar.
    - **Region**: **Central EU (Frankfurt)**. Así los datos quedan dentro de la UE.
    - **Plan**: **Free**.

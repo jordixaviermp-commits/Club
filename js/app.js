@@ -7,7 +7,7 @@ import {
   extractCode, todayISO, formatDate,
 } from './logic.js';
 
-const CODE_KEY = 'hinaco-code';
+const CODE_KEY = 'monzon-code';
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* modo privado */ } },
@@ -167,7 +167,7 @@ function installHint() {
 }
 
 function viewWelcome() {
-  return frame('CC Hinaco Prats', `
+  return frame('CC Monzón', `
     <section class="card center">
       <img src="icons/logo.png" alt="" class="hero-logo">
       <h2>Carreras del club</h2>
@@ -206,7 +206,7 @@ function viewRunnerHome() {
            <button class="btn primary" data-act="r-join" data-id="${g.id}">Apuntarme</button></div>`}
     </article>`;
   };
-  return frame('CC Hinaco Prats', `
+  return frame('CC Monzón', `
     <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
     ${installHint()}
     <h2 class="section">Próximas carreras</h2>
@@ -543,7 +543,7 @@ const actions = {
     ]);
     if (!choice) return;
     if (choice === 'wa') {
-      const msg = `Hola ${r.name}! Este es tu enlace personal para ver las carreras del CC Hinaco Prats y apuntarte:\n${link}\n\nEs solo tuyo: no lo reenvíes. Consejo: ábrelo y añádelo a la pantalla de inicio.`;
+      const msg = `Hola ${r.name}! Este es tu enlace personal para ver las carreras del Club Ciclista Monzón y apuntarte:\n${link}\n\nEs solo tuyo: no lo reenvíes. Consejo: ábrelo y añádelo a la pantalla de inicio.`;
       window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
     } else if (choice === 'copy') {
       try { await navigator.clipboard.writeText(link); toast('Enlace copiado'); } catch { prompt('Copia el enlace:', link); }
@@ -576,10 +576,10 @@ const actions = {
 
   async backup() {
     const data = await run(() => api.exportAll());
-    if (data) download(`hinaco-copia-${todayISO()}.json`, JSON.stringify(data, null, 1), 'application/json');
+    if (data) download(`monzon-copia-${todayISO()}.json`, JSON.stringify(data, null, 1), 'application/json');
   },
-  'csv-year'() { download(`hinaco-resultados-${S.year}.csv`, toCsv(csvRows(S.data.races.filter((r) => yearOf(r.date) === S.year))), 'text/csv;charset=utf-8'); },
-  'csv-all'() { download(`hinaco-resultados-todos.csv`, toCsv(csvRows(S.data.races)), 'text/csv;charset=utf-8'); },
+  'csv-year'() { download(`monzon-resultados-${S.year}.csv`, toCsv(csvRows(S.data.races.filter((r) => yearOf(r.date) === S.year))), 'text/csv;charset=utf-8'); },
+  'csv-all'() { download(`monzon-resultados-todos.csv`, toCsv(csvRows(S.data.races)), 'text/csv;charset=utf-8'); },
 };
 
 const forms = {

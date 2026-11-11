@@ -1,5 +1,5 @@
 -- =====================================================================
---  App de carreras del CC Hinaco Prats · Base de datos (Supabase)
+--  App de carreras del Club Ciclista Monzón · Base de datos (Supabase)
 --  Se pega entero en Supabase > SQL Editor > New query > Run.
 --  Se puede volver a ejecutar sin perder datos (crea solo lo que falta
 --  y actualiza las funciones).
