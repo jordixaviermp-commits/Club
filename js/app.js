@@ -91,7 +91,10 @@ async function run(fn, okMsg) {
   finally { S.busy = false; document.body.classList.remove('busy'); }
 }
 
-async function reload() { S.data = await api.loadAll(); }
+async function reload() {
+  S.data = await api.loadAll();
+  try { S.docs = await api.listDocuments(); } catch { S.docs = null; } // null = falta el SQL de contratos
+}
 
 // ---------- rutas ----------
 
@@ -118,6 +121,7 @@ async function onRoute() {
     if (sub !== null) {
       if (sub === 'equipo' || (sub === '' && S.regView === 'cal' && !S.team)) loadTeam();
       if (sub === 'federaciones' && !S.fed) loadFed();
+      if (sub === 'mi') loadMyDocs();
     }
   }
   if (S.session?.isAdmin) {
@@ -185,7 +189,7 @@ function render() {
     html = ({
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
       carreras: S.draft ? viewRaceEdit : viewRaces,
-      resumen: viewSummary, corredores: viewRunners, datos: viewData, federaciones: viewFed, bonos: viewBonus,
+      resumen: viewSummary, corredores: viewRunners, datos: viewData, federaciones: viewFed, bonos: viewBonus, docs: () => viewDocs(parseRoute().id),
       vista: () => (S.preview && S.runnerData ? runnerScreen(parseRoute().id || '') : viewRunners()),
       equipo: () => (S.preview ? viewTeam() : viewSummary()),
     }[view] || viewRegistrations)();
@@ -587,6 +591,7 @@ function viewRunnerMine() {
     <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
     ${runnerBonusCard(d)}
     ${myRacesCard(d)}
+    ${myDocsCard()}
     ${installHint()}
     ${S.preview ? '' : `<p class="center"><button class="link muted" data-act="r-forget">No soy ${esc(me.name)}</button></p>`}`,
   { rtab: 'mi' });
@@ -1072,6 +1077,84 @@ function adminRunnerRaces(r, year) {
   </details>`;
 }
 
+// ======================================================================
+//  Contratos y documentos de cada corredor
+// ======================================================================
+
+const MAX_DOC = 5_000_000;
+const fmtSize = (n) => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`);
+
+/** Lee un archivo en base64; las fotos grandes se reducen (máx. 2000 px, JPEG) para que quepan. */
+async function fileToB64(file) {
+  let blob = file, mime = file.type;
+  if (/^image\//.test(mime) && file.size > 1_500_000) {
+    const img = await createImageBitmap(file);
+    const k = Math.min(1, 2000 / Math.max(img.width, img.height));
+    const c = Object.assign(document.createElement('canvas'), { width: Math.round(img.width * k), height: Math.round(img.height * k) });
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.82)); mime = 'image/jpeg';
+  }
+  if (blob.size > MAX_DOC) throw new Error(`El archivo ocupa ${fmtSize(blob.size)}; el máximo es 5 MB.`);
+  const b64 = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(',')[1]); fr.onerror = rej; fr.readAsDataURL(blob); });
+  return { b64, mime };
+}
+
+/** Abre un documento (base64) en otra pestaña o lo descarga. */
+function openDoc({ filename, mime, b64 }) {
+  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+  const a = Object.assign(document.createElement('a'), { href: url, target: '_blank', rel: 'noopener' });
+  if (!/pdf|image/.test(mime)) a.download = filename;
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+const docIcon = (m) => (/pdf/.test(m) ? '📄' : '🖼️');
+
+function viewDocs(runnerId) {
+  const r = runnerById(runnerId);
+  if (!r) return frame('Documentos', '<p class="empty">Este corredor no existe.</p>', { back: '#/corredores' });
+  if (S.docs === null) return frame('Documentos', `<p class="card warn">Falta activar los documentos: ejecuta en Supabase el SQL
+    <code>supabase/cambios/2026-11-11-contratos.sql</code>.</p>`, { back: '#/corredores' });
+  const docs = (S.docs || []).filter((x) => x.runner_id === runnerId);
+  const y = new Date().getFullYear();
+  return frame(`Documentos de ${r.name}`, `
+    <form class="card stack" data-form="doc-upload" data-runner="${r.id}">
+      <h2>Subir contrato o documento</h2>
+      <label class="btn file">📎 Elegir archivo (PDF o foto)<input type="file" name="file" accept="application/pdf,image/*" hidden required></label>
+      <p class="hint" id="doc-chosen">Ningún archivo elegido. Máximo 5 MB; las fotos se reducen solas.</p>
+      <div class="grid2">
+        <label>Temporada<input type="number" name="year" value="${y}" min="2000" max="2100" required></label>
+        <label>Título<input name="title" value="Contrato ${y}" maxlength="120"></label>
+      </div>
+      <button class="btn primary">Subir</button>
+      <p class="hint">Solo lo verán ${esc(r.name)} (en «Mi temporada») y la dirección.</p>
+    </form>
+    <h2 class="section">Documentos subidos (${docs.length})</h2>
+    ${docs.length ? `<ul class="mini-list">${docs.map((x) => `<li><div><b>${docIcon(x.mime)} ${esc(x.title)}</b>
+      <small class="muted">Temporada ${x.year} · ${esc(x.filename)} · ${fmtSize(x.size)}</small></div>
+      <span class="row-btns"><button class="btn small" data-act="doc-open" data-id="${x.id}">Ver</button>
+      <button class="btn small danger ghost" data-act="doc-del" data-id="${x.id}" aria-label="Borrar">🗑️</button></span></li>`).join('')}</ul>`
+      : '<p class="empty">Todavía no hay documentos.</p>'}`, { back: '#/corredores' });
+}
+
+async function loadMyDocs() {
+  try { S.myDocs = await api.runnerDocuments(S.code || S.previewCode); } catch { S.myDocs = null; }
+  if (S.runnerData) render();
+}
+
+function myDocsCard() {
+  const docs = S.myDocs;
+  if (!docs) return '';
+  return `<section class="card season-block docs-block">
+    <h2>📄 Mi contrato y documentos</h2>
+    ${docs.length ? `<ul class="mini-list">${docs.map((x) => `<li><div><b>${docIcon(x.mime)} ${esc(x.title)}</b>
+      <small class="muted">Temporada ${x.year} · ${fmtSize(x.size)}</small></div>
+      <button class="btn primary small" data-act="my-doc-open" data-id="${x.id}">Ver</button></li>`).join('')}</ul>`
+      : '<p class="empty small">La dirección aún no ha subido tu contrato.</p>'}
+  </section>`;
+}
+
 function viewRunners() {
   const counts = new Map();
   for (const r of S.data.races) for (const x of r.results) if (x.runner_id) counts.set(x.runner_id, (counts.get(x.runner_id) || 0) + 1);
@@ -1102,7 +1185,7 @@ function viewRunners() {
     </details>
     ${runners.length ? '<button class="btn block" data-act="all-links">Copiar todos los enlaces</button>' : ''}
     <ul class="roster">${runners.map((r) => `<li>
-      <div><span class="name">${esc(r.name)}</span><small class="muted">${counts.get(r.id) || 0} carreras en total</small>${badge(bonusBy.get(r.id))}</div>
+      <div><span class="name">${esc(r.name)}${(S.docs || []).some((x) => x.runner_id === r.id && x.year === year) ? ' <a class="doc-badge" href="#/docs/' + r.id + '" title="Contrato ' + year + ' subido">📄</a>' : ''}</span><small class="muted">${counts.get(r.id) || 0} carreras en total</small>${badge(bonusBy.get(r.id))}</div>
       <div class="roster-sel">
         ${catSelect(`data-runner-cat="${r.id}" aria-label="Categoría habitual de ${esc(r.name)}"`, r.category || '')}
         ${contractSelect(`data-runner-contract="${r.id}" aria-label="Tipo de contrato de ${esc(r.name)}"`, r.contract || '')}
@@ -1170,6 +1253,13 @@ const actions = {
   async logout() { await api.signOut(); S.session = null; S.data = null; go('#/'); },
 
   // corredor
+  async 'doc-open'(el) { const doc = await run(() => api.getDocument(el.dataset.id)); if (doc) openDoc(doc); },
+  async 'my-doc-open'(el) { const doc = await run(() => api.runnerGetDocument(S.code || S.previewCode, el.dataset.id)); if (doc) openDoc(doc); },
+  async 'doc-del'(el) {
+    const x = (S.docs || []).find((y) => y.id === el.dataset.id);
+    if (!await confirmAction('Borrar documento', `Se borrará «${esc(x?.title || '')}». El corredor dejará de verlo.`, 'Borrar')) return;
+    await run(async () => { await api.deleteDocument(el.dataset.id); await reload(); }, 'Documento borrado'); render();
+  },
   async 'r-delete-mine'() {
     const d = S.rdraft;
     if (!await confirmAction('Borrar carrera', `Se borrará «${esc(d.name)}» y tu inscripción en ella.`, 'Borrar')) return;
@@ -1279,6 +1369,7 @@ const actions = {
     const choice = await choose(r.name, `Enlace personal: <code class="break">${esc(link)}</code>`, [
       { label: 'Enviar enlace por WhatsApp', value: 'wa', kind: 'primary' },
       { label: 'Copiar enlace', value: 'copy' },
+      { label: '📄 Contrato y documentos', value: 'docs' },
       { label: 'Ver su pantalla (vista previa)', value: 'preview' },
       ...(api.mode === 'demo' ? [{ label: 'Abrir su pantalla (demo)', value: 'open' }] : []),
       { label: 'Cambiar nombre', value: 'rename' },
@@ -1292,6 +1383,8 @@ const actions = {
       window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
     } else if (choice === 'copy') {
       try { await navigator.clipboard.writeText(link); toast('Enlace copiado'); } catch { prompt('Copia el enlace:', link); }
+    } else if (choice === 'docs') {
+      go('#/docs/' + r.id);
     } else if (choice === 'preview') {
       const view = await run(() => api.runnerView(r.code));
       if (!view) return;
@@ -1432,6 +1525,17 @@ const forms = {
     const ok = await run(async () => { await api.runnerReport(S.code, f.dataset.kind, f.dataset.id, position, cat, pod); await loadRunner(); return true; },
       position <= 3 ? `${medal(position)} ¡Enhorabuena! Resultado enviado` : 'Resultado enviado');
     if (ok) go(runnerHref('mi'));
+  },
+  async 'doc-upload'(f) {
+    const file = f.file.files?.[0];
+    if (!file) return toast('Elige un archivo.', true);
+    if (!/^(application\/pdf|image\/)/.test(file.type)) return toast('Solo PDF o fotos (JPG, PNG, WEBP).', true);
+    const ok = await run(async () => {
+      const { b64, mime } = await fileToB64(file);
+      await api.uploadDocument(f.dataset.runner, Number(f.year.value), f.title.value.trim(), file.name, mime, b64);
+      await reload(); return true;
+    }, 'Documento subido');
+    if (ok) render();
   },
   async 'bonus-cfg'(f) {
     const tiers = [0, 1, 2, 3].map((i) => ({ races: Number(f['r' + i].value), amount: Number(f['a' + i].value) }))
@@ -1601,6 +1705,9 @@ $app.addEventListener('change', async (ev) => {
   } else if (t.dataset.runnerCat) {
     const id = t.dataset.runnerCat;
     await run(async () => { await api.updateRunner(id, { category: t.value || null }); runnerById(id).category = t.value || null; }, 'Categoría guardada');
+  } else if (t.name === 'file' && t.closest('[data-form="doc-upload"]')) {
+    const f = t.files?.[0]; const p = $app.querySelector('#doc-chosen');
+    if (p && f) p.textContent = `Elegido: ${f.name} (${fmtSize(f.size)})`;
   } else if (t.dataset.file && t.files?.[0]) {
     const file = t.files[0]; t.value = '';
     await fileHandlers[t.dataset.file](file);

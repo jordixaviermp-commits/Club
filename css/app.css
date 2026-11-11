@@ -399,3 +399,8 @@ h2.section.past-head { color: var(--muted); margin-top: 1.4rem; }
 /* Resultado puesto por el corredor */
 .self-res { color: var(--tag-text, var(--accent)); font-weight: 600; }
 .badge-sent { flex: none; font-size: .78rem; font-weight: 700; padding: .15rem .5rem; border-radius: 999px; background: color-mix(in srgb, #1e9e4a 15%, var(--card)); color: #1e8a43; }
+
+/* Documentos */
+.docs-block { border-top-color: var(--accent); }
+.doc-badge { text-decoration: none; font-size: .9em; }
+.row-btns { display: flex; gap: .35rem; flex: none; }
