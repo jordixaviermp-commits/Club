@@ -132,7 +132,8 @@ export function demoApi(storage = globalThis.localStorage) {
   const requireAdmin = () => { if (!admin) throw new Error('solo_direccion'); };
   const fields = (o) => ({
     name: String(o.name || '').trim(), date: o.date, end_date: o.end_date && o.end_date > o.date ? o.end_date : null, place: o.place?.trim() || null, province: o.province?.trim() || null,
-    country: o.country?.trim() || null, modality: o.modality || 'Carretera', notes: o.notes?.trim() || null });
+    country: o.country?.trim() || null, modality: o.modality || 'Carretera', notes: o.notes?.trim() || null,
+    ...(o.stages !== undefined ? { stages: o.stages?.length ? o.stages : null } : {}) });
   const byCode = (code) => {
     const r = load().runners.find((x) => x.code === code);
     if (!r) throw new Error('enlace_no_valido');
@@ -203,7 +204,7 @@ export function demoApi(storage = globalThis.localStorage) {
       Object.assign(r, fields(race));
       d.results = d.results.filter((x) => x.race_id !== r.id).concat(results.map((x) => ({
         id: uuid(), race_id: r.id, runner_id: x.runner_id || null, runner_name: x.runner_name, category: x.category || null,
-        position: x.position ?? null, podium_type: x.podium_type || 'suelta' })));
+        position: x.position ?? null, podium_type: x.podium_type || 'suelta', stage_positions: x.stage_positions || null })));
       save(); return r.id;
     },
     async deleteRace(id) {

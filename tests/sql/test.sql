@@ -91,5 +91,13 @@ select pg_temp.expect_fail($q$select save_race('{"name":"Mal","date":"2027-06-12
 select save_registration('{"name":"Reg etapas","date":"2099-07-01","end_date":"2099-07-03"}', '[]') as reg2 \gset
 select promote_registration(:'reg2') as race2 \gset
 select pg_temp.check((select end_date from races where id = :'race2') = '2099-07-03', 'pasar a resultados conserva último día');
+-- etapas dentro de una misma carrera
+select save_race(jsonb_build_object('id', :'multi', 'name','Volta etapas','date','2027-06-12','end_date','2027-06-14',
+  'stages', '["Prólogo","Etapa 1","Etapa 2"]'::jsonb),
+  '[{"runner_id":"10000000-0000-0000-0000-000000000002","runner_name":"Anna Puig","position":2,"podium_type":"general","stage_positions":[1,null,3]}]');
+select pg_temp.check((select stages->>0 from races where id = :'multi') = 'Prólogo', 'nombres de etapa guardados');
+select pg_temp.check((select stage_positions from results where race_id = :'multi') = '[1,null,3]'::jsonb, 'puestos por etapa guardados');
+select save_race(jsonb_build_object('id', :'multi', 'name','Volta etapas','date','2027-06-12','stages','[]'::jsonb), '[]');
+select pg_temp.check((select stages from races where id = :'multi') is null, 'sin etapas = null');
 reset role;
 \echo TODAS LAS PRUEBAS SQL OK

@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalize, matchCategory, parseBulkRunners, yearSummary, csvRows, toCsv, parseCsv, importResultsCsv,
-  parseDate, extractCode, newCode, formatDate, planRosterRenewal, monthGrid, addMonths, formatRange, daysOf,
+  parseDate, extractCode, newCode, formatDate, planRosterRenewal, monthGrid, addMonths, formatRange, daysOf, podiumsOf,
 } from '../js/logic.js';
 
 test('normalize ignora mayúsculas y tildes', () => {
@@ -47,7 +47,7 @@ test('resumen anual', () => {
   assert.deepEqual(s.missingPlace.map((m) => [m.name, m.missing]), [['Dos', ['provincia']]]);
   assert.deepEqual(s.perRunner.map((r) => [r.name, r.races, r.road, r.btt, r.p1, r.p2, r.p3]), [
     ['Anna', 2, 1, 1, 1, 0, 1], ['Biel', 1, 1, 0, 0, 0, 0], ['Dani (baja)', 1, 0, 1, 0, 1, 0], ['Carla', 0, 0, 0, 0, 0, 0]]);
-  assert.deepEqual(s.byPodiumType.map((t) => [t.type, t.podiums, t.wins]), [['suelta', 1, 1], ['general', 1, 0], ['campeonato', 1, 0]]);
+  assert.deepEqual(s.byPodiumType.map((t) => [t.type, t.podiums, t.wins]), [['suelta', 1, 1], ['general', 1, 0], ['campeonato', 1, 0], ['etapa', 0, 0]]);
   assert.equal(s.podiumList.length, 3);
   assert.equal(yearSummary(2024, races, runners).byModality.length, 2); // Carretera y BTT siempre visibles
 });
@@ -116,4 +116,31 @@ test('carreras de varios días', () => {
     results: [{ runner_name: 'Anna', position: 1, podium_type: 'general' }] }]));
   const back = importResultsCsv(csv);
   assert.equal(back.races[0].end_date, '2027-06-14');
+});
+
+test('podios de etapa: cuentan como tipo «Etapa»', () => {
+  const runners2 = [{ id: 'a', name: 'Anna' }, { id: 'b', name: 'Biel' }];
+  const races2 = [{ id: 'v', name: 'Volta', date: '2027-06-12', end_date: '2027-06-14', modality: 'Carretera', country: 'España', province: 'Girona',
+    stages: ['Prólogo', '', 'Etapa 3'],
+    results: [
+      { runner_id: 'a', runner_name: 'Anna', position: 2, podium_type: 'general', stage_positions: [1, 5, 3] },
+      { runner_id: 'b', runner_name: 'Biel', position: 7, podium_type: 'general', stage_positions: [null, 1, null, 1] }, // la 4.ª no existe
+    ] }];
+  const s = yearSummary(2027, races2, runners2);
+  assert.deepEqual(s.totals, { races: 1, runners: 2, participations: 2, podiums: 4, wins: 2 });
+  assert.deepEqual(s.byPodiumType.map((t) => [t.type, t.podiums, t.wins]),
+    [['suelta', 0, 0], ['general', 1, 0], ['campeonato', 0, 0], ['etapa', 3, 2]]);
+  assert.deepEqual(s.perRunner.map((r) => [r.name, r.races, r.p1, r.p2, r.p3]), [['Anna', 1, 1, 1, 1], ['Biel', 1, 1, 0, 0]]);
+  assert.deepEqual(s.podiumList.filter((p) => p.type === 'etapa').map((p) => [p.runner, p.stage, p.position]),
+    [['Anna', 'Prólogo', 1], ['Anna', 'Etapa 3', 3], ['Biel', 'Etapa 2', 1]]);
+  assert.equal(s.byModality[0].podiums, 4);
+  // CSV de ida y vuelta conserva etapas
+  const csv = toCsv(csvRows(races2));
+  assert.match(csv, /Anna;;1;Sí;Etapa: Prólogo/);
+  const back = importResultsCsv(csv).races[0];
+  assert.deepEqual(back.stages, ['Prólogo', 'Etapa 3', 'Etapa 2']);
+  const anna = back.results.find((r) => r.runner_name === 'Anna');
+  assert.equal(anna.position, 2);
+  assert.deepEqual(anna.stage_positions, [1, 3, null]);
+  assert.equal(podiumsOf([{ race: back, res: anna }]).length, 3);
 });

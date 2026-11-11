@@ -17,7 +17,26 @@ export const PROVINCES = [
   'Soria', 'Tarragona', 'Teruel', 'Toledo', 'Valencia', 'Valladolid', 'Zamora', 'Zaragoza',
 ];
 
-export const podiumLabel = (id) => (PODIUM_TYPES.find((p) => p.id === id) || PODIUM_TYPES[0]).label;
+/** Tipo especial para los podios de etapa (no se elige en el desplegable: sale de los puestos por etapa). */
+export const STAGE_TYPE = { id: 'etapa', label: 'Etapa' };
+export const podiumLabel = (id) => (id === STAGE_TYPE.id ? STAGE_TYPE : PODIUM_TYPES.find((p) => p.id === id) || PODIUM_TYPES[0]).label;
+/** Nombre de la etapa i (0 = primera) de una carrera. */
+export const stageName = (race, i) => String(race?.stages?.[i] ?? '').trim() || `Etapa ${i + 1}`;
+
+/**
+ * Todos los podios de una lista de participaciones: los de la general/carrera (con su tipo)
+ * y los de cada etapa (tipo «etapa», con el nombre de la etapa).
+ */
+export function podiumsOf(parts) {
+  const out = [];
+  for (const { race, res } of parts) {
+    if (isPodium(res.position)) out.push({ race, res, position: res.position, type: res.podium_type || 'suelta', stage: null });
+    (res.stage_positions || []).forEach((pos, i) => {
+      if (i < (race.stages || []).length && isPodium(pos)) out.push({ race, res, position: pos, type: STAGE_TYPE.id, stage: stageName(race, i) });
+    });
+  }
+  return out;
+}
 
 /** Minúsculas, sin tildes y sin espacios sobrantes: para comparar nombres. */
 export function normalize(s) {
@@ -102,7 +121,7 @@ export function yearSummary(year, races, runners) {
   const yr = races.filter((r) => yearOf(r.date) === year)
     .sort((a, b) => a.date.localeCompare(b.date) || byText(a.name, b.name));
   const parts = yr.flatMap((race) => (race.results || []).map((res) => ({ race, res })));
-  const podiums = parts.filter((p) => isPodium(p.res.position));
+  const podiums = podiumsOf(parts);
   const personKey = (res) => res.runner_id || 'n:' + normalize(res.runner_name);
 
   const totals = {
@@ -110,7 +129,7 @@ export function yearSummary(year, races, runners) {
     runners: new Set(parts.map((p) => personKey(p.res))).size,
     participations: parts.length,
     podiums: podiums.length,
-    wins: podiums.filter((p) => p.res.position === 1).length,
+    wins: podiums.filter((p) => p.position === 1).length,
   };
 
   const byModality = MODALITIES.map((m) => ({
@@ -140,21 +159,22 @@ export function yearSummary(year, races, runners) {
     row.races++;
     if (race.modality === 'Carretera') row.road++;
     if (race.modality === 'BTT') row.btt++;
-    if (res.position === 1) row.p1++;
-    if (res.position === 2) row.p2++;
-    if (res.position === 3) row.p3++;
+  }
+  for (const p of podiums) {
+    const row = rows.get(personKey(p.res));
+    row['p' + p.position]++;
   }
   const perRunner = [...rows.values()].sort((a, b) => b.races - a.races || b.p1 - a.p1 || byText(a.name, b.name));
 
-  const byPodiumType = PODIUM_TYPES.map((t) => ({
+  const byPodiumType = [...PODIUM_TYPES, STAGE_TYPE].map((t) => ({
     type: t.id, label: t.label,
-    podiums: podiums.filter((p) => (p.res.podium_type || 'suelta') === t.id).length,
-    wins: podiums.filter((p) => (p.res.podium_type || 'suelta') === t.id && p.res.position === 1).length,
+    podiums: podiums.filter((p) => p.type === t.id).length,
+    wins: podiums.filter((p) => p.type === t.id && p.position === 1).length,
   }));
 
-  const podiumList = podiums.map(({ race, res }) => ({
+  const podiumList = podiums.map(({ race, res, position, type, stage }) => ({
     date: race.date, race: race.name, raceId: race.id, runner: res.runner_name, category: res.category || '',
-    type: res.podium_type || 'suelta', position: res.position,
+    type, stage, position,
   }));
 
   return { year, totals, byModality, countries, provinces, missingPlace, perRunner, byPodiumType, podiumList };
@@ -174,6 +194,12 @@ export function csvRows(races) {
       const pod = isPodium(res.position);
       out.push([r.date, r.end_date || '', r.name, r.place || '', r.province || '', r.country || '', r.modality, res.runner_name,
         res.category || '', res.position ?? '', pod ? 'Sí' : 'No', pod ? podiumLabel(res.podium_type) : '']);
+      (res.stage_positions || []).forEach((pos, i) => {
+        if (i < (r.stages || []).length && isPodium(pos)) {
+          out.push([r.date, r.end_date || '', r.name, r.place || '', r.province || '', r.country || '', r.modality, res.runner_name,
+            res.category || '', pos, 'Sí', `${STAGE_TYPE.label}: ${stageName(r, i)}`]);
+        }
+      });
     }
   }
   return out;
@@ -272,6 +298,29 @@ export function importResultsCsv(text) {
     const runner = get(ix.runner);
     if (!runner) return; // carrera sin participantes
     const race = races.get(key);
+    const typeText = get(ix.type);
+    const stageMatch = typeText.match(/^etapa\s*:?\s*(.*)$/i);
+    if (stageMatch) {
+      const pos = Number(get(ix.position));
+      if (!Number.isInteger(pos) || pos < 1) { errors.push(`Línea ${line}: puesto de etapa no válido; se ignora.`); return; }
+      race.stages = race.stages || [];
+      const sName = stageMatch[1].trim() || `Etapa ${race.stages.length + 1}`;
+      let i = race.stages.findIndex((x) => normalize(x) === normalize(sName));
+      if (i < 0) i = race.stages.push(sName) - 1;
+      let res = race.results.find((x) => normalize(x.runner_name) === normalize(runner));
+      if (!res) { res = { runner_name: runner, category: matchCategory(get(ix.category)), position: null, podium_type: 'general', _stageOnly: true }; race.results.push(res); }
+      res.stage_positions = res.stage_positions || [];
+      res.stage_positions[i] = pos;
+      return;
+    }
+    const prev = race.results.find((x) => normalize(x.runner_name) === normalize(runner) && x._stageOnly);
+    if (prev) { // ya había llegado una fila de etapa de este corredor: completar la general
+      const posText = get(ix.position);
+      prev.position = /^\d+$/.test(posText) && Number(posText) > 0 ? Number(posText) : null;
+      prev.podium_type = matchPodiumType(typeText);
+      delete prev._stageOnly;
+      return;
+    }
     if (race.results.some((x) => normalize(x.runner_name) === normalize(runner))) {
       errors.push(`Línea ${line}: ${runner} aparece dos veces en «${name}»; se ignora la repetición.`);
       return;
@@ -282,6 +331,12 @@ export function importResultsCsv(text) {
     race.results.push({ runner_name: runner, category: matchCategory(get(ix.category)),
       position, podium_type: matchPodiumType(get(ix.type)) });
   });
+  for (const race of races.values()) {
+    for (const res of race.results) {
+      delete res._stageOnly;
+      if (res.stage_positions) res.stage_positions = Array.from({ length: race.stages.length }, (_, i) => res.stage_positions[i] ?? null);
+    }
+  }
   return { races: [...races.values()], errors };
 }
 
