@@ -119,5 +119,22 @@ reset role;
 set role anon;
 select pg_temp.check(runner_view('BBBBBBBBBB')->'bonus'->>'contract' = 'renovacion_sin_licencia', 'bono: el corredor ve su tipo de contrato');
 select pg_temp.check(not (runner_view('BBBBBBBBBB')->'bonus'->>'nuevo')::boolean, 'bono: el contrato manda sobre la lista antigua');
+-- corredores que crean carreras
+reset role;
+set role anon;
+select runner_create_registration('BBBBBBBBBB', jsonb_build_object('name','  Marxa   Nova ','date', current_date + 10, 'modality','BTT'), 'Élite') as nueva \gset
+reset role;
+select pg_temp.check((select name from registrations where id = :'nueva') = 'Marxa Nova', 'corredor crea carrera (nombre limpio)');
+select pg_temp.check((select count(*) from registration_entries where registration_id = :'nueva') = 1, 'y queda apuntado');
+select pg_temp.check((select created_by from registrations where id = :'nueva') = '10000000-0000-0000-0000-000000000002', 'consta quién la creó');
+set role anon;
+select pg_temp.check(runner_create_registration('BBBBBBBBBB', jsonb_build_object('name','marxa nova','date', current_date + 10), null) = :'nueva', 'mismo nombre y día: no duplica');
+select pg_temp.expect_fail($q$select runner_create_registration('BBBBBBBBBB', jsonb_build_object('name','Pasada','date', current_date - 1), null)$q$, 'no crea carreras pasadas');
+select pg_temp.expect_fail($q$select runner_create_registration('BBBBBBBBBB', '{"name":"ab","date":"2099-01-01"}', null)$q$, 'nombre demasiado corto');
+select pg_temp.expect_fail($q$select runner_create_registration('XXXXXXXXXXXX', '{"name":"Hack","date":"2099-01-01"}', null)$q$, 'sin enlace no crea');
+select pg_temp.expect_fail($q$select runner_create_registration('BBBBBBBBBB', '{"name":"Rara","date":"2099-01-01","modality":"Patinete"}', null)$q$, 'modalidad inválida');
+do $$ begin for i in 1..9 loop perform runner_create_registration('BBBBBBBBBB', jsonb_build_object('name','Spam '||i,'date', current_date + 5), null); end loop; end $$;
+select pg_temp.expect_fail($q$select runner_create_registration('BBBBBBBBBB', jsonb_build_object('name','Spam 11','date', current_date + 5), null)$q$, 'límite de 10 al día');
+select pg_temp.expect_fail($q$update registrations set name = 'x'$q$, 'anon no edita inscripciones');
 reset role;
 \echo TODAS LAS PRUEBAS SQL OK

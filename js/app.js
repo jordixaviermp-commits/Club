@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  extractCode, todayISO, formatDate, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, yearBonuses, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
+  extractCode, todayISO, formatDate, searchRaces, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, yearBonuses, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -29,6 +29,7 @@ const S = {
   data: null, runnerData: null,
   year: new Date().getFullYear(), draft: null, busy: false, showPast: false, installEvt: null,
   regView: store.get(VIEW_KEY) === 'cal' ? 'cal' : 'list', calMonth: null, calDay: null,
+  q: { runner: '', admin: '' }, rdraft: null,
 };
 
 const $app = document.getElementById('app');
@@ -165,7 +166,7 @@ function render() {
       carreras: S.draft ? viewRaceEdit : viewRaces,
       resumen: viewSummary, corredores: viewRunners, datos: viewData, federaciones: viewFed, bonos: viewBonus,
     }[view] || viewRegistrations)();
-  } else if (S.code && S.runnerData) html = viewRunnerHome();
+  } else if (S.code && S.runnerData) html = view === 'nueva' ? viewRunnerNew() : viewRunnerHome();
   else html = viewWelcome();
   $app.innerHTML = html;
   document.body.classList.toggle('has-tabs', !!admin && view !== 'entrar');
@@ -261,6 +262,101 @@ function calendarView(regs, card, isMine = () => false) {
     ${shown.length ? shown.map(card).join('') : '<p class="empty">No hay carreras este mes.</p>'}`;
 }
 
+// ======================================================================
+//  Buscador «lupa»: encontrar una carrera antes de crearla (para no duplicar)
+// ======================================================================
+
+const searchBox = (scope, placeholder) => `<label class="search">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+  <input type="search" data-search="${scope}" value="${esc(S.q[scope] || '')}" placeholder="${esc(placeholder)}" autocomplete="off" enterkeyhint="search"></label>`;
+
+/** Carreras de las federaciones que aún no están en el club, parecidas a lo buscado. */
+function fedMatches(q, existing, limit = 5) {
+  if (!S.fed?.races) return [];
+  const today = todayISO();
+  const have = new Set(existing.map((g) => g.date + '|' + normalize(g.name)));
+  return searchRaces(q, S.fed.races.filter((r) => r.date >= today && !have.has(r.date + '|' + normalize(r.name)))).slice(0, limit);
+}
+
+const miniRow = (g, right) => `<li class="mini ${modClass(g.modality)}"><div><b>${esc(g.name)}</b>
+  <small class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''} · ${esc(g.modality)}</small></div>${right}</li>`;
+
+/** Resultados del buscador del corredor: carreras del club (apuntarse) y de las federaciones (añadir). */
+function runnerSearchResults(q) {
+  const d = S.runnerData;
+  if (!d || normalize(q).length < 2) return '';
+  const today = d.today || todayISO();
+  const mine = (g) => g.entries.some((e) => e.runner_id === d.me.id);
+  const club = searchRaces(q, d.registrations.filter((g) => g.date >= today)).slice(0, 6);
+  const fed = fedMatches(q, d.registrations);
+  return `
+    ${club.length ? `<p class="hint"><b>Ya están en el club</b> (apúntate aquí, no hace falta crearla):</p>
+      <ul class="mini-list">${club.map((g) => miniRow(g, mine(g) ? '<span class="done">✓ Apuntado</span>'
+        : `<button class="btn primary small" data-act="r-join" data-id="${g.id}">Apuntarme</button>`)).join('')}</ul>` : ''}
+    ${fed.length ? `<p class="hint"><b>En los calendarios de las federaciones</b>:</p>
+      <ul class="mini-list">${fed.map((r) => miniRow(r, `<button class="btn small" data-act="r-new-fed" data-i="${S.fed.races.indexOf(r)}">Añadir y apuntarme</button>`)).join('')}</ul>` : ''}
+    ${!club.length && !fed.length ? `<p class="hint">No hay ninguna carrera parecida a «${esc(q)}». Puedes añadirla:</p>` : ''}`;
+}
+
+function updateSearch(scope) {
+  if (scope === 'runner') {
+    const box = $app.querySelector('#search-results');
+    if (box) box.innerHTML = runnerSearchResults(S.q.runner);
+  } else if (scope === 'admin') {
+    const box = $app.querySelector('#reg-list');
+    if (box) box.innerHTML = adminRegList();
+  } else if (scope === 'rname') {
+    const box = $app.querySelector('#dup-list');
+    if (box) box.innerHTML = dupSuggestions(S.rdraft?.name || '', S.runnerData.registrations, true);
+  }
+}
+
+/** Avisos de posibles duplicados mientras se escribe el nombre de una carrera nueva. */
+function dupSuggestions(name, regs, forRunner) {
+  if (normalize(name).length < 3) return '';
+  const today = todayISO();
+  const club = searchRaces(name, regs.filter((g) => g.date >= today)).slice(0, 4);
+  const fed = fedMatches(name, regs, 4);
+  if (!club.length && !fed.length) return '';
+  const me = S.runnerData?.me;
+  return `<div class="dup">
+    ${club.length ? `<p><b>⚠️ ¿Es alguna de estas? Ya están creadas:</b></p><ul class="mini-list">${club.map((g) => miniRow(g,
+      forRunner ? (g.entries.some((e) => e.runner_id === me?.id) ? '<span class="done">✓ Apuntado</span>'
+        : `<button type="button" class="btn primary small" data-act="r-join-go" data-id="${g.id}">Apuntarme a esta</button>`)
+        : `<a class="btn small" href="#/inscripciones/${g.id}">Abrir</a>`)).join('')}</ul>` : ''}
+    ${fed.length ? `<p><b>En el calendario de las federaciones</b> (rellena los datos con un toque):</p><ul class="mini-list">${fed.map((r) => miniRow(r,
+      `<button type="button" class="btn small" data-act="fill-fed" data-i="${S.fed.races.indexOf(r)}">Usar estos datos</button>`)).join('')}</ul>` : ''}
+  </div>`;
+}
+
+const emptyRunnerDraft = (pre = {}) => ({ name: '', date: '', multi: false, end_date: '', place: '', province: '', country: DEFAULT_COUNTRY,
+  modality: 'Carretera', category: S.runnerData?.me?.category || '', ...pre });
+
+function viewRunnerNew() {
+  if (!S.rdraft) S.rdraft = emptyRunnerDraft({ name: S.q.runner || '' });
+  const d = S.rdraft;
+  if (!S.fed) loadFed().then(() => updateSearch('rname'));
+  return frame('Añadir carrera', `
+    <form class="card stack" data-form="r-create">
+      <p class="hint">Escribe el nombre: si ya existe en el club o en el calendario de las federaciones te saldrá aquí debajo, para no duplicarla.</p>
+      <label>Nombre de la carrera<input data-rf="name" value="${esc(d.name)}" required minlength="3" maxlength="120" autocomplete="off"></label>
+      <div id="dup-list">${dupSuggestions(d.name, S.runnerData.registrations, true)}</div>
+      <div class="grid2">
+        <label>${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-rf="date" value="${esc(d.date)}" min="${todayISO()}" required></label>
+        <label>Modalidad<select data-rf="modality">${MODALITIES.map((m) => opt(m, m, d.modality)).join('')}</select></label>
+      </div>
+      <label class="check"><input type="checkbox" data-rf-multi ${d.multi ? 'checked' : ''}> Carrera de varios días (por etapas)</label>
+      ${d.multi ? `<label>Último día<input type="date" data-rf="end_date" value="${esc(d.end_date)}" min="${esc(d.date || todayISO())}" required></label>` : ''}
+      <label>Lugar<input data-rf="place" value="${esc(d.place)}" maxlength="120"></label>
+      <div class="grid2">
+        <label>Provincia<input data-rf="province" list="dl-prov" value="${esc(d.province)}" autocomplete="off"></label>
+        <label>Tu categoría${catSelect('data-rf="category"', d.category, 'Categoría')}</label>
+      </div>
+      <button class="btn primary">Añadir y apuntarme</button>
+      <p class="hint">La dirección del club podrá corregirla o borrarla si hace falta.</p>
+    </form>`, { back: '#/' });
+}
+
 function runnerBonusCard(d) {
   const b = d.bonus;
   if (!b) return '';
@@ -309,6 +405,11 @@ function viewRunnerHome() {
     <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
     ${runnerBonusCard(d)}
     ${installHint()}
+    <section class="card search-card">
+      ${searchBox('runner', 'Busca una carrera: nombre o pueblo…')}
+      <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
+      <button class="btn block add-race" data-act="r-new">+ Añadir una carrera que no está</button>
+    </section>
     ${body}
     <h2 class="section">Calendarios de las federaciones</h2>
     ${fedLinks()}
@@ -347,14 +448,27 @@ function viewRegistrations() {
       <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality)}</div>
       ${g.date < today ? '<p class="warn-inline">Ya se ha disputado: pásala a resultados.</p>' : ''}
       <p class="count">${g.entries.length} inscrito${g.entries.length === 1 ? '' : 's'}${g.entries.length ? ': ' +
-        esc(g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p></a>`;
+        esc(g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p>
+      ${g.created_by ? `<p class="count">Añadida por ${esc(runnerById(g.created_by)?.name || 'un corredor')}</p>` : ''}</a>`;
   return frame('Inscripciones', `
     <a class="btn primary block" href="#/inscripciones/nueva">+ Nueva inscripción</a>
     <a class="btn block" href="#/federaciones">Carreras de las federaciones (catalana y aragonesa)</a>
     ${fedLinks()}
-    ${S.regView === 'cal' ? calendarView(regs, card)
-      : regs.length ? regs.map(card).join('') : '<p class="empty">No hay inscripciones abiertas.</p>'}`,
+    ${searchBox('admin', 'Buscar inscripción: nombre o pueblo…')}
+    <div id="reg-list">${adminRegList(card)}</div>`,
   { actions: viewToggle() });
+}
+
+let adminCard = null;
+/** Lista (o calendario) de inscripciones, filtrada por la lupa si hay texto. */
+function adminRegList(card = adminCard) {
+  adminCard = card;
+  const all = [...S.data.registrations].sort((a, b) => a.date.localeCompare(b.date) || byName(a, b));
+  const q = S.q.admin;
+  const regs = normalize(q).length >= 2 ? searchRaces(q, all) : all;
+  if (q && !regs.length) return `<p class="empty">Ninguna inscripción se parece a «${esc(q)}».</p>`;
+  return S.regView === 'cal' && !q ? calendarView(regs, card)
+    : regs.length ? regs.map(card).join('') : '<p class="empty">No hay inscripciones abiertas.</p>';
 }
 
 // ---------- Carreras de las federaciones (leídas cada semana por GitHub) ----------
@@ -464,6 +578,7 @@ function viewRegistrationEdit() {
   return frame(d.id ? 'Editar inscripción' : 'Nueva inscripción', `
     <form class="card stack" data-form="save-reg">
       ${raceFields(d)}
+      ${d.id ? '' : `<div id="dup-admin">${dupSuggestions(d.name, S.data.registrations, false)}</div>`}
       <label>Notas<textarea data-f="notes" rows="2">${esc(d.notes || '')}</textarea></label>
       <h3>Inscritos (${d.people.length})</h3>
       <ul class="edit-list">${d.people.map((p, i) => `<li>
@@ -787,8 +902,25 @@ const actions = {
   async logout() { await api.signOut(); S.session = null; S.data = null; go('#/'); },
 
   // corredor
+  async 'r-new'() { S.rdraft = null; if (!S.fed) loadFed(); go('#/nueva'); },
+  async 'r-new-fed'(el) {
+    const r = S.fed.races[Number(el.dataset.i)];
+    S.rdraft = emptyRunnerDraft({ name: r.name, date: r.date, place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY, modality: r.modality });
+    go('#/nueva');
+  },
+  'fill-fed'(el) {
+    const r = S.fed.races[Number(el.dataset.i)];
+    const vals = { name: r.name, date: r.date, place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY, modality: r.modality };
+    if (S.rdraft && parseRoute().view === 'nueva') Object.assign(S.rdraft, vals);
+    else if (S.draft) Object.assign(S.draft, vals, { notes: S.draft.notes || `Federación ${FED_NAMES[r.source] || r.source}: ${r.url}` });
+    render();
+  },
+  async 'r-join-go'(el) {
+    await run(async () => { await api.runnerJoin(S.code, el.dataset.id, S.rdraft?.category || S.runnerData.me.category || null); await loadRunner(); }, '¡Apuntado!');
+    S.rdraft = null; go('#/');
+  },
   async 'r-join'(el) {
-    const cat = $app.querySelector(`[data-cat="${el.dataset.id}"]`)?.value || null;
+    const cat = $app.querySelector(`[data-cat="${el.dataset.id}"]`)?.value || S.runnerData?.me?.category || null;
     await run(async () => { await api.runnerJoin(S.code, el.dataset.id, cat); await loadRunner(); }, '¡Apuntado!');
     render();
   },
@@ -969,6 +1101,25 @@ const forms = {
     }, 'Plantilla renovada');
     if (ok) { f.reset(); render(); }
   },
+  async 'r-create'() {
+    const d = S.rdraft;
+    const name = cleanName(d.name);
+    if (d.multi && !d.end_date) return toast('Falta el último día.', true);
+    // última comprobación: misma fecha y nombre parecido → ofrecer apuntarse a esa
+    const same = searchRaces(name, S.runnerData.registrations.filter((g) => g.date === d.date))[0];
+    if (same) {
+      const choice = await choose('¿Es esta carrera?', `Ya hay <b>${esc(same.name)}</b> el mismo día (${esc(when(same))}).`, [
+        { label: 'Sí, apuntarme a esa', value: 'join', kind: 'primary' }, { label: 'No, es otra: crearla', value: 'create' }]);
+      if (!choice) return;
+      if (choice === 'join') return actions['r-join-go']({ dataset: { id: same.id } });
+    }
+    const ok = await run(async () => {
+      await api.runnerCreate(S.code, { name, date: d.date, end_date: d.multi ? d.end_date : null, place: cleanName(d.place),
+        province: cleanName(d.province), country: d.country, modality: d.modality }, d.category || null);
+      await loadRunner(); return true;
+    }, 'Carrera añadida y te has apuntado');
+    if (ok) { S.rdraft = null; S.q.runner = ''; go('#/'); }
+  },
   async 'bonus-cfg'(f) {
     const tiers = [0, 1, 2, 3].map((i) => ({ races: Number(f['r' + i].value), amount: Number(f['a' + i].value) }))
       .filter((t) => t.races > 0);
@@ -1069,7 +1220,24 @@ $app.addEventListener('submit', (ev) => {
 
 $app.addEventListener('input', (ev) => {
   const t = ev.target;
+  if (t.dataset.search) {
+    S.q[t.dataset.search] = t.value;
+    if (t.dataset.search === 'runner' && !S.fed) loadFed().then(() => updateSearch('runner'));
+    updateSearch(t.dataset.search);
+    return;
+  }
+  if (t.dataset.rf && S.rdraft) {
+    S.rdraft[t.dataset.rf] = t.value;
+    if (t.dataset.rf === 'name') updateSearch('rname');
+    return;
+  }
   if (!S.draft) return;
+  if (S.draft.kind === 'reg' && !S.draft.id && t.dataset.f === 'name') {
+    S.draft.name = t.value;
+    if (!S.fed) loadFed();
+    const box = $app.querySelector('#dup-admin');
+    if (box) box.innerHTML = dupSuggestions(t.value, S.data.registrations, false);
+  }
   if (t.dataset.f) S.draft[t.dataset.f] = t.value;
   if (t.dataset.stage) {
     S.draft.stages[Number(t.dataset.stage)] = t.value;
@@ -1092,6 +1260,9 @@ $app.addEventListener('input', (ev) => {
 
 $app.addEventListener('change', async (ev) => {
   const t = ev.target;
+  if ('rfMulti' in t.dataset && S.rdraft) {
+    S.rdraft.multi = t.checked; if (!t.checked) S.rdraft.end_date = ''; render(); return;
+  }
   if (t.dataset.actChange === 'multi') {
     S.draft.multi = t.checked;
     if (!t.checked) S.draft.end_date = '';

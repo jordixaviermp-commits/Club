@@ -293,3 +293,23 @@ label.check input { accent-color: var(--accent); }
 .mod-legend { display: flex; flex-wrap: wrap; gap: .35rem .9rem; margin-top: .7rem; font-size: .8rem; font-weight: 600; }
 .mod-legend span { display: inline-flex; align-items: center; gap: .35rem; color: var(--text); }
 .mod-legend i { width: 12px; height: 12px; border-radius: 3px; background: var(--mc); }
+
+/* Lupa / buscador */
+.search { flex-direction: row; align-items: center; gap: .5rem; border: 2px solid var(--line); border-radius: 12px; padding: 0 .7rem; background: var(--card); margin: 0 0 12px; }
+.search:focus-within { border-color: var(--accent); }
+.search svg { width: 22px; height: 22px; flex: none; fill: none; stroke: var(--muted); stroke-width: 2.2; stroke-linecap: round; }
+.search input { border: 0; outline: none; padding: .6rem 0; font-size: 1rem; font-weight: 400; color: var(--text); background: transparent; }
+.search input:focus { outline: none; border: 0; }
+.search-card { padding: 12px; }
+.search-card .search { margin-bottom: .5rem; }
+.search-card .add-race { margin: .5rem 0 0; }
+.mini-list { list-style: none; padding: 0; margin: .3rem 0 .6rem; }
+.mini-list li { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .45rem .6rem; margin-bottom: .35rem;
+  border: 1px solid var(--line); border-left: 5px solid var(--mc, var(--line)); border-radius: 10px; background: var(--card); }
+.mini-list li > div { display: flex; flex-direction: column; min-width: 0; }
+.mini-list li b { font-size: .95rem; }
+.mini-list li small { font-size: .78rem; }
+.mini-list .btn { flex: none; }
+.mini-list .done { flex: none; font-size: .85rem; font-weight: 700; color: var(--muted); }
+.dup { background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 12px; padding: .6rem .7rem; }
+.dup p { font-size: .88rem; margin: .1rem 0 .3rem; }

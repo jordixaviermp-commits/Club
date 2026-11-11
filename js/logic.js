@@ -511,3 +511,50 @@ export function yearBonuses(year, races, registrations, runners, cfg) {
     return { runner: rn, planned: plan, ...bonusStatus(count, cfg, c), projected: bonusStatus(count + plan, cfg, c) };
   }).sort((a, b) => b.count - a.count || a.runner.name.localeCompare(b.runner.name, 'es'));
 }
+
+// ---------- Buscador de carreras (para no duplicar) ----------
+
+const STOP = new Set(['de', 'del', 'la', 'el', 'les', 'los', 'las', 'i', 'y', 'a', 'en', 'cursa', 'carrera', 'prueba', 'trofeo', 'trofeu', 'marxa', 'marcha',
+  'btt', 'mtb', 'cx', 'xco', 'gravel', 'ciclocross', 'ciclocros', 'open', 'copa', 'gran', 'premi', 'premio', 'memorial', 'campionat', 'campeonato', 'escolar']);
+const words = (s) => normalize(s).replace(/[^a-z0-9 ]/g, ' ').split(' ').filter((w) => w.length > 1);
+/** ¿Se parecen dos palabras largas salvo por una letra? («cerdana» ~ «cerdanya», «garriges» ~ «garrigues») */
+function oneEditAway(a, b) {
+  if (a.length < 5 || b.length < 5 || Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+}
+
+/**
+ * Puntuación de parecido entre lo buscado y una carrera (nombre y lugar). 0 = nada que ver.
+ * Cada palabra buscada cuenta si aparece (o empieza) en el nombre o el lugar; las palabras
+ * genéricas («cursa», «trofeo»…) cuentan poco para no sacar todas las carreras.
+ */
+export function raceMatchScore(query, race) {
+  const q = words(query);
+  if (!q.length) return 0;
+  const name = words(race.name), place = words([race.place, race.province].filter(Boolean).join(' '));
+  let score = 0, hits = 0;
+  for (const w of q) {
+    const inName = name.some((n) => n.startsWith(w) || (w.length >= 4 && n.includes(w)) || oneEditAway(w, n));
+    const exact = name.includes(w);
+    const inPlace = place.some((n) => n.startsWith(w));
+    if (inName || inPlace) hits++;
+    const weight = STOP.has(w) ? 0.3 : 1;
+    score += weight * (exact ? 3 : inName ? 2 : inPlace ? 1 : 0);
+  }
+  if (!hits) return 0;
+  return score * (hits / q.length); // premia que coincidan todas las palabras
+}
+
+/** Carreras parecidas a lo buscado, de más a menos parecidas. */
+export function searchRaces(query, races, min = 1) {
+  return races.map((r) => ({ race: r, score: raceMatchScore(query, r) }))
+    .filter((x) => x.score >= min)
+    .sort((a, b) => b.score - a.score || a.race.date.localeCompare(b.race.date))
+    .map((x) => x.race);
+}

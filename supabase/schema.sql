@@ -64,6 +64,9 @@ create index if not exists results_race_idx on public.results(race_id);
 create index if not exists results_runner_idx on public.results(runner_id);
 create index if not exists entries_runner_idx on public.registration_entries(runner_id);
 
+-- Inscripciones creadas por un corredor (null = creada por la dirección).
+alter table public.registrations add column if not exists created_by uuid references public.runners(id) on delete set null;
+
 -- Tipo de contrato del corredor en la temporada actual.
 alter table public.runners add column if not exists contract text;
 alter table public.runners drop constraint if exists runners_contract_check;
@@ -315,6 +318,41 @@ begin
   on conflict (registration_id, runner_id) do update set category = excluded.category;
 end $$;
 
+-- Un corredor añade una carrera que no estaba y queda apuntado.
+-- Si ya hay una con el mismo nombre el mismo día, no se duplica: se le apunta a esa.
+-- Límites contra errores o abusos: nombre de 3 a 120 caracteres, fecha entre hoy y dos años,
+-- como mucho 10 carreras creadas por corredor y día. Solo la dirección puede editarlas o borrarlas.
+create or replace function public.runner_create_registration(p_code text, p_reg jsonb, p_category text)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  v_runner uuid; v_id uuid;
+  v_name text := btrim(regexp_replace(coalesce(p_reg->>'name',''), '\s+', ' ', 'g'));
+  v_date date := nullif(p_reg->>'date','')::date;
+  v_end  date := nullif(nullif(p_reg->>'end_date',''), p_reg->>'date')::date;
+begin
+  select id into v_runner from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  if length(v_name) < 3 or length(v_name) > 120 then raise exception 'nombre_no_valido'; end if;
+  if v_date is null or v_date < current_date or v_date > current_date + 730 then raise exception 'fecha_no_valida'; end if;
+  if v_end is not null and (v_end < v_date or v_end > v_date + 30) then raise exception 'fecha_no_valida'; end if;
+  if (select count(*) from registrations where created_by = v_runner and created_at > now() - interval '1 day') >= 10 then
+    raise exception 'demasiadas_carreras';
+  end if;
+  select id into v_id from registrations where date = v_date and lower(name) = lower(v_name) limit 1;
+  if v_id is null then
+    insert into registrations (name, date, end_date, place, province, country, modality, notes, created_by)
+    values (v_name, v_date, v_end,
+            nullif(left(btrim(coalesce(p_reg->>'place','')), 120), ''), nullif(left(btrim(coalesce(p_reg->>'province','')), 60), ''),
+            coalesce(nullif(left(btrim(coalesce(p_reg->>'country','')), 60), ''), 'España'),
+            coalesce(nullif(p_reg->>'modality',''), 'Carretera'), nullif(left(btrim(coalesce(p_reg->>'notes','')), 500), ''), v_runner)
+    returning id into v_id;
+  end if;
+  insert into registration_entries (registration_id, runner_id, category)
+  values (v_id, v_runner, nullif(p_category, ''))
+  on conflict (registration_id, runner_id) do update set category = excluded.category;
+  return v_id;
+end $$;
+
 create or replace function public.runner_leave(p_code text, p_registration uuid)
 returns void language plpgsql security definer set search_path = public as $$
 declare v_runner uuid;
@@ -335,6 +373,7 @@ language sql stable as $$ select 'ok'::text $$;
 
 revoke execute on all functions in schema public from public, anon;
 grant execute on function public.runner_view(text), public.runner_join(text, uuid, text),
+                          public.runner_create_registration(text, jsonb, text),
                           public.runner_leave(text, uuid), public.ping() to anon, authenticated;
 grant execute on function public.is_admin(), public.require_admin(),
                           public.save_registration(jsonb, jsonb), public.save_race(jsonb, jsonb),
