@@ -171,9 +171,10 @@ test('bonos por carreras', () => {
 test('tipos de contrato', () => {
   assert.equal(bonusStatus(3, DEFAULT_BONUS, 'nuevo').penalty, 175);
   assert.equal(bonusStatus(3, DEFAULT_BONUS, 'renovacion').penalty, 100);
-  assert.equal(bonusStatus(3, DEFAULT_BONUS, 'renovacion_sin_licencia').penalty, 100);
+  assert.equal(bonusStatus(3, DEFAULT_BONUS, 'renovacion_sin_licencia').penalty, 0);
   assert.equal(bonusStatus(3, { ...DEFAULT_BONUS, penalty: { renovado: 100, nuevo: 175, sin_licencia: 60 } }, 'renovacion_sin_licencia').penalty, 60);
-  assert.equal(bonusStatus(3, { ...DEFAULT_BONUS, penalty: { renovado: 100, nuevo: 175 } }, 'renovacion_sin_licencia').penalty, 100); // config antigua
+  assert.equal(bonusStatus(3, { ...DEFAULT_BONUS, penalty: { renovado: 100, nuevo: 175 } }, 'renovacion_sin_licencia').penalty, 0); // config guardada antes: sin_licencia = 0
+  assert.equal(bonusConfigFor({ 2026: { penalty: { renovado: 100, nuevo: 175 } } }, 2026).penalty.sin_licencia, 0);
   assert.equal(bonusStatus(3, DEFAULT_BONUS, null).penalty, 100);
   assert.equal(bonusStatus(3, DEFAULT_BONUS, true).penalty, 175);
   assert.equal(matchContract('Renovación sin licencia'), 'renovacion_sin_licencia');

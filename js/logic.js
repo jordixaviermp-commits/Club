@@ -437,7 +437,7 @@ export const numDays = (start, end) => daysOf(start, end).length;
 export const DEFAULT_BONUS = {
   tiers: [{ races: 12, amount: 150 }, { races: 17, amount: 200 }, { races: 22, amount: 250 }],
   minimum: 12,
-  penalty: { renovado: 100, nuevo: 175, sin_licencia: 100 },
+  penalty: { renovado: 100, nuevo: 175, sin_licencia: 0 }, // renovación sin licencia: sin penalización
   nuevos: [],
 };
 
@@ -459,10 +459,10 @@ export function matchContract(s) {
 
 export function bonusConfigFor(all, year) {
   const cfg = all?.[year];
-  if (cfg) return { ...DEFAULT_BONUS, ...cfg, nuevos: cfg.nuevos || [] };
+  if (cfg) return { ...DEFAULT_BONUS, ...cfg, penalty: { ...DEFAULT_BONUS.penalty, ...cfg.penalty }, nuevos: cfg.nuevos || [] };
   const prev = Object.keys(all || {}).map(Number).filter((y) => y < year).sort((a, b) => b - a)[0];
   // de un año a otro se copian tramos, mínimo y penalizaciones, pero no quién es nuevo
-  return prev ? { ...DEFAULT_BONUS, ...all[prev], nuevos: [] } : { ...DEFAULT_BONUS };
+  return prev ? { ...DEFAULT_BONUS, ...all[prev], penalty: { ...DEFAULT_BONUS.penalty, ...all[prev].penalty }, nuevos: [] } : { ...DEFAULT_BONUS };
 }
 
 /** Carreras que cuentan para el bono: cada día de competición es una (una de 3 días = 3). */

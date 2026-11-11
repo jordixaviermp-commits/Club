@@ -668,7 +668,7 @@ function viewBonus() {
           <span></span>
           <label>Penalización renovación (€)<input type="number" min="0" name="pen_ren" value="${esc(cfg.penalty.renovado)}" required></label>
           <label>Penalización nuevos (€)<input type="number" min="0" name="pen_new" value="${esc(cfg.penalty.nuevo)}" required></label>
-          <label>Penalización renovación sin licencia (€)<input type="number" min="0" name="pen_sl" value="${esc(cfg.penalty.sin_licencia ?? cfg.penalty.renovado)}" required></label>
+          <label>Penalización renovación sin licencia (€)<input type="number" min="0" name="pen_sl" value="${esc(cfg.penalty.sin_licencia ?? 0)}" required></label>
         </div>
         <p class="hint">Deja vacío un tramo para no usarlo.</p>
         <button class="btn primary">Guardar condiciones de ${S.year}</button>
