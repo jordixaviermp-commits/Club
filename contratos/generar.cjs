@@ -21,7 +21,7 @@ const TIPOS = [
   {
     id: 'Renovacion', titulo: 'RENOVACIÓN',
     licencia: true,
-    material: [['maillot CARRERA', 1], ['culote', 1]], // sin calcetines gratis
+    material: [['maillot CARRERA', 1], ['culote', 1], ['par de calcetines aero', 1]],
     aportacion: 65,
     tramos: [[12, 50], [17, 100], [22, 150]],
     penalizacion: 100,
@@ -37,10 +37,10 @@ const TIPOS = [
 ];
 
 // Precios del material del Club para la temporada (compras adicionales a lo incluido en el contrato)
-// Solo el contrato nuevo lleva el 1.er par de calcetines gratis y la gorra y camiseta de patrocinadores gratis.
+// 1.er par de calcetines gratis: nuevo y renovación (no sin licencia). Gorra y camiseta de patrocinadores gratis: solo nuevo.
 const precios = (t) => [
   ['Maillot', '25 €'], ['Culote', '40 €'], ['Maillot manga larga HYDER', '45 €'],
-  ['Calcetines aero (par)', t.id === 'Nuevo' ? '1.º gratis · 2.º 15 €' : '15 €'], ['Chaleco', '35 €'], ['Manguitos', '15 €'],
+  ['Calcetines aero (par)', t.licencia ? '1.º gratis · 2.º 15 €' : '15 €'], ['Chaleco', '35 €'], ['Manguitos', '15 €'],
   ['Camiseta interior', '20 €'],
   ...(t.id === 'Nuevo' ? [['Gorra de patrocinadores', 'Gratis'], ['Camiseta de patrocinadores', 'Gratis']] : []),
 ];
