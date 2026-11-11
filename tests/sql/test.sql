@@ -136,5 +136,7 @@ select pg_temp.expect_fail($q$select runner_create_registration('BBBBBBBBBB', '{
 do $$ begin for i in 1..9 loop perform runner_create_registration('BBBBBBBBBB', jsonb_build_object('name','Spam '||i,'date', current_date + 5), null); end loop; end $$;
 select pg_temp.expect_fail($q$select runner_create_registration('BBBBBBBBBB', jsonb_build_object('name','Spam 11','date', current_date + 5), null)$q$, 'límite de 10 al día');
 select pg_temp.expect_fail($q$update registrations set name = 'x'$q$, 'anon no edita inscripciones');
+select pg_temp.check(jsonb_array_length(runner_view('BBBBBBBBBB')->'my_results') >= 1, 'mis carreras: ve sus resultados');
+select pg_temp.check((runner_view('BBBBBBBBBB')->'my_results')::text not like '%Pere Soler%', 'mis carreras: solo las suyas');
 reset role;
 \echo TODAS LAS PRUEBAS SQL OK

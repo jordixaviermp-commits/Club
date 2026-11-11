@@ -239,6 +239,12 @@ export function demoApi(storage = globalThis.localStorage) {
       const me = byCode(code); const d = load();
       return clone({
         me: { id: me.id, name: me.name, category: me.category }, today: todayISO(),
+        my_results: d.results.filter((x) => x.runner_id === me.id).map((x) => {
+          const r = d.races.find((y) => y.id === x.race_id);
+          return r && { race_id: r.id, name: r.name, date: r.date, end_date: r.end_date || null, place: r.place, province: r.province,
+            country: r.country, modality: r.modality, stages: r.stages || null, category: x.category, position: x.position,
+            podium_type: x.podium_type, stage_positions: x.stage_positions || null };
+        }).filter(Boolean).sort((a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name)),
         bonus: (() => { // igual que runner_view en la base de datos
           const year = new Date().getFullYear();
           const cfg = (d.settings || []).find((x) => x.key === 'bonus')?.value?.[year] || null;
