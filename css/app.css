@@ -214,3 +214,16 @@ label.check input { width: 22px; height: 22px; min-height: 0; }
 label.check input { accent-color: var(--accent); }
 /* Días de carreras por etapas: barra inferior que une los días */
 .cal-cell.stage::before { content: ""; position: absolute; left: -3px; right: -3px; bottom: 1px; height: 3px; background: var(--brand-cyan); opacity: .55; }
+
+/* Etapas dentro de una carrera */
+.stages-box { border: 1px solid var(--line); border-radius: 12px; padding: .7rem .8rem; }
+.stages-head { justify-content: space-between; margin: 0; }
+.stages-head h3 { margin: 0; }
+.stepper { display: flex; align-items: center; gap: .5rem; }
+.stepper b { min-width: 5.5rem; text-align: center; font-size: .95rem; }
+.stepper .icon-btn:disabled { opacity: .35; }
+.stage-names { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: .4rem; }
+.stage-pos { flex: 1 1 100%; display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: .35rem; }
+.stage-pos label { font-size: .72rem; gap: .1rem; overflow: hidden; }
+.stage-pos label { white-space: nowrap; text-overflow: ellipsis; }
+.stage-pos input { padding: .4rem .5rem; min-height: 40px; }

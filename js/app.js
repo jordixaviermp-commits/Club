@@ -2,7 +2,7 @@
 import { CONFIG } from './config.js';
 import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
-  CATEGORIES, MODALITIES, PODIUM_TYPES, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName,
+  CATEGORIES, MODALITIES, PODIUM_TYPES, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
   extractCode, todayISO, formatDate, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
@@ -469,7 +469,9 @@ function viewRaces() {
       <div class="race-head"><div><h3>${esc(r.name)}</h3>
       <p class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div><span class="tag">${esc(r.modality)}</span></div>
       <p class="count">${r.results.length} participante${r.results.length === 1 ? '' : 's'}</p>
-      ${pods.length ? `<p class="pods">${pods.map((x) => `${medal(x.position)} ${esc(x.runner_name)}${x.category ? ` <small>${esc(x.category)}</small>` : ''}`).join(' · ')}</p>` : ''}</a>`;
+      ${pods.length ? `<p class="pods">${pods.map((x) => `${medal(x.position)} ${esc(x.runner_name)}${x.category ? ` <small>${esc(x.category)}</small>` : ''}`).join(' · ')}</p>` : ''}
+      ${(() => { const st = podiumsOf(r.results.map((res) => ({ race: r, res }))).filter((p) => p.stage);
+        return r.stages?.length ? `<p class="count">${r.stages.length} etapas${st.length ? ` · ${st.length} podio${st.length === 1 ? '' : 's'} de etapa (${st.filter((p) => p.position === 1).length} victoria${st.filter((p) => p.position === 1).length === 1 ? '' : 's'})` : ''}</p>` : ''; })()}</a>`;
   };
   return frame('Carreras', `
     ${yearPicker(years)}
@@ -483,11 +485,13 @@ function yearPicker(years) {
 }
 
 function draftRace(id) {
-  if (id === 'nueva') return { kind: 'race', id: null, name: '', date: '', place: '', province: '', country: DEFAULT_COUNTRY, modality: 'Carretera', notes: '', people: [] };
+  if (id === 'nueva') return { kind: 'race', id: null, name: '', date: '', place: '', province: '', country: DEFAULT_COUNTRY, modality: 'Carretera', notes: '', people: [], stages: [] };
   const r = S.data.races.find((x) => x.id === id);
   if (!r) return null;
-  return { kind: 'race', ...r, multi: !!r.end_date, people: r.results.map((x) => ({ runner_id: x.runner_id, runner_name: x.runner_name, category: x.category || '',
-    position: x.position ?? '', podium_type: x.podium_type || 'suelta' }))
+  const stages = (r.stages || []).map((_, i) => stageName(r, i));
+  return { kind: 'race', ...r, stages, multi: !!r.end_date, people: r.results.map((x) => ({ runner_id: x.runner_id, runner_name: x.runner_name, category: x.category || '',
+    position: x.position ?? '', podium_type: x.podium_type || 'suelta',
+    stage_positions: stages.map((_, i) => x.stage_positions?.[i] ?? '') }))
     .sort((a, b) => (a.position || 9999) - (b.position || 9999) || a.runner_name.localeCompare(b.runner_name, 'es')) };
 }
 
@@ -498,8 +502,19 @@ function viewRaceEdit() {
     <form class="card stack" data-form="save-race">
       ${raceFields(d)}
       <label>Notas<textarea data-f="notes" rows="2">${esc(d.notes || '')}</textarea></label>
+      <div class="stages-box">
+        <div class="row stages-head"><h3>Etapas</h3>
+          <div class="stepper">
+            <button type="button" class="icon-btn" data-act="stages-n" data-n="-1" aria-label="Quitar etapa" ${d.stages.length ? '' : 'disabled'}>−</button>
+            <b aria-live="polite">${d.stages.length || 'Sin etapas'}</b>
+            <button type="button" class="icon-btn" data-act="stages-n" data-n="1" aria-label="Añadir etapa">+</button>
+          </div></div>
+        ${d.stages.length ? `<p class="hint">Cambia los nombres si quieres (Prólogo, CRI…). Los podios de etapa cuentan en el resumen como tipo «Etapa».</p>
+          <div class="stage-names">${d.stages.map((n, i) => `<input data-stage="${i}" value="${esc(n)}" aria-label="Nombre de la etapa ${i + 1}" maxlength="40">`).join('')}</div>`
+          : '<p class="hint">Para carreras por etapas: añade las etapas y podrás poner el puesto de cada corredor en cada una, además de la general.</p>'}
+      </div>
       <h3>Participantes (${d.people.length})</h3>
-      <p class="hint">Puesto = clasificación en su categoría. Del 1 al 3 es podio: indica de qué tipo.</p>
+      <p class="hint">Puesto = clasificación en su categoría${d.stages.length ? '. «General» es la clasificación final' : ''}. Del 1 al 3 es podio: indica de qué tipo.</p>
       <ul class="edit-list results">${d.people.map((p, i) => {
         const pod = isPodium(Number(p.position));
         return `<li>
@@ -507,13 +522,15 @@ function viewRaceEdit() {
         <button type="button" class="icon-btn" data-act="del-person" data-i="${i}" aria-label="Quitar">✕</button>
         <div class="res-fields">
           ${catSelect(`data-p="${i}" data-pf="category" aria-label="Categoría"`, p.category)}
-          <input type="number" inputmode="numeric" min="1" placeholder="Puesto" aria-label="Puesto" data-p="${i}" data-pf="position" value="${esc(p.position)}">
+          <input type="number" inputmode="numeric" min="1" placeholder="${d.stages.length ? 'General' : 'Puesto'}" aria-label="${d.stages.length ? 'Puesto en la general' : 'Puesto'}" data-p="${i}" data-pf="position" value="${esc(p.position)}">
           <select data-p="${i}" data-pf="podium_type" aria-label="Tipo de podio" ${pod ? '' : 'disabled'}>
             ${PODIUM_TYPES.map((t) => opt(t.id, t.label, p.podium_type)).join('')}</select>
-        </div></li>`;
+        </div>
+        ${d.stages.length ? `<div class="stage-pos">${d.stages.map((n, j) => `<label><span data-stage-label="${j}">${esc(n)}</span>
+          <input type="number" inputmode="numeric" min="1" data-p="${i}" data-sp="${j}" value="${esc(p.stage_positions?.[j] ?? '')}"></label>`).join('')}</div>` : ''}
+        </li>`;
       }).join('')}</ul>
       ${addRunnerSelect(d)}
-      <p class="hint">Un corredor tiene un solo puesto por carrera. En una prueba por etapas con podio de etapa y de general, crea dos carreras (p. ej. «Volta – etapa 2» y «Volta – general»).</p>
       <button class="btn primary">Guardar</button>
     </form>
     ${d.id ? `<button class="btn danger ghost block" data-act="del-race">Borrar carrera</button>` : ''}`,
@@ -557,7 +574,7 @@ function viewSummary() {
       <h3>Podios del año</h3>
       ${s.podiumList.length ? `<ul class="podium-list">${s.podiumList.map((p) => `<li><span class="medal">${medal(p.position)}</span><div>
         <b>${esc(p.runner)}</b>${p.category ? ` <small class="muted">${esc(p.category)}</small>` : ''} · ${p.position}º
-        <br><a href="#/carreras/${p.raceId}">${esc(p.race)}</a> <span class="muted">· ${formatDate(p.date, false)} · ${esc(podiumLabel(p.type))}</span></div></li>`).join('')}</ul>`
+        <br><a href="#/carreras/${p.raceId}">${esc(p.race)}</a> <span class="muted">· ${formatDate(p.date, false)} · ${esc(podiumLabel(p.type))}${p.stage ? ': ' + esc(p.stage) : ''}</span></div></li>`).join('')}</ul>`
         : '<p class="muted">Sin podios este año.</p>'}
     </section>
 
@@ -675,6 +692,22 @@ const actions = {
   },
 
   // listas de inscritos / participantes
+  'stages-n'(el) {
+    const d = S.draft;
+    if (Number(el.dataset.n) > 0) {
+      if (d.stages.length >= 30) return;
+      if (!d.stages.length) for (const p of d.people) if ((p.podium_type || 'suelta') === 'suelta') p.podium_type = 'general';
+      d.stages.push(`Etapa ${d.stages.length + 1}`);
+    } else {
+      const j = d.stages.length - 1;
+      if (j < 0) return;
+      if (d.people.some((p) => p.stage_positions?.[j] !== '' && p.stage_positions?.[j] != null)
+        && !confirm(`La etapa «${d.stages[j]}» tiene puestos anotados. ¿Quitarla igualmente?`)) return;
+      d.stages.pop();
+    }
+    for (const p of d.people) p.stage_positions = d.stages.map((_, k) => p.stage_positions?.[k] ?? '');
+    render();
+  },
   'del-person'(el) { S.draft.people.splice(Number(el.dataset.i), 1); render(); },
   year(el) { S.year = Number(el.dataset.y); render(); },
   'fed-source'(el) { fedFilter.source = el.dataset.v; render(); },
@@ -741,7 +774,8 @@ const actions = {
       const races = S.data.races.filter((x) => x.results.some((y) => y.runner_id === r.id));
       const data = { corredor: { nombre: r.name, categoria: r.category, alta: r.created_at },
         resultados: races.map((x) => { const y = x.results.find((z) => z.runner_id === r.id);
-          return { fecha: x.date, carrera: x.name, lugar: x.place, provincia: x.province, pais: x.country, modalidad: x.modality, categoria: y.category, puesto: y.position, tipo_podio: isPodium(y.position) ? podiumLabel(y.podium_type) : null }; }),
+          return { fecha: x.date, carrera: x.name, lugar: x.place, provincia: x.province, pais: x.country, modalidad: x.modality, categoria: y.category, puesto: y.position, tipo_podio: isPodium(y.position) ? podiumLabel(y.podium_type) : null,
+            ...(x.stages?.length ? { etapas: x.stages.map((_, i) => ({ etapa: stageName(x, i), puesto: y.stage_positions?.[i] ?? null })) } : {}) }; }),
         inscripciones: S.data.registrations.filter((g) => g.entries.some((e) => e.runner_id === r.id)).map((g) => ({ fecha: g.date, carrera: g.name })) };
       download(`datos-${normalize(r.name).replace(/\W+/g, '-')}.json`, JSON.stringify(data, null, 2), 'application/json');
     } else if (choice === 'delete') {
@@ -823,9 +857,18 @@ const forms = {
       const results = d.people.map((p) => {
         const position = p.position === '' || p.position == null ? null : Number(p.position);
         if (position !== null && (!Number.isInteger(position) || position < 1)) throw new Error(`Puesto no válido para ${p.runner_name}.`);
+        const stage_positions = d.stages.map((n, j) => {
+          const v = p.stage_positions?.[j];
+          if (v === '' || v == null) return null;
+          const k = Number(v);
+          if (!Number.isInteger(k) || k < 1) throw new Error(`Puesto no válido para ${p.runner_name} en ${n}.`);
+          return k;
+        });
         return { runner_id: p.runner_id, runner_name: p.runner_name, category: p.category || null, position,
-          podium_type: isPodium(position) ? p.podium_type || 'suelta' : 'suelta' };
+          podium_type: isPodium(position) ? p.podium_type || 'suelta' : 'suelta',
+          stage_positions: stage_positions.some((x) => x !== null) ? stage_positions : null };
       });
+      race.stages = d.stages.length ? d.stages.map((n, j) => cleanName(n) || `Etapa ${j + 1}`) : null;
       const r = await api.saveRace(race, results); await reload(); return r;
     }, 'Carrera guardada');
     if (id) go('#/carreras');
@@ -895,6 +938,15 @@ $app.addEventListener('input', (ev) => {
   const t = ev.target;
   if (!S.draft) return;
   if (t.dataset.f) S.draft[t.dataset.f] = t.value;
+  if (t.dataset.stage) {
+    S.draft.stages[Number(t.dataset.stage)] = t.value;
+    for (const el of $app.querySelectorAll(`[data-stage-label="${t.dataset.stage}"]`)) el.textContent = t.value || `Etapa ${Number(t.dataset.stage) + 1}`;
+  }
+  if (t.dataset.sp) {
+    const p = S.draft.people[Number(t.dataset.p)];
+    p.stage_positions = p.stage_positions || [];
+    p.stage_positions[Number(t.dataset.sp)] = t.value;
+  }
   if (t.dataset.pf) {
     const p = S.draft.people[Number(t.dataset.p)];
     p[t.dataset.pf] = t.value;
@@ -914,7 +966,8 @@ $app.addEventListener('change', async (ev) => {
     $app.querySelector('[data-f="end_date"]')?.focus();
   } else if (t.dataset.actChange === 'add-person' && t.value) {
     const r = runnerById(t.value);
-    S.draft.people.push({ runner_id: r.id, runner_name: r.name, category: r.category || '', position: '', podium_type: 'suelta' });
+    S.draft.people.push({ runner_id: r.id, runner_name: r.name, category: r.category || '', position: '',
+      podium_type: S.draft.stages?.length ? 'general' : 'suelta', stage_positions: (S.draft.stages || []).map(() => '') });
     render();
     $app.querySelector('.edit-list li:last-child')?.scrollIntoView({ block: 'center' });
   } else if (t.dataset.fed) {

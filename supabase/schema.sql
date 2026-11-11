@@ -72,6 +72,17 @@ alter table public.registrations add constraint registrations_end_date_check che
 alter table public.races drop constraint if exists races_end_date_check;
 alter table public.races add constraint races_end_date_check check (end_date is null or end_date > date);
 
+-- Carreras por etapas dentro de una misma carrera:
+--   races.stages            nombres de las etapas, p. ej. ["Prólogo","Etapa 1","Etapa 2"] (null = sin etapas)
+--   results.stage_positions puesto en cada etapa, en el mismo orden, p. ej. [3,null,1]
+--   results.position        sigue siendo el puesto de la general (o de la carrera, si no hay etapas)
+alter table public.races   add column if not exists stages jsonb;
+alter table public.results add column if not exists stage_positions jsonb;
+alter table public.races drop constraint if exists races_stages_check;
+alter table public.races add constraint races_stages_check check (stages is null or jsonb_typeof(stages) = 'array');
+alter table public.results drop constraint if exists results_stage_positions_check;
+alter table public.results add constraint results_stage_positions_check check (stage_positions is null or jsonb_typeof(stage_positions) = 'array');
+
 create table if not exists public.admins (                 -- quién es dirección
   user_id uuid primary key
 );
@@ -156,11 +167,12 @@ declare v_id uuid := nullif(p_race->>'id','')::uuid;
 begin
   perform public.require_admin();
   if v_id is null then
-    insert into races (name, date, end_date, place, province, country, modality, notes)
+    insert into races (name, date, end_date, place, province, country, modality, notes, stages)
     values (btrim(p_race->>'name'), (p_race->>'date')::date,
             nullif(nullif(p_race->>'end_date',''), p_race->>'date')::date, nullif(btrim(p_race->>'place'),''),
             nullif(btrim(p_race->>'province'),''), nullif(btrim(p_race->>'country'),''),
-            coalesce(nullif(p_race->>'modality',''),'Carretera'), nullif(btrim(p_race->>'notes'),''))
+            coalesce(nullif(p_race->>'modality',''),'Carretera'), nullif(btrim(p_race->>'notes'),''),
+            nullif(nullif(p_race->'stages', 'null'::jsonb), '[]'::jsonb))
     returning id into v_id;
   else
     update races set name = btrim(p_race->>'name'), date = (p_race->>'date')::date,
@@ -168,15 +180,17 @@ begin
       place = nullif(btrim(p_race->>'place'),''), province = nullif(btrim(p_race->>'province'),''),
       country = nullif(btrim(p_race->>'country'),''),
       modality = coalesce(nullif(p_race->>'modality',''),'Carretera'),
-      notes = nullif(btrim(p_race->>'notes'),'')
+      notes = nullif(btrim(p_race->>'notes'),''),
+      stages = nullif(nullif(p_race->'stages', 'null'::jsonb), '[]'::jsonb)
     where id = v_id;
     if not found then raise exception 'no_existe'; end if;
   end if;
 
   delete from results where race_id = v_id;
-  insert into results (race_id, runner_id, runner_name, category, position, podium_type)
+  insert into results (race_id, runner_id, runner_name, category, position, podium_type, stage_positions)
   select v_id, nullif(x->>'runner_id','')::uuid, btrim(x->>'runner_name'), nullif(x->>'category',''),
-         nullif(x->>'position','')::int, coalesce(nullif(x->>'podium_type',''),'suelta')
+         nullif(x->>'position','')::int, coalesce(nullif(x->>'podium_type',''),'suelta'),
+         nullif(nullif(x->'stage_positions', 'null'::jsonb), '[]'::jsonb)
     from jsonb_array_elements(coalesce(p_results,'[]')) x;
   return v_id;
 end $$;
