@@ -136,6 +136,20 @@ select pg_temp.expect_fail($q$select runner_create_registration('BBBBBBBBBB', '{
 do $$ begin for i in 1..9 loop perform runner_create_registration('BBBBBBBBBB', jsonb_build_object('name','Spam '||i,'date', current_date + 5), null); end loop; end $$;
 select pg_temp.expect_fail($q$select runner_create_registration('BBBBBBBBBB', jsonb_build_object('name','Spam 11','date', current_date + 5), null)$q$, 'límite de 10 al día');
 select pg_temp.expect_fail($q$update registrations set name = 'x'$q$, 'anon no edita inscripciones');
+-- editar / borrar las suyas
+reset role;
+insert into runners (id, name, code) values ('10000000-0000-0000-0000-000000000003', 'Carla Test', 'CCCCCCCCCC');
+set role anon;
+select pg_temp.check((select bool_or((g->>'mine_created')::boolean) from jsonb_array_elements(runner_view('BBBBBBBBBB')->'registrations') g), 'sabe cuáles creó');
+select runner_update_registration('BBBBBBBBBB', :'nueva', jsonb_build_object('name','Marxa Nova Editada','date', current_date + 11, 'modality','Gravel'));
+select pg_temp.check(runner_view('BBBBBBBBBB')::text like '%Marxa Nova Editada%', 'edita la suya');
+select pg_temp.expect_fail($q$select runner_update_registration('CCCCCCCCCC', '$q$ || :'nueva' || $q$', '{"name":"Hack","date":"2099-01-01"}')$q$, 'no edita la de otro');
+select pg_temp.expect_fail($q$select runner_delete_registration('CCCCCCCCCC', '$q$ || :'nueva' || $q$')$q$, 'no borra la de otro');
+select runner_join('CCCCCCCCCC', :'nueva', null);
+select pg_temp.expect_fail($q$select runner_delete_registration('BBBBBBBBBB', '$q$ || :'nueva' || $q$')$q$, 'no borra si hay otros apuntados');
+select runner_leave('CCCCCCCCCC', :'nueva');
+select runner_delete_registration('BBBBBBBBBB', :'nueva');
+select pg_temp.check(runner_view('BBBBBBBBBB')::text not like '%Marxa Nova Editada%', 'borra la suya si va solo');
 select pg_temp.check(jsonb_array_length(runner_view('BBBBBBBBBB')->'my_results') >= 1, 'mis carreras: ve sus resultados');
 select pg_temp.check((runner_view('BBBBBBBBBB')->'my_results')::text not like '%Pere Soler%', 'mis carreras: solo las suyas');
 select pg_temp.check(jsonb_array_length(runner_team('BBBBBBBBBB')->'races') >= 1, 'resumen equipo: ve las carreras del equipo');

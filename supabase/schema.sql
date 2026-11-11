@@ -304,6 +304,7 @@ begin
     'registrations', coalesce((
       select jsonb_agg(jsonb_build_object(
                'id', g.id, 'name', g.name, 'date', g.date, 'end_date', g.end_date, 'place', g.place,
+               'mine_created', g.created_by = me.id,
                'province', g.province, 'country', g.country, 'modality', g.modality, 'notes', g.notes,
                'entries', coalesce((
                   select jsonb_agg(jsonb_build_object('runner_id', r.id, 'name', r.name, 'category', e.category)
@@ -385,6 +386,51 @@ begin
   return v_id;
 end $$;
 
+-- Un corredor corrige los datos de una carrera que creó él (no resultados ni podios).
+create or replace function public.runner_update_registration(p_code text, p_id uuid, p_reg jsonb)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_runner uuid;
+  v_name text := btrim(regexp_replace(coalesce(p_reg->>'name',''), '\s+', ' ', 'g'));
+  v_date date := nullif(p_reg->>'date','')::date;
+  v_end  date := nullif(nullif(p_reg->>'end_date',''), p_reg->>'date')::date;
+begin
+  select id into v_runner from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  if not exists (select 1 from registrations where id = p_id and created_by = v_runner) then
+    raise exception 'no_es_tuya' using errcode = '42501';
+  end if;
+  if length(v_name) < 3 or length(v_name) > 120 then raise exception 'nombre_no_valido'; end if;
+  if v_date is null or v_date < current_date - 60 or v_date > current_date + 730 then raise exception 'fecha_no_valida'; end if;
+  if v_end is not null and (v_end < v_date or v_end > v_date + 30) then raise exception 'fecha_no_valida'; end if;
+  if exists (select 1 from registrations where id <> p_id and date = v_date and lower(name) = lower(v_name)) then
+    raise exception 'ya_existe';
+  end if;
+  update registrations set name = v_name, date = v_date, end_date = v_end,
+    place = nullif(left(btrim(coalesce(p_reg->>'place','')), 120), ''),
+    province = nullif(left(btrim(coalesce(p_reg->>'province','')), 60), ''),
+    country = coalesce(nullif(left(btrim(coalesce(p_reg->>'country','')), 60), ''), 'España'),
+    modality = coalesce(nullif(p_reg->>'modality',''), 'Carretera'),
+    notes = nullif(left(btrim(coalesce(p_reg->>'notes','')), 500), '')
+  where id = p_id;
+end $$;
+
+-- Un corredor borra una carrera que creó él, solo si no hay otros compañeros apuntados.
+create or replace function public.runner_delete_registration(p_code text, p_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_runner uuid;
+begin
+  select id into v_runner from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  if not exists (select 1 from registrations where id = p_id and created_by = v_runner) then
+    raise exception 'no_es_tuya' using errcode = '42501';
+  end if;
+  if exists (select 1 from registration_entries where registration_id = p_id and runner_id <> v_runner) then
+    raise exception 'otros_apuntados';
+  end if;
+  delete from registrations where id = p_id;
+end $$;
+
 create or replace function public.runner_leave(p_code text, p_registration uuid)
 returns void language plpgsql security definer set search_path = public as $$
 declare v_runner uuid;
@@ -406,6 +452,7 @@ language sql stable as $$ select 'ok'::text $$;
 revoke execute on all functions in schema public from public, anon;
 grant execute on function public.runner_view(text), public.runner_join(text, uuid, text),
                           public.runner_create_registration(text, jsonb, text),
+                          public.runner_update_registration(text, uuid, jsonb), public.runner_delete_registration(text, uuid),
                           public.runner_team(text),
                           public.runner_leave(text, uuid), public.ping() to anon, authenticated;
 grant execute on function public.is_admin(), public.require_admin(),

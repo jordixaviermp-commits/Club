@@ -9,6 +9,9 @@ const TABLES = ['runners', 'registrations', 'registration_entries', 'races', 're
 export function friendlyError(e) {
   const msg = String(e?.message || e || '');
   if (/enlace_no_valido/.test(msg)) return 'Este enlace ya no es válido. Pide uno nuevo a la dirección del club.';
+  if (/otros_apuntados/.test(msg)) return 'No puedes borrarla: hay más compañeros apuntados. Pídeselo a la dirección del club.';
+  if (/no_es_tuya/.test(msg)) return 'Solo puedes cambiar las carreras que has añadido tú.';
+  if (/ya_existe/.test(msg)) return 'Ya hay otra carrera con ese nombre ese mismo día.';
   if (/nombre_no_valido/.test(msg)) return 'Pon un nombre de carrera de al menos 3 letras.';
   if (/fecha_no_valida/.test(msg)) return 'Revisa las fechas: tiene que ser una carrera de hoy en adelante (como mucho dentro de dos años).';
   if (/demasiadas_carreras/.test(msg)) return 'Hoy ya has añadido muchas carreras. Si necesitas más, pídeselo a la dirección.';
@@ -83,6 +86,8 @@ export function supabaseApi(url, key) {
 
     async runnerView(code) { return ok(await sb.rpc('runner_view', { p_code: code })); },
     async runnerTeam(code) { return ok(await sb.rpc('runner_team', { p_code: code })); },
+    async runnerUpdate(code, id, reg) { ok(await sb.rpc('runner_update_registration', { p_code: code, p_id: id, p_reg: reg })); },
+    async runnerDelete(code, id) { ok(await sb.rpc('runner_delete_registration', { p_code: code, p_id: id })); },
     async runnerCreate(code, reg, category) { return ok(await sb.rpc('runner_create_registration', { p_code: code, p_reg: reg, p_category: category || null })); },
     async runnerJoin(code, regId, category) { ok(await sb.rpc('runner_join', { p_code: code, p_registration: regId, p_category: category || null })); },
     async runnerLeave(code, regId) { ok(await sb.rpc('runner_leave', { p_code: code, p_registration: regId })); },
@@ -261,12 +266,29 @@ export function demoApi(storage = globalThis.localStorage) {
           };
         })(),
         registrations: [...d.registrations].sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name)).map((g) => ({
-          ...g, entries: d.registration_entries.filter((e) => e.registration_id === g.id).map((e) => {
+          ...g, mine_created: g.created_by === me.id, entries: d.registration_entries.filter((e) => e.registration_id === g.id).map((e) => {
             const rn = d.runners.find((r) => r.id === e.runner_id);
             return { runner_id: e.runner_id, name: rn?.name, category: e.category };
           }).sort((a, b) => a.name.localeCompare(b.name)),
         })),
       });
+    },
+    async runnerUpdate(code, id, reg) {
+      const me = byCode(code); const d = load();
+      const g = d.registrations.find((x) => x.id === id && x.created_by === me.id);
+      if (!g) throw new Error('no_es_tuya');
+      const name = String(reg.name || '').replace(/\s+/g, ' ').trim();
+      if (name.length < 3) throw new Error('nombre_no_valido');
+      if (!reg.date) throw new Error('fecha_no_valida');
+      if (d.registrations.some((x) => x.id !== id && x.date === reg.date && x.name.toLowerCase() === name.toLowerCase())) throw new Error('ya_existe');
+      Object.assign(g, fields({ ...reg, name })); save();
+    },
+    async runnerDelete(code, id) {
+      const me = byCode(code); const d = load();
+      if (!d.registrations.some((x) => x.id === id && x.created_by === me.id)) throw new Error('no_es_tuya');
+      if (d.registration_entries.some((e) => e.registration_id === id && e.runner_id !== me.id)) throw new Error('otros_apuntados');
+      d.registrations = d.registrations.filter((x) => x.id !== id);
+      d.registration_entries = d.registration_entries.filter((e) => e.registration_id !== id); save();
     },
     async runnerTeam(code) {
       byCode(code); const d = load();

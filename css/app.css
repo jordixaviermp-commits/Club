@@ -377,3 +377,22 @@ h2.section.past-head { color: var(--muted); margin-top: 1.4rem; }
 .bbar-mark.min.hit b { color: #1e9e4a; }
 .bbar-mark b { white-space: nowrap; }
 .pen + .bbar { margin-top: 1.6rem; }
+
+/* Mi temporada: tres bloques bien diferenciados */
+.season-chips { display: flex; flex-wrap: wrap; gap: .4rem; margin: 0 0 10px; }
+.sc { font-size: .85rem; font-weight: 700; padding: .3rem .7rem; border-radius: 999px; border: 2px solid; }
+.sc.done { color: #1e8a43; border-color: #1e9e4a; background: color-mix(in srgb, #1e9e4a 12%, var(--card)); }
+.sc.pend { color: var(--muted); border-color: var(--muted); border-style: dashed; }
+.sc.next { color: var(--tag-text, var(--accent)); border-color: var(--brand-cyan); background: color-mix(in srgb, var(--brand-cyan) 14%, var(--card)); }
+.season-block { border-top: 6px solid; }
+.season-block h2 { font-size: 1.05rem; margin-bottom: .2rem; }
+.season-block h2 small { color: var(--muted); font-weight: 600; }
+.next-block { border-top-color: var(--brand-cyan); }
+.pend-block { border-top-color: var(--muted); border-top-style: dashed; background: color-mix(in srgb, var(--card) 70%, var(--bg)); }
+.done-block { border-top-color: #1e9e4a; }
+.badge-next, .badge-pend { flex: none; font-size: .78rem; font-weight: 700; padding: .15rem .5rem; border-radius: 999px; }
+.badge-next { background: color-mix(in srgb, var(--brand-cyan) 18%, var(--card)); color: var(--tag-text, var(--accent)); }
+.badge-pend { border: 1px dashed var(--muted); color: var(--muted); }
+.empty.small { padding: .6rem 0; font-size: .9rem; }
+.mine-created { font-size: .82rem; margin: .45rem 0 0; color: var(--muted); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .sc.done { color: #6fd08f; } }

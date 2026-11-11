@@ -372,14 +372,18 @@ const emptyRunnerDraft = (pre = {}) => ({ name: '', date: '', multi: false, end_
 function viewRunnerNew() {
   if (!S.rdraft) S.rdraft = emptyRunnerDraft({ name: S.q.runner || '' });
   const d = S.rdraft;
-  if (!S.fed) loadFed().then(() => updateSearch('rname'));
-  return frame('Añadir carrera', `
+  const editing = !!d.id;
+  const reg = editing ? S.runnerData.registrations.find((x) => x.id === d.id) : null;
+  const others = reg ? reg.entries.filter((e) => e.runner_id !== S.runnerData.me.id).length : 0;
+  if (!S.fed && !editing) loadFed().then(() => updateSearch('rname'));
+  return frame(editing ? 'Editar mi carrera' : 'Añadir carrera', `
     <form class="card stack" data-form="r-create">
-      <p class="hint">Escribe el nombre: si ya existe en el club o en el calendario de las federaciones te saldrá aquí debajo, para no duplicarla.</p>
+      <p class="hint">${editing ? 'Puedes corregir los datos de esta carrera porque la añadiste tú. Los resultados y podios los pone la dirección.'
+        : 'Escribe el nombre: si ya existe en el club o en el calendario de las federaciones te saldrá aquí debajo, para no duplicarla.'}</p>
       <label>Nombre de la carrera<input data-rf="name" value="${esc(d.name)}" required minlength="3" maxlength="120" autocomplete="off"></label>
-      <div id="dup-list">${dupSuggestions(d.name, S.runnerData.registrations, true)}</div>
+      <div id="dup-list">${editing ? '' : dupSuggestions(d.name, S.runnerData.registrations, true)}</div>
       <div class="grid2">
-        <label>${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-rf="date" value="${esc(d.date)}" min="${todayISO()}" required></label>
+        <label>${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-rf="date" value="${esc(d.date)}" ${editing ? '' : `min="${todayISO()}"`} required></label>
         <label>Modalidad<select data-rf="modality">${MODALITIES.map((m) => opt(m, m, d.modality)).join('')}</select></label>
       </div>
       <label class="check"><input type="checkbox" data-rf-multi ${d.multi ? 'checked' : ''}> Carrera de varios días (por etapas)</label>
@@ -387,11 +391,15 @@ function viewRunnerNew() {
       <label>Lugar<input data-rf="place" value="${esc(d.place)}" maxlength="120"></label>
       <div class="grid2">
         <label>Provincia<input data-rf="province" list="dl-prov" value="${esc(d.province)}" autocomplete="off"></label>
-        <label>Tu categoría${catSelect('data-rf="category"', d.category, 'Categoría')}</label>
+        ${editing ? '<span></span>' : `<label>Tu categoría${catSelect('data-rf="category"', d.category, 'Categoría')}</label>`}
       </div>
-      <button class="btn primary">Añadir y apuntarme</button>
+      ${editing ? `<label>Notas<textarea data-rf="notes" rows="2" maxlength="500">${esc(d.notes || '')}</textarea></label>` : ''}
+      <button class="btn primary">${editing ? 'Guardar cambios' : 'Añadir y apuntarme'}</button>
       <p class="hint">La dirección del club podrá corregirla o borrarla si hace falta.</p>
-    </form>`, { back: runnerHref('') });
+    </form>
+    ${editing ? (others
+      ? `<p class="card hint">🗑️ No puedes borrarla: hay ${others} compañero${others === 1 ? '' : 's'} más apuntado${others === 1 ? '' : 's'}. Si hay que quitarla, pídeselo a la dirección del club.</p>`
+      : '<button class="btn danger ghost block" data-act="r-delete-mine">🗑️ Borrar esta carrera</button>') : ''}`, { back: runnerHref('') });
 }
 
 /** «Mis carreras»: sus carreras con resultados por temporada y las apuntadas pendientes de resultado. */
@@ -401,7 +409,7 @@ function myRacesCard(d) {
   const today = d.today || todayISO();
   const mineReg = d.registrations.filter((g) => g.entries.some((e) => e.runner_id === d.me.id));
   const pending = mineReg.filter((g) => g.date < today);
-  const upcoming = mineReg.filter((g) => g.date >= today);
+  const upcoming = mineReg.filter((g) => g.date >= today).sort((a, b) => a.date.localeCompare(b.date));
   const years = [...new Set([new Date().getFullYear(), ...results.map((r) => yearOf(r.date))])].sort((a, b) => b - a);
   if (!years.includes(S.myYear)) S.myYear = years[0];
   const list = results.filter((r) => yearOf(r.date) === S.myYear);
@@ -414,16 +422,36 @@ function myRacesCard(d) {
       ${stagePods.length ? `<small>${stagePods.map((x) => `${medal(x.p)} ${esc(x.n)}`).join(' · ')}</small>` : ''}</div>
       <span class="pos">${pos}</span></li>`;
   };
-  return `<details class="card my-races"${S.myOpen ? ' open' : ''} data-toggle-key="myOpen">
-    <summary><b>📋 Mis carreras ${S.myYear}</b>: ${list.length}${days !== list.length ? ` (${days} días para el bono)` : ''}</summary>
+  const myCat = (g) => g.entries.find((e) => e.runner_id === d.me.id)?.category;
+  const dleft = (g) => { const n = Math.round((new Date(g.date + 'T12:00:00Z') - new Date(today + 'T12:00:00Z')) / 864e5);
+    return n === 0 ? 'hoy' : n === 1 ? 'mañana' : `en ${n} días`; };
+  return `
+  <div class="season-chips">
+    <span class="sc done">✅ ${list.length} hecha${list.length === 1 ? '' : 's'}</span>
+    <span class="sc pend">🏁 ${pending.length} pendiente${pending.length === 1 ? '' : 's'}</span>
+    <span class="sc next">📅 ${upcoming.length} próxima${upcoming.length === 1 ? '' : 's'}</span>
+  </div>
+
+  <section class="card season-block next-block">
+    <h2>📅 Mis próximas inscripciones <small>(${upcoming.length})</small></h2>
+    <p class="hint">Carreras a las que estás apuntado y que aún no se han corrido.</p>
+    ${upcoming.length ? `<ul class="mini-list">${upcoming.map((g) => miniRow(g, `<span class="badge-next">${dleft(g)}${myCat(g) ? ` · ${esc(myCat(g))}` : ''}</span>`)).join('')}</ul>`
+      : '<p class="empty small">No estás apuntado a ninguna. Búscalas en la pestaña Carreras.</p>'}
+  </section>
+
+  ${pending.length ? `<section class="card season-block pend-block">
+    <h2>🏁 Ya corridas, pendientes de resultado <small>(${pending.length})</small></h2>
+    <p class="hint">Estabas apuntado y ya se han disputado. Cuentan para el bono cuando la dirección pase el resultado.</p>
+    <ul class="mini-list">${pending.map((g) => miniRow(g, '<span class="badge-pend">pendiente</span>')).join('')}</ul>
+  </section>` : ''}
+
+  <section class="card season-block done-block">
+    <h2>✅ Carreras hechas ${S.myYear} <small>(${list.length}${days !== list.length ? ` · ${days} días para el bono` : ''})</small></h2>
     ${years.length > 1 ? `<div class="years">${years.map((y) => `<button class="chip${y === S.myYear ? ' on' : ''}" data-act="my-year" data-y="${y}">${y}</button>`).join('')}</div>` : ''}
     ${list.length ? `<ul class="mini-list">${list.map(row).join('')}</ul>`
-      : `<p class="hint">Todavía no hay carreras tuyas con resultados en ${S.myYear}.</p>`}
-    ${pending.length ? `<p class="hint"><b>Apuntado, pendientes de que la dirección pase el resultado (${pending.length}):</b></p>
-      <ul class="mini-list">${pending.map((g) => miniRow(g, '<span class="done">pendiente</span>')).join('')}</ul>` : ''}
-    <p class="hint">${upcoming.length ? `Además estás apuntado a ${upcoming.length} carrera${upcoming.length === 1 ? '' : 's'} próxima${upcoming.length === 1 ? '' : 's'}.` : 'No estás apuntado a ninguna carrera próxima.'}
-      Si falta alguna carrera o un puesto, díselo a la dirección del club.</p>
-  </details>`;
+      : `<p class="empty small">Todavía no hay carreras tuyas con resultado en ${S.myYear}.</p>`}
+    <p class="hint">Si falta alguna carrera o un puesto, díselo a la dirección del club.</p>
+  </section>`;
 }
 
 function runnerBonusCard(d) {
@@ -446,6 +474,14 @@ function runnerBonusCard(d) {
 
 function runnerScreen(sub) {
   if (sub === 'nueva') return viewRunnerNew();
+  if (sub === 'editar') {
+    const id = parseRoute().id;
+    const g = S.runnerData.registrations.find((x) => x.id === id && x.mine_created);
+    if (!g) return frame('Editar carrera', '<p class="empty">Esta carrera no existe o no la añadiste tú.</p>', { back: runnerHref('') });
+    if (S.rdraft?.id !== id) S.rdraft = emptyRunnerDraft({ id, name: g.name, date: g.date, multi: !!g.end_date, end_date: g.end_date || '',
+      place: g.place || '', province: g.province || '', country: g.country || DEFAULT_COUNTRY, modality: g.modality, notes: g.notes || '' });
+    return viewRunnerNew();
+  }
   if (sub === 'mi') return viewRunnerMine();
   if (sub === 'equipo') return viewTeam();
   if (sub === 'federaciones') return viewFed();
@@ -483,6 +519,7 @@ function viewRunnerHome() {
         <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>
         ${modTag(g.modality)}</div>
       ${open ? '' : '<p class="state-tag">🏁 Ya disputada · pendiente de resultados</p>'}
+      ${g.mine_created && !S.preview ? `<p class="mine-created">Añadida por ti · <a href="#/editar/${g.id}">✏️ Editar o borrar</a></p>` : ''}
       ${g.notes ? `<p class="notes">${esc(g.notes)}</p>` : ''}
       <p class="count">👥 ${g.entries.length} del club</p>
       ${g.entries.length ? `<ul class="people">${g.entries.map((e) =>
@@ -515,7 +552,6 @@ function viewRunnerHome() {
 /** «Mi temporada»: bono, mis carreras e instalación. */
 function viewRunnerMine() {
   const d = S.runnerData, me = d.me;
-  S.myOpen = S.myOpen ?? true;
   return frame(runnerTitle(), `
     ${previewBanner()}
     <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
@@ -1104,6 +1140,12 @@ const actions = {
   async logout() { await api.signOut(); S.session = null; S.data = null; go('#/'); },
 
   // corredor
+  async 'r-delete-mine'() {
+    const d = S.rdraft;
+    if (!await confirmAction('Borrar carrera', `Se borrará «${esc(d.name)}» y tu inscripción en ella.`, 'Borrar')) return;
+    const ok = await run(async () => { await api.runnerDelete(S.code, d.id); await loadRunner(); return true; }, 'Carrera borrada');
+    if (ok) { S.rdraft = null; go('#/'); }
+  },
   async 'r-new'() { S.rdraft = null; if (!S.fed) loadFed(); go('#/nueva'); },
   async 'r-new-fed'(el) {
     const r = S.fed.races[Number(el.dataset.i)];
@@ -1327,6 +1369,15 @@ const forms = {
     const d = S.rdraft;
     const name = cleanName(d.name);
     if (d.multi && !d.end_date) return toast('Falta el último día.', true);
+    if (d.id) { // editar una carrera propia
+      const ok = await run(async () => {
+        await api.runnerUpdate(S.code, d.id, { name, date: d.date, end_date: d.multi ? d.end_date : null, place: cleanName(d.place),
+          province: cleanName(d.province), country: d.country, modality: d.modality, notes: d.notes || '' });
+        await loadRunner(); return true;
+      }, 'Carrera actualizada');
+      if (ok) { S.rdraft = null; go('#/'); }
+      return;
+    }
     // última comprobación: misma fecha y nombre parecido → ofrecer apuntarse a esa
     const same = searchRaces(name, S.runnerData.registrations.filter((g) => g.date === d.date))[0];
     if (same) {
@@ -1426,7 +1477,7 @@ const fileHandlers = {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-join-go']);
+const RUNNER_ACTIONS = new Set(['r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-join-go', 'r-delete-mine']);
 $app.addEventListener('click', (ev) => {
   const el = ev.target.closest('[data-act]');
   if (!el || !actions[el.dataset.act]) return;
