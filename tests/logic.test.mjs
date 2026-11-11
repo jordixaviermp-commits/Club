@@ -255,3 +255,14 @@ test('bono: las carreras extra por podio de circuito suben el tramo pero no cuen
   assert.equal(rows.find((r) => r.runner.id === 'a').amount, 100);
   assert.equal(rows.find((r) => r.runner.id === 'b').amount, 50); // pendiente o de otro año: no suma
 });
+
+test('bono: una inscripción ya disputada con el puesto puesto por el corredor cuenta como hecha', () => {
+  const cfg = bonusConfigFor({}, 2026);
+  const runners = [{ id: 'a', name: 'Ana', contract: 'renovacion' }];
+  const regs = [
+    { date: '2026-03-01', end_date: '2026-03-03', entries: [{ runner_id: 'a', self_position: 5 }] },
+    { date: '2026-04-01', entries: [{ runner_id: 'a', self_position: null }] },
+  ];
+  const [row] = yearBonuses(2026, [], regs, runners, cfg);
+  assert.equal(row.count, 3); assert.equal(row.planned, 1);
+});

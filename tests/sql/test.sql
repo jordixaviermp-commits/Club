@@ -230,6 +230,17 @@ select pg_temp.check((runner_view('DDDDDDDDDD')->'bonus'->>'extra')::int = 4, 'c
 select pg_temp.check(jsonb_array_length(runner_view('DDDDDDDDDD')->'circuits') = 1, 'circuito: el corredor ve el suyo');
 select pg_temp.check(jsonb_array_length(runner_view('CCCCCCCCCC')->'circuits') = 0, 'circuito: no ve los de otros');
 select pg_temp.expect_fail($q$select runner_cancel_circuit('DDDDDDDDDD', '$q$ || :'cp' || $q$')$q$, 'circuito: confirmado ya no se retira');
+-- una inscripción ya disputada cuenta en cuanto el corredor pone su puesto (sin pasarla a resultados)
+reset role;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+insert into registrations (id, name, date, end_date) values ('20000000-0000-0000-0000-000000000060', 'Etapas Pasadas', current_date - 5, current_date - 3);
+insert into registration_entries (registration_id, runner_id) values ('20000000-0000-0000-0000-000000000060', '10000000-0000-0000-0000-000000000004');
+set role anon;
+select pg_temp.check((runner_view('DDDDDDDDDD')->'bonus'->>'planned')::int >= 3, 'cuenta: sin resultado puesto solo es prevista');
+select (runner_view('DDDDDDDDDD')->'bonus'->>'done')::int as antes, (runner_view('DDDDDDDDDD')->'bonus'->>'planned')::int as plan_antes \gset
+select runner_report_result('DDDDDDDDDD', 'reg', '20000000-0000-0000-0000-000000000060', 6, null, null);
+select pg_temp.check((runner_view('DDDDDDDDDD')->'bonus'->>'done')::int = :antes + 3, 'cuenta: al poner su puesto suma los 3 días a lo hecho');
+select pg_temp.check((runner_view('DDDDDDDDDD')->'bonus'->>'planned')::int = :plan_antes - 3, 'cuenta: y deja de ser prevista');
 -- documentos (contratos)
 reset role;
 set role authenticated;

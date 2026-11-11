@@ -338,12 +338,17 @@ begin
     -- Cada día de competición cuenta como una carrera (una de 3 días = 3).
     'bonus', jsonb_build_object(
       'year', v_year,
+      -- Cuentan las carreras con resultados y también las inscripciones ya disputadas en las que el propio
+      -- corredor ha puesto su puesto (aunque la dirección aún no las haya pasado a resultados).
       'done', (select coalesce(sum(coalesce(r.end_date - r.date, 0) + 1), 0)
                  from results x join races r on r.id = x.race_id
-                where x.runner_id = me.id and extract(year from r.date) = v_year),
+                where x.runner_id = me.id and extract(year from r.date) = v_year)
+            + (select coalesce(sum(coalesce(g.end_date - g.date, 0) + 1), 0)
+                 from registration_entries e join registrations g on g.id = e.registration_id
+                where e.runner_id = me.id and e.self_position is not null and extract(year from g.date) = v_year),
       'planned', (select coalesce(sum(coalesce(g.end_date - g.date, 0) + 1), 0)
                     from registration_entries e join registrations g on g.id = e.registration_id
-                   where e.runner_id = me.id and extract(year from g.date) = v_year),
+                   where e.runner_id = me.id and e.self_position is null and extract(year from g.date) = v_year),
       -- carreras extra por podios confirmados en la general final de un circuito (solo para el bono)
       'extra', (select count(*) from circuit_podiums c where c.runner_id = me.id and c.year = v_year and c.status = 'confirmado')
                * coalesce((v_cfg ->> 'circuitExtra')::int, 4),
