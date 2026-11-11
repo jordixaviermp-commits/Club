@@ -68,16 +68,19 @@ export function parseBulkRunners(text, existingNames = []) {
   for (const raw of String(text ?? '').split(/\r?\n/)) {
     const line = raw.trim();
     if (!line) continue;
-    const i = line.search(/[,;\t]/);
-    const name = cleanName(i < 0 ? line : line.slice(0, i));
-    const catText = i < 0 ? '' : line.slice(i + 1).trim();
+    const [first, ...rest] = line.split(/[,;\t]/);
+    const name = cleanName(first);
     if (!name) continue;
     const key = normalize(name);
     if (seen.has(key)) { duplicates.push(name); continue; }
     seen.add(key);
-    const category = catText ? matchCategory(catText) : null;
-    if (catText && !category) unknownCategory.push({ name, text: catText });
-    toAdd.push({ name, category });
+    // campos opcionales, en cualquier orden: categoría («M40») y tipo de contrato («nuevo», «renovación sin licencia»)
+    let category = null, contract = null;
+    for (const f of rest.map((x) => x.trim()).filter(Boolean)) {
+      const c = matchCategory(f), k = c ? null : matchContract(f);
+      if (c) category = c; else if (k) contract = k; else unknownCategory.push({ name, text: f });
+    }
+    toAdd.push({ name, category, contract });
   }
   return { toAdd, duplicates, unknownCategory };
 }
@@ -95,9 +98,12 @@ export function planRosterRenewal(text, runners) {
   for (const item of list) {
     const r = current.get(normalize(item.name));
     if (r) {
-      keep.push({ runner: r, category: item.category && item.category !== r.category ? item.category : null });
+      // Al empezar temporada, quien era «nuevo» pasa a «renovación» salvo que la lista diga otra cosa.
+      const contract = item.contract || (r.contract === 'nuevo' ? 'renovacion' : null);
+      keep.push({ runner: r, category: item.category && item.category !== r.category ? item.category : null,
+        contract: contract && contract !== r.contract ? contract : null });
       current.delete(normalize(item.name));
-    } else add.push(item);
+    } else add.push({ ...item, contract: item.contract || 'nuevo' });
   }
   return { keep, add, remove: [...current.values()], duplicates, unknownCategory };
 }
@@ -431,9 +437,25 @@ export const numDays = (start, end) => daysOf(start, end).length;
 export const DEFAULT_BONUS = {
   tiers: [{ races: 12, amount: 150 }, { races: 17, amount: 200 }, { races: 22, amount: 250 }],
   minimum: 12,
-  penalty: { renovado: 100, nuevo: 175 },
+  penalty: { renovado: 100, nuevo: 175, sin_licencia: 100 },
   nuevos: [],
 };
+
+/** Tipos de contrato del corredor (temporada actual). */
+export const CONTRACTS = [
+  { id: 'nuevo', label: 'Nuevo', penalty: 'nuevo' },
+  { id: 'renovacion', label: 'Renovación', penalty: 'renovado' },
+  { id: 'renovacion_sin_licencia', label: 'Renovación sin licencia', penalty: 'sin_licencia' },
+];
+export const contractLabel = (id) => CONTRACTS.find((c) => c.id === id)?.label || 'Sin indicar';
+/** Acepta «nuevo», «Renovación sin licencia», «renov s/l»… → id del contrato, o null. */
+export function matchContract(s) {
+  const n = normalize(s).replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!n) return null;
+  if (n.startsWith('nuev')) return 'nuevo';
+  if (n.startsWith('renov')) return /sin|s l|sl\b/.test(n.slice(5)) ? 'renovacion_sin_licencia' : 'renovacion';
+  return null;
+}
 
 export function bonusConfigFor(all, year) {
   const cfg = all?.[year];
@@ -450,7 +472,11 @@ export const bonusRacesOf = (race) => numDays(race.date, race.end_date);
  * Situación de un corredor: { count, minimum, reachesMinimum, penalty, amount, tier, next, missingToNext, missingToMinimum }.
  * `amount` es lo que cobra con lo hecho; `penalty`, lo que pagaría si acabara la temporada así.
  */
-export function bonusStatus(count, cfg, isNew) {
+export function bonusStatus(count, cfg, contract) {
+  // `contract`: id de CONTRACTS (o true/false de versiones antiguas: true = nuevo)
+  const c = contract === true ? 'nuevo' : contract === false || contract == null ? 'renovacion' : contract;
+  const penaltyKey = CONTRACTS.find((x) => x.id === c)?.penalty || 'renovado';
+  const pen = { ...DEFAULT_BONUS.penalty, ...(cfg.penalty || {}) };
   const tiers = [...(cfg.tiers || [])].filter((t) => t.races > 0).sort((a, b) => a.races - b.races);
   const reached = tiers.filter((t) => count >= t.races);
   const tier = reached.at(-1) || null;
@@ -459,12 +485,12 @@ export function bonusStatus(count, cfg, isNew) {
   const reachesMinimum = count >= minimum;
   return {
     count, minimum, reachesMinimum,
-    penalty: reachesMinimum ? 0 : Number(cfg.penalty?.[isNew ? 'nuevo' : 'renovado']) || 0,
+    penalty: reachesMinimum ? 0 : Number(pen[penaltyKey] ?? pen.renovado) || 0,
     amount: tier ? tier.amount : 0,
     tier, next,
     missingToNext: next ? next.races - count : 0,
     missingToMinimum: reachesMinimum ? 0 : minimum - count,
-    isNew: !!isNew,
+    isNew: c === 'nuevo', contract: c,
   };
 }
 
@@ -477,10 +503,11 @@ export function yearBonuses(year, races, registrations, runners, cfg) {
   for (const g of registrations) if (yearOf(g.date) === year) for (const e of g.entries || []) {
     planned.set(e.runner_id, (planned.get(e.runner_id) || 0) + bonusRacesOf(g));
   }
-  const nuevos = new Set(cfg.nuevos || []);
+  const nuevos = new Set(cfg.nuevos || []); // lista antigua: solo si el corredor no tiene contrato indicado
   return runners.map((rn) => {
     const count = done.get(rn.id) || 0;
     const plan = planned.get(rn.id) || 0;
-    return { runner: rn, planned: plan, ...bonusStatus(count, cfg, nuevos.has(rn.id)), projected: bonusStatus(count + plan, cfg, nuevos.has(rn.id)) };
+    const c = rn.contract || (nuevos.has(rn.id) ? 'nuevo' : null);
+    return { runner: rn, planned: plan, ...bonusStatus(count, cfg, c), projected: bonusStatus(count + plan, cfg, c) };
   }).sort((a, b) => b.count - a.count || a.runner.name.localeCompare(b.runner.name, 'es'));
 }

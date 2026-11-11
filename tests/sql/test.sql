@@ -111,4 +111,13 @@ select pg_temp.check((runner_view('BBBBBBBBBB')->'bonus'->>'nuevo')::boolean, 'b
 select pg_temp.check(runner_view('BBBBBBBBBB')->'bonus'->'config' ? 'nuevos' = false, 'bono: no ve la lista de nuevos');
 select pg_temp.expect_fail('select * from settings', 'anon no lee ajustes');
 reset role;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+update runners set contract = 'renovacion_sin_licencia' where code = 'BBBBBBBBBB';
+select pg_temp.expect_fail($q$update runners set contract = 'otro' where code = 'BBBBBBBBBB'$q$, 'tipo de contrato no válido rechazado');
+reset role;
+set role anon;
+select pg_temp.check(runner_view('BBBBBBBBBB')->'bonus'->>'contract' = 'renovacion_sin_licencia', 'bono: el corredor ve su tipo de contrato');
+select pg_temp.check(not (runner_view('BBBBBBBBBB')->'bonus'->>'nuevo')::boolean, 'bono: el contrato manda sobre la lista antigua');
+reset role;
 \echo TODAS LAS PRUEBAS SQL OK
