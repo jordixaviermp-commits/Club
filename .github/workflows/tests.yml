@@ -1,0 +1,17 @@
+name: Pruebas
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node --test tests/*.test.mjs
+      - name: Base de datos (PostgreSQL 16)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-16 >/dev/null
+          sudo chmod -R o+rx "$GITHUB_WORKSPACE"
+          sudo bash tests/sql/run.sh
