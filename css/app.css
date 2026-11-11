@@ -227,3 +227,27 @@ label.check input { accent-color: var(--accent); }
 .stage-pos label { font-size: .72rem; gap: .1rem; overflow: hidden; }
 .stage-pos label { white-space: nowrap; text-overflow: ellipsis; }
 .stage-pos input { padding: .4rem .5rem; min-height: 40px; }
+
+/* Bonos por carreras */
+.bad { color: var(--danger); font-weight: 600; }
+.bbadge { display: block; margin-top: .15rem; font-size: .75rem; font-weight: 600; color: var(--muted); }
+.bbadge.ok { color: #1e7a3c; }
+.bbadge.bad { color: var(--danger); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .bbadge.ok { color: #6fd08f; } }
+.bbar { position: relative; height: 12px; border-radius: 6px; background: var(--line); margin: 1.4rem 0 .4rem; }
+.bbar span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; }
+.bbar-plan { background: var(--brand-cyan); opacity: .3; }
+.bbar-done { background: var(--danger); }
+.bbar-done.ok { background: var(--brand-cyan); }
+.bbar-mark { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--text); opacity: .55; }
+.bbar-mark.hit { opacity: 1; }
+.bbar-mark b { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); font-size: .7rem; font-style: normal; color: var(--muted); padding-bottom: 1px; }
+.bonus-text { font-size: .9rem; margin: .2rem 0 0; }
+.bonus-list { list-style: none; padding: 0; margin: 0 0 12px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
+.bonus-list li { padding: .7rem 1rem .8rem; border-bottom: 1px solid var(--line); }
+.bonus-list li:last-child { border-bottom: 0; }
+.bonus-head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+.bonus-head .name { font-weight: 600; }
+.bonus-head select { width: auto; min-height: 36px; padding: .2rem .5rem; font-size: .85rem; }
+.tier-rows { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+.bonus-card h2 { margin-bottom: 0; }

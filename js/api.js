@@ -1,9 +1,9 @@
 // Acceso a datos. Dos versiones con la misma interfaz:
 //  - Supabase (real), cuando config.js tiene URL y clave.
 //  - Demostración, guardada solo en este navegador, para probar la app sin montar nada.
-import { newCode, todayISO } from './logic.js';
+import { newCode, todayISO, numDays, yearOf } from './logic.js';
 
-const TABLES = ['runners', 'registrations', 'registration_entries', 'races', 'results'];
+const TABLES = ['runners', 'registrations', 'registration_entries', 'races', 'results', 'settings'];
 
 /** Mensajes de error comprensibles. */
 export function friendlyError(e) {
@@ -25,6 +25,7 @@ function nest(data) {
     runners: data.runners,
     registrations: data.registrations.map((g) => ({ ...g, entries: entriesBy.get(g.id) || [] })),
     races: data.races.map((r) => ({ ...r, results: resultsBy.get(r.id) || [] })),
+    settings: Object.fromEntries((data.settings || []).map((x) => [x.key, x.value])),
   };
 }
 
@@ -42,7 +43,9 @@ export function supabaseApi(url, key) {
       if (rows.length < 1000) return out;
     }
   };
-  const rawAll = async () => Object.fromEntries(await Promise.all(TABLES.map(async (t) => [t, await all(t)])));
+  const rawAll = async () => Object.fromEntries(await Promise.all(TABLES.map(async (t) => {
+    try { return [t, await all(t)]; } catch (e) { if (t === 'settings') return [t, []]; throw e; } // antes de actualizar el SQL
+  })));
 
   return {
     mode: 'supabase',
@@ -60,6 +63,7 @@ export function supabaseApi(url, key) {
       ok(await sb.from('runners').insert(list.map((r) => ({ name: r.name, category: r.category || null, code: newCode() }))));
     },
     async updateRunner(id, patch) { ok(await sb.from('runners').update(patch).eq('id', id)); },
+    async saveSetting(key, value) { ok(await sb.from('settings').upsert({ key, value })); },
     async regenerateCode(id) { ok(await sb.from('runners').update({ code: newCode() }).eq('id', id)); },
     async deleteRunner(id, anonymize) { ok(await sb.rpc('delete_runner', { p_id: id, p_anonymize: anonymize })); },
 
@@ -159,6 +163,9 @@ export function demoApi(storage = globalThis.localStorage) {
       save();
     },
     async updateRunner(id, patch) { requireAdmin(); Object.assign(load().runners.find((r) => r.id === id), patch); save(); },
+    async saveSetting(key, value) {
+      requireAdmin(); const d = load(); d.settings = (d.settings || []).filter((x) => x.key !== key).concat([{ key, value: clone(value) }]); save();
+    },
     async regenerateCode(id) { requireAdmin(); load().runners.find((r) => r.id === id).code = newCode(); save(); },
     async deleteRunner(id, anonymize) {
       requireAdmin(); const d = load();
@@ -217,7 +224,9 @@ export function demoApi(storage = globalThis.localStorage) {
     async exportAll() { requireAdmin(); return { app: 'cc-monzon', version: 1, exported_at: new Date().toISOString(), ...clone(load()) }; },
     async importAll(data) {
       requireAdmin();
+      const keep = load().settings || [];
       mem = Object.fromEntries(TABLES.map((t) => [t, clone(data[t] || [])]));
+      if (!data.settings) mem.settings = keep;
       save();
     },
 
@@ -225,6 +234,19 @@ export function demoApi(storage = globalThis.localStorage) {
       const me = byCode(code); const d = load();
       return clone({
         me: { id: me.id, name: me.name, category: me.category }, today: todayISO(),
+        bonus: (() => { // igual que runner_view en la base de datos
+          const year = new Date().getFullYear();
+          const cfg = (d.settings || []).find((x) => x.key === 'bonus')?.value?.[year] || null;
+          const days = (x) => numDays(x.date, x.end_date);
+          const { nuevos = [], ...pub } = cfg || {};
+          return {
+            year, config: cfg ? pub : null, nuevo: nuevos.includes(me.id),
+            done: d.results.filter((x) => x.runner_id === me.id).map((x) => d.races.find((r) => r.id === x.race_id))
+              .filter((r) => r && yearOf(r.date) === year).reduce((n, r) => n + days(r), 0),
+            planned: d.registration_entries.filter((e) => e.runner_id === me.id).map((e) => d.registrations.find((g) => g.id === e.registration_id))
+              .filter((g) => g && yearOf(g.date) === year).reduce((n, g) => n + days(g), 0),
+          };
+        })(),
         registrations: [...d.registrations].sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name)).map((g) => ({
           ...g, entries: d.registration_entries.filter((e) => e.registration_id === g.id).map((e) => {
             const rn = d.runners.find((r) => r.id === e.runner_id);

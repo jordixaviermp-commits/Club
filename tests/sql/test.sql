@@ -99,5 +99,16 @@ select pg_temp.check((select stages->>0 from races where id = :'multi') = 'Pról
 select pg_temp.check((select stage_positions from results where race_id = :'multi') = '[1,null,3]'::jsonb, 'puestos por etapa guardados');
 select save_race(jsonb_build_object('id', :'multi', 'name','Volta etapas','date','2027-06-12','stages','[]'::jsonb), '[]');
 select pg_temp.check((select stages from races where id = :'multi') is null, 'sin etapas = null');
+-- bonos
+insert into settings values ('bonus', jsonb_build_object(extract(year from current_date)::int::text,
+  '{"tiers":[{"races":12,"amount":150}],"minimum":12,"penalty":{"renovado":100,"nuevo":175},"nuevos":["10000000-0000-0000-0000-000000000002"]}'::jsonb));
+select save_race(jsonb_build_object('name','Bono 3 días','date', current_date - 1, 'end_date', current_date + 1),
+  '[{"runner_id":"10000000-0000-0000-0000-000000000002","runner_name":"Anna Puig"}]');
+reset role;
+set role anon;
+select pg_temp.check((runner_view('BBBBBBBBBB')->'bonus'->>'done')::int >= 3, 'bono: carrera de 3 días cuenta 3');
+select pg_temp.check((runner_view('BBBBBBBBBB')->'bonus'->>'nuevo')::boolean, 'bono: sabe que es nuevo');
+select pg_temp.check(runner_view('BBBBBBBBBB')->'bonus'->'config' ? 'nuevos' = false, 'bono: no ve la lista de nuevos');
+select pg_temp.expect_fail('select * from settings', 'anon no lee ajustes');
 reset role;
 \echo TODAS LAS PRUEBAS SQL OK
