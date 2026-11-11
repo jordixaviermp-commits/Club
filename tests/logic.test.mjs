@@ -1,0 +1,88 @@
+// node --test tests/
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  normalize, matchCategory, parseBulkRunners, yearSummary, csvRows, toCsv, parseCsv, importResultsCsv,
+  parseDate, extractCode, newCode, formatDate,
+} from '../js/logic.js';
+
+test('normalize ignora mayúsculas y tildes', () => {
+  assert.equal(normalize('  JOSÉ   Martínez '), 'jose martinez');
+});
+
+test('matchCategory', () => {
+  assert.equal(matchCategory('m40'), 'M40');
+  assert.equal(matchCategory('elite'), 'Élite');
+  assert.equal(matchCategory('Sub23'), 'Sub-23');
+  assert.equal(matchCategory('M45'), null);
+});
+
+test('alta masiva: categorías opcionales y duplicados', () => {
+  const r = parseBulkRunners('Pere Soler, M40\n\nanna puig\nAnna Puig, elite\nJosé Ruiz, M99\nJOSE RUIZ', ['Pére soler']);
+  assert.deepEqual(r.toAdd, [{ name: 'anna puig', category: null }, { name: 'José Ruiz', category: null }]);
+  assert.deepEqual(r.duplicates, ['Pere Soler', 'Anna Puig', 'JOSE RUIZ']);
+  assert.deepEqual(r.unknownCategory, [{ name: 'José Ruiz', text: 'M99' }]);
+});
+
+const runners = [{ id: 'a', name: 'Anna' }, { id: 'b', name: 'Biel' }, { id: 'c', name: 'Carla' }];
+const races = [
+  { id: 'r1', name: 'Uno', date: '2026-03-01', province: 'Girona', country: 'España', modality: 'Carretera', results: [
+    { runner_id: 'a', runner_name: 'Anna', position: 1, podium_type: 'suelta', category: 'Élite' },
+    { runner_id: 'b', runner_name: 'Biel', position: 4, category: 'M40' }] },
+  { id: 'r2', name: 'Dos', date: '2026-05-01', province: '', country: 'Francia', modality: 'BTT', results: [
+    { runner_id: 'a', runner_name: 'Anna', position: 3, podium_type: 'campeonato', category: 'Élite' },
+    { runner_id: null, runner_name: 'Dani (baja)', position: 2, podium_type: 'general', category: 'M50' }] },
+  { id: 'r3', name: 'Tres', date: '2026-06-01', province: 'Lleida', country: 'España', modality: 'Gravel', results: [] },
+  { id: 'r0', name: 'Vieja', date: '2025-06-01', province: 'Lleida', country: 'España', modality: 'Pista', results: [
+    { runner_id: 'c', runner_name: 'Carla', position: 1 }] },
+];
+
+test('resumen anual', () => {
+  const s = yearSummary(2026, races, runners);
+  assert.deepEqual(s.totals, { races: 3, runners: 3, participations: 4, podiums: 3, wins: 1 });
+  assert.deepEqual(s.byModality.map((m) => m.modality), ['Carretera', 'BTT', 'Gravel']); // Pista no aparece en 2026
+  assert.deepEqual(s.byModality[1], { modality: 'BTT', races: 1, participations: 2, podiums: 2 });
+  assert.deepEqual(s.countries, [{ name: 'España', races: 2 }, { name: 'Francia', races: 1 }]);
+  assert.deepEqual(s.provinces, [{ name: 'Girona', races: 1 }, { name: 'Lleida', races: 1 }]);
+  assert.deepEqual(s.missingPlace.map((m) => [m.name, m.missing]), [['Dos', ['provincia']]]);
+  assert.deepEqual(s.perRunner.map((r) => [r.name, r.races, r.road, r.btt, r.p1, r.p2, r.p3]), [
+    ['Anna', 2, 1, 1, 1, 0, 1], ['Biel', 1, 1, 0, 0, 0, 0], ['Dani (baja)', 1, 0, 1, 0, 1, 0], ['Carla', 0, 0, 0, 0, 0, 0]]);
+  assert.deepEqual(s.byPodiumType.map((t) => [t.type, t.podiums, t.wins]), [['suelta', 1, 1], ['general', 1, 0], ['campeonato', 1, 0]]);
+  assert.equal(s.podiumList.length, 3);
+  assert.equal(yearSummary(2024, races, runners).byModality.length, 2); // Carretera y BTT siempre visibles
+});
+
+test('CSV ida y vuelta', () => {
+  const csv = toCsv(csvRows(races.filter((r) => r.date.startsWith('2026'))));
+  assert.ok(csv.startsWith('﻿Fecha;Carrera;Lugar;Provincia;País;Modalidad;Corredor;Categoría;Puesto;Podio;Tipo de podio\r\n'));
+  assert.match(csv, /2026-05-01;Dos;;;Francia;BTT;Dani \(baja\);M50;2;Sí;General de varias pruebas/);
+  const back = importResultsCsv(csv);
+  assert.deepEqual(back.errors, []);
+  assert.equal(back.races.length, 2); // «Tres» no tiene participantes y no genera filas
+  const dos = back.races.find((r) => r.name === 'Dos');
+  assert.deepEqual(dos.results.map((x) => [x.runner_name, x.position, x.podium_type, x.category]),
+    [['Dani (baja)', 2, 'general', 'M50'], ['Anna', 3, 'campeonato', 'Élite']]);
+});
+
+test('parseCsv con comas, comillas y saltos', () => {
+  assert.deepEqual(parseCsv('a,b\n"x, y","di ""hola""\nadiós"\n'), [['a', 'b'], ['x, y', 'di "hola"\nadiós']]);
+});
+
+test('importar CSV con fechas españolas y errores', () => {
+  const r = importResultsCsv('Fecha;Carrera;Corredor;Puesto\n14/6/2027;Volta;Pere;1º\nmal;Volta;Joan;2\n14/06/2027;Volta;pere;3');
+  assert.equal(r.races.length, 1);
+  assert.equal(r.races[0].date, '2027-06-14');
+  assert.equal(r.races[0].country, 'España');
+  assert.equal(r.errors.length, 3);
+});
+
+test('fechas y códigos', () => {
+  assert.equal(parseDate('2027-6-4'), '2027-06-04');
+  assert.equal(parseDate('4.6.2027'), '2027-06-04');
+  assert.equal(formatDate('2027-06-14'), 'lun 14 jun 2027');
+  const c = newCode();
+  assert.match(c, /^[A-Z0-9]{12}$/);
+  assert.equal(extractCode(`https://x.github.io/Club/#/c/${c}`), c);
+  assert.equal(extractCode(c.toLowerCase()), c);
+  assert.equal(extractCode('hola'), null);
+});
