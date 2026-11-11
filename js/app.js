@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  extractCode, todayISO, formatDate, searchRaces, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, yearBonuses, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
+  extractCode, todayISO, formatDate, searchRaces, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -498,7 +498,7 @@ function runnerBonusCard(d) {
     <p class="bonus-text">${bonusText(st)}</p>
     ${b.contract ? `<p class="hint">Contrato: ${esc(contractLabel(b.contract))}.</p>` : ''}
     ${b.planned ? `<p class="hint">Con tus ${b.planned} inscripcion${b.planned === 1 ? '' : 'es'} de ${b.year} llegarías a ${proj.count}${proj.tier ? ` (${euros(proj.amount)})` : ''}${proj.reachesMinimum ? '' : ', aún por debajo del mínimo'}.</p>` : ''}
-    <p class="hint">Tramos: ${[...cfg.tiers].sort((a, c) => a.races - c.races).map((t) => `${t.races} carreras → ${euros(t.amount)}`).join(' · ')}. Una carrera de varios días cuenta un día cada uno.
+    <p class="hint">Tramos${st.contract ? ` (${esc(contractLabel(st.contract).toLowerCase())})` : ''}: ${tiersLine(st.tiers)}. Una carrera de varios días cuenta un día cada uno.
       <br>Penalización si no se llega al mínimo (${cfg.minimum}): ${penaltiesLine(cfg)}.</p>
   </section>`;
 }
@@ -964,7 +964,7 @@ const bonusCfg = (year) => bonusConfigFor(S.data?.settings?.bonus, year);
 
 /** Barra de progreso con las marcas de los tramos y del mínimo. */
 function bonusBar(st, cfg, planned = 0) {
-  const tiers = [...cfg.tiers].sort((a, b) => a.races - b.races);
+  const tiers = st.tiers || tiersFor(cfg, st.contract);
   const max = Math.max(...tiers.map((t) => t.races), cfg.minimum || 0, st.count + planned, 1);
   const pct = (n) => `${Math.min(100, (n / max) * 100).toFixed(1)}%`;
   return `<div class="bbar" role="img" aria-label="${st.count} de ${max} carreras">
@@ -973,6 +973,17 @@ function bonusBar(st, cfg, planned = 0) {
     ${tiers.map((t) => `<i class="bbar-mark${st.count >= t.races ? ' hit' : ''}${t.races === st.minimum ? ' min' : ''}" style="left:${pct(t.races)}"><b>${t.races}${t.races === st.minimum ? ' mín' : ''}</b></i>`).join('')}
     ${st.minimum && !tiers.some((t) => t.races === st.minimum) ? `<i class="bbar-mark min${st.reachesMinimum ? ' hit' : ''}" style="left:${pct(st.minimum)}"><b>${st.minimum} mín</b></i>` : ''}
   </div>`;
+}
+
+const tiersLine = (tiers) => tiers.map((t) => `${t.races} carreras → ${euros(t.amount)}`).join(' · ');
+/** Tramos de cada tipo de contrato, agrupando los que coinciden: «nuevo y renovación: 12 carreras → 50 € · …». */
+function tiersByContractLine(cfg) {
+  const groups = new Map();
+  for (const c of CONTRACTS) {
+    const line = tiersLine(tiersFor(cfg, c.id));
+    groups.set(line, [...(groups.get(line) || []), c.label.toLowerCase()]);
+  }
+  return [...groups].map(([line, names]) => `${names.join(' y ')}: ${line}`).join('<br>');
 }
 
 /** Frase con la situación: tramo actual, lo que falta y la penalización. */
@@ -999,7 +1010,8 @@ function penaltyAlert(st, cfg, year, { who = 'Te' } = {}) {
 function bonusText(st, who = 'Llevas') {
   const parts = [`${who} <b>${st.count}</b> carrera${st.count === 1 ? '' : 's'}`];
   if (st.tier) parts.push(`tramo de <b>${euros(st.amount)}</b>`);
-  if (!st.reachesMinimum) parts.push(`<span class="bad">faltan ${st.missingToMinimum} para el mínimo (${st.minimum}) · penalización ${euros(st.penalty)}</span>`);
+  if (!st.reachesMinimum && st.penalty) parts.push(`<span class="bad">faltan ${st.missingToMinimum} para el mínimo (${st.minimum}) · penalización ${euros(st.penalty)}</span>`);
+  else if (!st.reachesMinimum) parts.push(st.next ? `faltan ${st.missingToNext} para ${euros(st.next.amount)}` : `faltan ${st.missingToMinimum} para el mínimo (${st.minimum})`);
   else if (st.next) parts.push(`faltan ${st.missingToNext} para ${euros(st.next.amount)}`);
   else parts.push('tramo máximo');
   return parts.join(' · ');
@@ -1023,6 +1035,7 @@ function viewBonus() {
     </div>
     <div class="pen bad-box">⚠️ <b>Mínimo del contrato: ${cfg.minimum} carreras</b> antes del 31 de diciembre.
       Penalización si no se llega: ${penaltiesLine(cfg)}.</div>
+    <p class="hint">Bonos a partir del mínimo — ${tiersByContractLine(cfg)}</p>
     <p class="hint">Cuentan las carreras con resultados de ${S.year}; una carrera de varios días cuenta un día cada uno. La parte clara de la barra suma las inscripciones de ${S.year} pendientes.</p>
     <ul class="bonus-list">${rows.map((r) => `<li>
       <div class="bonus-head"><span class="name">${esc(r.runner.name)}</span>
@@ -1035,9 +1048,10 @@ function viewBonus() {
     <details class="card"${saved ? '' : ' open'}>
       <summary><b>Condiciones del bono ${S.year}</b>${saved ? '' : ' <span class="muted">(sin guardar: se usan las de la temporada anterior o las del contrato 2026)</span>'}</summary>
       <form class="stack" data-form="bonus-cfg">
-        <div class="tier-rows">${[0, 1, 2, 3].map((i) => { const t = [...cfg.tiers].sort((a, b) => a.races - b.races)[i] || {};
-          return `<label>Tramo ${i + 1}: carreras<input type="number" min="1" name="r${i}" value="${esc(t.races ?? '')}"></label>
-            <label>Importe (€)<input type="number" min="0" name="a${i}" value="${esc(t.amount ?? '')}"></label>`; }).join('')}</div>
+        <p><b>Tramos de nuevo y renovación</b></p>
+        ${tierInputs(tiersFor(cfg, 'renovacion'), '')}
+        <p><b>Tramos de renovación sin licencia</b></p>
+        ${tierInputs(tiersFor(cfg, 'renovacion_sin_licencia'), 'sl_')}
         <div class="grid2">
           <label>Mínimo del contrato<input type="number" min="0" name="minimum" value="${esc(cfg.minimum)}" required></label>
           <span></span>
@@ -1050,6 +1064,21 @@ function viewBonus() {
       </form>
     </details>
     <button class="btn block" data-act="bonus-csv">Exportar bonos ${S.year} a CSV (Excel)</button>`, { back: '#/corredores' });
+}
+
+function tierInputs(tiers, prefix) {
+  return `<div class="tier-rows">${[0, 1, 2, 3].map((i) => { const t = tiers[i] || {};
+    return `<label>Tramo ${i + 1}: carreras<input type="number" min="1" name="${prefix}r${i}" value="${esc(t.races ?? '')}"></label>
+      <label>Importe (€)<input type="number" min="0" name="${prefix}a${i}" value="${esc(t.amount ?? '')}"></label>`; }).join('')}</div>`;
+}
+
+/** Lee los tramos de un formulario; devuelve un mensaje de error si están mal. */
+function readTiers(f, prefix, label) {
+  const tiers = [0, 1, 2, 3].map((i) => ({ races: Number(f[prefix + 'r' + i].value), amount: Number(f[prefix + 'a' + i].value) }))
+    .filter((t) => t.races > 0);
+  if (!tiers.length) return { error: `Pon al menos un tramo de ${label}.` };
+  if (new Set(tiers.map((t) => t.races)).size !== tiers.length) return { error: `Hay dos tramos de ${label} con el mismo número de carreras.` };
+  return { tiers: tiers.sort((a, b) => a.races - b.races) };
 }
 
 async function saveBonus(year, cfg) {
@@ -1538,11 +1567,11 @@ const forms = {
     if (ok) render();
   },
   async 'bonus-cfg'(f) {
-    const tiers = [0, 1, 2, 3].map((i) => ({ races: Number(f['r' + i].value), amount: Number(f['a' + i].value) }))
-      .filter((t) => t.races > 0);
-    if (!tiers.length) return toast('Pon al menos un tramo.', true);
-    if (new Set(tiers.map((t) => t.races)).size !== tiers.length) return toast('Hay dos tramos con el mismo número de carreras.', true);
-    const cfg = { ...bonusCfg(S.year), tiers: tiers.sort((a, b) => a.races - b.races), minimum: Number(f.minimum.value),
+    const main = readTiers(f, '', 'nuevo y renovación');
+    if (main.error) return toast(main.error, true);
+    const sl = readTiers(f, 'sl_', 'renovación sin licencia');
+    if (sl.error) return toast(sl.error, true);
+    const cfg = { ...bonusCfg(S.year), tiers: main.tiers, tiersByContract: { renovacion_sin_licencia: sl.tiers }, minimum: Number(f.minimum.value),
       penalty: { renovado: Number(f.pen_ren.value), nuevo: Number(f.pen_new.value), sin_licencia: Number(f.pen_sl.value) } };
     await run(() => saveBonus(S.year, cfg), `Condiciones de ${S.year} guardadas`);
     render();
