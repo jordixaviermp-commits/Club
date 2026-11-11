@@ -404,3 +404,16 @@ h2.section.past-head { color: var(--muted); margin-top: 1.4rem; }
 .docs-block { border-top-color: var(--accent); }
 .doc-badge { text-decoration: none; font-size: .9em; }
 .row-btns { display: flex; gap: .35rem; flex: none; }
+
+/* Tipo de carrera, podios de circuito y campanita de avisos */
+.type-line { margin: .35rem 0 0; }
+.tag.t-champ { background: #fdf3d0; color: #7a5b00; }
+.tag.t-circ { background: #e8e4fb; color: #45329c; }
+.bbar-extra { background: repeating-linear-gradient(45deg, var(--gold), var(--gold) 5px, #e6c95c 5px, #e6c95c 10px); }
+.extra-chip { display: inline-block; font-size: .8rem; font-weight: 700; padding: .12rem .5rem; border-radius: 999px; background: #fdf3d0; color: #7a5b00; white-space: nowrap; }
+.pending-chip { display: inline-block; font-size: .8rem; font-weight: 600; padding: .12rem .5rem; border-radius: 999px; background: var(--warn-bg); border: 1px solid var(--warn-line); white-space: nowrap; }
+.circ-card { border-top: 4px solid var(--gold); }
+.circ-card details { margin-top: .6rem; }
+.circ-card form { margin-top: .6rem; }
+.bell { position: relative; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+.bell-n { position: absolute; top: 2px; right: 0; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: var(--danger); color: #fff; font-size: .7rem; font-weight: 800; line-height: 18px; text-align: center; }

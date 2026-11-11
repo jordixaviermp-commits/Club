@@ -239,3 +239,19 @@ test('pastLimit: carreras olvidadas desde el 1 de enero del año anterior', () =
   assert.equal(pastLimit(new Date(2026, 11, 20)), '2025-01-01');
   assert.equal(pastLimit(new Date(2027, 0, 3)), '2026-01-01');
 });
+
+test('bono: las carreras extra por podio de circuito suben el tramo pero no cuentan para el mínimo', () => {
+  const cfg = bonusConfigFor({}, 2026);
+  const a = bonusStatus(13, cfg, 'renovacion', 4);
+  assert.equal(a.count, 13); assert.equal(a.extra, 4); assert.equal(a.bonusCount, 17);
+  assert.equal(a.amount, 100); assert.equal(a.reachesMinimum, true);
+  const b = bonusStatus(10, cfg, 'nuevo', 4); // 14 para el bono, pero solo 10 corridas
+  assert.equal(b.reachesMinimum, false); assert.equal(b.penalty, 175); assert.equal(b.missingToMinimum, 2);
+  const runners = [{ id: 'a', name: 'Ana', contract: 'renovacion' }, { id: 'b', name: 'Bea', contract: 'renovacion' }];
+  const races = Array.from({ length: 13 }, (_, i) => ({ date: `2026-03-${String(i + 1).padStart(2, '0')}`, results: [{ runner_id: 'a' }, { runner_id: 'b' }] }));
+  const pods = [{ runner_id: 'a', year: 2026, status: 'confirmado', circuit: 'Copa' }, { runner_id: 'b', year: 2026, status: 'pendiente', circuit: 'Copa' },
+    { runner_id: 'b', year: 2025, status: 'confirmado', circuit: 'Copa' }];
+  const rows = yearBonuses(2026, races, [], runners, cfg, pods);
+  assert.equal(rows.find((r) => r.runner.id === 'a').amount, 100);
+  assert.equal(rows.find((r) => r.runner.id === 'b').amount, 50); // pendiente o de otro año: no suma
+});
