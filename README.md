@@ -15,6 +15,7 @@ App web instalable en el móvil para que la dirección del club gestione inscrip
 | `js/api.js` | Acceso a datos: Supabase o demostración, con la misma interfaz |
 | `supabase/schema.sql` | Tablas, seguridad (RLS) y funciones. Se puede volver a ejecutar |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Instalación como app y apertura sin conexión |
+| `scripts/calendarios.mjs`, `data/calendarios.json` | Lector de los calendarios de las federaciones catalana y aragonesa y su resultado (lo actualiza `.github/workflows/calendarios.yml`) |
 | `.github/workflows/keepalive.yml` | Consulta dos veces por semana para que Supabase gratuito no se pause |
 
 **Seguridad:** el rol anónimo no puede leer ni escribir ninguna tabla. Los corredores solo usan tres funciones (`runner_view`, `runner_join`, `runner_leave`) que exigen su código personal de 12 caracteres y solo actúan sobre ellos mismos. La dirección entra con email y contraseña de Supabase Auth y debe figurar en la tabla `admins`.
