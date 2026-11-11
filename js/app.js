@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  extractCode, todayISO, formatDate, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
+  extractCode, todayISO, formatDate, bonusConfigFor, bonusStatus, yearBonuses, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -156,7 +156,7 @@ function render() {
     html = ({
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
       carreras: S.draft ? viewRaceEdit : viewRaces,
-      resumen: viewSummary, corredores: viewRunners, datos: viewData, federaciones: viewFed,
+      resumen: viewSummary, corredores: viewRunners, datos: viewData, federaciones: viewFed, bonos: viewBonus,
     }[view] || viewRegistrations)();
   } else if (S.code && S.runnerData) html = viewRunnerHome();
   else html = viewWelcome();
@@ -252,6 +252,20 @@ function calendarView(regs, card, isMine = () => false) {
     ${shown.length ? shown.map(card).join('') : '<p class="empty">No hay carreras este mes.</p>'}`;
 }
 
+function runnerBonusCard(d) {
+  const b = d.bonus;
+  if (!b) return '';
+  const cfg = bonusConfigFor(b.config ? { [b.year]: b.config } : {}, b.year);
+  const st = bonusStatus(b.done, cfg, b.nuevo);
+  const proj = bonusStatus(b.done + (b.planned || 0), cfg, b.nuevo);
+  return `<section class="card bonus-card"><h2>Tu bono ${b.year}</h2>
+    ${bonusBar(st, cfg, b.planned || 0)}
+    <p class="bonus-text">${bonusText(st)}</p>
+    ${b.planned ? `<p class="hint">Con tus ${b.planned} inscripcion${b.planned === 1 ? '' : 'es'} de ${b.year} llegarías a ${proj.count}${proj.tier ? ` (${euros(proj.amount)})` : ''}${proj.reachesMinimum ? '' : ', aún por debajo del mínimo'}.</p>` : ''}
+    <p class="hint">Tramos: ${[...cfg.tiers].sort((a, c) => a.races - c.races).map((t) => `${t.races} carreras → ${euros(t.amount)}`).join(' · ')}. Una carrera de varios días cuenta un día cada uno.</p>
+  </section>`;
+}
+
 function viewRunnerHome() {
   const d = S.runnerData, me = d.me, today = d.today || todayISO();
   const upcoming = d.registrations.filter((g) => g.date >= today);
@@ -282,6 +296,7 @@ function viewRunnerHome() {
     ${past.length ? `<details class="past"><summary>Carreras ya disputadas pendientes de resultados (${past.length})</summary>${past.map(card).join('')}</details>` : ''}`;
   return frame('CC Monzón', `
     <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
+    ${runnerBonusCard(d)}
     ${installHint()}
     ${body}
     <h2 class="section">Calendarios de las federaciones</h2>
@@ -585,11 +600,94 @@ function viewSummary() {
 //  Plantilla
 // ======================================================================
 
+// ======================================================================
+//  Bonos por carreras de la temporada
+// ======================================================================
+
+const euros = (n) => `${Number(n || 0).toLocaleString('es-ES')} €`;
+const bonusCfg = (year) => bonusConfigFor(S.data?.settings?.bonus, year);
+
+/** Barra de progreso con las marcas de los tramos y del mínimo. */
+function bonusBar(st, cfg, planned = 0) {
+  const tiers = [...cfg.tiers].sort((a, b) => a.races - b.races);
+  const max = Math.max(...tiers.map((t) => t.races), cfg.minimum || 0, st.count + planned, 1);
+  const pct = (n) => `${Math.min(100, (n / max) * 100).toFixed(1)}%`;
+  return `<div class="bbar" role="img" aria-label="${st.count} de ${max} carreras">
+    <span class="bbar-plan" style="width:${pct(st.count + planned)}"></span>
+    <span class="bbar-done ${st.reachesMinimum ? 'ok' : ''}" style="width:${pct(st.count)}"></span>
+    ${tiers.map((t) => `<i class="bbar-mark${st.count >= t.races ? ' hit' : ''}" style="left:${pct(t.races)}"><b>${t.races}</b></i>`).join('')}
+  </div>`;
+}
+
+/** Frase con la situación: tramo actual, lo que falta y la penalización. */
+function bonusText(st, who = 'Llevas') {
+  const parts = [`${who} <b>${st.count}</b> carrera${st.count === 1 ? '' : 's'}`];
+  if (st.tier) parts.push(`tramo de <b>${euros(st.amount)}</b>`);
+  if (!st.reachesMinimum) parts.push(`<span class="bad">faltan ${st.missingToMinimum} para el mínimo (${st.minimum}) · penalización ${euros(st.penalty)}</span>`);
+  else if (st.next) parts.push(`faltan ${st.missingToNext} para ${euros(st.next.amount)}`);
+  else parts.push('tramo máximo');
+  return parts.join(' · ');
+}
+
+function viewBonus() {
+  const years = availableYears(S.data.races);
+  if (!years.includes(S.year)) S.year = years[0];
+  const cfg = bonusCfg(S.year);
+  const rows = yearBonuses(S.year, S.data.races, S.data.registrations, S.data.runners, cfg);
+  const totalPay = rows.reduce((n, r) => n + r.amount, 0);
+  const totalPen = rows.reduce((n, r) => n + r.penalty, 0);
+  const saved = !!S.data.settings?.bonus?.[S.year];
+  return frame(`Bonos ${S.year}`, `
+    ${yearPicker(years)}
+    <div class="kpis">
+      <div class="kpi"><b>${rows.filter((r) => r.tier).length}</b><span>con bono</span></div>
+      <div class="kpi"><b>${euros(totalPay)}</b><span>en bonos ahora</span></div>
+      <div class="kpi"><b>${rows.filter((r) => !r.reachesMinimum).length}</b><span>bajo el mínimo</span></div>
+      <div class="kpi"><b>${euros(totalPen)}</b><span>penalizaciones si acabara hoy</span></div>
+    </div>
+    <p class="hint">Cuentan las carreras con resultados de ${S.year}; una carrera de varios días cuenta un día cada uno. La parte clara de la barra suma las inscripciones de ${S.year} pendientes.</p>
+    <ul class="bonus-list">${rows.map((r) => `<li>
+      <div class="bonus-head"><span class="name">${esc(r.runner.name)}</span>
+        <select data-bonus-new="${r.runner.id}" aria-label="Contrato de ${esc(r.runner.name)}">
+          ${opt('renovado', 'Renovado', r.isNew ? 'nuevo' : 'renovado')}${opt('nuevo', 'Nuevo', r.isNew ? 'nuevo' : 'renovado')}</select></div>
+      ${bonusBar(r, cfg, r.planned)}
+      <p class="bonus-text">${bonusText(r, 'Lleva')}${r.planned ? ` · <span class="muted">con sus ${r.planned} inscrita${r.planned === 1 ? '' : 's'}: ${r.projected.count}</span>` : ''}</p>
+    </li>`).join('')}</ul>
+    ${rows.length ? '' : '<p class="empty">No hay corredores.</p>'}
+    <details class="card"${saved ? '' : ' open'}>
+      <summary><b>Condiciones del bono ${S.year}</b>${saved ? '' : ' <span class="muted">(sin guardar: se usan las de la temporada anterior o las del contrato 2026)</span>'}</summary>
+      <form class="stack" data-form="bonus-cfg">
+        <div class="tier-rows">${[0, 1, 2, 3].map((i) => { const t = [...cfg.tiers].sort((a, b) => a.races - b.races)[i] || {};
+          return `<label>Tramo ${i + 1}: carreras<input type="number" min="1" name="r${i}" value="${esc(t.races ?? '')}"></label>
+            <label>Importe (€)<input type="number" min="0" name="a${i}" value="${esc(t.amount ?? '')}"></label>`; }).join('')}</div>
+        <div class="grid2">
+          <label>Mínimo del contrato<input type="number" min="0" name="minimum" value="${esc(cfg.minimum)}" required></label>
+          <span></span>
+          <label>Penalización renovados (€)<input type="number" min="0" name="pen_ren" value="${esc(cfg.penalty.renovado)}" required></label>
+          <label>Penalización nuevos (€)<input type="number" min="0" name="pen_new" value="${esc(cfg.penalty.nuevo)}" required></label>
+        </div>
+        <p class="hint">Deja vacío un tramo para no usarlo.</p>
+        <button class="btn primary">Guardar condiciones de ${S.year}</button>
+      </form>
+    </details>
+    <button class="btn block" data-act="bonus-csv">Exportar bonos ${S.year} a CSV (Excel)</button>`, { back: '#/corredores' });
+}
+
+async function saveBonus(year, cfg) {
+  const all = { ...(S.data.settings?.bonus || {}), [year]: cfg };
+  await api.saveSetting('bonus', all);
+  await reload();
+}
+
 function viewRunners() {
   const counts = new Map();
   for (const r of S.data.races) for (const x of r.results) if (x.runner_id) counts.set(x.runner_id, (counts.get(x.runner_id) || 0) + 1);
   const runners = [...S.data.runners].sort(byName);
+  const year = new Date().getFullYear();
+  const bonusBy = new Map(yearBonuses(year, S.data.races, S.data.registrations, S.data.runners, bonusCfg(year)).map((b) => [b.runner.id, b]));
+  const badge = (b) => !b ? '' : `<small class="bbadge ${b.reachesMinimum ? (b.tier ? 'ok' : '') : 'bad'}">Bono ${year}: ${b.count}/${b.next ? b.next.races : b.count}${b.tier ? ` · ${euros(b.amount)}` : ''}${b.reachesMinimum ? '' : ' · bajo mínimo'}</small>`;
   return frame(`Corredores (${runners.length})`, `
+    <a class="btn block" href="#/bonos">Bonos por carreras ${year}</a>
     <details class="card" ${runners.length ? '' : 'open'}>
       <summary><b>+ Añadir corredores</b></summary>
       <form class="stack" data-form="bulk">
@@ -611,7 +709,7 @@ function viewRunners() {
     </details>
     ${runners.length ? '<button class="btn block" data-act="all-links">Copiar todos los enlaces</button>' : ''}
     <ul class="roster">${runners.map((r) => `<li>
-      <div><span class="name">${esc(r.name)}</span><small class="muted">${counts.get(r.id) || 0} carreras</small></div>
+      <div><span class="name">${esc(r.name)}</span><small class="muted">${counts.get(r.id) || 0} carreras en total</small>${badge(bonusBy.get(r.id))}</div>
       ${catSelect(`data-runner-cat="${r.id}" aria-label="Categoría habitual"`, r.category || '')}
       <button class="icon-btn" data-act="runner-menu" data-id="${r.id}" aria-label="Opciones de ${esc(r.name)}">⋯</button></li>`).join('')}</ul>
     ${runners.length ? '' : '<p class="empty">Todavía no hay corredores.</p>'}`);
@@ -798,6 +896,14 @@ const actions = {
     if (data) download(`monzon-copia-${todayISO()}.json`, JSON.stringify(data, null, 1), 'application/json');
   },
   'csv-year'() { download(`monzon-resultados-${S.year}.csv`, toCsv(csvRows(S.data.races.filter((r) => yearOf(r.date) === S.year))), 'text/csv;charset=utf-8'); },
+  'bonus-csv'() {
+    const cfg = bonusCfg(S.year);
+    const rows = yearBonuses(S.year, S.data.races, S.data.registrations, S.data.runners, cfg).map((r) => [
+      r.runner.name, r.isNew ? 'Nuevo' : 'Renovado', r.count, r.amount, r.reachesMinimum ? 'Sí' : 'No', r.penalty,
+      r.next ? r.next.races : '', r.next ? r.missingToNext : '', r.planned, r.projected.count]);
+    download(`monzon-bonos-${S.year}.csv`, toCsv(rows, ['Corredor', 'Contrato', 'Carreras', 'Bono actual (€)', 'Llega al mínimo',
+      'Penalización (€)', 'Siguiente tramo', 'Faltan', 'Inscritas pendientes', 'Previsión']), 'text/csv;charset=utf-8');
+  },
   'csv-all'() { download(`monzon-resultados-todos.csv`, toCsv(csvRows(S.data.races)), 'text/csv;charset=utf-8'); },
 };
 
@@ -842,9 +948,26 @@ const forms = {
       if (plan.add.length) await api.addRunners(plan.add);
       for (const k of catChanges) await api.updateRunner(k.runner.id, { category: k.category });
       for (const r of plan.remove) await api.deleteRunner(r.id, false);
+      await reload();
+      if (plan.add.length) { // las altas de la temporada cuentan como «nuevos» para las penalizaciones del bono
+        const year = new Date().getFullYear(), cfg = bonusCfg(year), added = new Set(plan.add.map((a) => normalize(a.name)));
+        const ids = S.data.runners.filter((r) => added.has(normalize(r.name))).map((r) => r.id);
+        try { await api.saveSetting('bonus', { ...(S.data.settings?.bonus || {}), [year]: { ...cfg, nuevos: [...new Set([...cfg.nuevos, ...ids])] } }); }
+        catch (e) { console.warn('No se pudo marcar a los nuevos en el bono', e); }
+      }
       await reload(); return true;
     }, 'Plantilla renovada');
     if (ok) { f.reset(); render(); }
+  },
+  async 'bonus-cfg'(f) {
+    const tiers = [0, 1, 2, 3].map((i) => ({ races: Number(f['r' + i].value), amount: Number(f['a' + i].value) }))
+      .filter((t) => t.races > 0);
+    if (!tiers.length) return toast('Pon al menos un tramo.', true);
+    if (new Set(tiers.map((t) => t.races)).size !== tiers.length) return toast('Hay dos tramos con el mismo número de carreras.', true);
+    const cfg = { ...bonusCfg(S.year), tiers: tiers.sort((a, b) => a.races - b.races), minimum: Number(f.minimum.value),
+      penalty: { renovado: Number(f.pen_ren.value), nuevo: Number(f.pen_new.value) } };
+    await run(() => saveBonus(S.year, cfg), `Condiciones de ${S.year} guardadas`);
+    render();
   },
   async 'save-reg'() {
     const id = await run(saveRegistrationDraft, 'Inscripción guardada');
@@ -972,6 +1095,12 @@ $app.addEventListener('change', async (ev) => {
     $app.querySelector('.edit-list li:last-child')?.scrollIntoView({ block: 'center' });
   } else if (t.dataset.fed) {
     fedFilter[t.dataset.fed] = t.type === 'checkbox' ? t.checked : t.value; render();
+  } else if (t.dataset.bonusNew) {
+    const cfg = bonusCfg(S.year);
+    const nuevos = new Set(cfg.nuevos);
+    if (t.value === 'nuevo') nuevos.add(t.dataset.bonusNew); else nuevos.delete(t.dataset.bonusNew);
+    await run(() => saveBonus(S.year, { ...cfg, nuevos: [...nuevos] }), 'Guardado');
+    render();
   } else if (t.dataset.runnerCat) {
     const id = t.dataset.runnerCat;
     await run(async () => { await api.updateRunner(id, { category: t.value || null }); runnerById(id).category = t.value || null; }, 'Categoría guardada');

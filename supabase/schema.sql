@@ -83,6 +83,14 @@ alter table public.races add constraint races_stages_check check (stages is null
 alter table public.results drop constraint if exists results_stage_positions_check;
 alter table public.results add constraint results_stage_positions_check check (stage_positions is null or jsonb_typeof(stage_positions) = 'array');
 
+-- Ajustes del club (p. ej. los bonos por temporada). Solo los ve y cambia la dirección.
+--   key 'bonus' → {"2026": {"tiers":[{"races":12,"amount":150},…], "minimum":12,
+--                           "penalty":{"renovado":100,"nuevo":175}, "nuevos":[<runner_id>,…]}}
+create table if not exists public.settings (
+  key   text primary key,
+  value jsonb not null
+);
+
 create table if not exists public.admins (                 -- quién es dirección
   user_id uuid primary key
 );
@@ -95,6 +103,7 @@ alter table public.registration_entries enable row level security;
 alter table public.races                enable row level security;
 alter table public.results              enable row level security;
 alter table public.admins               enable row level security;
+alter table public.settings             enable row level security;
 
 create or replace function public.is_admin() returns boolean
 language sql stable security definer set search_path = public as $$
@@ -104,16 +113,16 @@ $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['runners','registrations','registration_entries','races','results'] loop
+  foreach t in array array['runners','registrations','registration_entries','races','results','settings'] loop
     execute format('drop policy if exists admin_all on public.%I', t);
     execute format('create policy admin_all on public.%I for all to authenticated using (public.is_admin()) with check (public.is_admin())', t);
   end loop;
 end $$;
 
 revoke all on public.runners, public.registrations, public.registration_entries,
-              public.races, public.results, public.admins from anon, public;
+              public.races, public.results, public.admins, public.settings from anon, public;
 grant select, insert, update, delete on public.runners, public.registrations,
-              public.registration_entries, public.races, public.results to authenticated;
+              public.registration_entries, public.races, public.results, public.settings to authenticated;
 revoke all on public.admins from authenticated;
 
 -- ---------- Funciones de dirección (respetan la seguridad de arriba) ---
@@ -240,6 +249,10 @@ begin
   insert into registration_entries select * from jsonb_populate_recordset(null::registration_entries, coalesce(p->'registration_entries','[]'));
   insert into races        select * from jsonb_populate_recordset(null::races,        coalesce(p->'races','[]'));
   insert into results      select * from jsonb_populate_recordset(null::results,      coalesce(p->'results','[]'));
+  if p ? 'settings' then  -- las copias antiguas no traen ajustes: entonces se conservan los actuales
+    delete from settings where true;
+    insert into settings select * from jsonb_populate_recordset(null::settings, coalesce(p->'settings','[]'));
+  end if;
 end $$;
 
 -- ---------- Funciones de corredores (entran con su enlace personal) ----
@@ -248,13 +261,26 @@ end $$;
 
 create or replace function public.runner_view(p_code text)
 returns jsonb language plpgsql stable security definer set search_path = public as $$
-declare me runners;
+declare me runners; v_year int := extract(year from current_date)::int; v_cfg jsonb;
 begin
   select * into me from runners where code = p_code;
   if not found then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  select value -> v_year::text into v_cfg from settings where key = 'bonus';
   return jsonb_build_object(
     'me', jsonb_build_object('id', me.id, 'name', me.name, 'category', me.category),
     'today', current_date,
+    -- Su bono de la temporada: solo lo suyo (sin la lista de quién es nuevo).
+    -- Cada día de competición cuenta como una carrera (una de 3 días = 3).
+    'bonus', jsonb_build_object(
+      'year', v_year,
+      'done', (select coalesce(sum(coalesce(r.end_date - r.date, 0) + 1), 0)
+                 from results x join races r on r.id = x.race_id
+                where x.runner_id = me.id and extract(year from r.date) = v_year),
+      'planned', (select coalesce(sum(coalesce(g.end_date - g.date, 0) + 1), 0)
+                    from registration_entries e join registrations g on g.id = e.registration_id
+                   where e.runner_id = me.id and extract(year from g.date) = v_year),
+      'config', v_cfg - 'nuevos',
+      'nuevo', coalesce(v_cfg -> 'nuevos' ? me.id::text, false)),
     'registrations', coalesce((
       select jsonb_agg(jsonb_build_object(
                'id', g.id, 'name', g.name, 'date', g.date, 'end_date', g.end_date, 'place', g.place,

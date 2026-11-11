@@ -424,3 +424,63 @@ export function daysOf(start, end) {
 
 /** Número de días de una carrera. */
 export const numDays = (start, end) => daysOf(start, end).length;
+
+// ---------- Bonos por carreras de la temporada ----------
+
+/** Bono de la temporada 2026 según el contrato; los años sin configurar copian el último configurado. */
+export const DEFAULT_BONUS = {
+  tiers: [{ races: 12, amount: 150 }, { races: 17, amount: 200 }, { races: 22, amount: 250 }],
+  minimum: 12,
+  penalty: { renovado: 100, nuevo: 175 },
+  nuevos: [],
+};
+
+export function bonusConfigFor(all, year) {
+  const cfg = all?.[year];
+  if (cfg) return { ...DEFAULT_BONUS, ...cfg, nuevos: cfg.nuevos || [] };
+  const prev = Object.keys(all || {}).map(Number).filter((y) => y < year).sort((a, b) => b - a)[0];
+  // de un año a otro se copian tramos, mínimo y penalizaciones, pero no quién es nuevo
+  return prev ? { ...DEFAULT_BONUS, ...all[prev], nuevos: [] } : { ...DEFAULT_BONUS };
+}
+
+/** Carreras que cuentan para el bono: cada día de competición es una (una de 3 días = 3). */
+export const bonusRacesOf = (race) => numDays(race.date, race.end_date);
+
+/**
+ * Situación de un corredor: { count, minimum, reachesMinimum, penalty, amount, tier, next, missingToNext, missingToMinimum }.
+ * `amount` es lo que cobra con lo hecho; `penalty`, lo que pagaría si acabara la temporada así.
+ */
+export function bonusStatus(count, cfg, isNew) {
+  const tiers = [...(cfg.tiers || [])].filter((t) => t.races > 0).sort((a, b) => a.races - b.races);
+  const reached = tiers.filter((t) => count >= t.races);
+  const tier = reached.at(-1) || null;
+  const next = tiers.find((t) => count < t.races) || null;
+  const minimum = Number(cfg.minimum) || 0;
+  const reachesMinimum = count >= minimum;
+  return {
+    count, minimum, reachesMinimum,
+    penalty: reachesMinimum ? 0 : Number(cfg.penalty?.[isNew ? 'nuevo' : 'renovado']) || 0,
+    amount: tier ? tier.amount : 0,
+    tier, next,
+    missingToNext: next ? next.races - count : 0,
+    missingToMinimum: reachesMinimum ? 0 : minimum - count,
+    isNew: !!isNew,
+  };
+}
+
+/** Bonos de toda la plantilla en un año, a partir de las carreras (con resultados) y las inscripciones. */
+export function yearBonuses(year, races, registrations, runners, cfg) {
+  const done = new Map(), planned = new Map();
+  for (const r of races) if (yearOf(r.date) === year) for (const x of r.results || []) {
+    if (x.runner_id) done.set(x.runner_id, (done.get(x.runner_id) || 0) + bonusRacesOf(r));
+  }
+  for (const g of registrations) if (yearOf(g.date) === year) for (const e of g.entries || []) {
+    planned.set(e.runner_id, (planned.get(e.runner_id) || 0) + bonusRacesOf(g));
+  }
+  const nuevos = new Set(cfg.nuevos || []);
+  return runners.map((rn) => {
+    const count = done.get(rn.id) || 0;
+    const plan = planned.get(rn.id) || 0;
+    return { runner: rn, planned: plan, ...bonusStatus(count, cfg, nuevos.has(rn.id)), projected: bonusStatus(count + plan, cfg, nuevos.has(rn.id)) };
+  }).sort((a, b) => b.count - a.count || a.runner.name.localeCompare(b.runner.name, 'es'));
+}

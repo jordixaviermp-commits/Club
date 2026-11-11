@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalize, matchCategory, parseBulkRunners, yearSummary, csvRows, toCsv, parseCsv, importResultsCsv,
-  parseDate, extractCode, newCode, formatDate, planRosterRenewal, monthGrid, addMonths, formatRange, daysOf, podiumsOf,
+  parseDate, extractCode, newCode, formatDate, planRosterRenewal, monthGrid, addMonths, formatRange, daysOf, podiumsOf, bonusStatus, bonusConfigFor, yearBonuses, DEFAULT_BONUS,
 } from '../js/logic.js';
 
 test('normalize ignora mayúsculas y tildes', () => {
@@ -143,4 +143,27 @@ test('podios de etapa: cuentan como tipo «Etapa»', () => {
   assert.equal(anna.position, 2);
   assert.deepEqual(anna.stage_positions, [1, 3, null]);
   assert.equal(podiumsOf([{ race: back, res: anna }]).length, 3);
+});
+
+test('bonos por carreras', () => {
+  const cfg = DEFAULT_BONUS;
+  assert.deepEqual([0, 11, 12, 16, 17, 22, 30].map((n) => { const b = bonusStatus(n, cfg, false); return [b.amount, b.penalty, b.missingToNext]; }),
+    [[0, 100, 12], [0, 100, 1], [150, 0, 5], [150, 0, 1], [200, 0, 5], [250, 0, 0], [250, 0, 0]]);
+  assert.equal(bonusStatus(5, cfg, true).penalty, 175);
+  assert.equal(bonusStatus(5, cfg, true).missingToMinimum, 7);
+  // configuración por año: copia la anterior sin la lista de nuevos
+  const all = { 2026: { ...DEFAULT_BONUS, minimum: 10, nuevos: ['x'] } };
+  assert.equal(bonusConfigFor(all, 2027).minimum, 10);
+  assert.deepEqual(bonusConfigFor(all, 2027).nuevos, []);
+  assert.deepEqual(bonusConfigFor({}, 2026).tiers, DEFAULT_BONUS.tiers);
+  // las carreras por etapas cuentan un día cada una; las inscripciones dan la previsión
+  const rows = yearBonuses(2026,
+    [{ date: '2026-03-01', results: [{ runner_id: 'a' }, { runner_id: 'b' }] },
+     { date: '2026-06-12', end_date: '2026-06-14', results: [{ runner_id: 'a' }] },
+     { date: '2025-06-12', results: [{ runner_id: 'a' }] }],
+    [{ date: '2026-09-01', entries: [{ runner_id: 'b' }] }],
+    [{ id: 'a', name: 'Anna' }, { id: 'b', name: 'Biel' }, { id: 'c', name: 'Carla' }],
+    { ...DEFAULT_BONUS, nuevos: ['c'] });
+  assert.deepEqual(rows.map((r) => [r.runner.name, r.count, r.planned, r.penalty, r.projected.count]),
+    [['Anna', 4, 0, 100, 4], ['Biel', 1, 1, 100, 2], ['Carla', 0, 0, 175, 0]]);
 });
