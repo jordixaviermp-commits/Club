@@ -37,11 +37,12 @@ const TIPOS = [
 ];
 
 // Precios del material del Club para la temporada (compras adicionales a lo incluido en el contrato)
-// El primer par de calcetines solo es gratis en nuevo y renovación (van incluidos en el material).
+// Solo el contrato nuevo lleva el 1.er par de calcetines gratis y la gorra y camiseta de patrocinadores gratis.
 const precios = (t) => [
   ['Maillot', '25 €'], ['Culote', '40 €'], ['Maillot manga larga HYDER', '45 €'],
-  ['Calcetines aero (par)', t.licencia ? '1.º gratis · 2.º 15 €' : '15 €'], ['Chaleco', '35 €'], ['Manguitos', '15 €'],
-  ['Camiseta interior', '20 €'], ['Gorra de patrocinadores', 'Gratis'], ['Camiseta de patrocinadores', 'Gratis'],
+  ['Calcetines aero (par)', t.id === 'Nuevo' ? '1.º gratis · 2.º 15 €' : '15 €'], ['Chaleco', '35 €'], ['Manguitos', '15 €'],
+  ['Camiseta interior', '20 €'],
+  ...(t.id === 'Nuevo' ? [['Gorra de patrocinadores', 'Gratis'], ['Camiseta de patrocinadores', 'Gratis']] : []),
 ];
 
 const ORD = ['', 'un', 'dos', 'tres', 'cuatro'];
