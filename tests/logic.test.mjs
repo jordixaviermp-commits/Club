@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalize, matchCategory, parseBulkRunners, yearSummary, csvRows, toCsv, parseCsv, importResultsCsv,
-  parseDate, extractCode, newCode, formatDate, planRosterRenewal, monthGrid, addMonths, formatRange, daysOf, podiumsOf, bonusStatus, bonusConfigFor, yearBonuses, DEFAULT_BONUS,
+  parseDate, extractCode, newCode, formatDate, planRosterRenewal, monthGrid, addMonths, formatRange, daysOf, podiumsOf, bonusStatus, bonusConfigFor, yearBonuses, DEFAULT_BONUS, matchContract,
 } from '../js/logic.js';
 
 test('normalize ignora mayúsculas y tildes', () => {
@@ -19,7 +19,7 @@ test('matchCategory', () => {
 
 test('alta masiva: categorías opcionales y duplicados', () => {
   const r = parseBulkRunners('Pere Soler, M40\n\nanna puig\nAnna Puig, elite\nJosé Ruiz, M99\nJOSE RUIZ', ['Pére soler']);
-  assert.deepEqual(r.toAdd, [{ name: 'anna puig', category: null }, { name: 'José Ruiz', category: null }]);
+  assert.deepEqual(r.toAdd, [{ name: 'anna puig', category: null, contract: null }, { name: 'José Ruiz', category: null, contract: null }]);
   assert.deepEqual(r.duplicates, ['Pere Soler', 'Anna Puig', 'JOSE RUIZ']);
   assert.deepEqual(r.unknownCategory, [{ name: 'José Ruiz', text: 'M99' }]);
 });
@@ -91,7 +91,7 @@ test('renovación anual de la plantilla', () => {
   const cur = [{ id: '1', name: 'Pere Soler', category: 'M40' }, { id: '2', name: 'Anna Puig', category: 'Élite' }, { id: '3', name: 'Joan Vila', category: null }];
   const p = planRosterRenewal('pere soler, M50\nJoan Vila\nLaia Serra, Sub-23\nLAIA SERRA', cur);
   assert.deepEqual(p.keep.map((k) => [k.runner.id, k.category]), [['1', 'M50'], ['3', null]]);
-  assert.deepEqual(p.add, [{ name: 'Laia Serra', category: 'Sub-23' }]);
+  assert.deepEqual(p.add, [{ name: 'Laia Serra', category: 'Sub-23', contract: 'nuevo' }]);
   assert.deepEqual(p.remove.map((r) => r.id), ['2']);
   assert.deepEqual(p.duplicates, ['LAIA SERRA']);
 });
@@ -166,4 +166,32 @@ test('bonos por carreras', () => {
     { ...DEFAULT_BONUS, nuevos: ['c'] });
   assert.deepEqual(rows.map((r) => [r.runner.name, r.count, r.planned, r.penalty, r.projected.count]),
     [['Anna', 4, 0, 100, 4], ['Biel', 1, 1, 100, 2], ['Carla', 0, 0, 175, 0]]);
+});
+
+test('tipos de contrato', () => {
+  assert.equal(bonusStatus(3, DEFAULT_BONUS, 'nuevo').penalty, 175);
+  assert.equal(bonusStatus(3, DEFAULT_BONUS, 'renovacion').penalty, 100);
+  assert.equal(bonusStatus(3, DEFAULT_BONUS, 'renovacion_sin_licencia').penalty, 0);
+  assert.equal(bonusStatus(3, { ...DEFAULT_BONUS, penalty: { renovado: 100, nuevo: 175, sin_licencia: 60 } }, 'renovacion_sin_licencia').penalty, 60);
+  assert.equal(bonusStatus(3, { ...DEFAULT_BONUS, penalty: { renovado: 100, nuevo: 175 } }, 'renovacion_sin_licencia').penalty, 0); // config guardada antes: sin_licencia = 0
+  assert.equal(bonusConfigFor({ 2026: { penalty: { renovado: 100, nuevo: 175 } } }, 2026).penalty.sin_licencia, 0);
+  assert.equal(bonusStatus(3, DEFAULT_BONUS, null).penalty, 100);
+  assert.equal(bonusStatus(3, DEFAULT_BONUS, true).penalty, 175);
+  assert.equal(matchContract('Renovación sin licencia'), 'renovacion_sin_licencia');
+  assert.equal(matchContract('renov s/l'), 'renovacion_sin_licencia');
+  assert.equal(matchContract('renovación'), 'renovacion');
+  assert.equal(matchContract('NUEVO'), 'nuevo');
+  assert.equal(matchContract('M40'), null);
+  // el contrato del corredor manda sobre la lista antigua de nuevos
+  const rows = yearBonuses(2026, [], [], [{ id: 'a', name: 'A', contract: 'renovacion' }, { id: 'b', name: 'B' }], { ...DEFAULT_BONUS, nuevos: ['a', 'b'] });
+  assert.deepEqual(rows.map((r) => [r.runner.id, r.contract, r.penalty]), [['a', 'renovacion', 100], ['b', 'nuevo', 175]]);
+});
+
+test('alta y renovación con tipo de contrato', () => {
+  const r = parseBulkRunners('Pere Soler, M40, renovación\nAnna, renov sin licencia\nBiel, nuevo, Élite');
+  assert.deepEqual(r.toAdd.map((x) => [x.name, x.category, x.contract]),
+    [['Pere Soler', 'M40', 'renovacion'], ['Anna', null, 'renovacion_sin_licencia'], ['Biel', 'Élite', 'nuevo']]);
+  const plan = planRosterRenewal('Ana\nBea, renovación sin licencia\nCris', [
+    { id: '1', name: 'Ana', contract: 'nuevo' }, { id: '2', name: 'Bea', contract: 'renovacion' }, { id: '3', name: 'Cris', contract: 'renovacion_sin_licencia' }]);
+  assert.deepEqual(plan.keep.map((k) => [k.runner.id, k.contract]), [['1', 'renovacion'], ['2', 'renovacion_sin_licencia'], ['3', null]]);
 });

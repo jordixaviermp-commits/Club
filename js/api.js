@@ -60,7 +60,8 @@ export function supabaseApi(url, key) {
 
     async loadAll() { return nest(await rawAll()); },
     async addRunners(list) {
-      ok(await sb.from('runners').insert(list.map((r) => ({ name: r.name, category: r.category || null, code: newCode() }))));
+      ok(await sb.from('runners').insert(list.map((r) => ({ name: r.name, category: r.category || null, code: newCode(),
+        ...(r.contract ? { contract: r.contract } : {}) }))));
     },
     async updateRunner(id, patch) { ok(await sb.from('runners').update(patch).eq('id', id)); },
     async saveSetting(key, value) { ok(await sb.from('settings').upsert({ key, value })); },
@@ -159,7 +160,7 @@ export function demoApi(storage = globalThis.localStorage) {
     async loadAll() { requireAdmin(); return clone(nest(load())); },
     async addRunners(list) {
       requireAdmin();
-      for (const r of list) load().runners.push({ id: uuid(), name: r.name, category: r.category || null, code: newCode(), created_at: new Date().toISOString() });
+      for (const r of list) load().runners.push({ id: uuid(), name: r.name, category: r.category || null, code: newCode(), created_at: new Date().toISOString(), contract: r.contract || null });
       save();
     },
     async updateRunner(id, patch) { requireAdmin(); Object.assign(load().runners.find((r) => r.id === id), patch); save(); },
@@ -240,7 +241,8 @@ export function demoApi(storage = globalThis.localStorage) {
           const days = (x) => numDays(x.date, x.end_date);
           const { nuevos = [], ...pub } = cfg || {};
           return {
-            year, config: cfg ? pub : null, nuevo: nuevos.includes(me.id),
+            year, config: cfg ? pub : null, contract: me.contract || null,
+            nuevo: me.contract === 'nuevo' || (!me.contract && nuevos.includes(me.id)),
             done: d.results.filter((x) => x.runner_id === me.id).map((x) => d.races.find((r) => r.id === x.race_id))
               .filter((r) => r && yearOf(r.date) === year).reduce((n, r) => n + days(r), 0),
             planned: d.registration_entries.filter((e) => e.runner_id === me.id).map((e) => d.registrations.find((g) => g.id === e.registration_id))

@@ -64,6 +64,12 @@ create index if not exists results_race_idx on public.results(race_id);
 create index if not exists results_runner_idx on public.results(runner_id);
 create index if not exists entries_runner_idx on public.registration_entries(runner_id);
 
+-- Tipo de contrato del corredor en la temporada actual.
+alter table public.runners add column if not exists contract text;
+alter table public.runners drop constraint if exists runners_contract_check;
+alter table public.runners add constraint runners_contract_check
+  check (contract is null or contract in ('nuevo','renovacion','renovacion_sin_licencia'));
+
 -- Carreras de varios días (por etapas): último día. Vacío = carrera de un solo día.
 alter table public.registrations add column if not exists end_date date;
 alter table public.races         add column if not exists end_date date;
@@ -280,7 +286,8 @@ begin
                     from registration_entries e join registrations g on g.id = e.registration_id
                    where e.runner_id = me.id and extract(year from g.date) = v_year),
       'config', v_cfg - 'nuevos',
-      'nuevo', coalesce(v_cfg -> 'nuevos' ? me.id::text, false)),
+      'contract', me.contract,
+      'nuevo', coalesce(me.contract = 'nuevo' or (me.contract is null and v_cfg -> 'nuevos' ? me.id::text), false)),
     'registrations', coalesce((
       select jsonb_agg(jsonb_build_object(
                'id', g.id, 'name', g.name, 'date', g.date, 'end_date', g.end_date, 'place', g.place,

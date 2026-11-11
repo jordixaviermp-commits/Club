@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  extractCode, todayISO, formatDate, bonusConfigFor, bonusStatus, yearBonuses, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
+  extractCode, todayISO, formatDate, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, yearBonuses, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -34,6 +34,8 @@ const S = {
 const $app = document.getElementById('app');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const opt = (value, label, sel) => `<option value="${esc(value)}"${value === sel ? ' selected' : ''}>${esc(label)}</option>`;
+const contractSelect = (attrs, sel) =>
+  `<select ${attrs}>${opt('', 'Contrato: sin indicar', sel || '')}${CONTRACTS.map((c) => opt(c.id, c.label, sel)).join('')}</select>`;
 const catSelect = (attrs, sel, emptyLabel = 'Sin categoría') =>
   `<select ${attrs}>${opt('', emptyLabel, sel || '')}${CATEGORIES.map((c) => opt(c, c, sel)).join('')}</select>`;
 const byName = (a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' });
@@ -256,11 +258,13 @@ function runnerBonusCard(d) {
   const b = d.bonus;
   if (!b) return '';
   const cfg = bonusConfigFor(b.config ? { [b.year]: b.config } : {}, b.year);
-  const st = bonusStatus(b.done, cfg, b.nuevo);
-  const proj = bonusStatus(b.done + (b.planned || 0), cfg, b.nuevo);
+  const c = b.contract || (b.nuevo ? 'nuevo' : null);
+  const st = bonusStatus(b.done, cfg, c);
+  const proj = bonusStatus(b.done + (b.planned || 0), cfg, c);
   return `<section class="card bonus-card"><h2>Tu bono ${b.year}</h2>
     ${bonusBar(st, cfg, b.planned || 0)}
     <p class="bonus-text">${bonusText(st)}</p>
+    ${b.contract ? `<p class="hint">Contrato: ${esc(contractLabel(b.contract))}.</p>` : ''}
     ${b.planned ? `<p class="hint">Con tus ${b.planned} inscripcion${b.planned === 1 ? '' : 'es'} de ${b.year} llegarías a ${proj.count}${proj.tier ? ` (${euros(proj.amount)})` : ''}${proj.reachesMinimum ? '' : ', aún por debajo del mínimo'}.</p>` : ''}
     <p class="hint">Tramos: ${[...cfg.tiers].sort((a, c) => a.races - c.races).map((t) => `${t.races} carreras → ${euros(t.amount)}`).join(' · ')}. Una carrera de varios días cuenta un día cada uno.</p>
   </section>`;
@@ -648,8 +652,7 @@ function viewBonus() {
     <p class="hint">Cuentan las carreras con resultados de ${S.year}; una carrera de varios días cuenta un día cada uno. La parte clara de la barra suma las inscripciones de ${S.year} pendientes.</p>
     <ul class="bonus-list">${rows.map((r) => `<li>
       <div class="bonus-head"><span class="name">${esc(r.runner.name)}</span>
-        <select data-bonus-new="${r.runner.id}" aria-label="Contrato de ${esc(r.runner.name)}">
-          ${opt('renovado', 'Renovado', r.isNew ? 'nuevo' : 'renovado')}${opt('nuevo', 'Nuevo', r.isNew ? 'nuevo' : 'renovado')}</select></div>
+        ${contractSelect(`data-runner-contract="${r.runner.id}" aria-label="Tipo de contrato de ${esc(r.runner.name)}"`, r.runner.contract || (r.isNew ? 'nuevo' : ''))}</div>
       ${bonusBar(r, cfg, r.planned)}
       <p class="bonus-text">${bonusText(r, 'Lleva')}${r.planned ? ` · <span class="muted">con sus ${r.planned} inscrita${r.planned === 1 ? '' : 's'}: ${r.projected.count}</span>` : ''}</p>
     </li>`).join('')}</ul>
@@ -663,8 +666,9 @@ function viewBonus() {
         <div class="grid2">
           <label>Mínimo del contrato<input type="number" min="0" name="minimum" value="${esc(cfg.minimum)}" required></label>
           <span></span>
-          <label>Penalización renovados (€)<input type="number" min="0" name="pen_ren" value="${esc(cfg.penalty.renovado)}" required></label>
+          <label>Penalización renovación (€)<input type="number" min="0" name="pen_ren" value="${esc(cfg.penalty.renovado)}" required></label>
           <label>Penalización nuevos (€)<input type="number" min="0" name="pen_new" value="${esc(cfg.penalty.nuevo)}" required></label>
+          <label>Penalización renovación sin licencia (€)<input type="number" min="0" name="pen_sl" value="${esc(cfg.penalty.sin_licencia ?? 0)}" required></label>
         </div>
         <p class="hint">Deja vacío un tramo para no usarlo.</p>
         <button class="btn primary">Guardar condiciones de ${S.year}</button>
@@ -691,7 +695,7 @@ function viewRunners() {
     <details class="card" ${runners.length ? '' : 'open'}>
       <summary><b>+ Añadir corredores</b></summary>
       <form class="stack" data-form="bulk">
-        <p class="hint">Uno por línea. La categoría es opcional: «Pere Soler, M40». Los nombres repetidos se ignoran (sin importar mayúsculas ni tildes).</p>
+        <p class="hint">Uno por línea. Categoría y contrato son opcionales: «Pere Soler, M40, renovación». Contratos: nuevo, renovación o renovación sin licencia. Los nombres repetidos se ignoran (sin importar mayúsculas ni tildes).</p>
         <textarea name="bulk" rows="5" placeholder="Pere Soler, M40&#10;Anna Puig, Élite&#10;Jordi Vila"></textarea>
         <button class="btn primary">Añadir</button>
       </form>
@@ -710,7 +714,10 @@ function viewRunners() {
     ${runners.length ? '<button class="btn block" data-act="all-links">Copiar todos los enlaces</button>' : ''}
     <ul class="roster">${runners.map((r) => `<li>
       <div><span class="name">${esc(r.name)}</span><small class="muted">${counts.get(r.id) || 0} carreras en total</small>${badge(bonusBy.get(r.id))}</div>
-      ${catSelect(`data-runner-cat="${r.id}" aria-label="Categoría habitual"`, r.category || '')}
+      <div class="roster-sel">
+        ${catSelect(`data-runner-cat="${r.id}" aria-label="Categoría habitual de ${esc(r.name)}"`, r.category || '')}
+        ${contractSelect(`data-runner-contract="${r.id}" aria-label="Tipo de contrato de ${esc(r.name)}"`, r.contract || '')}
+      </div>
       <button class="icon-btn" data-act="runner-menu" data-id="${r.id}" aria-label="Opciones de ${esc(r.name)}">⋯</button></li>`).join('')}</ul>
     ${runners.length ? '' : '<p class="empty">Todavía no hay corredores.</p>'}`);
 }
@@ -870,7 +877,7 @@ const actions = {
       await run(async () => { await api.regenerateCode(r.id); await reload(); }, 'Enlace nuevo creado: envíaselo'); render();
     } else if (choice === 'export') {
       const races = S.data.races.filter((x) => x.results.some((y) => y.runner_id === r.id));
-      const data = { corredor: { nombre: r.name, categoria: r.category, alta: r.created_at },
+      const data = { corredor: { nombre: r.name, categoria: r.category, contrato: r.contract ? contractLabel(r.contract) : null, alta: r.created_at },
         resultados: races.map((x) => { const y = x.results.find((z) => z.runner_id === r.id);
           return { fecha: x.date, carrera: x.name, lugar: x.place, provincia: x.province, pais: x.country, modalidad: x.modality, categoria: y.category, puesto: y.position, tipo_podio: isPodium(y.position) ? podiumLabel(y.podium_type) : null,
             ...(x.stages?.length ? { etapas: x.stages.map((_, i) => ({ etapa: stageName(x, i), puesto: y.stage_positions?.[i] ?? null })) } : {}) }; }),
@@ -899,7 +906,7 @@ const actions = {
   'bonus-csv'() {
     const cfg = bonusCfg(S.year);
     const rows = yearBonuses(S.year, S.data.races, S.data.registrations, S.data.runners, cfg).map((r) => [
-      r.runner.name, r.isNew ? 'Nuevo' : 'Renovado', r.count, r.amount, r.reachesMinimum ? 'Sí' : 'No', r.penalty,
+      r.runner.name, contractLabel(r.contract), r.count, r.amount, r.reachesMinimum ? 'Sí' : 'No', r.penalty,
       r.next ? r.next.races : '', r.next ? r.missingToNext : '', r.planned, r.projected.count]);
     download(`monzon-bonos-${S.year}.csv`, toCsv(rows, ['Corredor', 'Contrato', 'Carreras', 'Bono actual (€)', 'Llega al mínimo',
       'Penalización (€)', 'Siguiente tramo', 'Faltan', 'Inscritas pendientes', 'Previsión']), 'text/csv;charset=utf-8');
@@ -937,9 +944,11 @@ const forms = {
     if (!total) return toast('Pega la lista de corredores de la temporada.', true);
     const names = (xs) => esc(xs.join(', '));
     const catChanges = plan.keep.filter((k) => k.category);
+    const conChanges = plan.keep.filter((k) => k.contract);
     const msg = `La plantilla quedará con <b>${total}</b> corredores.<br><br>` +
       `<b>Siguen (${plan.keep.length})</b>, con el mismo enlace${catChanges.length ? `; cambian de categoría: ${names(catChanges.map((k) => `${k.runner.name} → ${k.category}`))}` : ''}.<br><br>` +
-      `<b>Altas (${plan.add.length})</b>${plan.add.length ? ': ' + names(plan.add.map((a) => a.name)) + '. Tendrás que enviarles su enlace.' : '.'}<br><br>` +
+      (conChanges.length ? `Cambian de contrato: ${names(conChanges.map((k) => `${k.runner.name} → ${contractLabel(k.contract)}`))}.<br><br>` : '') +
+      `<b>Altas (${plan.add.length})</b>${plan.add.length ? ': ' + names(plan.add.map((a) => `${a.name} (${contractLabel(a.contract).toLowerCase()})`)) + '. Tendrás que enviarles su enlace.' : '.'}<br><br>` +
       `<b>Bajas (${plan.remove.length})</b>${plan.remove.length ? ': ' + names(plan.remove.map((r) => r.name)) + '. Su enlace deja de funcionar; sus resultados se conservan.' : '.'}` +
       (plan.unknownCategory.length ? `<br><br>⚠️ Categoría no reconocida (se deja como estaba): ${names(plan.unknownCategory.map((u) => `${u.name} («${u.text}»)`))}` : '') +
       (plan.remove.length > total / 2 ? '<br><br>⚠️ Se da de baja a más de la mitad. Comprueba que has pegado la lista completa.' : '');
@@ -947,14 +956,8 @@ const forms = {
     const ok = await run(async () => {
       if (plan.add.length) await api.addRunners(plan.add);
       for (const k of catChanges) await api.updateRunner(k.runner.id, { category: k.category });
+      for (const k of conChanges) await api.updateRunner(k.runner.id, { contract: k.contract });
       for (const r of plan.remove) await api.deleteRunner(r.id, false);
-      await reload();
-      if (plan.add.length) { // las altas de la temporada cuentan como «nuevos» para las penalizaciones del bono
-        const year = new Date().getFullYear(), cfg = bonusCfg(year), added = new Set(plan.add.map((a) => normalize(a.name)));
-        const ids = S.data.runners.filter((r) => added.has(normalize(r.name))).map((r) => r.id);
-        try { await api.saveSetting('bonus', { ...(S.data.settings?.bonus || {}), [year]: { ...cfg, nuevos: [...new Set([...cfg.nuevos, ...ids])] } }); }
-        catch (e) { console.warn('No se pudo marcar a los nuevos en el bono', e); }
-      }
       await reload(); return true;
     }, 'Plantilla renovada');
     if (ok) { f.reset(); render(); }
@@ -965,7 +968,7 @@ const forms = {
     if (!tiers.length) return toast('Pon al menos un tramo.', true);
     if (new Set(tiers.map((t) => t.races)).size !== tiers.length) return toast('Hay dos tramos con el mismo número de carreras.', true);
     const cfg = { ...bonusCfg(S.year), tiers: tiers.sort((a, b) => a.races - b.races), minimum: Number(f.minimum.value),
-      penalty: { renovado: Number(f.pen_ren.value), nuevo: Number(f.pen_new.value) } };
+      penalty: { renovado: Number(f.pen_ren.value), nuevo: Number(f.pen_new.value), sin_licencia: Number(f.pen_sl.value) } };
     await run(() => saveBonus(S.year, cfg), `Condiciones de ${S.year} guardadas`);
     render();
   },
@@ -1095,12 +1098,10 @@ $app.addEventListener('change', async (ev) => {
     $app.querySelector('.edit-list li:last-child')?.scrollIntoView({ block: 'center' });
   } else if (t.dataset.fed) {
     fedFilter[t.dataset.fed] = t.type === 'checkbox' ? t.checked : t.value; render();
-  } else if (t.dataset.bonusNew) {
-    const cfg = bonusCfg(S.year);
-    const nuevos = new Set(cfg.nuevos);
-    if (t.value === 'nuevo') nuevos.add(t.dataset.bonusNew); else nuevos.delete(t.dataset.bonusNew);
-    await run(() => saveBonus(S.year, { ...cfg, nuevos: [...nuevos] }), 'Guardado');
-    render();
+  } else if (t.dataset.runnerContract) {
+    const id = t.dataset.runnerContract;
+    await run(async () => { await api.updateRunner(id, { contract: t.value || null }); runnerById(id).contract = t.value || null; }, 'Contrato guardado');
+    if (parseRoute().view === 'bonos') render();
   } else if (t.dataset.runnerCat) {
     const id = t.dataset.runnerCat;
     await run(async () => { await api.updateRunner(id, { category: t.value || null }); runnerById(id).category = t.value || null; }, 'Categoría guardada');

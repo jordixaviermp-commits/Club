@@ -251,3 +251,11 @@ label.check input { accent-color: var(--accent); }
 .bonus-head select { width: auto; min-height: 36px; padding: .2rem .5rem; font-size: .85rem; }
 .tier-rows { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
 .bonus-card h2 { margin-bottom: 0; }
+
+/* Plantilla: categoría y contrato en una segunda línea */
+.roster li { flex-wrap: wrap; }
+.roster li > div:first-child { flex: 1 1 60%; }
+.roster li > .icon-btn { order: 2; }
+.roster li > .roster-sel { order: 3; flex: 1 1 100%; display: grid; grid-template-columns: 1fr 1.5fr; gap: .4rem; flex-direction: initial; }
+.roster li .roster-sel select { width: 100%; min-height: 40px; padding: .35rem .5rem; font-size: .9rem; }
+.bonus-head select { max-width: 60%; }
