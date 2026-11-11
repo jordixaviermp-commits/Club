@@ -36,6 +36,13 @@ const TIPOS = [
   },
 ];
 
+// Precios del material del Club para la temporada (compras adicionales a lo incluido en el contrato)
+const PRECIOS = [
+  ['Maillot', '25 €'], ['Culote', '40 €'], ['Maillot manga larga HYDER', '45 €'],
+  ['Calcetines', '5 € (1 par gratis)'], ['Chaleco', '35 €'], ['Manguitos', '15 €'],
+  ['Camiseta interior', '20 €'], ['Gorra de patrocinadores', 'Gratis'], ['Camiseta de patrocinadores', 'Gratis'],
+];
+
 const ORD = ['', 'un', 'dos', 'tres', 'cuatro'];
 const euros = (n) => `${n} €`;
 const enLetras = { 100: 'CIEN EUROS', 175: 'CIENTO SETENTA Y CINCO EUROS' };
@@ -50,15 +57,21 @@ function tercera(t, y) {
     items.push(t.aportacion
       ? `El deportista aportará la cantidad de <b>${euros(t.aportacion)}</b> en concepto de licencia y equipaciones. El Club asume el resto del coste.`
       : `El Club asume el coste de la licencia y de las equipaciones. El deportista solo deberá aportar <b>${euros(t.penalizacion)}</b> en caso de no alcanzar el mínimo de participaciones establecido en la cláusula QUINTA.`);
-    items.push('En caso de querer adquirir culotes adicionales, el precio unitario de los mismos es de 35€.');
+    items.push(`Material adicional: el deportista podrá adquirir más prendas del Club a los precios de la temporada ${y} indicados a continuación.`);
   } else {
     items.push('El presente acuerdo no incluye la tramitación ni el pago de la licencia federativa por parte del Club, ni la entrega de equipaciones. El deportista deberá disponer de licencia federativa en vigor y competir con la indumentaria oficial del Club, cuyo coste correrá a su cargo.');
-    items.push('En caso de querer adquirir equipaciones del Club, se le facilitarán al precio vigente de la temporada (culote: 35€ por unidad).');
+    items.push(`El deportista podrá adquirir las prendas del Club a los precios de la temporada ${y} indicados a continuación.`);
   }
+  const precios = `<table class="precios"><tr><th colspan="4">Precios ${y} del material del Club</th></tr>
+${PRECIOS.reduce((rows, p, i) => (i % 2 ? rows[rows.length - 1].push(p) : rows.push([p]), rows), [])
+  .map((r) => `<tr>${r.map(([n, e]) => `<td>${n}</td><td class="n">${e}</td>`).join('')}${r.length < 2 ? '<td></td><td></td>' : ''}</tr>`).join('\n')}
+</table>`;
   items.push(`Se ayudará económicamente al corredor según el número de pruebas realizadas durante la temporada ${y}. Siendo la bonificación:`);
-  return `<div class="clause">
+  return `<div>
 <p><b>TERCERA.- Condiciones contractuales:</b></p>
-<ul>${items.map((i) => `<li>${i}</li>`).join('\n')}</ul>
+<ul>${items.slice(0, -1).map((i) => `<li>${i}</li>`).join('\n')}</ul>
+${precios}
+<ul><li>${items.at(-1)}</li></ul>
 <table>
 <tr><th>Objetivo de Temporada</th><th>Bonificación</th></tr>
 ${t.tramos.map(([c, e]) => `<tr><td>Participación en ${c} carreras</td><td class="n">${euros(e)}</td></tr>`).join('\n')}
@@ -99,11 +112,11 @@ function html(t) {
 <style>
 @page { size: A4; margin: 16mm 17mm 18mm 17mm; }
 * { box-sizing: border-box; }
-body { font-family: Arial, "Liberation Sans", Helvetica, sans-serif; font-size: 9.3pt; color: #222; line-height: 1.42; margin: 0; }
+body { font-family: Arial, "Liberation Sans", Helvetica, sans-serif; font-size: 9.1pt; color: #222; line-height: 1.38; margin: 0; }
 h1 { font-size: 17pt; margin: 0 0 2px; letter-spacing: .3px; color: #111; }
 .sub { color: #6b7a99; font-size: 10pt; margin: 0 0 10px; padding-bottom: 9px; border-bottom: 2.5px solid #d32f2f; }
-h2 { font-size: 12pt; letter-spacing: .6px; margin: 14px 0 7px; padding-bottom: 4px; border-bottom: 1px solid #ddd; color: #111; }
-p { margin: 0 0 9px; text-align: justify; }
+h2 { font-size: 12pt; letter-spacing: .6px; margin: 11px 0 6px; padding-bottom: 4px; border-bottom: 1px solid #ddd; color: #111; }
+p { margin: 0 0 8px; text-align: justify; }
 .date { text-align: right; font-style: italic; margin: 14px 0 6px; }
 .blank { display: inline-block; border-bottom: 1px solid #222; height: 1em; vertical-align: baseline; }
 ul { margin: 4px 0 8px; padding-left: 16px; }
@@ -112,6 +125,10 @@ table { border-collapse: collapse; width: 62%; margin: 6px 0 12px; font-size: 9.
 th, td { border: 1px solid #d6d9e0; padding: 5px 8px; }
 th { background: #f1f3f7; text-align: left; }
 td.n { text-align: right; font-weight: bold; }
+table { page-break-inside: avoid; }
+table.precios { width: 100%; font-size: 8.8pt; margin: 2px 0 8px; }
+table.precios th { text-align: center; }
+table.precios td { padding: 3px 8px; }
 .clause { page-break-inside: avoid; }
 .sign { display: flex; justify-content: space-between; margin-top: 34px; page-break-inside: avoid; }
 .sign div { width: 44%; text-align: center; border-top: 1px solid #555; padding-top: 6px; }
