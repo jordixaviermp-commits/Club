@@ -367,6 +367,8 @@ export function extractCode(s) {
 export function todayISO(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+/** Primer día en que un corredor puede apuntar una carrera ya pasada que se olvidó: 1 de enero del año anterior. */
+export function pastLimit(d = new Date()) { return `${d.getFullYear() - 1}-01-01`; }
 const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const DAYS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
 /** «2027-06-14» → «lun 14 jun 2027». */

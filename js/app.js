@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  extractCode, todayISO, formatDate, searchRaces, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
+  extractCode, todayISO, pastLimit, formatDate, searchRaces, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -122,6 +122,7 @@ async function onRoute() {
       if (sub === 'equipo' || (sub === '' && S.regView === 'cal' && !S.team)) loadTeam();
       if (sub === 'federaciones' && !S.fed) loadFed();
       if (sub === 'contrato') loadMyDocs();
+      if (sub === 'nueva' && !S.team) loadTeam();
     }
   }
   if (S.session?.isAdmin) {
@@ -357,20 +358,29 @@ function updateSearch(scope) {
 function dupSuggestions(name, regs, forRunner) {
   if (normalize(name).length < 3) return '';
   const today = todayISO();
-  const club = searchRaces(name, regs.filter((g) => g.date >= today)).slice(0, 4);
-  const fed = fedMatches(name, regs, 4);
-  if (!club.length && !fed.length) return '';
+  // el corredor también ve las ya pasadas (para apuntar una carrera que se olvidó)
+  const club = searchRaces(name, regs.filter((g) => g.date >= (forRunner ? pastLimit() : today))).slice(0, 4);
   const me = S.runnerData?.me;
+  const done = forRunner && Array.isArray(S.team?.races)
+    ? searchRaces(name, S.team.races.filter((r) => r.date >= pastLimit() && r.date <= today)).slice(0, 3) : [];
+  const fed = fedMatches(name, regs, 4);
+  if (!club.length && !fed.length && !done.length) return '';
   return `<div class="dup">
-    ${club.length ? `<p><b>⚠️ ¿Es alguna de estas? Ya están creadas:</b></p><ul class="mini-list">${club.map((g) => miniRow(g,
+    ${club.length || done.length ? `<p><b>⚠️ ¿Es alguna de estas? Ya están creadas:</b></p><ul class="mini-list">${club.map((g) => miniRow(g,
       forRunner ? (g.entries.some((e) => e.runner_id === me?.id) ? '<span class="done">✓ Apuntado</span>'
-        : `<button type="button" class="btn primary small" data-act="r-join-go" data-id="${g.id}">Apuntarme a esta</button>`)
-        : `<a class="btn small" href="#/inscripciones/${g.id}">Abrir</a>`)).join('')}</ul>` : ''}
+        : `<button type="button" class="btn primary small" data-act="r-join-go" data-id="${g.id}">${g.date < today ? 'La hice: apuntarme' : 'Apuntarme a esta'}</button>`)
+        : `<a class="btn small" href="#/inscripciones/${g.id}">Abrir</a>`)).join('')}${done.map((r) => miniRow(r,
+      (r.results || []).some((x) => x.runner_id === me?.id) ? '<span class="done">✓ Ya sales</span>'
+        : `<button type="button" class="btn primary small" data-act="r-join-race" data-id="${r.id}">La hice: añadirme</button>`)).join('')}</ul>` : ''}
     ${fed.length ? `<p><b>En el calendario de las federaciones</b> (rellena los datos con un toque):</p><ul class="mini-list">${fed.map((r) => miniRow(r,
       `<button type="button" class="btn small" data-act="fill-fed" data-i="${S.fed.races.indexOf(r)}">Usar estos datos</button>`)).join('')}</ul>` : ''}
   </div>`;
 }
 
+/** Inscripción ya disputada (para llevar al corredor a poner su resultado al apuntarse). */
+const isPastReg = (id) => { const g = S.runnerData?.registrations.find((x) => x.id === id); return !!g && g.date < (S.runnerData.today || todayISO()); };
+/** Pantalla para poner el resultado: de una inscripción (reg_) o de una carrera ya en resultados (race_). */
+const resultHref = (id) => (S.runnerData?.registrations.some((g) => g.id === id) ? `#/resultado/reg_${id}` : `#/resultado/race_${id}`);
 const emptyRunnerDraft = (pre = {}) => ({ name: '', date: '', multi: false, end_date: '', place: '', province: '', country: DEFAULT_COUNTRY,
   modality: 'Carretera', category: S.runnerData?.me?.category || '', ...pre });
 
@@ -408,15 +418,15 @@ function viewRunnerNew() {
   return frame(editing ? 'Editar mi carrera' : 'Añadir carrera', `
     <form class="card stack" data-form="r-create">
       <p class="hint">${editing ? 'Puedes corregir los datos de esta carrera porque la añadiste tú. Los resultados y podios los pone la dirección.'
-        : 'Escribe el nombre: si ya existe en el club o en el calendario de las federaciones te saldrá aquí debajo, para no duplicarla.'}</p>
+        : 'Escribe el nombre: si ya existe en el club o en el calendario de las federaciones te saldrá aquí debajo, para no duplicarla.<br>¿Se te olvidó apuntar una carrera que ya hiciste? Añádela igual con su fecha (desde el 1 de enero del año pasado) y luego pon tu resultado.'}</p>
       <label>Nombre de la carrera<input data-rf="name" value="${esc(d.name)}" required minlength="3" maxlength="120" autocomplete="off"></label>
       <div id="dup-list">${editing ? '' : dupSuggestions(d.name, S.runnerData.registrations, true)}</div>
       <div class="grid2">
-        <label>${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-rf="date" value="${esc(d.date)}" ${editing ? '' : `min="${todayISO()}"`} required></label>
+        <label>${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-rf="date" value="${esc(d.date)}" min="${pastLimit()}" required></label>
         <label>Modalidad<select data-rf="modality">${MODALITIES.map((m) => opt(m, m, d.modality)).join('')}</select></label>
       </div>
       <label class="check"><input type="checkbox" data-rf-multi ${d.multi ? 'checked' : ''}> Carrera de varios días (por etapas)</label>
-      ${d.multi ? `<label>Último día<input type="date" data-rf="end_date" value="${esc(d.end_date)}" min="${esc(d.date || todayISO())}" required></label>` : ''}
+      ${d.multi ? `<label>Último día<input type="date" data-rf="end_date" value="${esc(d.end_date)}" min="${esc(d.date || pastLimit())}" required></label>` : ''}
       <label>Lugar<input data-rf="place" value="${esc(d.place)}" maxlength="120"></label>
       <div class="grid2">
         <label>Provincia<input data-rf="province" list="dl-prov" value="${esc(d.province)}" autocomplete="off"></label>
@@ -536,7 +546,8 @@ function doneRaceCard(r, { admin = false, meId = null } = {}) {
       <p class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div>${modTag(r.modality)}</div>
     <p class="count">🏁 Disputada · ${res.length} del club${res.length ? ': ' + esc(res.map((x) => x.runner_name).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p>
     ${pods.length ? `<p class="pods">${pods.map((x) => `${medal(x.position)} ${esc(x.runner_name)}`).join(' · ')}</p>` : ''}
-    ${mine ? `<p class="joined-done">✓ Participaste${mine.position ? ` · ${mine.position}º` : ''}</p>` : ''}`;
+    ${mine ? `<p class="joined-done">✓ Participaste${mine.position ? ` · ${mine.position}º` : ''}</p>` : ''}
+    ${!admin && meId && !mine && r.date >= pastLimit() && !S.preview ? `<p><button class="btn small" data-act="r-join-race" data-id="${r.id}">La hice y no salgo: añadirme</button></p>` : ''}`;
   return admin ? `<a class="card race done-race link-card ${modClass(r.modality)}" href="#/carreras/${r.id}">${inner}</a>`
     : `<article class="card race done-race ${modClass(r.modality)}">${inner}</article>`;
 }
@@ -554,7 +565,10 @@ function viewRunnerHome() {
         ${modTag(g.modality)}</div>
       ${open ? '' : `<p class="state-tag">🏁 Ya disputada · pendiente de resultados</p>
         ${mine && !S.preview ? (g.my_result ? `<p class="mine-created">📝 Tu resultado: ${g.my_result.position}º (enviado)</p>`
-          : `<p><a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a></p>`) : ''}`}
+          : `<p class="row"><a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>
+             <button class="btn ghost small" data-act="r-leave" data-id="${g.id}">No fui: borrarme</button></p>`) : ''}
+        ${!mine && g.date >= pastLimit() ? `<div class="row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, me.category, 'Categoría')}
+           <button class="btn primary" data-act="r-join" data-id="${g.id}">La hice: apuntarme</button></div>` : ''}`}
       ${g.mine_created && !S.preview ? `<p class="mine-created">Añadida por ti · <a href="#/editar/${g.id}">✏️ Editar o borrar</a></p>` : ''}
       ${g.notes ? `<p class="notes">${esc(g.notes)}</p>` : ''}
       <p class="count">👥 ${g.entries.length} del club</p>
@@ -1320,13 +1334,20 @@ const actions = {
     render();
   },
   async 'r-join-go'(el) {
-    await run(async () => { await api.runnerJoin(S.code, el.dataset.id, S.rdraft?.category || S.runnerData.me.category || null); await loadRunner(); }, '¡Apuntado!');
-    S.rdraft = null; go('#/');
+    const ok = await run(async () => { await api.runnerJoin(S.code, el.dataset.id, S.rdraft?.category || S.runnerData.me.category || null); await loadRunner(); return true; }, '¡Apuntado!');
+    S.rdraft = null; go(ok && isPastReg(el.dataset.id) ? resultHref(el.dataset.id) : '#/');
   },
   async 'r-join'(el) {
     const cat = $app.querySelector(`[data-cat="${el.dataset.id}"]`)?.value || S.runnerData?.me?.category || null;
-    await run(async () => { await api.runnerJoin(S.code, el.dataset.id, cat); await loadRunner(); }, '¡Apuntado!');
+    const ok = await run(async () => { await api.runnerJoin(S.code, el.dataset.id, cat); await loadRunner(); return true; }, '¡Apuntado!');
+    if (ok && isPastReg(el.dataset.id)) return go(resultHref(el.dataset.id));
     render();
+  },
+  // «La hice y no salgo»: añadirse a una carrera que ya está en resultados y poner el puesto
+  async 'r-join-race'(el) {
+    const ok = await run(async () => { await api.runnerJoinRace(S.code, el.dataset.id, S.rdraft?.category || S.runnerData.me.category || null); await loadRunner(); return true; }, 'Añadido: ahora pon tu resultado');
+    if (!ok) return;
+    S.rdraft = null; S.team = null; go(resultHref(el.dataset.id));
   },
   async 'r-leave'(el) {
     if (!await confirmAction('Borrar inscripción', '¿Seguro que quieres borrarte de esta carrera?', 'Sí, borrarme')) return;
@@ -1549,12 +1570,13 @@ const forms = {
       if (!choice) return;
       if (choice === 'join') return actions['r-join-go']({ dataset: { id: same.id } });
     }
-    const ok = await run(async () => {
-      await api.runnerCreate(S.code, { name, date: d.date, end_date: d.multi ? d.end_date : null, place: cleanName(d.place),
+    const past = d.date < todayISO();
+    const id = await run(async () => {
+      const newId = await api.runnerCreate(S.code, { name, date: d.date, end_date: d.multi ? d.end_date : null, place: cleanName(d.place),
         province: cleanName(d.province), country: d.country, modality: d.modality }, d.category || null);
-      await loadRunner(); return true;
-    }, 'Carrera añadida y te has apuntado');
-    if (ok) { S.rdraft = null; S.q.runner = ''; go('#/'); }
+      await loadRunner(); return newId || true;
+    }, past ? 'Carrera añadida: ahora pon tu resultado' : 'Carrera añadida y te has apuntado');
+    if (id) { S.rdraft = null; S.q.runner = ''; go(past ? resultHref(id) : '#/'); }
   },
   async 'r-report'(f) {
     const position = Number(f.position.value);
@@ -1662,7 +1684,7 @@ const fileHandlers = {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-join-go', 'r-delete-mine']);
+const RUNNER_ACTIONS = new Set(['r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-join-go', 'r-delete-mine', 'r-join-race']);
 $app.addEventListener('click', (ev) => {
   const el = ev.target.closest('[data-act]');
   if (!el || !actions[el.dataset.act]) return;
