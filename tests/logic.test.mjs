@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalize, matchCategory, parseBulkRunners, yearSummary, csvRows, toCsv, parseCsv, importResultsCsv,
-  parseDate, extractCode, newCode, formatDate, planRosterRenewal, monthGrid, addMonths, formatRange, daysOf, podiumsOf, bonusStatus, bonusConfigFor, yearBonuses, DEFAULT_BONUS, matchContract, searchRaces,
+  parseDate, extractCode, newCode, formatDate, planRosterRenewal, monthGrid, addMonths, formatRange, daysOf, podiumsOf, bonusStatus, bonusConfigFor, yearBonuses, DEFAULT_BONUS, matchContract, searchRaces, pastLimit,
 } from '../js/logic.js';
 
 test('normalize ignora mayúsculas y tildes', () => {
@@ -233,4 +233,9 @@ test('buscador de carreras', () => {
   assert.deepEqual(names('xyz'), []);
   assert.deepEqual(names('BTT Garrigues'), ['BTT Les Garrigues']);
   assert.deepEqual(searchRaces('BTT Garrigues', [{ name: 'Open Escolar BTT Cambrils', date: '2026-11-14' }]), []); // «BTT» sola no basta
+});
+
+test('pastLimit: carreras olvidadas desde el 1 de enero del año anterior', () => {
+  assert.equal(pastLimit(new Date(2026, 11, 20)), '2025-01-01');
+  assert.equal(pastLimit(new Date(2027, 0, 3)), '2026-01-01');
 });

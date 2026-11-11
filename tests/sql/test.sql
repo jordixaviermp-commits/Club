@@ -129,7 +129,7 @@ select pg_temp.check((select count(*) from registration_entries where registrati
 select pg_temp.check((select created_by from registrations where id = :'nueva') = '10000000-0000-0000-0000-000000000002', 'consta quién la creó');
 set role anon;
 select pg_temp.check(runner_create_registration('BBBBBBBBBB', jsonb_build_object('name','marxa nova','date', current_date + 10), null) = :'nueva', 'mismo nombre y día: no duplica');
-select pg_temp.expect_fail($q$select runner_create_registration('BBBBBBBBBB', jsonb_build_object('name','Pasada','date', current_date - 1), null)$q$, 'no crea carreras pasadas');
+select pg_temp.expect_fail($q$select runner_create_registration('BBBBBBBBBB', '{"name":"Muy Vieja","date":"2000-01-01"}', null)$q$, 'no crea carreras de antes del año anterior');
 select pg_temp.expect_fail($q$select runner_create_registration('BBBBBBBBBB', '{"name":"ab","date":"2099-01-01"}', null)$q$, 'nombre demasiado corto');
 select pg_temp.expect_fail($q$select runner_create_registration('XXXXXXXXXXXX', '{"name":"Hack","date":"2099-01-01"}', null)$q$, 'sin enlace no crea');
 select pg_temp.expect_fail($q$select runner_create_registration('BBBBBBBBBB', '{"name":"Rara","date":"2099-01-01","modality":"Patinete"}', null)$q$, 'modalidad inválida');
@@ -178,6 +178,31 @@ select pg_temp.check((runner_view('BBBBBBBBBB')->'my_results')::text not like '%
 select pg_temp.check(jsonb_array_length(runner_team('BBBBBBBBBB')->'races') >= 1, 'resumen equipo: ve las carreras del equipo');
 select pg_temp.check(runner_team('BBBBBBBBBB')::text !~ '(BBBBBBBBBB|AAAAAAAAAA|contract|renovacion|"notes")', 'resumen equipo: sin enlaces, contratos ni notas');
 select pg_temp.expect_fail($q$select runner_team('XXXXXXXXXXXX')$q$, 'resumen equipo: sin enlace no');
+-- carreras olvidadas (ya pasadas)
+reset role;
+insert into runners (id, name, code) values ('10000000-0000-0000-0000-000000000004', 'Dani Test', 'DDDDDDDDDD');
+set role anon;
+select runner_create_registration('DDDDDDDDDD', jsonb_build_object('name','Olvidada','date', current_date - 3), 'M40') as olv \gset
+select pg_temp.check((select count(*) from jsonb_array_elements(runner_view('DDDDDDDDDD')->'registrations') g
+                       where g->>'id' = :'olv' and g->'entries' @> '[{"name":"Dani Test"}]') = 1, 'olvidada: crea una carrera pasada y queda apuntado');
+select runner_report_result('DDDDDDDDDD', 'reg', :'olv', 5, null, null);
+select pg_temp.check((select (g->'my_result'->>'position')::int from jsonb_array_elements(runner_view('DDDDDDDDDD')->'registrations') g where g->>'id' = :'olv') = 5, 'olvidada: pone su resultado');
+select pg_temp.expect_fail($q$select runner_leave('DDDDDDDDDD', '$q$ || :'olv' || $q$')$q$, 'olvidada: con resultado puesto ya no se borra');
+select runner_join('CCCCCCCCCC', :'olv', null);
+select runner_leave('CCCCCCCCCC', :'olv');
+select pg_temp.check((select jsonb_array_length(g->'entries') from jsonb_array_elements(runner_view('CCCCCCCCCC')->'registrations') g where g->>'id' = :'olv') = 1, 'olvidada: otro se apunta y se borra (sin resultado)');
+select pg_temp.check(runner_create_registration('DDDDDDDDDD', jsonb_build_object('name','ayer','date', current_date - 1), null) = :'rp', 'ya en resultados: se le añade a esa carrera');
+select pg_temp.check((select count(*) from jsonb_array_elements(runner_view('DDDDDDDDDD')->'my_results') x where x->>'race_id' = :'rp' and x->'position' = 'null') = 1, 'ya en resultados: aparece sin puesto');
+select runner_report_result('DDDDDDDDDD', 'race', :'rp', 9, null, null);
+select runner_join_race('DDDDDDDDDD', :'rp', null);
+select pg_temp.check((select (x->>'position')::int from jsonb_array_elements(runner_view('DDDDDDDDDD')->'my_results') x where x->>'race_id' = :'rp') = 9, 'añadirse otra vez no borra su puesto');
+select pg_temp.expect_fail($q$select runner_join_race('XXXXXXXXXXXX', '$q$ || :'rp' || $q$', null)$q$, 'sin enlace no se añade');
+select pg_temp.expect_fail($q$select runner_join_race('DDDDDDDDDD', gen_random_uuid(), null)$q$, 'carrera inexistente');
+reset role;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+insert into races (id, name, date) values ('30000000-0000-0000-0000-000000000001', 'Futura', current_date + 5);
+set role anon;
+select pg_temp.expect_fail($q$select runner_join_race('DDDDDDDDDD', '30000000-0000-0000-0000-000000000001', null)$q$, 'no se añade a resultados de una carrera futura');
 -- documentos (contratos)
 reset role;
 set role authenticated;

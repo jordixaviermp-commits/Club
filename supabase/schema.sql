@@ -371,7 +371,8 @@ declare v_runner uuid;
 begin
   select id into v_runner from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
-  if not exists (select 1 from registrations where id = p_registration and date >= current_date) then
+  -- también carreras ya pasadas (desde el 1 de enero del año anterior): «la hice y no me apunté»
+  if not exists (select 1 from registrations where id = p_registration and date >= make_date(extract(year from current_date)::int - 1, 1, 1)) then
     raise exception 'inscripcion_cerrada';
   end if;
   insert into registration_entries (registration_id, runner_id, category)
@@ -381,7 +382,9 @@ end $$;
 
 -- Un corredor añade una carrera que no estaba y queda apuntado.
 -- Si ya hay una con el mismo nombre el mismo día, no se duplica: se le apunta a esa.
--- Límites contra errores o abusos: nombre de 3 a 120 caracteres, fecha entre hoy y dos años,
+-- Si es una carrera ya pasada que la dirección ya pasó a resultados (mismo nombre y día), se le añade a esa.
+-- Límites contra errores o abusos: nombre de 3 a 120 caracteres, fecha desde el 1 de enero del año anterior
+-- (para las carreras que se olvidó de apuntar) hasta dentro de dos años,
 -- como mucho 10 carreras creadas por corredor y día. Solo la dirección puede editarlas o borrarlas.
 create or replace function public.runner_create_registration(p_code text, p_reg jsonb, p_category text)
 returns uuid language plpgsql security definer set search_path = public as $$
@@ -394,10 +397,19 @@ begin
   select id into v_runner from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
   if length(v_name) < 3 or length(v_name) > 120 then raise exception 'nombre_no_valido'; end if;
-  if v_date is null or v_date < current_date or v_date > current_date + 730 then raise exception 'fecha_no_valida'; end if;
+  if v_date is null or v_date < make_date(extract(year from current_date)::int - 1, 1, 1) or v_date > current_date + 730 then raise exception 'fecha_no_valida'; end if;
   if v_end is not null and (v_end < v_date or v_end > v_date + 30) then raise exception 'fecha_no_valida'; end if;
   if (select count(*) from registrations where created_by = v_runner and created_at > now() - interval '1 day') >= 10 then
     raise exception 'demasiadas_carreras';
+  end if;
+  if v_date < current_date then
+    select id into v_id from races where date = v_date and lower(name) = lower(v_name) limit 1;
+    if v_id is not null then
+      insert into results (race_id, runner_id, runner_name, category)
+      select v_id, v_runner, name, nullif(p_category, '') from runners where id = v_runner
+      on conflict (race_id, runner_id) do nothing;
+      return v_id;
+    end if;
   end if;
   select id into v_id from registrations where date = v_date and lower(name) = lower(v_name) limit 1;
   if v_id is null then
@@ -429,7 +441,7 @@ begin
     raise exception 'no_es_tuya' using errcode = '42501';
   end if;
   if length(v_name) < 3 or length(v_name) > 120 then raise exception 'nombre_no_valido'; end if;
-  if v_date is null or v_date < current_date - 60 or v_date > current_date + 730 then raise exception 'fecha_no_valida'; end if;
+  if v_date is null or v_date < make_date(extract(year from current_date)::int - 1, 1, 1) or v_date > current_date + 730 then raise exception 'fecha_no_valida'; end if;
   if v_end is not null and (v_end < v_date or v_end > v_date + 30) then raise exception 'fecha_no_valida'; end if;
   if exists (select 1 from registrations where id <> p_id and date = v_date and lower(name) = lower(v_name)) then
     raise exception 'ya_existe';
@@ -537,13 +549,32 @@ begin
   return jsonb_build_object('filename', d.filename, 'mime', d.mime, 'b64', encode(d.data, 'base64'));
 end $$;
 
+-- «La hice y no salgo»: el corredor se añade a una carrera que ya está en resultados (sin puesto;
+-- después lo pone él con runner_report_result). Solo carreras ya disputadas desde el 1 de enero del año anterior.
+create or replace function public.runner_join_race(p_code text, p_race uuid, p_category text)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_runner uuid; v_name text;
+begin
+  select id, name into v_runner, v_name from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  if not exists (select 1 from races where id = p_race and date <= current_date and date >= make_date(extract(year from current_date)::int - 1, 1, 1)) then
+    raise exception 'inscripcion_cerrada';
+  end if;
+  insert into results (race_id, runner_id, runner_name, category)
+  values (p_race, v_runner, v_name, nullif(p_category, ''))
+  on conflict (race_id, runner_id) do nothing;
+end $$;
+
 create or replace function public.runner_leave(p_code text, p_registration uuid)
 returns void language plpgsql security definer set search_path = public as $$
 declare v_runner uuid;
 begin
   select id into v_runner from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
-  if not exists (select 1 from registrations where id = p_registration and date >= current_date) then
+  -- una ya pasada solo si aún no ha puesto su resultado
+  if not exists (select 1 from registrations g where g.id = p_registration and g.date >= make_date(extract(year from current_date)::int - 1, 1, 1)
+                   and (g.date >= current_date or not exists (select 1 from registration_entries e where e.registration_id = g.id
+                                                                and e.runner_id = v_runner and e.self_position is not null))) then
     raise exception 'inscripcion_cerrada';
   end if;
   delete from registration_entries where registration_id = p_registration and runner_id = v_runner;
@@ -562,7 +593,7 @@ grant execute on function public.runner_view(text), public.runner_join(text, uui
                           public.runner_report_result(text, text, uuid, int, text, text),
                           public.runner_documents_list(text), public.runner_get_document(text, uuid),
                           public.runner_team(text),
-                          public.runner_leave(text, uuid), public.ping() to anon, authenticated;
+                          public.runner_leave(text, uuid), public.runner_join_race(text, uuid, text), public.ping() to anon, authenticated;
 grant execute on function public.is_admin(), public.require_admin(),
                           public.save_registration(jsonb, jsonb), public.save_race(jsonb, jsonb),
                           public.promote_registration(uuid), public.delete_runner(uuid, boolean),

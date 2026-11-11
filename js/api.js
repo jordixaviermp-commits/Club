@@ -1,7 +1,7 @@
 // Acceso a datos. Dos versiones con la misma interfaz:
 //  - Supabase (real), cuando config.js tiene URL y clave.
 //  - Demostración, guardada solo en este navegador, para probar la app sin montar nada.
-import { newCode, todayISO, numDays, yearOf } from './logic.js';
+import { newCode, todayISO, pastLimit, numDays, yearOf } from './logic.js';
 
 const TABLES = ['runners', 'registrations', 'registration_entries', 'races', 'results', 'settings'];
 
@@ -15,9 +15,9 @@ export function friendlyError(e) {
   if (/no_es_tuya/.test(msg)) return 'Solo puedes cambiar las carreras que has añadido tú.';
   if (/ya_existe/.test(msg)) return 'Ya hay otra carrera con ese nombre ese mismo día.';
   if (/nombre_no_valido/.test(msg)) return 'Pon un nombre de carrera de al menos 3 letras.';
-  if (/fecha_no_valida/.test(msg)) return 'Revisa las fechas: tiene que ser una carrera de hoy en adelante (como mucho dentro de dos años).';
+  if (/fecha_no_valida/.test(msg)) return 'Revisa las fechas: desde el 1 de enero del año pasado hasta, como mucho, dentro de dos años.';
   if (/demasiadas_carreras/.test(msg)) return 'Hoy ya has añadido muchas carreras. Si necesitas más, pídeselo a la dirección.';
-  if (/inscripcion_cerrada/.test(msg)) return 'Esta carrera ya ha pasado: no se puede cambiar la inscripción.';
+  if (/inscripcion_cerrada/.test(msg)) return 'Ya no se puede cambiar: es una carrera demasiado antigua o ya has puesto tu resultado. Pídeselo a la dirección del club.';
   if (/solo_direccion|permission denied|42501/.test(msg)) return 'No tienes permiso para hacer esto.';
   if (/Invalid login credentials/i.test(msg)) return 'Email o contraseña incorrectos.';
   if (/duplicate key|unique/i.test(msg)) return 'Hay un corredor repetido en la misma carrera.';
@@ -106,6 +106,7 @@ export function supabaseApi(url, key) {
     async runnerCreate(code, reg, category) { return ok(await sb.rpc('runner_create_registration', { p_code: code, p_reg: reg, p_category: category || null })); },
     async runnerJoin(code, regId, category) { ok(await sb.rpc('runner_join', { p_code: code, p_registration: regId, p_category: category || null })); },
     async runnerLeave(code, regId) { ok(await sb.rpc('runner_leave', { p_code: code, p_registration: regId })); },
+    async runnerJoinRace(code, raceId, category) { ok(await sb.rpc('runner_join_race', { p_code: code, p_race: raceId, p_category: category || null })); },
   };
 }
 
@@ -171,7 +172,7 @@ export function demoApi(storage = globalThis.localStorage) {
   };
   const openReg = (id) => {
     const g = load().registrations.find((x) => x.id === id);
-    if (!g || g.date < todayISO()) throw new Error('inscripcion_cerrada');
+    if (!g || g.date < pastLimit()) throw new Error('inscripcion_cerrada');
     return g;
   };
 
@@ -358,8 +359,13 @@ export function demoApi(storage = globalThis.localStorage) {
       const me = byCode(code); const d = load();
       const name = String(reg.name || '').replace(/\s+/g, ' ').trim();
       if (name.length < 3 || name.length > 120) throw new Error('nombre_no_valido');
-      if (!reg.date || reg.date < todayISO()) throw new Error('fecha_no_valida');
+      if (!reg.date || reg.date < pastLimit()) throw new Error('fecha_no_valida');
       if (reg.end_date && reg.end_date < reg.date) throw new Error('fecha_no_valida');
+      const race = reg.date < todayISO() && d.races.find((x) => x.date === reg.date && x.name.toLowerCase() === name.toLowerCase());
+      if (race) { // ya está en resultados: se le añade a esa
+        if (!d.results.some((x) => x.race_id === race.id && x.runner_id === me.id)) d.results.push({ id: uuid(), race_id: race.id, runner_id: me.id, runner_name: me.name, category: category || null, position: null, podium_type: 'suelta' });
+        save(); return race.id;
+      }
       let g = d.registrations.find((x) => x.date === reg.date && x.name.toLowerCase() === name.toLowerCase());
       if (!g) {
         g = { id: uuid(), created_at: new Date().toISOString(), created_by: me.id, ...fields({ ...reg, name }) };
@@ -375,8 +381,16 @@ export function demoApi(storage = globalThis.localStorage) {
       d.registration_entries.push({ registration_id: regId, runner_id: me.id, category: category || null, created_at: new Date().toISOString() });
       save();
     },
+    async runnerJoinRace(code, raceId, category) {
+      const me = byCode(code); const d = load();
+      const race = d.races.find((x) => x.id === raceId);
+      if (!race || race.date > todayISO() || race.date < pastLimit()) throw new Error('inscripcion_cerrada');
+      if (!d.results.some((x) => x.race_id === raceId && x.runner_id === me.id)) d.results.push({ id: uuid(), race_id: raceId, runner_id: me.id, runner_name: me.name, category: category || null, position: null, podium_type: 'suelta' });
+      save();
+    },
     async runnerLeave(code, regId) {
-      const me = byCode(code); openReg(regId); const d = load();
+      const me = byCode(code); const g = openReg(regId); const d = load();
+      if (g.date < todayISO() && d.registration_entries.some((e) => e.registration_id === regId && e.runner_id === me.id && e.self_position)) throw new Error('inscripcion_cerrada');
       d.registration_entries = d.registration_entries.filter((e) => !(e.registration_id === regId && e.runner_id === me.id));
       save();
     },
