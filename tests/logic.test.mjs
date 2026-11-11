@@ -148,7 +148,7 @@ test('podios de etapa: cuentan como tipo «Etapa»', () => {
 test('bonos por carreras', () => {
   const cfg = DEFAULT_BONUS;
   assert.deepEqual([0, 11, 12, 16, 17, 22, 30].map((n) => { const b = bonusStatus(n, cfg, false); return [b.amount, b.penalty, b.missingToNext]; }),
-    [[0, 100, 12], [0, 100, 1], [150, 0, 5], [150, 0, 1], [200, 0, 5], [250, 0, 0], [250, 0, 0]]);
+    [[0, 100, 12], [0, 100, 1], [50, 0, 5], [50, 0, 1], [100, 0, 5], [150, 0, 0], [150, 0, 0]]);
   assert.equal(bonusStatus(5, cfg, true).penalty, 175);
   assert.equal(bonusStatus(5, cfg, true).missingToMinimum, 7);
   // configuración por año: copia la anterior sin la lista de nuevos
@@ -166,6 +166,24 @@ test('bonos por carreras', () => {
     { ...DEFAULT_BONUS, nuevos: ['c'] });
   assert.deepEqual(rows.map((r) => [r.runner.name, r.count, r.planned, r.penalty, r.projected.count]),
     [['Anna', 4, 0, 100, 4], ['Biel', 1, 1, 100, 2], ['Carla', 0, 0, 175, 0]]);
+});
+
+test('tramos de bono por tipo de contrato', () => {
+  // renovación sin licencia: 100/150/200 €; nuevo y renovación: 50/100/150 €
+  assert.deepEqual([11, 12, 17, 22].map((n) => bonusStatus(n, DEFAULT_BONUS, 'renovacion_sin_licencia').amount), [0, 100, 150, 200]);
+  assert.deepEqual([11, 12, 17, 22].map((n) => bonusStatus(n, DEFAULT_BONUS, 'nuevo').amount), [0, 50, 100, 150]);
+  assert.equal(bonusStatus(11, DEFAULT_BONUS, 'renovacion_sin_licencia').penalty, 0);
+  // configuración guardada con los tramos erróneos de antes (150/200/250): se usan los del contrato
+  const old = { 2026: { tiers: [{ races: 12, amount: 150 }, { races: 17, amount: 200 }, { races: 22, amount: 250 }], minimum: 12, penalty: { renovado: 100, nuevo: 175 } } };
+  assert.deepEqual(bonusConfigFor(old, 2026).tiers, DEFAULT_BONUS.tiers);
+  assert.deepEqual(bonusConfigFor(old, 2027).tiers, DEFAULT_BONUS.tiers);
+  assert.equal(bonusStatus(12, bonusConfigFor(old, 2027), 'renovacion_sin_licencia').amount, 100);
+  // configuración propia: se respeta, y los tramos sin licencia vienen de los del contrato si no se guardaron
+  const own = { 2027: { tiers: [{ races: 12, amount: 60 }], minimum: 12 } };
+  assert.equal(bonusStatus(12, bonusConfigFor(own, 2027), 'renovacion').amount, 60);
+  assert.equal(bonusStatus(12, bonusConfigFor(own, 2027), 'renovacion_sin_licencia').amount, 100);
+  const ownSl = { 2027: { tiers: [{ races: 12, amount: 60 }], tiersByContract: { renovacion_sin_licencia: [{ races: 10, amount: 90 }] } } };
+  assert.equal(bonusStatus(10, bonusConfigFor(ownSl, 2027), 'renovacion_sin_licencia').amount, 90);
 });
 
 test('tipos de contrato', () => {

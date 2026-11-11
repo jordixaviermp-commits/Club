@@ -76,6 +76,21 @@ alter table public.registration_entries add constraint entries_self_check check 
   (self_position is null or self_position > 0) and (self_podium_type is null or self_podium_type in ('suelta','general','campeonato')));
 alter table public.results add column if not exists self_reported boolean not null default false;
 
+-- Documentos de cada corredor (p. ej. su contrato de la temporada). Solo los ven él y la dirección.
+create table if not exists public.runner_documents (
+  id         uuid primary key default gen_random_uuid(),
+  runner_id  uuid not null references public.runners(id) on delete cascade,
+  year       integer not null,
+  title      text not null default 'Contrato',
+  filename   text not null,
+  mime       text not null check (mime in ('application/pdf','image/jpeg','image/png','image/webp')),
+  size       integer not null check (size > 0 and size <= 5000000),
+  data       bytea not null,
+  created_at timestamptz default now()
+);
+create index if not exists runner_documents_runner_idx on public.runner_documents(runner_id);
+alter table public.runner_documents enable row level security;  -- permisos: ver «Seguridad» más abajo
+
 -- Tipo de contrato del corredor en la temporada actual.
 alter table public.runners add column if not exists contract text;
 alter table public.runners drop constraint if exists runners_contract_check;
@@ -131,16 +146,16 @@ $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['runners','registrations','registration_entries','races','results','settings'] loop
+  foreach t in array array['runners','registrations','registration_entries','races','results','settings','runner_documents'] loop
     execute format('drop policy if exists admin_all on public.%I', t);
     execute format('create policy admin_all on public.%I for all to authenticated using (public.is_admin()) with check (public.is_admin())', t);
   end loop;
 end $$;
 
 revoke all on public.runners, public.registrations, public.registration_entries,
-              public.races, public.results, public.admins, public.settings from anon, public;
+              public.races, public.results, public.admins, public.settings, public.runner_documents from anon, public;
 grant select, insert, update, delete on public.runners, public.registrations,
-              public.registration_entries, public.races, public.results, public.settings to authenticated;
+              public.registration_entries, public.races, public.results, public.settings, public.runner_documents to authenticated;
 revoke all on public.admins from authenticated;
 
 -- ---------- Funciones de dirección (respetan la seguridad de arriba) ---
@@ -477,6 +492,51 @@ begin
   end if;
 end $$;
 
+-- Documentos: la dirección sube y descarga; el corredor ve y descarga solo los suyos.
+create or replace function public.upload_document(p_runner uuid, p_year int, p_title text, p_filename text, p_mime text, p_b64 text)
+returns uuid language plpgsql set search_path = public as $$
+declare v_id uuid; v_data bytea := decode(p_b64, 'base64');
+begin
+  perform public.require_admin();
+  insert into runner_documents (runner_id, year, title, filename, mime, size, data)
+  values (p_runner, p_year, left(coalesce(nullif(btrim(p_title), ''), 'Contrato'), 120), left(p_filename, 200), p_mime, length(v_data), v_data)
+  returning id into v_id;
+  return v_id;
+end $$;
+
+create or replace function public.get_document(p_id uuid)
+returns jsonb language plpgsql stable set search_path = public as $$
+declare d runner_documents;
+begin
+  perform public.require_admin();
+  select * into d from runner_documents where id = p_id;
+  if not found then raise exception 'no_existe'; end if;
+  return jsonb_build_object('filename', d.filename, 'mime', d.mime, 'b64', encode(d.data, 'base64'));
+end $$;
+
+create or replace function public.runner_documents_list(p_code text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare v_runner uuid;
+begin
+  select id into v_runner from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  return coalesce((select jsonb_agg(jsonb_build_object('id', id, 'year', year, 'title', title, 'filename', filename,
+                                                       'mime', mime, 'size', size, 'created_at', created_at)
+                                    order by year desc, created_at desc)
+                     from runner_documents where runner_id = v_runner), '[]'::jsonb);
+end $$;
+
+create or replace function public.runner_get_document(p_code text, p_id uuid)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare v_runner uuid; d runner_documents;
+begin
+  select id into v_runner from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  select * into d from runner_documents where id = p_id and runner_id = v_runner;
+  if not found then raise exception 'no_es_tuya' using errcode = '42501'; end if;
+  return jsonb_build_object('filename', d.filename, 'mime', d.mime, 'b64', encode(d.data, 'base64'));
+end $$;
+
 create or replace function public.runner_leave(p_code text, p_registration uuid)
 returns void language plpgsql security definer set search_path = public as $$
 declare v_runner uuid;
@@ -500,9 +560,11 @@ grant execute on function public.runner_view(text), public.runner_join(text, uui
                           public.runner_create_registration(text, jsonb, text),
                           public.runner_update_registration(text, uuid, jsonb), public.runner_delete_registration(text, uuid),
                           public.runner_report_result(text, text, uuid, int, text, text),
+                          public.runner_documents_list(text), public.runner_get_document(text, uuid),
                           public.runner_team(text),
                           public.runner_leave(text, uuid), public.ping() to anon, authenticated;
 grant execute on function public.is_admin(), public.require_admin(),
                           public.save_registration(jsonb, jsonb), public.save_race(jsonb, jsonb),
                           public.promote_registration(uuid), public.delete_runner(uuid, boolean),
-                          public.import_backup(jsonb) to authenticated;
+                          public.import_backup(jsonb), public.upload_document(uuid, int, text, text, text, text),
+                          public.get_document(uuid) to authenticated;

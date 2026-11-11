@@ -433,13 +433,19 @@ export const numDays = (start, end) => daysOf(start, end).length;
 
 // ---------- Bonos por carreras de la temporada ----------
 
-/** Bono de la temporada 2026 según el contrato; los años sin configurar copian el último configurado. */
+/** Bono según los contratos (2026 y 2027); los años sin configurar copian el último configurado. */
 export const DEFAULT_BONUS = {
-  tiers: [{ races: 12, amount: 150 }, { races: 17, amount: 200 }, { races: 22, amount: 250 }],
+  tiers: [{ races: 12, amount: 50 }, { races: 17, amount: 100 }, { races: 22, amount: 150 }], // nuevo y renovación
+  // tramos propios por tipo de contrato (los que no aparecen usan `tiers`)
+  tiersByContract: { renovacion_sin_licencia: [{ races: 12, amount: 100 }, { races: 17, amount: 150 }, { races: 22, amount: 200 }] },
   minimum: 12,
   penalty: { renovado: 100, nuevo: 175, sin_licencia: 0 }, // renovación sin licencia: sin penalización
   nuevos: [],
 };
+
+/** Tramos que la app traía por error (150/200/250 €): si se guardaron tal cual, se sustituyen por los del contrato. */
+const WRONG_OLD_TIERS = '12:150,17:200,22:250';
+const tiersKey = (t) => [...(t || [])].sort((a, b) => a.races - b.races).map((x) => `${x.races}:${x.amount}`).join(',');
 
 /** Tipos de contrato del corredor (temporada actual). */
 export const CONTRACTS = [
@@ -457,13 +463,29 @@ export function matchContract(s) {
   return null;
 }
 
+function withDefaults(cfg, nuevos) {
+  const wrongTiers = tiersKey(cfg.tiers) === WRONG_OLD_TIERS;
+  return {
+    ...DEFAULT_BONUS, ...cfg,
+    tiers: wrongTiers || !cfg.tiers?.length ? DEFAULT_BONUS.tiers : cfg.tiers,
+    // una configuración guardada antes de los tramos por contrato no los trae: se usan los del contrato
+    tiersByContract: { ...DEFAULT_BONUS.tiersByContract, ...(wrongTiers ? {} : cfg.tiersByContract || {}) },
+    penalty: { ...DEFAULT_BONUS.penalty, ...cfg.penalty },
+    nuevos,
+  };
+}
+
 export function bonusConfigFor(all, year) {
   const cfg = all?.[year];
-  if (cfg) return { ...DEFAULT_BONUS, ...cfg, penalty: { ...DEFAULT_BONUS.penalty, ...cfg.penalty }, nuevos: cfg.nuevos || [] };
+  if (cfg) return withDefaults(cfg, cfg.nuevos || []);
   const prev = Object.keys(all || {}).map(Number).filter((y) => y < year).sort((a, b) => b - a)[0];
   // de un año a otro se copian tramos, mínimo y penalizaciones, pero no quién es nuevo
-  return prev ? { ...DEFAULT_BONUS, ...all[prev], penalty: { ...DEFAULT_BONUS.penalty, ...all[prev].penalty }, nuevos: [] } : { ...DEFAULT_BONUS };
+  return prev ? withDefaults(all[prev], []) : withDefaults({}, []);
 }
+
+/** Tramos de bono que corresponden a un tipo de contrato. */
+export const tiersFor = (cfg, contract) =>
+  [...((cfg.tiersByContract || {})[contract] || cfg.tiers || [])].filter((t) => t.races > 0).sort((a, b) => a.races - b.races);
 
 /** Carreras que cuentan para el bono: cada día de competición es una (una de 3 días = 3). */
 export const bonusRacesOf = (race) => numDays(race.date, race.end_date);
@@ -477,7 +499,7 @@ export function bonusStatus(count, cfg, contract) {
   const c = contract === true ? 'nuevo' : contract === false || contract == null ? 'renovacion' : contract;
   const penaltyKey = CONTRACTS.find((x) => x.id === c)?.penalty || 'renovado';
   const pen = { ...DEFAULT_BONUS.penalty, ...(cfg.penalty || {}) };
-  const tiers = [...(cfg.tiers || [])].filter((t) => t.races > 0).sort((a, b) => a.races - b.races);
+  const tiers = tiersFor(cfg, c);
   const reached = tiers.filter((t) => count >= t.races);
   const tier = reached.at(-1) || null;
   const next = tiers.find((t) => count < t.races) || null;
@@ -490,7 +512,7 @@ export function bonusStatus(count, cfg, contract) {
     tier, next,
     missingToNext: next ? next.races - count : 0,
     missingToMinimum: reachesMinimum ? 0 : minimum - count,
-    isNew: c === 'nuevo', contract: c,
+    isNew: c === 'nuevo', contract: c, tiers,
   };
 }
 

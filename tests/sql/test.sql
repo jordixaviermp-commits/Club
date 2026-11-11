@@ -178,5 +178,21 @@ select pg_temp.check((runner_view('BBBBBBBBBB')->'my_results')::text not like '%
 select pg_temp.check(jsonb_array_length(runner_team('BBBBBBBBBB')->'races') >= 1, 'resumen equipo: ve las carreras del equipo');
 select pg_temp.check(runner_team('BBBBBBBBBB')::text !~ '(BBBBBBBBBB|AAAAAAAAAA|contract|renovacion|"notes")', 'resumen equipo: sin enlaces, contratos ni notas');
 select pg_temp.expect_fail($q$select runner_team('XXXXXXXXXXXX')$q$, 'resumen equipo: sin enlace no');
+-- documentos (contratos)
+reset role;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+select upload_document('10000000-0000-0000-0000-000000000002', 2026, 'Contrato 2026', 'contrato.pdf', 'application/pdf', encode('%PDF-1.4 hola'::bytea, 'base64')) as doc \gset
+select pg_temp.check(convert_from(decode(get_document(:'doc')->>'b64', 'base64'), 'UTF8') = '%PDF-1.4 hola', 'dirección sube y descarga');
+select pg_temp.expect_fail($q$select upload_document('10000000-0000-0000-0000-000000000002', 2026, 'x', 'x.exe', 'application/x-msdownload', 'aGk=')$q$, 'solo PDF o imágenes');
+reset role;
+set role anon;
+select pg_temp.check(jsonb_array_length(runner_documents_list('BBBBBBBBBB')) = 1, 'el corredor ve su contrato');
+select pg_temp.check(runner_documents_list('BBBBBBBBBB')::text not like '%hola%', 'la lista no lleva el archivo');
+select pg_temp.check(convert_from(decode(runner_get_document('BBBBBBBBBB', :'doc')->>'b64', 'base64'), 'UTF8') = '%PDF-1.4 hola', 'el corredor descarga el suyo');
+select pg_temp.check(jsonb_array_length(runner_documents_list('CCCCCCCCCC')) = 0, 'otro corredor no lo ve');
+select pg_temp.expect_fail($q$select runner_get_document('CCCCCCCCCC', '$q$ || :'doc' || $q$')$q$, 'otro corredor no lo descarga');
+select pg_temp.expect_fail('select * from runner_documents', 'anon no lee la tabla');
+select pg_temp.expect_fail($q$select upload_document('10000000-0000-0000-0000-000000000002', 2026, 'x', 'x.pdf', 'application/pdf', 'aGk=')$q$, 'anon no sube');
 reset role;
 \echo TODAS LAS PRUEBAS SQL OK

@@ -73,6 +73,14 @@ export function supabaseApi(url, key) {
     },
     async updateRunner(id, patch) { ok(await sb.from('runners').update(patch).eq('id', id)); },
     async saveSetting(key, value) { ok(await sb.from('settings').upsert({ key, value })); },
+    async listDocuments() {
+      return ok(await sb.from('runner_documents').select('id,runner_id,year,title,filename,mime,size,created_at').order('year', { ascending: false }));
+    },
+    async uploadDocument(runnerId, year, title, filename, mime, b64) {
+      return ok(await sb.rpc('upload_document', { p_runner: runnerId, p_year: year, p_title: title, p_filename: filename, p_mime: mime, p_b64: b64 }));
+    },
+    async getDocument(id) { return ok(await sb.rpc('get_document', { p_id: id })); },
+    async deleteDocument(id) { ok(await sb.from('runner_documents').delete().eq('id', id)); },
     async regenerateCode(id) { ok(await sb.from('runners').update({ code: newCode() }).eq('id', id)); },
     async deleteRunner(id, anonymize) { ok(await sb.rpc('delete_runner', { p_id: id, p_anonymize: anonymize })); },
 
@@ -88,6 +96,8 @@ export function supabaseApi(url, key) {
 
     async runnerView(code) { return ok(await sb.rpc('runner_view', { p_code: code })); },
     async runnerTeam(code) { return ok(await sb.rpc('runner_team', { p_code: code })); },
+    async runnerDocuments(code) { return ok(await sb.rpc('runner_documents_list', { p_code: code })); },
+    async runnerGetDocument(code, id) { return ok(await sb.rpc('runner_get_document', { p_code: code, p_id: id })); },
     async runnerReport(code, kind, id, position, category, podiumType) {
       ok(await sb.rpc('runner_report_result', { p_code: code, p_kind: kind, p_id: id, p_position: position, p_category: category || null, p_podium_type: podiumType || null }));
     },
@@ -179,6 +189,19 @@ export function demoApi(storage = globalThis.localStorage) {
       save();
     },
     async updateRunner(id, patch) { requireAdmin(); Object.assign(load().runners.find((r) => r.id === id), patch); save(); },
+    async listDocuments() { requireAdmin(); return clone((load().documents || []).map(({ b64, ...m }) => m)); },
+    async uploadDocument(runnerId, year, title, filename, mime, b64) {
+      requireAdmin(); const d = load(); d.documents = d.documents || [];
+      const doc = { id: uuid(), runner_id: runnerId, year, title: title || 'Contrato', filename, mime, size: Math.round(b64.length * 0.75), created_at: new Date().toISOString(), b64 };
+      d.documents.push(doc); save(); return doc.id;
+    },
+    async getDocument(id) { requireAdmin(); const x = (load().documents || []).find((y) => y.id === id); if (!x) throw new Error('no_existe'); return { filename: x.filename, mime: x.mime, b64: x.b64 }; },
+    async deleteDocument(id) { requireAdmin(); const d = load(); d.documents = (d.documents || []).filter((x) => x.id !== id); save(); },
+    async runnerDocuments(code) { const me = byCode(code); return clone((load().documents || []).filter((x) => x.runner_id === me.id).map(({ b64, runner_id, ...m }) => m)); },
+    async runnerGetDocument(code, id) {
+      const me = byCode(code); const x = (load().documents || []).find((y) => y.id === id && y.runner_id === me.id);
+      if (!x) throw new Error('no_es_tuya'); return { filename: x.filename, mime: x.mime, b64: x.b64 };
+    },
     async saveSetting(key, value) {
       requireAdmin(); const d = load(); d.settings = (d.settings || []).filter((x) => x.key !== key).concat([{ key, value: clone(value) }]); save();
     },
