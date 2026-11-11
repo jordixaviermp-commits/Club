@@ -538,8 +538,10 @@ export function yearBonuses(year, races, registrations, runners, cfg, circuitPod
   for (const r of races) if (yearOf(r.date) === year) for (const x of r.results || []) {
     if (x.runner_id) done.set(x.runner_id, (done.get(x.runner_id) || 0) + bonusRacesOf(r));
   }
+  // inscripción ya disputada con el puesto puesto por el corredor: cuenta como hecha (aunque no esté en resultados)
   for (const g of registrations) if (yearOf(g.date) === year) for (const e of g.entries || []) {
-    planned.set(e.runner_id, (planned.get(e.runner_id) || 0) + bonusRacesOf(g));
+    const m = e.self_position ? done : planned;
+    m.set(e.runner_id, (m.get(e.runner_id) || 0) + bonusRacesOf(g));
   }
   const nuevos = new Set(cfg.nuevos || []); // lista antigua: solo si el corredor no tiene contrato indicado
   return runners.map((rn) => {

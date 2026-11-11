@@ -328,8 +328,10 @@ export function demoApi(storage = globalThis.localStorage) {
             year, config: cfg ? pub : null, contract: me.contract || null,
             nuevo: me.contract === 'nuevo' || (!me.contract && nuevos.includes(me.id)),
             done: d.results.filter((x) => x.runner_id === me.id).map((x) => d.races.find((r) => r.id === x.race_id))
-              .filter((r) => r && yearOf(r.date) === year).reduce((n, r) => n + days(r), 0),
-            planned: d.registration_entries.filter((e) => e.runner_id === me.id).map((e) => d.registrations.find((g) => g.id === e.registration_id))
+              .filter((r) => r && yearOf(r.date) === year).reduce((n, r) => n + days(r), 0)
+              + d.registration_entries.filter((e) => e.runner_id === me.id && e.self_position).map((e) => d.registrations.find((g) => g.id === e.registration_id))
+                .filter((g) => g && yearOf(g.date) === year).reduce((n, g) => n + days(g), 0),
+            planned: d.registration_entries.filter((e) => e.runner_id === me.id && !e.self_position).map((e) => d.registrations.find((g) => g.id === e.registration_id))
               .filter((g) => g && yearOf(g.date) === year).reduce((n, g) => n + days(g), 0),
           };
         })(),

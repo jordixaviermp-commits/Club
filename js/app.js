@@ -507,9 +507,9 @@ function myRacesCard(d) {
 
   ${pending.length ? `<section class="card season-block pend-block">
     <h2>🏁 Ya corridas, pendientes de resultado <small>(${pending.length})</small></h2>
-    <p class="hint">Estabas apuntado y ya se han disputado. Pon tu resultado (una sola vez); cuentan para el bono cuando la dirección las pase a resultados.</p>
+    <p class="hint">Estabas apuntado y ya se han disputado. Pon tu resultado (una sola vez): <b>en cuanto lo pongas ya te cuenta para el bono</b>. Si no fuiste, pulsa «No fui: borrarme» en la lista de carreras.</p>
     <ul class="mini-list">${pending.map((g) => miniRow(g, g.my_result
-      ? `<span class="badge-sent">📝 ${g.my_result.position}º enviado</span>`
+      ? `<span class="badge-sent">📝 ${g.my_result.position}º · ya cuenta</span>`
       : (S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>`))).join('')}</ul>
   </section>` : ''}
 
@@ -905,7 +905,7 @@ function viewAlerts() {
         <div class="row"><button class="btn primary" data-act="circ-confirm" data-id="${c.id}">Confirmar (+${per})</button>
           <button class="btn danger ghost" data-act="circ-del" data-id="${c.id}">Rechazar</button></div></article>`).join('')}` : ''}
     ${a.past.length ? `<h2 class="section">🏁 Carreras ya disputadas por pasar a resultados (${a.past.length})</h2>
-      <p class="hint">Hasta que no las pases a resultados no cuentan para el bono ni salen en el resumen.</p>
+      <p class="hint">Si el corredor ya puso su puesto, a él ya le cuenta para el bono. Pásala a resultados para que salga en el resumen del equipo y para completar los puestos de los demás.</p>
       <ul class="mini-list card">${a.past.map((g) => { const n = g.entries.filter((e) => e.self_position).length;
         return `<li><div><b>${esc(g.name)}</b><small class="muted">${when(g)} · ${g.entries.length} del club${n ? ` · 📝 ${n} con resultado puesto` : ''}</small></div>
           <a class="btn small" href="#/inscripciones/${g.id}">Abrir</a></li>`; }).join('')}</ul>` : ''}
@@ -1157,7 +1157,7 @@ function viewBonus() {
     <div class="pen bad-box">⚠️ <b>Mínimo del contrato: ${cfg.minimum} carreras</b> antes del 31 de diciembre.
       Penalización si no se llega: ${penaltiesLine(cfg)}.</div>
     <p class="hint">Bonos a partir del mínimo — ${tiersByContractLine(cfg)}</p>
-    <p class="hint">Cuentan las carreras con resultados de ${S.year}; una carrera de varios días cuenta un día cada uno. La parte clara de la barra suma las inscripciones de ${S.year} pendientes.</p>
+    <p class="hint">Cuentan las carreras con resultados de ${S.year} y las ya disputadas en las que el corredor puso su puesto, aunque aún no las hayas pasado a resultados; una carrera de varios días cuenta un día cada uno. La parte clara de la barra suma las inscripciones de ${S.year} pendientes.</p>
     <ul class="bonus-list">${rows.map((r) => `<li>
       <div class="bonus-head"><span class="name">${esc(r.runner.name)}</span>
         ${contractSelect(`data-runner-contract="${r.runner.id}" aria-label="Tipo de contrato de ${esc(r.runner.name)}"`, r.runner.contract || (r.isNew ? 'nuevo' : ''))}</div>
