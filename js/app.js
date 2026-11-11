@@ -121,7 +121,7 @@ async function onRoute() {
     if (sub !== null) {
       if (sub === 'equipo' || (sub === '' && S.regView === 'cal' && !S.team)) loadTeam();
       if (sub === 'federaciones' && !S.fed) loadFed();
-      if (sub === 'mi') loadMyDocs();
+      if (sub === 'contrato') loadMyDocs();
     }
   }
   if (S.session?.isAdmin) {
@@ -156,6 +156,7 @@ const icon = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/
 const RUNNER_TABS = [
   ['', 'Carreras', 'M8 2v3M16 2v3M3 9h18M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z'],
   ['mi', 'Mi temporada', 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1'],
+  ['contrato', 'Contrato', 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M9 13h6M9 17h6'],
   ['equipo', 'Equipo', 'M4 20V10M10 20V4M16 20v-7M22 20H2'],
   ['federaciones', 'Federaciones', 'M5 21V4M5 4h11l-2 4 2 4H5'],
 ];
@@ -515,6 +516,7 @@ function runnerScreen(sub) {
     return viewRunnerNew();
   }
   if (sub === 'mi') return viewRunnerMine();
+  if (sub === 'contrato') return viewRunnerContract();
   if (sub === 'equipo') return viewTeam();
   if (sub === 'federaciones') return viewFed();
   return viewRunnerHome();
@@ -591,10 +593,19 @@ function viewRunnerMine() {
     <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
     ${runnerBonusCard(d)}
     ${myRacesCard(d)}
-    ${myDocsCard()}
+    <a class="btn block" href="${runnerHref('contrato')}">📄 Ver mi contrato</a>
     ${installHint()}
     ${S.preview ? '' : `<p class="center"><button class="link muted" data-act="r-forget">No soy ${esc(me.name)}</button></p>`}`,
   { rtab: 'mi' });
+}
+
+/** «Contrato»: el contrato de la temporada (y otros documentos) y el bono que marca. */
+function viewRunnerContract() {
+  return frame(runnerTitle(), `
+    ${previewBanner()}
+    ${myDocsCard()}
+    ${runnerBonusCard(S.runnerData)}`,
+  { rtab: 'contrato' });
 }
 
 // ======================================================================
@@ -1157,7 +1168,7 @@ function viewDocs(runnerId) {
         <label>Título<input name="title" value="Contrato ${y}" maxlength="120"></label>
       </div>
       <button class="btn primary">Subir</button>
-      <p class="hint">Solo lo verán ${esc(r.name)} (en «Mi temporada») y la dirección.</p>
+      <p class="hint">Solo lo verán ${esc(r.name)} (en la pestaña «Contrato») y la dirección.</p>
     </form>
     <h2 class="section">Documentos subidos (${docs.length})</h2>
     ${docs.length ? `<ul class="mini-list">${docs.map((x) => `<li><div><b>${docIcon(x.mime)} ${esc(x.title)}</b>
