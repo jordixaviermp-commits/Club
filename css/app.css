@@ -204,6 +204,7 @@ label.check input { width: 22px; height: 22px; min-height: 0; }
 .src { display: inline-block; font-size: .72rem; font-weight: 700; padding: .05rem .45rem; border-radius: 6px; margin-right: .3rem; color: #fff; }
 .src-FCC { background: #b8860b; }
 .src-FAC { background: #a3262a; }
+.src-LIGA { background: #1f7a5c; }
 .fed .row { justify-content: space-between; }
 .fed .done { color: var(--muted); font-weight: 600; font-size: .9rem; }
 label.check input { accent-color: var(--accent); }

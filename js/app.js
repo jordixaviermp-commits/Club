@@ -478,12 +478,12 @@ function runnerSearchResults(q) {
   const today = d.today || todayISO();
   const mine = (g) => g.entries.some((e) => e.runner_id === d.me.id);
   const club = searchRaces(q, d.registrations.filter((g) => g.date >= today)).slice(0, 6);
-  const fed = fedMatches(q, d.registrations);
+  const fed = fedMatches(q, d.registrations, 10);
   return `
     ${club.length ? `<p class="hint"><b>Ya están en el club</b> (apúntate aquí, no hace falta crearla):</p>
       <ul class="mini-list">${club.map((g) => miniRow(g, mine(g) ? '<span class="done">✓ Apuntado</span>'
         : `<button class="btn primary small" data-act="r-join" data-id="${g.id}">Apuntarme</button>`)).join('')}</ul>` : ''}
-    ${fed.length ? `<p class="hint"><b>En los calendarios de las federaciones</b>:</p>
+    ${fed.length ? `<p class="hint"><b>En los calendarios de las federaciones y ligas</b>:</p>
       <ul class="mini-list">${fed.map((r) => miniRow(r, `<button class="btn small" data-act="r-new-fed" data-i="${S.fed.races.indexOf(r)}">Añadir y apuntarme</button>`)).join('')}</ul>` : ''}
     ${!club.length && !fed.length ? `<p class="hint">No hay ninguna carrera parecida a «${esc(q)}». Puedes añadirla:</p>` : ''}`;
 }
@@ -951,20 +951,36 @@ const FED_DATA_URLS = [
   'https://raw.githubusercontent.com/jordixaviermp-commits/Club/main/data/calendarios.json',
   'data/calendarios.json',
 ];
-const FED_NAMES = { FCC: 'Catalana', FAC: 'Aragonesa' };
+const LEAGUE_URLS = [
+  // ligas y circuitos escritos a mano (el lector de las federaciones no los toca)
+  'https://raw.githubusercontent.com/jordixaviermp-commits/Club/main/data/ligas.json',
+  'data/ligas.json',
+];
+const FED_NAMES = { FCC: 'Catalana', FAC: 'Aragonesa', LIGA: 'Liga' };
+const raceSrc = (r) => (r.source === 'LIGA' ? r.league || 'Liga' : `Federación ${FED_NAMES[r.source] || r.source}`);
 const fedFilter = { source: 'all', modality: 'all', leisure: false };
 
-async function loadFed() {
-  S.fed = { loading: true };
-  for (const url of FED_DATA_URLS) {
+async function loadJson(urls) {
+  for (const url of urls) {
     try {
       const res = await fetch(url, { cache: 'no-cache' });
       if (!res.ok) continue;
       const data = await res.json();
-      if (Array.isArray(data.races)) { S.fed = data; break; }
+      if (Array.isArray(data.races)) return data;
     } catch { /* probar la siguiente */ }
   }
-  if (S.fed.loading) S.fed = { failed: true };
+  return null;
+}
+
+async function loadFed() {
+  S.fed = { loading: true };
+  const [fed, leagues] = await Promise.all([loadJson(FED_DATA_URLS), loadJson(LEAGUE_URLS)]);
+  const extra = (leagues?.races || []).filter((r) => r.date && r.name);
+  if (fed || extra.length) {
+    const races = [...(fed?.races || []), ...extra]
+      .sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name, 'es'));
+    S.fed = { ...(fed || { errors: [] }), races };
+  } else S.fed = { failed: true };
   if (parseRoute().view === 'federaciones') render();
 }
 
@@ -1004,8 +1020,8 @@ function viewFed() {
       <div class="race-head"><div><h3>${esc(r.name)}</h3>
         <p class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div>
         ${modTag(r.modality)}</div>
-      <p class="fed-meta"><span class="src src-${esc(r.source)}">${esc(FED_NAMES[r.source] || r.source)}</span>
-        ${esc(r.discipline || '')}${r.kind === 'Ocio' ? ' · ocio' : ''}${r.info ? ` · <span class="muted">${esc(r.info)}</span>` : ''}</p>
+      <p class="fed-meta"><span class="src src-${esc(r.source)}">${esc(r.source === 'LIGA' ? 'Liga' : FED_NAMES[r.source] || r.source)}</span>
+        ${esc(r.source === 'LIGA' ? '' : r.discipline || '')}${r.kind === 'Ocio' ? ' · ocio' : ''}${r.info ? `${r.source === 'LIGA' ? '' : ' · '}<span class="muted">${esc(r.info)}</span>` : ''}</p>
       <div class="row">
         <a class="btn small" href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">Ver en la web ↗</a>
         ${action(r)}
@@ -1014,7 +1030,7 @@ function viewFed() {
   const updated = f.updated_at ? new Date(f.updated_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
   return frame('Federaciones', `
     ${runner ? previewBanner() : ''}
-    <div class="years" role="tablist">${[['all', 'Todas'], ['FCC', 'Catalana'], ['FAC', 'Aragonesa']].map(([v, l]) =>
+    <div class="years" role="tablist">${[['all', 'Todas'], ['FCC', 'Catalana'], ['FAC', 'Aragonesa'], ['LIGA', 'Ligas']].map(([v, l]) =>
       `<button class="chip${fedFilter.source === v ? ' on' : ''}" data-act="fed-source" data-v="${v}">${l}</button>`).join('')}</div>
     <div class="grid2 fed-filters">
       <label>Modalidad<select data-fed="modality">${opt('all', 'Todas', fedFilter.modality)}${mods.map((m) => opt(m, m, fedFilter.modality)).join('')}</select></label>
@@ -2156,7 +2172,7 @@ const actions = {
     const r = S.fed.races[Number(el.dataset.i)];
     const vals = { name: r.name, date: r.date, place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY, modality: r.modality };
     if (S.rdraft && parseRoute().view === 'nueva') Object.assign(S.rdraft, vals);
-    else if (S.draft) Object.assign(S.draft, vals, { notes: S.draft.notes || `Federación ${FED_NAMES[r.source] || r.source}: ${r.url}` });
+    else if (S.draft) Object.assign(S.draft, vals, { notes: S.draft.notes || `${raceSrc(r)}: ${r.url}` });
     render();
   },
   async 'r-join-go'(el) {
@@ -2210,7 +2226,7 @@ const actions = {
   'fed-create'(el) {
     const r = S.fed.races[Number(el.dataset.i)];
     S.prefill = { name: r.name, date: r.date, place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY,
-      modality: r.modality, notes: `Federación ${FED_NAMES[r.source] || r.source}: ${r.url}` };
+      modality: r.modality, notes: `${raceSrc(r)}: ${r.url}` };
     go('#/inscripciones/nueva');
   },
   async 'insc-menu'() {
