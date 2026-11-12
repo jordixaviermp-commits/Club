@@ -186,7 +186,7 @@ const runnerHref = (sub) => (sub ? `${runnerBase()}/${sub}` : `${runnerBase()}/`
 /** Campanita de la dirección: número de cosas pendientes. */
 function bellButton() {
   const n = alertCount();
-  return `<a class="icon-btn bell${n ? ' on' : ''}" href="#/avisos" aria-label="Avisos${n ? `: ${n} pendientes` : ''}" title="Avisos">🔔${n ? `<span class="bell-n">${n}</span>` : ''}</a>`;
+  return `<a class="icon-btn bell${n ? ' on' : ''}" href="#/avisos" aria-label="Avisos${n ? `: ${n} pendientes` : ''}" title="Avisos">${icon(ICON_BELL)}${n ? `<span class="bell-n">${n}</span>` : ''}</a>`;
 }
 
 function frame(title, body, { back, actions = '', rtab = null } = {}) {
@@ -260,6 +260,7 @@ function viewWelcome() {
 // ---------- Calendario de inscripciones (dirección y corredores) ----------
 
 const ICON_CAL = 'M8 2v3M16 2v3M3 9h18M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z';
+const ICON_BELL = 'M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0';
 const ICON_LIST = 'M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01';
 const viewToggle = () => S.regView === 'cal'
   ? `<button class="icon-btn" data-act="reg-view" aria-label="Ver como lista" title="Ver como lista">${icon(ICON_LIST)}</button>`
@@ -537,7 +538,7 @@ function runnerBonusCard(d) {
     ${b.planned ? `<p class="hint">Con tus ${b.planned} inscripcion${b.planned === 1 ? '' : 'es'} de ${b.year} llegarías a ${proj.bonusCount}${proj.tier ? ` (${euros(proj.amount)})` : ''}${proj.reachesMinimum ? '' : ', aún por debajo del mínimo'}.</p>` : ''}
     <p class="hint">Tramos${st.contract ? ` (${esc(contractLabel(st.contract).toLowerCase())})` : ''}: ${tiersLine(st.tiers)}. Una carrera de varios días cuenta un día cada uno.
       <br>Penalización si no se llega al mínimo (${cfg.minimum}): ${penaltiesLine(cfg)}.
-      ${st.extra ? '<br>Las carreras extra por podio de circuito suben el tramo del bono, pero no cuentan para el mínimo.' : ''}</p>
+      <br>🏆 Un podio en la general final de un circuito suma +${cfg.circuitExtra ?? 4} carreras para el bono, pero <b>no cuenta para el mínimo de ${cfg.minimum}</b>: para evitar la penalización hay que correr ${cfg.minimum} carreras.</p>
   </section>`;
 }
 
@@ -859,7 +860,7 @@ function circuitsCard(d) {
   return `<section class="card circ-card">
     <h2>🏆 General final de un circuito</h2>
     <p class="hint">Si acabas entre los <b>3 primeros de la clasificación general final</b> de un circuito completo (Copa, Open, Critérium…), absoluta o de tu categoría,
-      se te suman <b>+${per} carreras para el bono</b>. No vale el podio de una prueba suelta. Comunícalo aquí y la dirección lo confirmará.</p>
+      se te suman <b>+${per} carreras para el bono</b>, pero <b>no cuentan para el mínimo de ${d.bonus?.config?.minimum ?? 12}</b>. No vale el podio de una prueba suelta. Comunícalo aquí y la dirección lo confirmará.</p>
     ${mine.length ? `<ul class="mini-list">${mine.map((c) => `<li><div><b>${medal(c.position)} ${esc(c.circuit)}</b>
       <small class="muted">${c.year} · ${c.position}º · ${scopeLabel(c.scope)}</small></div>
       ${c.status === 'confirmado' ? `<span class="extra-chip">✅ +${per} carreras</span>`
@@ -1157,6 +1158,7 @@ function viewBonus() {
     <div class="pen bad-box">⚠️ <b>Mínimo del contrato: ${cfg.minimum} carreras</b> antes del 31 de diciembre.
       Penalización si no se llega: ${penaltiesLine(cfg)}.</div>
     <p class="hint">Bonos a partir del mínimo — ${tiersByContractLine(cfg)}</p>
+    <p class="hint">🏆 Un podio en la general final de un circuito suma +${cfg.circuitExtra ?? 4} carreras para el bono, pero no cuenta para el mínimo de ${cfg.minimum}.</p>
     <p class="hint">Cuentan las carreras con resultados de ${S.year} y las ya disputadas en las que el corredor puso su puesto, aunque aún no las hayas pasado a resultados; una carrera de varios días cuenta un día cada uno. La parte clara de la barra suma las inscripciones de ${S.year} pendientes.</p>
     <ul class="bonus-list">${rows.map((r) => `<li>
       <div class="bonus-head"><span class="name">${esc(r.runner.name)}</span>
