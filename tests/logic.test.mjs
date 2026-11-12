@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalize, matchCategory, parseBulkRunners, yearSummary, csvRows, toCsv, parseCsv, importResultsCsv,
-  parseDate, extractCode, newCode, formatDate, planRosterRenewal, monthGrid, addMonths, formatRange, daysOf, podiumsOf, bonusStatus, bonusConfigFor, yearBonuses, DEFAULT_BONUS, matchContract, searchRaces, pastLimit, SUBTYPES, parseKm, kmText, guessSubtype, missingFields, matchPeople } from '../js/logic.js';
+  parseDate, extractCode, newCode, formatDate, planRosterRenewal, monthGrid, addMonths, formatRange, daysOf, podiumsOf, bonusStatus, bonusConfigFor, yearBonuses, DEFAULT_BONUS, matchContract, searchRaces, pastLimit, SUBTYPES, parseKm, kmText, guessSubtype, missingFields, matchPeople, cleanGoogleLink } from '../js/logic.js';
 
 test('normalize ignora mayúsculas y tildes', () => {
   assert.equal(normalize('  JOSÉ   Martínez '), 'jose martinez');
@@ -341,4 +341,18 @@ test('buscar compañeros por nombre: sin tildes, por el principio de cada palabr
   assert.deepEqual(nombres('rta'), ['Marta Roca']);              // dentro del nombre (3 letras o más)
   assert.deepEqual(nombres('a'), []);                            // una sola letra: demasiado corto
   assert.deepEqual(nombres('zzz'), []);
+});
+
+test('enlaces de Google: solo https y de Google, y sin los parámetros de compartir', () => {
+  const hoja = 'https://docs.google.com/spreadsheets/d/ABC123/edit';
+  assert.equal(cleanGoogleLink(hoja + '?usp=drivesdk'), hoja);
+  assert.equal(cleanGoogleLink('  ' + hoja + '?usp=sharing&ouid=999  '), hoja);
+  assert.equal(cleanGoogleLink(hoja + '?gid=5#gid=5'), hoja + '?gid=5#gid=5'); // lo demás se conserva
+  assert.equal(cleanGoogleLink('https://docs.google.com/forms/d/e/XYZ/viewform?usp=sharing&ouid=1'), 'https://docs.google.com/forms/d/e/XYZ/viewform');
+  assert.equal(cleanGoogleLink('http://docs.google.com/spreadsheets/d/ABC/edit'), null);  // sin https
+  assert.equal(cleanGoogleLink('https://evil.example.com/docs.google.com/spreadsheets/d/ABC'), null);
+  assert.equal(cleanGoogleLink('https://docs.google.com.evil.com/spreadsheets/d/ABC'), null);
+  assert.equal(cleanGoogleLink('https://user:pass@docs.google.com/spreadsheets/d/ABC'), null);
+  assert.equal(cleanGoogleLink('no es un enlace'), null);
+  assert.equal(cleanGoogleLink(''), null);
 });

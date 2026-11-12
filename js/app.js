@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, parseKm, kmText, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
+  extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -2240,8 +2240,24 @@ function viewRunners() {
 //  Datos: copias, migración, privacidad
 // ======================================================================
 
+/** Enlaces solo de la dirección (por ejemplo, la hoja con las respuestas del pedido de ropa). Se guardan en los ajustes, que solo ve la dirección. */
+function directionLinksCard() {
+  const cur = S.data?.settings?.enlaces_direccion?.ropa_respuestas || '';
+  return `<section class="card stack"><h2>📋 Respuestas del pedido de ropa</h2>
+    <p>La hoja de cálculo donde caen las respuestas del formulario del pedido de ropa (el que ven los corredores en Contrato).</p>
+    ${cur ? `<a class="btn primary" href="${esc(cur)}" target="_blank" rel="noopener noreferrer">Abrir la hoja de respuestas ↗</a>` : '<p class="hint">Aún no has puesto el enlace de la hoja.</p>'}
+    <details${cur ? '' : ' open'}><summary><b>${cur ? 'Cambiar el enlace' : 'Poner el enlace'}</b></summary>
+      <form class="stack" data-form="dir-links">
+        <label>Enlace de la hoja de Google<input name="ropa" type="url" inputmode="url" placeholder="https://docs.google.com/spreadsheets/d/…" value="${esc(cur)}" autocomplete="off"></label>
+        <button class="btn">Guardar enlace</button>
+        ${cur ? '<button type="button" class="btn ghost" data-act="dir-link-clear">Quitar el enlace</button>' : ''}
+      </form></details>
+    <p class="hint">🔒 El enlace se guarda en la base de datos, <b>solo lo ve la dirección</b> (los corredores no). La hoja lleva datos personales: en Google, en «Compartir», déjala con acceso <b>restringido</b>.</p></section>`;
+}
+
 function viewData() {
   return frame('Datos', `
+    ${directionLinksCard()}
     <section class="card stack"><h2>Copia de seguridad</h2>
       <p>Descarga todos los datos (corredores, inscripciones, carreras y resultados) en un archivo. Guárdalo en tu Drive o correo una vez al mes.</p>
       <button class="btn primary" data-act="backup">Descargar copia de datos</button>
@@ -2415,6 +2431,11 @@ const actions = {
   },
   'fed-seguro'(el) { S.fedSeguro = el.dataset.f; store.set(FED_KEY, S.fedSeguro); render(); },
   'mate-open'(el) { openMate(el.dataset.id); },
+  async 'dir-link-clear'() {
+    if (!await confirmAction('Quitar el enlace', 'Dejará de salir el botón de la hoja de respuestas en Datos.', 'Quitar')) return;
+    await run(async () => { await api.saveSetting('enlaces_direccion', { ...(S.data.settings?.enlaces_direccion || {}), ropa_respuestas: null }); await reload(); }, 'Enlace quitado');
+    render();
+  },
   'copy-text'(el) { copyText(el.dataset.text, el.dataset.msg || 'Copiado'); },
   'mod-filter'(el) {
     S.mod = el.dataset.m; S.sub = 'all'; S.calDay = null; store.set(MOD_KEY, S.mod); render();
@@ -2769,6 +2790,14 @@ const forms = {
     const ok = await run(async () => { await api.runnerProposeCircuit(S.code, name, Number(f.year.value), Number(f.position.value), f.scope.value); await loadRunner(); return true; },
       'Enviado: la dirección tiene que confirmarlo');
     if (ok) render();
+  },
+  async 'dir-links'(f) {
+    const raw = f.ropa.value.trim();
+    const url = raw ? cleanGoogleLink(raw) : '';
+    if (raw && !url) return toast('Pega un enlace de Google (docs.google.com), que empiece por https://', true);
+    await run(async () => { await api.saveSetting('enlaces_direccion', { ...(S.data.settings?.enlaces_direccion || {}), ropa_respuestas: url || null }); await reload(); },
+      url ? 'Enlace guardado' : 'Enlace quitado');
+    render();
   },
   async 'circ-add'(f) {
     const name = cleanName(f.circuit.value);
