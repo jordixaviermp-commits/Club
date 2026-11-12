@@ -8,8 +8,9 @@ import {
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
-import { SEGUROS } from './seguros.js';
+import { FEDERACIONES, ORDEN_FEDERACIONES } from './seguros.js';
 const VIEW_KEY = 'monzon-regview';
+const FED_KEY = 'monzon-federacion';
 const MOD_KEY = 'monzon-modfilter';
 const FED_CALENDARS = [
   { label: 'Calendario Federació Catalana', url: 'https://www.ciclisme.cat/calendari/tot' },
@@ -34,7 +35,7 @@ const S = {
   session: null, code: store.get(CODE_KEY), news: null, newsFresh: new Set(),
   data: null, runnerData: null,
   year: new Date().getFullYear(), draft: null, busy: false, showPast: false, installEvt: null,
-  mod: store.get(MOD_KEY) || 'all', sub: 'all', who: 'all', fold: new Set(), regView: store.get(VIEW_KEY) === 'cal' ? 'cal' : 'list', calMonth: null, calDay: null,
+  fedSeguro: FEDERACIONES[store.get(FED_KEY)] ? store.get(FED_KEY) : null, mod: store.get(MOD_KEY) || 'all', sub: 'all', who: 'all', fold: new Set(), regView: store.get(VIEW_KEY) === 'cal' ? 'cal' : 'list', calMonth: null, calDay: null,
   q: { runner: '', admin: '' }, rdraft: null,
 };
 
@@ -287,39 +288,73 @@ function render() {
 // ---------- En caso de accidente ----------
 const telHref = (t) => 'tel:' + String(t).replace(/[^\d+]/g, '');
 const copyBtn = (text, msg) => `<button class="btn small ghost" data-act="copy-text" data-text="${esc(text)}" data-msg="${esc(msg)}">Copiar</button>`;
+const telBtn = (t) => `<a class="btn primary big" href="${telHref(t.numero)}">📞 Llamar · ${esc(t.numero)}${t.etiqueta ? ` (${esc(t.etiqueta)})` : ''}</a>`;
+const mailBtn = (c, verbo = 'Escribir a') => `<a class="btn primary big" href="mailto:${esc(c.para)}?subject=${encodeURIComponent(c.asunto || '')}">✉️ ${verbo} ${esc(c.para)}</a>
+  <p class="sos-row"><span>${esc(c.para)}</span>${copyBtn(c.para, 'Correo copiado')}</p>`;
+const polizaRow = (etiqueta, valor, msg = 'Número de póliza copiado') => `<p class="sos-row"><span>${esc(etiqueta)}:<br><b class="sos-num">${esc(valor)}</b></span>${copyBtn(valor, msg)}</p>`;
+/** Enlaces a PDF: con `download`, un toque los descarga (en algunos móviles se abren en el visor, que también deja guardarlos). */
+const pdfLinks = (list = []) => list.map((l) => `<a class="btn" href="${esc(l.href)}" download="${esc(l.href.split('/').pop())}" target="_blank" rel="noopener noreferrer">${esc(l.etiqueta)} ⬇️</a>`).join('');
+/** Todos los documentos de una federación en un solo sitio, para descargarlos. */
+function accidentDocs(fed) {
+  const docs = [...(fed.imagen ? [{ etiqueta: '🖼️ Imagen resumen', href: fed.imagen }] : []), ...(fed.accidente.pdfs || []), ...(fed.rc.pdfs || [])];
+  if (!docs.length) return '';
+  return `<section class="card sos-card"><h2>📥 Documentos para descargar</h2>
+    <p class="hint">Descárgalos con cobertura y los tendrás en el móvil por si los necesitas sin ella.</p>${pdfLinks(docs)}</section>`;
+}
+
+/** Imagen resumen de la federación elegida (se genera con scripts/imagenes-seguros.mjs). */
+const accidentImage = (fed) => (fed.imagen ? `<section class="card sos-card sos-img"><h2>🖼️ Resumen en una imagen</h2>
+  <a href="${esc(fed.imagen)}" target="_blank" rel="noopener noreferrer"><img src="${esc(fed.imagen)}" alt="Qué hacer en caso de accidente con licencia ${esc(fed.corto.toLowerCase())}: llamar a Gerosalud al 981 941 111 antes de ir al médico, enviar el parte y pedir autorización para más asistencia"></a>
+  <a class="btn primary" href="${esc(fed.imagen)}" download="${esc(fed.imagen.split('/').pop())}">⬇️ Descargar la imagen</a>
+  <p class="hint">Tócala para verla a tamaño completo. Guárdala en tu galería y la tendrás también sin cobertura.</p></section>` : '');
+
+function accidentSteps(a) {
+  return `${a.aviso ? `<p class="card sos-urgent">⚠️ <b>${esc(a.aviso)}</b></p>` : ''}
+    ${a.pasos.map((p, i) => `<section class="card sos-card">
+      <h2><span class="sos-n">${i + 1}</span> ${esc(p.titulo)}</h2>
+      <p>${esc(p.texto)}</p>
+      ${p.tel ? telBtn(p.tel) : ''}
+      ${[].concat(p.correo || []).map((c) => mailBtn(c)).join('')}
+      ${p.copia ? polizaRow(p.copia.etiqueta, p.copia.valor, p.copia.msg) : ''}
+      ${pdfLinks(p.enlaces)}</section>`).join('')}
+    ${a.avisoFinal ? `<p class="card warn">${esc(a.avisoFinal)}</p>` : ''}
+    ${a.resumen ? `<section class="card sos-card"><h2>📋 Qué cubre el seguro (resumen)</h2>
+      <ul class="bullets">${a.resumen.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+      <p class="hint">Es un resumen: manda siempre el texto de la póliza.</p>${pdfLinks(a.pdfs)}</section>` : ''}`;
+}
+
+function accidentRc(rc) {
+  return `<section class="card sos-card">
+    <h2>🛡️ Responsabilidad civil</h2>
+    <p>Si el daño lo has causado tú a otra persona o a sus cosas.</p>
+    ${polizaRow(`Póliza ${rc.aseguradora}`, rc.poliza)}
+    ${rc.datos?.length ? `<ul class="bullets">${rc.datos.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+    ${rc.antes ? `<p><b>${esc(rc.antes)}</b></p>` : ''}
+    ${(rc.casos || []).map((c) => `<details class="sos-case"><summary><b>${esc(c.titulo)}</b></summary>
+      <p>${esc(c.antes)}</p>
+      <p class="hint"><b>Entrega junta, a la federación:</b></p>
+      <ol class="bullets">${c.adjuntar.map((x) => `<li>${esc(x)}</li>`).join('')}</ol></details>`).join('')}
+    ${rc.tel ? telBtn(rc.tel) : ''}
+    ${pdfLinks(rc.pdfs)}
+    ${rc.correo ? mailBtn(rc.correo, 'Enviar a') : ''}
+  </section>`;
+}
+
 function viewAccident() {
-  const a = SEGUROS.accidentes, rc = SEGUROS.responsabilidadCivil;
   const back = S.session?.isAdmin ? '#/inscripciones' : runnerHref('mi');
+  const fed = FEDERACIONES[S.fedSeguro];
+  const chips = `<p class="hint sos-pick">Mi licencia es de la federación:</p>
+    <div class="modbar fedbar" role="group" aria-label="Federación de tu licencia">${ORDEN_FEDERACIONES.map((id) =>
+      `<button class="chip modchip${S.fedSeguro === id ? ' on' : ''}" data-act="fed-seguro" data-f="${id}" aria-pressed="${S.fedSeguro === id}">${esc(FEDERACIONES[id].corto)}</button>`).join('')}</div>`;
   return frame('Accidente', `
     <p class="card sos-urgent">🚨 <b>Urgencia grave: llama primero al 112.</b> Lo de abajo es para comunicar el accidente al seguro de la federación.</p>
-    <section class="card sos-card">
-      <h2><span class="sos-n">1</span> Llama al seguro</h2>
-      <p>Comunica el accidente <b>por teléfono antes de ${a.plazoDias} días</b> a <b>${esc(a.gestora)}</b>.</p>
-      <a class="btn primary big" href="${telHref(a.telefono)}">📞 Llamar · ${esc(a.telefono)}</a>
-      <p class="sos-row"><span>Póliza de accidentes <b>${esc(a.aseguradora)}</b>:<br><b class="sos-num">${esc(a.poliza)}</b></span>${copyBtn(a.poliza, 'Número de póliza copiado')}</p>
-    </section>
-    <section class="card sos-card">
-      <h2><span class="sos-n">2</span> Rellena la declaración y envíala</h2>
-      <p>Rellena la <b>declaración de accidente</b> y envíala por correo a la federación.</p>
-      <a class="btn primary big" href="mailto:${esc(a.email)}?subject=${encodeURIComponent('Declaració d\'accident')}">✉️ Escribir a ${esc(a.email)}</a>
-      <p class="sos-row"><span>${esc(a.email)}</span>${copyBtn(a.email, 'Correo copiado')}</p>
-      <a class="btn" href="${esc(SEGUROS.info)}" target="_blank" rel="noopener noreferrer">📄 Declaración de accidente (web de la federación) ↗</a>
-    </section>
-    <section class="card sos-card">
-      <h2>🛡️ Responsabilidad civil</h2>
-      <p>Si el daño lo has causado tú a otra persona o a sus cosas.</p>
-      <p class="sos-row"><span>Póliza <b>${esc(rc.aseguradora)}</b>:<br><b class="sos-num">${esc(rc.poliza)}</b></span>${copyBtn(rc.poliza, 'Número de póliza copiado')}</p>
-      <p class="hint">Franquicia: <b>${rc.franquicia} €</b> (lo que pagas tú de cada siniestro). Categorías de Pre-benjamín a Cadete: <b>${esc(rc.polizaMenores.aseguradora)} ${esc(rc.polizaMenores.poliza)}</b>.</p>
-      <p><b>Primero, avisa a la policía</b> para que quede constancia de quién es el responsable. Después, la documentación depende del caso:</p>
-      ${rc.casos.map((c) => `<details class="sos-case"><summary><b>${esc(c.titulo)}</b></summary>
-        <p>${esc(c.antes)}</p>
-        <p class="hint"><b>Entrega junta, a la federación:</b></p>
-        <ol class="bullets">${c.adjuntar.map((x) => `<li>${esc(x)}</li>`).join('')}</ol></details>`).join('')}
-      <a class="btn" href="${esc(rc.formulario)}" target="_blank" rel="noopener noreferrer">📄 Declaración de siniestros (PDF para rellenar)</a>
-      <a class="btn" href="${esc(rc.protocolo)}" target="_blank" rel="noopener noreferrer">📋 Protocolo de responsabilidad civil (PDF)</a>
-      <a class="btn primary big" href="mailto:${esc(rc.email)}?subject=${encodeURIComponent('Declaració de sinistre - Responsabilitat civil')}">✉️ Enviar a ${esc(rc.email)}</a>
-    </section>
-    <p class="hint center">Datos de la ${esc(SEGUROS.federacion)}, para licencias de esa federación. Si tu licencia es de otra (por ejemplo, la aragonesa), el seguro es otro: pregunta a la dirección. Toda la información, en <a href="${esc(SEGUROS.info)}" target="_blank" rel="noopener noreferrer">${esc(SEGUROS.info.replace('https://', ''))}</a>.</p>`, { back });
+    ${chips}
+    ${fed ? `${accidentImage(fed)}
+      ${accidentSteps(fed.accidente)}
+      ${accidentRc(fed.rc)}
+      ${accidentDocs(fed)}
+      <p class="hint center">Datos de la ${esc(fed.nombre)}. Si tu licencia es de otra federación, cambia arriba. Toda la información, en <a href="${esc(fed.info)}" target="_blank" rel="noopener noreferrer">${esc(fed.info.replace('https://', ''))}</a>.</p>`
+      : '<p class="card">👆 <b>Elige la federación de tu licencia</b> (sale en tu carné de federado): el seguro y los pasos cambian. Se recordará en este móvil.</p>'}`, { back });
 }
 
 // ======================================================================
@@ -2303,6 +2338,7 @@ const actions = {
     if (S.regView === 'cal' && S.runnerData && !S.team && (S.code || S.previewCode)) loadTeam();
     render();
   },
+  'fed-seguro'(el) { S.fedSeguro = el.dataset.f; store.set(FED_KEY, S.fedSeguro); render(); },
   'copy-text'(el) { copyText(el.dataset.text, el.dataset.msg || 'Copiado'); },
   'mod-filter'(el) {
     S.mod = el.dataset.m; S.sub = 'all'; S.calDay = null; store.set(MOD_KEY, S.mod); render();
