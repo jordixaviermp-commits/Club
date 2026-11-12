@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalize, matchCategory, parseBulkRunners, yearSummary, csvRows, toCsv, parseCsv, importResultsCsv,
-  parseDate, extractCode, newCode, formatDate, planRosterRenewal, monthGrid, addMonths, formatRange, daysOf, podiumsOf, bonusStatus, bonusConfigFor, yearBonuses, DEFAULT_BONUS, matchContract, searchRaces, pastLimit, SUBTYPES, parseKm, kmText,
+  parseDate, extractCode, newCode, formatDate, planRosterRenewal, monthGrid, addMonths, formatRange, daysOf, podiumsOf, bonusStatus, bonusConfigFor, yearBonuses, DEFAULT_BONUS, matchContract, searchRaces, pastLimit, SUBTYPES, parseKm, kmText, guessSubtype, missingFields,
 } from '../js/logic.js';
 
 test('normalize ignora mayúsculas y tildes', () => {
@@ -315,4 +315,19 @@ test('formato y km: parseKm, kmText y resumen', () => {
   assert.equal(s.perRunner.find((r) => r.key === 'a').km, 180.5);
   assert.equal(s.perRunner.find((r) => r.key === 'b').km, 80);
   assert.deepEqual(s.bySubtype.map((x) => [x.modality, x.subtype, x.races]), [['BTT', 'XCM', 2], ['Carretera', 'Critérium', 1]]);
+});
+
+test('formato sugerido por el nombre y datos que faltan', () => {
+  assert.equal(guessSubtype('Open XCM Graus', 'BTT'), 'XCM');
+  assert.equal(guessSubtype('Ultra XCM Pirineus', 'BTT'), 'UXCM');
+  assert.equal(guessSubtype('Gran Premi XCO Monzón', 'BTT'), 'XCO');
+  assert.equal(guessSubtype('Maratón BTT de Aragón', 'BTT'), 'XCM');
+  assert.equal(guessSubtype('Critérium de Barbastro', 'Carretera'), 'Critérium');
+  assert.equal(guessSubtype('Marxa cicloturista Sallent', 'Carretera'), 'Ciclodeportiva');
+  assert.equal(guessSubtype('Campionat de Catalunya CRI', 'Carretera'), 'Contrarreloj');
+  assert.equal(guessSubtype('Open XCM Graus', 'Carretera'), '');   // el formato depende de la modalidad
+  assert.equal(guessSubtype('Gravel Pirineus', 'Gravel'), '');
+  assert.deepEqual(missingFields({ province: '', km: null, modality: 'BTT', subtype: '' }), ['province', 'km', 'subtype']);
+  assert.deepEqual(missingFields({ province: 'Huesca', km: 42, modality: 'BTT', subtype: 'XCO' }), []);
+  assert.deepEqual(missingFields({ province: 'Huesca', km: 0, modality: 'Gravel' }), ['km']);       // Gravel no pide formato
 });

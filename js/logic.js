@@ -23,6 +23,29 @@ export function parseKm(v) {
   const n = Number(String(v ?? '').replace(',', '.'));
   return Number.isFinite(n) && n > 0 && n <= 1000 ? Math.round(n * 10) / 10 : null;
 }
+/** Formato que sugiere el nombre de la carrera («Open XCM Graus» → XCM), o '' si no hay pista. */
+export function guessSubtype(name, modality) {
+  const n = String(name ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  if (modality === 'BTT') {
+    if (/\buxcm\b|\bultra\b/.test(n)) return 'UXCM';
+    if (/\bxcm\b|maraton|marathon|maratona/.test(n)) return 'XCM';
+    if (/\bxco\b/.test(n)) return 'XCO';
+  } else if (modality === 'Carretera') {
+    if (/criterium/.test(n)) return 'Critérium';
+    if (/contrarreloj|contrarellotge|\bcri\b|cronoescalada/.test(n)) return 'Contrarreloj';
+    if (/ciclodeportiva|cicloturista|cicloturisme|gran ?fondo|\bmarxa\b/.test(n)) return 'Ciclodeportiva';
+    if (/\bmaster\b/.test(n)) return 'Máster';
+  }
+  return '';
+}
+/** Datos que le faltan a una carrera: provincia, km y (si la modalidad lo pide) formato. */
+export function missingFields(x) {
+  const out = [];
+  if (!String(x?.province ?? '').trim()) out.push('province');
+  if (!(Number(x?.km) > 0)) out.push('km');
+  if (SUBTYPES[x?.modality] && !String(x?.subtype ?? '').trim()) out.push('subtype');
+  return out;
+}
 export const kmText = (km) => `${Number(km).toLocaleString('es-ES', { maximumFractionDigits: 1 })} km`;
 export const CIRCUIT_SCOPES = [{ id: 'categoria', label: 'De su categoría' }, { id: 'absoluta', label: 'Absoluta (scratch)' }];
 export const DEFAULT_COUNTRY = 'España';

@@ -141,6 +141,9 @@ export function supabaseApi(url, key) {
     async runnerJoin(code, regId, category) { ok(await sb.rpc('runner_join', { p_code: code, p_registration: regId, p_category: category || null })); },
     async runnerLeave(code, regId) { ok(await sb.rpc('runner_leave', { p_code: code, p_registration: regId })); },
     async runnerJoinRace(code, raceId, category) { ok(await sb.rpc('runner_join_race', { p_code: code, p_race: raceId, p_category: category || null })); },
+    async autoPromote() { try { return ok(await sb.rpc('auto_promote_registrations')); } catch { return 0; } },
+    async runnerComplete(code, kind, id, data) { ok(await sb.rpc('runner_complete_race', { p_code: code, p_kind: kind, p_id: id, p_data: data })); },
+    async listChanges() { try { return ok(await sb.from('change_log').select('*').order('at', { ascending: false }).limit(300)); } catch { return null; } },
     async runnerSetDetails(code, id, subtype, km) { ok(await sb.rpc('runner_set_race_details', { p_code: code, p_id: id, p_subtype: subtype || null, p_km: parseKm(km) })); },
     async runnerSetType(code, id, type, circuit) { ok(await sb.rpc('runner_set_race_type', { p_code: code, p_id: id, p_type: type, p_circuit: circuit || null })); },
     async runnerProposeCircuit(code, circuit, year, position, scope) {
@@ -201,6 +204,34 @@ export function demoApi(storage = globalThis.localStorage) {
   let admin = false;
   try { admin = storage.getItem(DEMO_KEY + '-admin') === '1'; } catch { /* nada */ }
   const requireAdmin = () => { if (!admin) throw new Error('solo_direccion'); };
+  /** Apunta una línea en el historial de la demostración. */
+  const logc = (actor, action, summary) => {
+    const d = load(); d.change_log = d.change_log || [];
+    d.change_log.push({ id: uuid(), at: new Date().toISOString(), actor, entity: 'race', action, summary });
+    d.change_log = d.change_log.slice(-300);
+  };
+  /** Pasa solas a resultados las inscripciones disputadas hace más de 3 días con algún puesto puesto por un inscrito. */
+  const autoPromote = () => {
+    const d = load(); const t = new Date(); t.setDate(t.getDate() - 3); const limit = todayISO(t); let n = 0;
+    for (const g of [...d.registrations]) {
+      if (g.suspended || (g.end_date || g.date) >= limit) continue;
+      const ents = d.registration_entries.filter((e) => e.registration_id === g.id && e.self_position);
+      if (!ents.length) continue;
+      const { created_by, created_at, ...rest } = g;
+      const race = { ...rest, id: uuid(), created_at: new Date().toISOString() };
+      d.races.push(race);
+      for (const e of ents) {
+        const rn = d.runners.find((r) => r.id === e.runner_id);
+        d.results.push({ id: uuid(), race_id: race.id, runner_id: e.runner_id, runner_name: rn?.name || '?', category: e.category || null, position: e.self_position,
+          podium_type: e.self_position <= 3 ? (e.self_podium_type || 'suelta') : 'suelta', self_reported: true });
+      }
+      d.registrations = d.registrations.filter((x) => x.id !== g.id);
+      d.registration_entries = d.registration_entries.filter((e) => e.registration_id !== g.id);
+      logc('Sistema', 'auto_resultados', `pasó sola a resultados: ${g.name} (${g.date})`); n++;
+    }
+    if (n) save();
+    return n;
+  };
   const fields = (o) => ({
     name: String(o.name || '').trim(), date: o.date, end_date: o.end_date && o.end_date > o.date ? o.end_date : null, place: o.place?.trim() || null, province: o.province?.trim() || null,
     country: o.country?.trim() || null, modality: o.modality || 'Carretera', notes: o.notes?.trim() || null,
@@ -226,7 +257,21 @@ export function demoApi(storage = globalThis.localStorage) {
     async signOut() { admin = false; try { storage.removeItem(DEMO_KEY + '-admin'); } catch { /* nada */ } },
     async resetDemo() { mem = demoSeed(); save(); },
 
-    async loadAll() { requireAdmin(); return clone(nest({ circuit_podiums: [], announcements: [], ...load() })); },
+    async loadAll() { requireAdmin(); autoPromote(); return clone(nest({ circuit_podiums: [], announcements: [], ...load() })); },
+    async autoPromote() { requireAdmin(); return autoPromote(); },
+    async listChanges() { requireAdmin(); return clone([...(load().change_log || [])].sort((a, b) => b.at.localeCompare(a.at))); },
+    async runnerComplete(code, kind, id, data) {
+      const me = byCode(code); const d = load();
+      const x = kind === 'reg' ? d.registrations.find((g) => g.id === id) : d.races.find((r) => r.id === id);
+      const mine = kind === 'reg' ? (d.registration_entries.some((e) => e.registration_id === id && e.runner_id === me.id) || x?.created_by === me.id)
+        : d.results.some((r) => r.race_id === id && r.runner_id === me.id);
+      if (!x || !mine) throw new Error('no_es_tuya');
+      const done = [];
+      const fill = (k, v) => { if (v === null || v === undefined || v === '') return; if (x[k] === null || x[k] === undefined || x[k] === '') { x[k] = v; done.push(`${k}: ${v}`); } };
+      fill('place', String(data.place || '').trim()); fill('province', String(data.province || '').trim());
+      fill('subtype', SUBTYPES[x.modality]?.includes(data.subtype) ? data.subtype : null); fill('km', parseKm(data.km));
+      if (done.length) { logc(me.name, 'update', `cambió ${kind === 'reg' ? 'la inscripción' : 'la carrera'} ${x.name}: ${done.join('; ')}`); save(); }
+    },
     async addRunners(list) {
       requireAdmin();
       for (const r of list) load().runners.push({ id: uuid(), name: r.name, category: r.category || null, code: newCode(), created_at: new Date().toISOString(), contract: r.contract || null });
@@ -338,7 +383,7 @@ export function demoApi(storage = globalThis.localStorage) {
     },
 
     async runnerView(code) {
-      const me = byCode(code); const d = load();
+      const me = byCode(code); autoPromote(); const d = load();
       return clone({
         me: { id: me.id, name: me.name, category: me.category }, today: todayISO(),
         my_results: d.results.filter((x) => x.runner_id === me.id).map((x) => {
@@ -391,12 +436,14 @@ export function demoApi(storage = globalThis.localStorage) {
         if (e.self_position) throw new Error('resultado_ya_puesto');
         Object.assign(e, { self_position: position, self_podium_type: pod, self_reported_at: new Date().toISOString() });
         if (category) e.category = category;
+        logc(me.name, 'resultado', `puso su resultado: ${position}º en ${g.name}`);
       } else {
         const r = d.results.find((x) => x.race_id === id && x.runner_id === me.id);
         if (!r) throw new Error('no_es_tuya');
         if (r.position) throw new Error('resultado_ya_puesto');
         Object.assign(r, { position, podium_type: pod || 'suelta', self_reported: true });
         if (category) r.category = category;
+        logc(me.name, 'resultado', `puso su resultado: ${position}º en ${d.races.find((x) => x.id === id)?.name}`);
       }
       save();
     },
@@ -445,6 +492,7 @@ export function demoApi(storage = globalThis.localStorage) {
       }
       d.registration_entries = d.registration_entries.filter((e) => !(e.registration_id === g.id && e.runner_id === me.id));
       d.registration_entries.push({ registration_id: g.id, runner_id: me.id, category: category || null, created_at: new Date().toISOString() });
+      if (g.created_by === me.id) logc(me.name, 'insert', `creó la inscripción ${g.name} (${g.date})`);
       save(); return g.id;
     },
     async runnerJoin(code, regId, category) {
@@ -457,7 +505,10 @@ export function demoApi(storage = globalThis.localStorage) {
       const me = byCode(code); const d = load();
       const race = d.races.find((x) => x.id === raceId);
       if (!race || race.date > todayISO() || race.date < pastLimit()) throw new Error('inscripcion_cerrada');
-      if (!d.results.some((x) => x.race_id === raceId && x.runner_id === me.id)) d.results.push({ id: uuid(), race_id: raceId, runner_id: me.id, runner_name: me.name, category: category || null, position: null, podium_type: 'suelta' });
+      if (!d.results.some((x) => x.race_id === raceId && x.runner_id === me.id)) {
+        d.results.push({ id: uuid(), race_id: raceId, runner_id: me.id, runner_name: me.name, category: category || null, position: null, podium_type: 'suelta' });
+        logc(me.name, 'la_hizo', `se añadió a ${race.name} (la hizo)`);
+      }
       save();
     },
     async runnerSetDetails(code, id, subtype, km) {
