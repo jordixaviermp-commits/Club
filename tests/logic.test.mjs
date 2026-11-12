@@ -3,8 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalize, matchCategory, parseBulkRunners, yearSummary, csvRows, toCsv, parseCsv, importResultsCsv,
-  parseDate, extractCode, newCode, formatDate, planRosterRenewal, monthGrid, addMonths, formatRange, daysOf, podiumsOf, bonusStatus, bonusConfigFor, yearBonuses, DEFAULT_BONUS, matchContract, searchRaces, pastLimit, SUBTYPES, parseKm, kmText, guessSubtype, missingFields,
-} from '../js/logic.js';
+  parseDate, extractCode, newCode, formatDate, planRosterRenewal, monthGrid, addMonths, formatRange, daysOf, podiumsOf, bonusStatus, bonusConfigFor, yearBonuses, DEFAULT_BONUS, matchContract, searchRaces, pastLimit, SUBTYPES, parseKm, kmText, guessSubtype, missingFields, matchPeople } from '../js/logic.js';
 
 test('normalize ignora mayúsculas y tildes', () => {
   assert.equal(normalize('  JOSÉ   Martínez '), 'jose martinez');
@@ -330,4 +329,16 @@ test('formato sugerido por el nombre y datos que faltan', () => {
   assert.deepEqual(missingFields({ province: '', km: null, modality: 'BTT', subtype: '' }), ['province', 'km', 'subtype']);
   assert.deepEqual(missingFields({ province: 'Huesca', km: 42, modality: 'BTT', subtype: 'XCO' }), []);
   assert.deepEqual(missingFields({ province: 'Huesca', km: 0, modality: 'Gravel' }), ['km']);       // Gravel no pide formato
+});
+
+test('buscar compañeros por nombre: sin tildes, por el principio de cada palabra y en cualquier orden', () => {
+  const gente = [{ id: 1, name: 'Joan Ferrer' }, { id: 2, name: 'Anna Puig' }, { id: 3, name: 'Jordi Vila' }, { id: 4, name: 'Marta Roca' }, { id: 5, name: 'Josep Maria Álvarez' }];
+  const nombres = (q) => matchPeople(q, gente).map((p) => p.name);
+  assert.deepEqual(nombres('jo'), ['Joan Ferrer', 'Jordi Vila', 'Josep Maria Álvarez']);
+  assert.deepEqual(nombres('ferrer joan'), ['Joan Ferrer']);   // cualquier orden
+  assert.deepEqual(nombres('alvarez'), ['Josep Maria Álvarez']); // sin tildes
+  assert.deepEqual(nombres('MAR'), ['Josep Maria Álvarez', 'Marta Roca']); // sin mayúsculas, también la 2.ª palabra
+  assert.deepEqual(nombres('rta'), ['Marta Roca']);              // dentro del nombre (3 letras o más)
+  assert.deepEqual(nombres('a'), []);                            // una sola letra: demasiado corto
+  assert.deepEqual(nombres('zzz'), []);
 });

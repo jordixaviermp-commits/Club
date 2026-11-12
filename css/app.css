@@ -613,3 +613,9 @@ ol.bullets { list-style: decimal; }
 .lic-card h3 { margin: 0 0 .3rem; }
 .lic-card .row { display: flex; gap: .6rem; flex-wrap: wrap; }
 .lic-card .btn { flex: 1; text-align: center; text-decoration: none; }
+
+/* Compañeros en el buscador y su ventana */
+.mini-list li > button.mini-main { display: flex; flex-direction: column; flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: .1rem 0; font: inherit; color: inherit; cursor: pointer; }
+.mini-list li.tappable > button.mini-main b::after { content: " ›"; color: var(--muted); font-weight: 400; }
+.dlg.mate { max-height: 80vh; overflow-y: auto; }
+.mate-h { font-size: .95rem; margin: .8rem 0 .2rem; }
