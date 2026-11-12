@@ -47,11 +47,15 @@ const modLegend = (mods) => `<div class="mod-legend">${MODALITIES.filter((m) => 
 const newsText = (t) => esc(t).replace(/https?:\/\/[^\s<]+/g, (u) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`).replace(/\n/g, '<br>');
 const newsSeen = () => { try { return new Set(JSON.parse(store.get(NEWS_KEY) || '[]')); } catch { return new Set(); } };
 /** Noticias que este móvil aún no ha abierto (en la vista previa de la dirección no cuenta ninguna). */
-const unreadNews = () => (S.preview || !S.news ? [] : S.news.filter((n) => !newsSeen().has(n.id)));
+const unreadNews = () => (S.preview || !S.news ? [] : S.news.filter((n) => !newsSeen().has(n.id) || (n.rsvp && !n.my_answer)));
 const markNewsSeen = () => { if (S.preview || !S.news) return; store.set(NEWS_KEY, JSON.stringify([...new Set([...newsSeen(), ...S.news.map((n) => n.id)])].slice(-200))); };
 /** Carga las noticias del corredor (null si aún falta el SQL: entonces no hay campanita). */
 async function loadNews() {
   try { S.news = await api.runnerNews(S.code || S.previewCode); } catch { S.news = null; }
+}
+/** Sus peticiones de corrección de puesto (null si aún falta el SQL). */
+async function loadCorrections() {
+  try { S.corrections = await api.runnerCorrections(S.code || S.previewCode); } catch { S.corrections = null; }
 }
 /** Campanita de los corredores: noticias nuevas de la dirección. */
 function newsBell() {
@@ -187,7 +191,7 @@ async function onRoute() {
 }
 
 async function loadRunner() {
-  try { S.runnerData = await api.runnerView(S.code); await loadNews(); }
+  try { S.runnerData = await api.runnerView(S.code); await loadNews(); await loadCorrections(); }
   catch (e) {
     S.runnerData = null;
     if (/enlace_no_valido/.test(String(e?.message))) { store.del(CODE_KEY); S.code = null; }
@@ -455,7 +459,7 @@ function viewRunnerReport(key) {
   const back = runnerHref('mi');
   if (!race) return frame('Mi resultado', '<p class="empty">No se encuentra esta carrera.</p>', { back });
   const already = kind === 'reg' ? race.my_result : race.position;
-  if (already) return frame('Mi resultado', `<p class="card">Ya pusiste tu resultado en <b>${esc(race.name)}</b>. Si hay que corregirlo, pídeselo a la dirección.</p>`, { back });
+  if (already) return viewCorrection(kind, id, race, back);
   const cat = kind === 'reg' ? race.entries.find((e) => e.runner_id === d.me.id)?.category : race.category;
   return frame('Mi resultado', `
     <form class="card stack" data-form="r-report" data-kind="${kind}" data-id="${id}">
@@ -469,6 +473,36 @@ function viewRunnerReport(key) {
       <p class="pen bad-box">⚠️ Revísalo bien: <b>una vez enviado no podrás cambiarlo</b>. Si te equivocas, tendrá que corregirlo la dirección.</p>
       <button class="btn primary">Enviar mi resultado</button>
     </form>`, { back });
+}
+
+/** El resultado ya está puesto: el corredor puede pedir que lo corrija la dirección. */
+function viewCorrection(kind, id, race, back) {
+  const d = S.runnerData;
+  const cur = kind === 'reg' ? race.my_result.position : race.position;
+  const curCat = kind === 'reg' ? d.registrations.find((g) => g.id === id)?.entries.find((e) => e.runner_id === d.me.id)?.category : race.category;
+  const mine = (S.corrections || []).filter((c) => c.target_id === id);
+  const pending = mine.find((c) => c.status === 'pendiente');
+  const done = mine.filter((c) => c.status !== 'pendiente').slice(0, 3);
+  const line = (c) => `${c.old_position}º → <b>${c.new_position}º</b>${c.new_category ? ' · ' + esc(c.new_category) : ''}`;
+  return frame('Mi resultado', `${previewBanner()}
+    <section class="card"><h3>${esc(race.name)}</h3><p class="muted">${when(race)} · ${esc(race.modality)}</p>
+      <p>Tu resultado: <b>${isPodium(cur) ? medal(cur) + ' ' : ''}${cur}º</b>${curCat ? ' · ' + esc(curCat) : ''}</p>
+      <p class="hint">El resultado se pone una sola vez. Si te equivocaste, pide la corrección: la dirección la revisará con un toque.</p></section>
+    ${done.map((c) => `<p class="card ${c.status === 'aceptada' ? 'pen ok' : 'warn'}">${c.status === 'aceptada' ? '✅ Aceptada' : '❌ Rechazada'}: ${line(c)}${c.reply ? `<br><small>${esc(c.reply)}</small>` : ''}</p>`).join('')}
+    ${S.corrections === null ? '<p class="card warn">Las correcciones aún no están activadas: pídeselo a la dirección del club.</p>'
+      : pending ? `<section class="card"><p>⏳ <b>Pediste corregir</b> ${line(pending)}${pending.note ? `<br><small class="muted">«${esc(pending.note)}»</small>` : ''}</p>
+          <p class="hint">La dirección lo revisará. Cuando lo haga lo verás aquí.</p>
+          ${S.preview ? '' : `<button class="btn ghost" data-act="corr-cancel" data-id="${pending.id}">Retirar la petición</button>`}</section>`
+      : `<form class="card stack" data-form="r-correct" data-kind="${kind}" data-id="${id}">
+          <h3>Pedir corrección</h3>
+          <div class="grid2">
+            <label>Puesto correcto<input type="number" name="position" inputmode="numeric" min="1" max="999" required></label>
+            <label>Categoría${catSelect('name="category"', curCat || '', 'Sin cambio')}</label>
+          </div>
+          <label>Si es podio (1º, 2º o 3º), ¿de qué tipo?
+            <select name="podium">${PODIUM_TYPES.map((t) => opt(t.id, t.label, 'suelta')).join('')}</select></label>
+          <label>Motivo (opcional)<input name="note" maxlength="300" placeholder="Me equivoqué al teclear"></label>
+          <button class="btn primary">Enviar a la dirección</button></form>`}`, { back });
 }
 
 function viewRunnerNew() {
@@ -636,7 +670,7 @@ function runnerRegCard(g) {
         ${modTag(g.modality)}</div>${typeTag(g)}
       ${g.suspended ? '<p class="state-tag">⛔ Suspendida: cuenta para el mínimo de carreras, no para el bono</p>' : ''}
       ${open || g.suspended ? '' : `<p class="state-tag">🏁 Ya disputada · pendiente de resultados</p>
-        ${mine && !S.preview ? (g.my_result ? `<p class="mine-created">📝 Tu resultado: ${g.my_result.position}º (enviado)</p>`
+        ${mine && !S.preview ? (g.my_result ? `<p class="mine-created">📝 Tu resultado: ${g.my_result.position}º (enviado) · <a href="#/resultado/reg_${g.id}">✏️ Pedir corrección</a></p>`
           : `<p class="row"><a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>
              <button class="btn ghost small" data-act="r-leave" data-id="${g.id}">No fui: borrarme</button></p>`) : ''}
         ${!mine && g.date >= pastLimit() ? `<div class="row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, me.category, 'Categoría')}
@@ -704,7 +738,8 @@ function viewRunnerDoneRace(raceId) {
   return frame('Carrera', `${previewBanner()}
     <article class="card race done-race ${modClass(r.modality)}"><div class="race-head"><div><h3>${esc(r.name)}</h3>
       <p class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div>${modTag(r.modality)}</div>${typeTag(r)}
-      ${my ? `<p class="joined-done">${my.position ? `✓ Tu puesto: ${isPodium(my.position) ? medal(my.position) + ' ' : ''}${my.position}º${my.category ? ' · ' + esc(my.category) : ''}${my.self_reported ? ' · 📝 puesto por ti' : ''}`
+      ${my ? `<p class="joined-done">${my.position ? `✓ Tu puesto: ${isPodium(my.position) ? medal(my.position) + ' ' : ''}${my.position}º${my.category ? ' · ' + esc(my.category) : ''}${my.self_reported ? ' · 📝 puesto por ti' : ''}
+          ${S.preview ? '' : ((S.corrections || []).some((c) => c.target_id === raceId && c.status === 'pendiente') ? ' · ⏳ corrección pedida' : ` · <a href="#/resultado/race_${raceId}">✏️ Pedir corrección</a>`)}`
         : `Corriste esta carrera. ${S.preview ? '' : `<a class="btn primary small" href="#/resultado/race_${raceId}">Poner mi puesto</a>`}`}</p>` : ''}
       ${team ? `<p class="count">🏁 ${team.results.length} del club${res.length ? ':' : ''}</p>
         ${res.length ? `<ol class="rank-mini">${res.map((x) => `<li class="${x.runner_id === meId ? 'me' : ''}"><span>${isPodium(x.position) ? medal(x.position) : x.position + 'º'}</span> ${esc(x.runner_name)}${x.category ? ` <small>${esc(x.category)}</small>` : ''}</li>`).join('')}</ol>` : ''}`
@@ -961,6 +996,20 @@ async function enterNews() {
   markNewsSeen();
   if (S.runnerData) render();
 }
+/** Bloque «¿Vienes?» de una noticia que pide confirmación. */
+function rsvpBlock(n) {
+  const yes = Number(n.yes_count) || 0;
+  const counts = `<p class="count">👥 ${yes} apuntado${yes === 1 ? '' : 's'}${n.no_count ? ` · ${n.no_count} no van` : ''}</p>`;
+  if (S.preview) return `<div class="rsvp"><p class="muted small">Esta noticia pide confirmación («Me apunto / No voy»).</p>${counts}</div>`;
+  const mine = n.my_answer === 'si' ? `✅ Te has apuntado${n.my_guests ? ` con ${n.my_guests} acompañante${n.my_guests === 1 ? '' : 's'}` : ''}`
+    : n.my_answer === 'no' ? '❌ Has dicho que no vas' : '';
+  return `<div class="rsvp ${n.my_answer ? 'answered' : 'todo'}">${counts}
+    <p>${mine ? `<b>${mine}</b> · puedes cambiarlo:` : '<b>¿Vienes?</b> Responde para que la dirección sepa cuántos sois.'}</p>
+    <div class="row"><label class="inline">Acompañantes <select data-guests="${n.id}">${[0, 1, 2, 3, 4, 5].map((k) => opt(String(k), String(k), String(n.my_guests ?? 0))).join('')}</select></label>
+      <button class="btn primary small" data-act="news-reply" data-id="${n.id}" data-a="si">Me apunto</button>
+      <button class="btn ghost small" data-act="news-reply" data-id="${n.id}" data-a="no">No voy</button></div></div>`;
+}
+
 function viewNews() {
   const list = S.news;
   return frame('Noticias del club', `
@@ -969,7 +1018,7 @@ function viewNews() {
       : list.length ? list.map((n) => `<article class="card news${S.newsFresh.has(n.id) ? ' fresh' : ''}">
         <div class="race-head"><h3>${esc(n.title)}</h3>${S.newsFresh.has(n.id) ? '<span class="tag t-new">Nueva</span>' : ''}</div>
         <p class="muted">${formatDate(String(n.created_at).slice(0, 10))}${n.expires_at ? ` · hasta el ${formatDate(n.expires_at, false)}` : ''}</p>
-        ${n.body ? `<p class="news-body">${newsText(n.body)}</p>` : ''}</article>`).join('')
+        ${n.body ? `<p class="news-body">${newsText(n.body)}</p>` : ''}${n.rsvp ? rsvpBlock(n) : ''}</article>`).join('')
       : '<p class="empty">No hay noticias por ahora. Cuando el club tenga algo que contaros (quedadas, pedidos de ropa…), lo verás aquí.</p>'}`, { rtab: 'noticias' });
 }
 
@@ -1045,6 +1094,20 @@ function viewHistory() {
       : '<p class="empty">Todavía no hay cambios apuntados.</p>'}`}`, { back: '#/datos' });
 }
 
+/** Dirección: quién ha respondido a una noticia que pide confirmación. */
+function rsvpAdmin(n) {
+  const reps = (S.data.announcementReplies || []).filter((x) => x.announcement_id === n.id);
+  const yes = reps.filter((x) => x.answer === 'si'), no = reps.filter((x) => x.answer === 'no');
+  const answered = new Set(reps.map((x) => x.runner_id));
+  const pend = S.data.runners.filter((x) => !answered.has(x.id)).sort(byName);
+  const total = yes.reduce((c, x) => c + 1 + (x.guests || 0), 0);
+  const nm = (x) => esc(runnerById(x.runner_id)?.name || '?');
+  return `<details class="rsvp-admin" open><summary><b>👥 ${total} apuntado${total === 1 ? '' : 's'}</b>${total !== yes.length ? ` (${yes.length} corredor${yes.length === 1 ? '' : 'es'} + ${total - yes.length} acompañante${total - yes.length === 1 ? '' : 's'})` : ''} · ❌ ${no.length} · ⏳ ${pend.length} sin responder</summary>
+    <p><b>Sí:</b> ${yes.length ? yes.map((x) => nm(x) + (x.guests ? ` (+${x.guests})` : '')).join(', ') : '—'}</p>
+    <p><b>No:</b> ${no.length ? no.map(nm).join(', ') : '—'}</p>
+    <p><b>Sin responder:</b> ${pend.length ? pend.map((x) => esc(x.name)).join(', ') : '—'}</p></details>`;
+}
+
 /** Dirección: escribir las noticias que verán los corredores. */
 function viewAdminNews() {
   const list = S.data.announcements;
@@ -1058,6 +1121,8 @@ function viewAdminNews() {
       <h3>${e ? 'Editar noticia' : 'Nueva noticia'}</h3>
       <label>Título<input name="title" value="${esc(e?.title || '')}" placeholder="Quedada social del club" minlength="3" maxlength="120" required autocomplete="off"></label>
       <label>Texto<textarea name="body" rows="6" maxlength="4000" placeholder="Qué, cuándo, dónde y qué tienen que hacer. Los enlaces se pueden pulsar.">${esc(e?.body || '')}</textarea></label>
+      <label class="check"><input type="checkbox" name="rsvp" ${e?.rsvp ? 'checked' : ''}> Pedir confirmación («Me apunto / No voy» y acompañantes)</label>
+      ${S.data.announcementReplies === null ? '<p class="hint">Para pedir confirmación hay que ejecutar en Supabase <code>supabase/cambios/2026-11-12-correcciones-quedadas-2.sql</code>.</p>' : ''}
       <label>Mostrar hasta (opcional)<input type="date" name="expires_at" value="${esc(e?.expires_at || '')}" min="${today}"></label>
       <p class="hint">Si pones fecha, la noticia desaparece sola al pasar ese día. Sin fecha se queda hasta que la borres.</p>
       <div class="row"><button class="btn primary">${e ? 'Guardar cambios' : 'Publicar'}</button>${e ? '<button type="button" class="btn ghost" data-act="ann-cancel">Cancelar</button>' : ''}</div>
@@ -1067,6 +1132,7 @@ function viewAdminNews() {
       return `<article class="card news${gone ? ' gone' : ''}"><div class="race-head"><h3>${esc(n.title)}</h3>${gone ? '<span class="tag">Caducada</span>' : ''}</div>
         <p class="muted">${formatDate(String(n.created_at).slice(0, 10))}${n.expires_at ? ` · hasta el ${formatDate(n.expires_at, false)}` : ''}</p>
         ${n.body ? `<p class="news-body">${newsText(n.body)}</p>` : ''}
+        ${n.rsvp ? rsvpAdmin(n) : ''}
         <div class="row"><button class="btn small" data-act="ann-edit" data-id="${n.id}">Editar</button>
           <button class="btn small danger ghost" data-act="ann-del" data-id="${n.id}">Borrar</button></div></article>`; }).join('')
       : '<p class="empty">Todavía no has publicado ninguna.</p>'}`, { back: '#/avisos' });
@@ -1126,14 +1192,15 @@ function adminAlerts() {
     week, weekTodo: week.filter((g) => !posted.has(g.id)),
     noContract: S.data.runners.filter((r) => !r.contract).sort(byName),
     backup: backupDue(),
+    corrections: (S.data.corrections || []).filter((c) => c.status === 'pendiente'),
   };
 }
-const alertCount = () => { const a = adminAlerts(); return a.circuits.length + a.weekTodo.length + a.backup.length; };
+const alertCount = () => { const a = adminAlerts(); return a.circuits.length + a.weekTodo.length + a.backup.length + a.corrections.length; };
 
 function viewAlerts() {
   const a = adminAlerts();
   const per = bonusCfg(new Date().getFullYear()).circuitExtra ?? 4;
-  const none = !a.circuits.length && !a.week.length && !a.noContract.length && !a.backup.length;
+  const none = !a.circuits.length && !a.week.length && !a.noContract.length && !a.backup.length && !a.corrections.length;
   const raceCard = (g) => postCard(g);
   return frame('Avisos', `
     <a class="btn primary block" href="#/noticias">📣 Noticias para los corredores${S.data.announcements ? ` (${S.data.announcements.length})` : ''}</a>
@@ -1145,6 +1212,14 @@ function viewAlerts() {
         <button class="btn ghost" data-act="post-all">✓ Marcar todas</button></div>` : '<p class="pen ok">✅ Todas publicadas.</p>'}
       ${a.week.map(raceCard).join('')}
       <a class="btn block ghost" href="#/semana">Ver más días</a>` : ''}
+    ${a.corrections.length ? `<h2 class="section">✏️ Correcciones de puesto pedidas (${a.corrections.length})</h2>
+      <p class="hint">Un corredor dice que se equivocó al poner su puesto. Si aceptas, se aplica el cambio al momento.</p>
+      ${a.corrections.map((c) => `<article class="card"><h3>${esc(runnerById(c.runner_id)?.name || '?')}</h3>
+        <p><b>${esc(c.race_name)}</b>${c.race_date ? ` · ${formatDate(c.race_date, false)}` : ''}</p>
+        <p>${c.old_position}º → <b>${c.new_position}º</b>${c.new_category ? ` · ${esc(c.new_category)}` : ''}${c.new_position <= 3 ? ` · ${esc(podiumLabel(c.new_podium_type || 'suelta'))}` : ''}</p>
+        ${c.note ? `<p class="muted">«${esc(c.note)}»</p>` : ''}
+        <div class="row"><button class="btn primary" data-act="corr-accept" data-id="${c.id}">Aceptar</button>
+          <button class="btn danger ghost" data-act="corr-reject" data-id="${c.id}">Rechazar</button></div></article>`).join('')}` : ''}
     ${a.circuits.length ? `<h2 class="section">🏆 Podios de circuito por confirmar (${a.circuits.length})</h2>
       <p class="hint">Un corredor dice que ha hecho podio en la general final de un circuito. Si lo confirmas, se le suman +${per} carreras para el bono.</p>
       ${a.circuits.map((c) => `<article class="card"><h3>${esc(runnerById(c.runner_id)?.name || '?')}</h3>
@@ -2104,6 +2179,23 @@ const actions = {
     render();
     toast(`${ids.length} corredor${ids.length === 1 ? '' : 'es'} añadido${ids.length === 1 ? '' : 's'}`);
   },
+  async 'corr-cancel'(el) {
+    if (!await confirmAction('Retirar la petición', '¿Retirar tu petición de corrección?', 'Retirar')) return;
+    await run(async () => { await api.runnerCancelCorrection(S.code, el.dataset.id); await loadCorrections(); }, 'Petición retirada'); render();
+  },
+  async 'corr-accept'(el) {
+    await run(async () => { await api.resolveCorrection(el.dataset.id, true, null); await reload(); }, 'Corrección aceptada y aplicada'); render();
+  },
+  async 'corr-reject'(el) {
+    const reply = prompt('Motivo del rechazo (opcional, lo verá el corredor):', '');
+    if (reply === null) return;
+    await run(async () => { await api.resolveCorrection(el.dataset.id, false, reply); await reload(); }, 'Corrección rechazada'); render();
+  },
+  async 'news-reply'(el) {
+    const guests = Number($app.querySelector(`select[data-guests="${el.dataset.id}"]`)?.value || 0);
+    await run(async () => { await api.runnerReplyNews(S.code, el.dataset.id, el.dataset.a, guests); await loadNews(); }, el.dataset.a === 'si' ? '¡Apuntado!' : 'Anotado: no vienes');
+    render();
+  },
   'hist-filter'(el) { S.histFilter = el.dataset.f; render(); },
   'week-view'(el) { S.weekView = el.dataset.v; render(); },
   'week-all'() { const set = postedSet(), list = weekRaces(S.weekDays || 14); if (list.every((g) => set.has(g.id))) list.forEach((g) => set.delete(g.id)); else list.forEach((g) => set.add(g.id)); savePosted(set); render(); },
@@ -2140,6 +2232,14 @@ const actions = {
 };
 
 const forms = {
+  async 'r-correct'(f) {
+    if (S.preview) return toast('Vista previa: aquí no se puede cambiar nada.', true);
+    const position = Number(f.position.value);
+    if (!Number.isInteger(position) || position < 1) return toast('Pon un puesto válido (1, 2, 3…).', true);
+    const ok = await run(async () => { await api.runnerRequestCorrection(S.code, f.dataset.kind, f.dataset.id, position, f.category.value || null, f.podium.value, cleanName(f.note.value)); await loadCorrections(); return true; },
+      'Petición enviada: la dirección la revisará');
+    if (ok) render();
+  },
   async 'r-complete'(f) {
     if (S.preview) return toast('Vista previa: aquí no se puede cambiar nada.', true);
     const data = { province: cleanName(f.province?.value || ''), km: f.km?.value || '', subtype: f.subtype?.value || '' };
@@ -2251,7 +2351,7 @@ const forms = {
   async 'ann-save'(f) {
     const title = cleanName(f.title.value);
     if (title.length < 3) return toast('Pon un título de al menos 3 letras.', true);
-    const ok = await run(async () => { await api.saveAnnouncement({ id: S.annEdit, title, body: f.body.value.trim(), expires_at: f.expires_at.value || null }); await reload(); return true; },
+    const ok = await run(async () => { await api.saveAnnouncement({ id: S.annEdit, title, body: f.body.value.trim(), expires_at: f.expires_at.value || null, rsvp: f.rsvp.checked }); await reload(); return true; },
       S.annEdit ? 'Noticia guardada' : 'Noticia publicada: ya la ven los corredores');
     if (ok) { S.annEdit = null; render(); window.scrollTo(0, 0); }
   },
@@ -2389,7 +2489,7 @@ document.addEventListener('visibilitychange', async () => {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel']);
+const RUNNER_ACTIONS = new Set(['r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'corr-cancel', 'news-reply']);
 $app.addEventListener('click', (ev) => {
   const el = ev.target.closest('[data-act]');
   if (!el || !actions[el.dataset.act]) return;

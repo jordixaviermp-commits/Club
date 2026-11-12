@@ -3,8 +3,8 @@
 //  - Demostración, guardada solo en este navegador, para probar la app sin montar nada.
 import { newCode, todayISO, pastLimit, numDays, yearOf, SUBTYPES, parseKm } from './logic.js';
 
-const TABLES = ['runners', 'registrations', 'registration_entries', 'races', 'results', 'settings', 'circuit_podiums', 'announcements'];
-const OPTIONAL = new Set(['settings', 'circuit_podiums', 'announcements']); // tablas que pueden faltar si aún no se ha ejecutado su SQL
+const TABLES = ['runners', 'registrations', 'registration_entries', 'races', 'results', 'settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests'];
+const OPTIONAL = new Set(['settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests']); // tablas que pueden faltar si aún no se ha ejecutado su SQL
 
 /** Mensajes de error comprensibles. */
 export function friendlyError(e) {
@@ -15,7 +15,8 @@ export function friendlyError(e) {
   if (/carrera_suspendida/.test(msg)) return 'Esta carrera se ha suspendido: no se puede poner resultado ni pasarla a resultados.';
   if (/otros_apuntados/.test(msg)) return 'No puedes borrarla: hay más compañeros apuntados. Pídeselo a la dirección del club.';
   if (/no_es_tuya/.test(msg)) return 'Solo puedes cambiar las carreras que has añadido tú.';
-  if (/ya_existe/.test(msg)) return 'Ya existe: hay otra carrera con ese nombre ese día, o ya comunicaste ese circuito.';
+  if (/ya_existe/.test(msg)) return 'Ya existe: otra carrera con ese nombre ese día, un circuito ya comunicado o una petición tuya pendiente.';
+  if (/sin_cambios/.test(msg)) return 'Eso es lo mismo que ya pusiste: cambia el puesto, la categoría o el tipo de podio.';
   if (/nombre_no_valido/.test(msg)) return 'Pon un nombre de carrera de al menos 3 letras.';
   if (/fecha_no_valida/.test(msg)) return 'Revisa las fechas: desde el 1 de enero del año pasado hasta, como mucho, dentro de dos años.';
   if (/demasiadas_carreras/.test(msg)) return 'Hoy ya has añadido muchas carreras. Si necesitas más, pídeselo a la dirección.';
@@ -47,6 +48,8 @@ function nest(data) {
     settings: Object.fromEntries((data.settings || []).map((x) => [x.key, x.value])),
     circuitPodiums: data.circuit_podiums || null, // null = falta el SQL de circuitos
     announcements: data.announcements || null,    // null = falta el SQL de noticias
+    announcementReplies: data.announcement_replies || null,
+    corrections: data.correction_requests || null,
   };
 }
 
@@ -115,7 +118,7 @@ export function supabaseApi(url, key) {
       return id;
     },
     async saveAnnouncement(a) {
-      const row = { title: a.title, body: a.body || '', expires_at: a.expires_at || null };
+      const row = { title: a.title, body: a.body || '', expires_at: a.expires_at || null, ...(a.rsvp || a.id ? { rsvp: !!a.rsvp } : {}) };
       if (a.id) ok(await sb.from('announcements').update(row).eq('id', a.id)); else ok(await sb.from('announcements').insert(row));
     },
     async deleteAnnouncement(id) { ok(await sb.from('announcements').delete().eq('id', id)); },
@@ -144,6 +147,13 @@ export function supabaseApi(url, key) {
     async autoPromote() { try { return ok(await sb.rpc('auto_promote_registrations')); } catch { return 0; } },
     async runnerComplete(code, kind, id, data) { ok(await sb.rpc('runner_complete_race', { p_code: code, p_kind: kind, p_id: id, p_data: data })); },
     async listChanges() { try { return ok(await sb.from('change_log').select('*').order('at', { ascending: false }).limit(300)); } catch { return null; } },
+    async runnerReplyNews(code, id, answer, guests) { ok(await sb.rpc('runner_reply_news', { p_code: code, p_id: id, p_answer: answer, p_guests: guests || 0 })); },
+    async runnerRequestCorrection(code, kind, id, position, category, podiumType, note) {
+      return ok(await sb.rpc('runner_request_correction', { p_code: code, p_kind: kind, p_id: id, p_position: position, p_category: category || null, p_podium_type: podiumType || null, p_note: note || null }));
+    },
+    async runnerCorrections(code) { return ok(await sb.rpc('runner_corrections', { p_code: code })); },
+    async runnerCancelCorrection(code, id) { ok(await sb.rpc('runner_cancel_correction', { p_code: code, p_id: id })); },
+    async resolveCorrection(id, accept, reply) { ok(await sb.rpc('resolve_correction', { p_id: id, p_accept: !!accept, p_reply: reply || null })); },
     async runnerSetDetails(code, id, subtype, km) { ok(await sb.rpc('runner_set_race_details', { p_code: code, p_id: id, p_subtype: subtype || null, p_km: parseKm(km) })); },
     async runnerSetType(code, id, type, circuit) { ok(await sb.rpc('runner_set_race_type', { p_code: code, p_id: id, p_type: type, p_circuit: circuit || null })); },
     async runnerProposeCircuit(code, circuit, year, position, scope) {
@@ -257,7 +267,7 @@ export function demoApi(storage = globalThis.localStorage) {
     async signOut() { admin = false; try { storage.removeItem(DEMO_KEY + '-admin'); } catch { /* nada */ } },
     async resetDemo() { mem = demoSeed(); save(); },
 
-    async loadAll() { requireAdmin(); autoPromote(); return clone(nest({ circuit_podiums: [], announcements: [], ...load() })); },
+    async loadAll() { requireAdmin(); autoPromote(); return clone(nest({ circuit_podiums: [], announcements: [], announcement_replies: [], correction_requests: [], ...load() })); },
     async autoPromote() { requireAdmin(); return autoPromote(); },
     async listChanges() { requireAdmin(); return clone([...(load().change_log || [])].sort((a, b) => b.at.localeCompare(a.at))); },
     async runnerComplete(code, kind, id, data) {
@@ -355,7 +365,7 @@ export function demoApi(storage = globalThis.localStorage) {
 
     async saveAnnouncement(a) {
       requireAdmin(); const d = load(); d.announcements = d.announcements || [];
-      const row = { title: String(a.title || '').trim(), body: String(a.body || ''), expires_at: a.expires_at || null };
+      const row = { title: String(a.title || '').trim(), body: String(a.body || ''), expires_at: a.expires_at || null, rsvp: !!a.rsvp };
       if (row.title.length < 3) throw new Error('Pon un título de al menos 3 letras.');
       const prev = a.id && d.announcements.find((x) => x.id === a.id);
       if (prev) Object.assign(prev, row); else d.announcements.push({ id: uuid(), created_at: new Date().toISOString(), ...row });
@@ -363,8 +373,59 @@ export function demoApi(storage = globalThis.localStorage) {
     },
     async deleteAnnouncement(id) { requireAdmin(); const d = load(); d.announcements = (d.announcements || []).filter((x) => x.id !== id); save(); },
     async runnerNews(code) {
-      byCode(code); const t = todayISO();
-      return clone((load().announcements || []).filter((x) => !x.expires_at || x.expires_at >= t).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 30));
+      const me = byCode(code); const t = todayISO(); const reps = load().announcement_replies || [];
+      return clone((load().announcements || []).filter((x) => !x.expires_at || x.expires_at >= t).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 30).map((n) => {
+        const mine = reps.find((r) => r.announcement_id === n.id && r.runner_id === me.id), all = reps.filter((r) => r.announcement_id === n.id);
+        return { ...n, rsvp: !!n.rsvp, my_answer: mine?.answer || null, my_guests: mine?.guests ?? null,
+          yes_count: all.filter((r) => r.answer === 'si').reduce((c, r) => c + 1 + r.guests, 0), no_count: all.filter((r) => r.answer === 'no').length };
+      }));
+    },
+    async runnerReplyNews(code, id, answer, guests) {
+      const me = byCode(code); const d = load(); const n = (d.announcements || []).find((x) => x.id === id);
+      if (!n || !n.rsvp || (n.expires_at && n.expires_at < todayISO())) throw new Error('inscripcion_cerrada');
+      if (!['si', 'no'].includes(answer)) throw new Error('tipo_no_valido');
+      d.announcement_replies = (d.announcement_replies || []).filter((r) => !(r.announcement_id === id && r.runner_id === me.id));
+      d.announcement_replies.push({ announcement_id: id, runner_id: me.id, answer, guests: answer === 'si' ? Math.max(0, Math.min(Number(guests) || 0, 10)) : 0 });
+      save();
+    },
+    async runnerRequestCorrection(code, kind, id, position, category, podiumType, note) {
+      const me = byCode(code); const d = load(); d.correction_requests = d.correction_requests || [];
+      if (!Number.isInteger(position) || position < 1 || position > 999) throw new Error('puesto_no_valido');
+      let old = null, name = '', date = null;
+      if (kind === 'reg') { const e = d.registration_entries.find((x) => x.registration_id === id && x.runner_id === me.id); const g = d.registrations.find((x) => x.id === id); old = e?.self_position ?? null; name = g?.name; date = g?.date; }
+      else { const x = d.results.find((r) => r.race_id === id && r.runner_id === me.id); const r = d.races.find((q) => q.id === id); old = x?.position ?? null; name = r?.name; date = r?.date; }
+      if (old === null || old === undefined) throw new Error('no_es_tuya');
+      if (old === position && !category && !podiumType) throw new Error('sin_cambios');
+      if (d.correction_requests.some((c) => c.runner_id === me.id && c.target_id === id && c.status === 'pendiente')) throw new Error('ya_existe');
+      const row = { id: uuid(), runner_id: me.id, kind, target_id: id, race_name: name, race_date: date, old_position: old, new_position: position, new_category: category || null,
+        new_podium_type: position <= 3 ? (podiumType || 'suelta') : null, note: String(note || '').trim().slice(0, 300) || null, status: 'pendiente', reply: null, created_at: new Date().toISOString(), resolved_at: null };
+      d.correction_requests.push(row);
+      logc(me.name, 'correccion', `pidió corregir su puesto en ${name}: ${old}º → ${position}º`); save(); return row.id;
+    },
+    async runnerCorrections(code) {
+      const me = byCode(code);
+      return clone((load().correction_requests || []).filter((c) => c.runner_id === me.id).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 20).map(({ runner_id, ...c }) => c));
+    },
+    async runnerCancelCorrection(code, id) {
+      const me = byCode(code); const d = load();
+      if (!(d.correction_requests || []).some((c) => c.id === id && c.runner_id === me.id && c.status === 'pendiente')) throw new Error('no_es_tuya');
+      d.correction_requests = d.correction_requests.filter((c) => c.id !== id); save();
+    },
+    async resolveCorrection(id, accept, reply) {
+      requireAdmin(); const d = load(); const c = (d.correction_requests || []).find((x) => x.id === id && x.status === 'pendiente');
+      if (!c) throw new Error('no_existe');
+      if (accept) {
+        const pod = c.new_position <= 3 ? (c.new_podium_type || 'suelta') : null; let n = 0;
+        if (c.kind === 'reg') { const e = d.registration_entries.find((x) => x.registration_id === c.target_id && x.runner_id === c.runner_id);
+          if (e) { Object.assign(e, { self_position: c.new_position, self_podium_type: pod }); if (c.new_category) e.category = c.new_category; n = 1; } }
+        if (!n) { const race = c.kind === 'race' ? d.races.find((r) => r.id === c.target_id) : d.races.find((r) => r.name === c.race_name && r.date === c.race_date);
+          const x = race && d.results.find((r) => r.race_id === race.id && r.runner_id === c.runner_id);
+          if (x) { Object.assign(x, { position: c.new_position, podium_type: pod || 'suelta', self_reported: true }); if (c.new_category) x.category = c.new_category; n = 1; } }
+        if (!n) throw new Error('no_existe');
+      }
+      Object.assign(c, { status: accept ? 'aceptada' : 'rechazada', reply: String(reply || '').trim().slice(0, 300) || null, resolved_at: new Date().toISOString() });
+      logc('Dirección', 'correccion', `${accept ? 'aceptó' : 'rechazó'} la corrección de ${d.runners.find((r) => r.id === c.runner_id)?.name} en ${c.race_name}: ${c.old_position}º → ${c.new_position}º`);
+      save();
     },
     async saveCircuitPodium(row) {
       requireAdmin(); const d = load(); d.circuit_podiums = d.circuit_podiums || [];

@@ -531,3 +531,14 @@ h2.section.past-head { color: var(--muted); margin-top: 1.4rem; }
 .hist-list li { padding: .6rem .7rem; margin-bottom: .45rem; border: 1px solid var(--line); border-left: 5px solid var(--muted); border-radius: 10px; background: var(--card); }
 .hist-list li p { margin: .15rem 0 0; overflow-wrap: anywhere; }
 .hist-list li.hist-cor { border-left-color: var(--brand-cyan); } .hist-list li.hist-dir { border-left-color: var(--accent); } .hist-list li.hist-sis { border-left-color: var(--gold); }
+
+/* Quedadas (confirmar asistencia) */
+.rsvp { margin-top: .7rem; padding: .7rem; border-radius: 10px; border: 1px solid var(--line); }
+.rsvp.todo { background: var(--warn-bg); border-color: var(--warn-line); }
+.rsvp.answered { background: color-mix(in srgb, var(--brand-cyan) 10%, transparent); }
+.rsvp p { margin: .2rem 0; }
+.rsvp .row { align-items: center; }
+label.inline { display: inline-flex; align-items: center; gap: .4rem; }
+label.inline select { width: auto; }
+.rsvp-admin { margin-top: .6rem; padding: .5rem .7rem; border: 1px solid var(--line); border-radius: 10px; }
+.rsvp-admin p { margin: .3rem 0; overflow-wrap: anywhere; }
