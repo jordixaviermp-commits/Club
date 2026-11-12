@@ -230,6 +230,14 @@ select pg_temp.check((runner_view('DDDDDDDDDD')->'bonus'->>'extra')::int = 4, 'c
 select pg_temp.check(jsonb_array_length(runner_view('DDDDDDDDDD')->'circuits') = 1, 'circuito: el corredor ve el suyo');
 select pg_temp.check(jsonb_array_length(runner_view('CCCCCCCCCC')->'circuits') = 0, 'circuito: no ve los de otros');
 select pg_temp.expect_fail($q$select runner_cancel_circuit('DDDDDDDDDD', '$q$ || :'cp' || $q$')$q$, 'circuito: confirmado ya no se retira');
+select pg_temp.expect_fail($q$delete from circuit_podiums$q$, 'circuito: el corredor no lo borra directamente');
+-- la dirección SÍ puede quitar un plus ya confirmado (por si se equivoca al confirmar)
+reset role;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+select pg_temp.check((select count(*) from circuit_podiums where id = :'cp' and status = 'confirmado') = 1, 'circuito: el plus sigue ahí, confirmado');
+delete from circuit_podiums where id = :'cp';
+select pg_temp.check((select count(*) from circuit_podiums where id = :'cp') = 0, 'circuito: la dirección sí puede borrar un plus confirmado');
 -- una inscripción ya disputada cuenta en cuanto el corredor pone su puesto (sin pasarla a resultados)
 reset role;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
