@@ -33,7 +33,7 @@ const S = {
   session: null, code: store.get(CODE_KEY), news: null, newsFresh: new Set(),
   data: null, runnerData: null,
   year: new Date().getFullYear(), draft: null, busy: false, showPast: false, installEvt: null,
-  mod: store.get(MOD_KEY) || 'all', regView: store.get(VIEW_KEY) === 'cal' ? 'cal' : 'list', calMonth: null, calDay: null,
+  mod: store.get(MOD_KEY) || 'all', sub: 'all', who: 'all', fold: new Set(), regView: store.get(VIEW_KEY) === 'cal' ? 'cal' : 'list', calMonth: null, calDay: null,
   q: { runner: '', admin: '' }, rdraft: null,
 };
 
@@ -305,26 +305,76 @@ function viewWelcome() {
     <p class="center"><a href="#/entrar" class="muted">Acceso de la dirección</a></p>`);
 }
 
-// ---------- Filtro rápido por modalidad (chips bajo la lupa) ----------
+// ---------- Filtros rápidos bajo la lupa: modalidad, formato y situación ----------
 const MOD_ICON = { Carretera: '🚴', BTT: '⛰️', Gravel: '🪨', Ciclocross: '🌲', Pista: '🏟️', Otra: '🏁' };
 /** Deja solo las carreras de la modalidad elegida (todas si no hay filtro). */
 const byMod = (list) => (S.mod === 'all' ? list : list.filter((x) => x.modality === S.mod));
+/** Modalidad + formato (+ «con compañeros» / «aún no estoy apuntado» si se indica `me`). */
+function regFilter(list, me = null) {
+  let out = byMod(list);
+  if (S.mod !== 'all' && S.sub !== 'all') out = out.filter((g) => (S.sub === '_none' ? !g.subtype : g.subtype === S.sub));
+  if (me && S.who === 'mates') out = out.filter((g) => (g.entries || []).some((e) => e.runner_id !== me.id));
+  if (me && S.who === 'free') out = out.filter((g) => !(g.entries || []).some((e) => e.runner_id === me.id) && !(g.results || []).some((x) => x.runner_id === me.id));
+  return out;
+}
+const filtersOn = (me) => S.mod !== 'all' || S.sub !== 'all' || (!!me && S.who !== 'all');
+const clearFilters = () => { S.mod = 'all'; S.sub = 'all'; S.who = 'all'; store.set(MOD_KEY, 'all'); };
 /**
- * Chips «Todas · Carretera · BTT…» con cuántas carreras próximas hay de cada una.
- * `regs`: inscripciones; las pasadas no cuentan en el número.
+ * Botones de filtro: modalidad → formato (al elegir modalidad) → situación (solo corredores).
+ * Los números son carreras próximas. `regs`: todas las inscripciones; `me`: el corredor (null en dirección).
  */
-function modFilterBar(regs) {
+function modFilterBar(regs, me = null) {
   const today = todayISO();
-  const up = regs.filter((g) => g.date >= today && !g.suspended);
+  const upOf = (list) => list.filter((g) => g.date >= today && !g.suspended);
   const mods = MODALITIES.filter((m) => regs.some((g) => g.modality === m));
   if (S.mod !== 'all' && !mods.includes(S.mod)) S.mod = 'all';
-  if (mods.length < 2) return '';
-  const chip = (val, label, n, cls = '') => `<button class="chip modchip ${cls}${S.mod === val ? ' on' : ''}" data-act="mod-filter" data-m="${esc(val)}" aria-pressed="${S.mod === val}">${label}<b>${n}</b></button>`;
-  const people = new Set(byMod(up).flatMap((g) => (g.entries || []).map((e) => e.runner_id))).size;
-  return `<div class="modbar" role="group" aria-label="Filtrar por modalidad">
-    ${chip('all', 'Todas', up.length)}
-    ${mods.map((m) => chip(m, `${MOD_ICON[m] || '🏁'} ${esc(m)}`, up.filter((g) => g.modality === m).length, modClass(m))).join('')}
-  </div>${S.mod !== 'all' ? `<p class="hint modsum">${MOD_ICON[S.mod] || ''} Solo <b>${esc(S.mod)}</b>: ${byMod(up).length} carrera${byMod(up).length === 1 ? '' : 's'} próxima${byMod(up).length === 1 ? '' : 's'} · 👥 ${people} compañero${people === 1 ? '' : 's'} apuntado${people === 1 ? '' : 's'}</p>` : ''}`;
+  // formatos disponibles dentro de la modalidad elegida (solo los que tienen carreras próximas)
+  const inMod = upOf(byMod(regs));
+  const subs = S.mod === 'all' ? [] : [...(SUBTYPES[S.mod] || []).map((o) => [o, inMod.filter((g) => g.subtype === o).length]), ['_none', inMod.filter((g) => !g.subtype).length]]
+    .filter(([, n]) => n > 0);
+  const showSubs = subs.length >= 2;
+  if (S.sub !== 'all' && (!showSubs || !subs.some(([k]) => k === S.sub))) S.sub = 'all';
+  if (mods.length < 2 && !me) return '';
+  const chip = (act, attr, val, cur, label, n, cls = '') => `<button class="chip modchip ${cls}${cur === val ? ' on' : ''}" data-act="${act}" data-${attr}="${esc(val)}" aria-pressed="${cur === val}">${label}<b>${n}</b></button>`;
+  const modRow = mods.length >= 2 ? `<div class="modbar" role="group" aria-label="Filtrar por modalidad">
+    ${chip('mod-filter', 'm', 'all', S.mod, 'Todas', upOf(regs).length)}
+    ${mods.map((m) => chip('mod-filter', 'm', m, S.mod, `${MOD_ICON[m] || '🏁'} ${esc(m)}`, upOf(regs).filter((g) => g.modality === m).length, modClass(m))).join('')}
+  </div>` : '';
+  const subRow = showSubs ? `<div class="modbar subbar ${modClass(S.mod)}" role="group" aria-label="Filtrar por formato">
+    ${chip('sub-filter', 's', 'all', S.sub, 'Todos', inMod.length)}
+    ${subs.map(([k, n]) => chip('sub-filter', 's', k, S.sub, k === '_none' ? 'Sin formato' : esc(k), n)).join('')}
+  </div>` : '';
+  const base = upOf(regFilter(regs));
+  const mates = (g) => (g.entries || []).some((e) => e.runner_id !== me.id);
+  const free = (g) => !(g.entries || []).some((e) => e.runner_id === me.id) && !(g.results || []).some((x) => x.runner_id === me.id);
+  const whoRow = me ? `<div class="modbar whobar" role="group" aria-label="Filtrar por situación">
+    ${chip('who-filter', 'w', 'all', S.who, 'Todas', base.length)}
+    ${chip('who-filter', 'w', 'mates', S.who, '👥 Con compañeros', base.filter(mates).length)}
+    ${chip('who-filter', 'w', 'free', S.who, '➕ Aún no estoy apuntado', base.filter(free).length)}
+  </div>` : '';
+  const shown = upOf(regFilter(regs, me));
+  const people = new Set(shown.flatMap((g) => (g.entries || []).map((e) => e.runner_id))).size;
+  const n = shown.length;
+  const sum = filtersOn(me) ? `<p class="hint modsum">${[S.mod !== 'all' ? `${MOD_ICON[S.mod] || ''} <b>${esc(S.mod)}</b>` : '', S.sub !== 'all' ? `<b>${S.sub === '_none' ? 'sin formato' : esc(S.sub)}</b>` : '',
+    me && S.who === 'mates' ? '<b>con compañeros</b>' : '', me && S.who === 'free' ? '<b>sin apuntarme</b>' : '']
+    .filter(Boolean).join(' · ') || 'Filtro activo'}: ${n} carrera${n === 1 ? '' : 's'} próxima${n === 1 ? '' : 's'} · 👥 ${people} compañero${people === 1 ? '' : 's'} apuntado${people === 1 ? '' : 's'}
+    <button class="link small" data-act="filters-clear">Quitar filtros</button></p>` : '';
+  return modRow + subRow + whoRow + sum;
+}
+
+/** Lista de carreras agrupada por mes, con cabecera plegable («Diciembre 2026 · 4 carreras · 👥 6»). */
+function monthList(list, card) {
+  const groups = new Map();
+  for (const g of list) (groups.get(g.date.slice(0, 7)) || groups.set(g.date.slice(0, 7), []).get(g.date.slice(0, 7))).push(g);
+  return [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([ym, items]) => {
+    const [y, m] = ym.split('-').map(Number);
+    const folded = S.fold.has(ym);
+    const people = new Set(items.flatMap((g) => (g.entries || []).map((e) => e.runner_id))).size;
+    return `<button class="month-head${folded ? ' folded' : ''}" data-act="month-fold" data-m="${ym}" aria-expanded="${!folded}">
+      <span class="mh-name">${MONTH_NAMES[m - 1][0].toUpperCase() + MONTH_NAMES[m - 1].slice(1)} ${y}</span>
+      <span class="mh-meta">${items.length} carrera${items.length === 1 ? '' : 's'}${people ? ` · 👥 ${people}` : ''}</span><i class="mh-arrow" aria-hidden="true">▾</i></button>
+      ${folded ? '' : items.map(card).join('')}`;
+  }).join('');
 }
 
 // ---------- Calendario de inscripciones (dirección y corredores) ----------
@@ -740,7 +790,7 @@ function runnerRegCard(g) {
 
 function viewRunnerHome() {
   const d = S.runnerData, me = d.me, today = d.today || todayISO();
-  const regs = byMod(d.registrations);
+  const regs = regFilter(d.registrations, me);
   const upcoming = regs.filter((g) => g.date >= today);
   const past = regs.filter((g) => g.date < today);
   const card = runnerRegCard;
@@ -749,7 +799,7 @@ function viewRunnerHome() {
   const body = S.regView === 'cal'
     ? calendarView(regs, card, isMine, { done, doneCard: (r) => doneRaceCard(r, { meId: me.id }) })
     : `<h2 class="section">Próximas carreras (${upcoming.length})</h2>
-    ${upcoming.length ? upcoming.map(card).join('') : `<p class="empty">${S.mod === 'all' ? 'Todavía no hay carreras abiertas.' : `No hay carreras de ${esc(S.mod)} próximas.`}</p>`}
+    ${upcoming.length ? monthList(upcoming, card) : `<p class="empty">${filtersOn(me) ? 'Ninguna carrera próxima con estos filtros. <button class="link" data-act="filters-clear">Quitar filtros</button>' : 'Todavía no hay carreras abiertas.'}</p>`}
     ${past.length ? `<details class="past"><summary>🏁 Ya disputadas, pendientes de resultados (${past.length})</summary>${past.map(card).join('')}</details>` : ''}`;
   return frame(runnerTitle(), `
     ${previewBanner()}
@@ -757,7 +807,7 @@ function viewRunnerHome() {
       ${searchBox('runner', 'Buscar carrera o pueblo…')}
       <button class="btn primary add-btn" data-act="r-new" aria-label="Añadir una carrera que no está" title="Añadir carrera">＋</button>
     </div>
-    ${modFilterBar(d.registrations)}
+    ${modFilterBar(d.registrations, me)}
     <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
     ${body}`,
   { rtab: '', actions: `${viewToggle()}${S.preview ? '' : '<button class="icon-btn" data-act="r-refresh" aria-label="Actualizar">↻</button>'}` });
@@ -882,7 +932,7 @@ let adminCard = null;
 function adminRegList(card = adminCard) {
   adminCard = card;
   const today = todayISO();
-  const all = byMod(S.data.registrations).sort((a, b) => a.date.localeCompare(b.date) || byName(a, b));
+  const all = regFilter(S.data.registrations).sort((a, b) => a.date.localeCompare(b.date) || byName(a, b));
   const q = S.q.admin;
   const regs = normalize(q).length >= 2 ? searchRaces(q, all) : all;
   if (q && !regs.length) return `<p class="empty">Ninguna inscripción se parece a «${esc(q)}».</p>`;
@@ -890,7 +940,7 @@ function adminRegList(card = adminCard) {
     return calendarView(regs, card, () => false, { done: byMod(S.data.races), doneCard: (r) => doneRaceCard(r, { admin: true }) });
   }
   const up = regs.filter((g) => g.date >= today), past = regs.filter((g) => g.date < today);
-  return `${up.length ? `<h2 class="section">📅 Próximas (${up.length})</h2>${up.map(card).join('')}` : `<p class="empty">No hay inscripciones próximas${S.mod === 'all' ? '' : ' de ' + esc(S.mod)}.</p>`}
+  return `${up.length ? `<h2 class="section">📅 Próximas (${up.length})</h2>${monthList(up, card)}` : `<p class="empty">No hay inscripciones próximas${filtersOn(null) ? ' con estos filtros. <button class="link" data-act="filters-clear">Quitar filtros</button>' : ''}.</p>`}
     ${past.length ? `<h2 class="section past-head">🏁 Ya disputadas (${past.length})</h2>${past.map(card).join('')}` : ''}`;
 }
 
@@ -2179,8 +2229,12 @@ const actions = {
     render();
   },
   'mod-filter'(el) {
-    S.mod = el.dataset.m; S.calDay = null; store.set(MOD_KEY, S.mod); render();
+    S.mod = el.dataset.m; S.sub = 'all'; S.calDay = null; store.set(MOD_KEY, S.mod); render();
   },
+  'sub-filter'(el) { S.sub = el.dataset.s; render(); },
+  'who-filter'(el) { S.who = el.dataset.w; render(); },
+  'filters-clear'() { clearFilters(); render(); },
+  'month-fold'(el) { const m = el.dataset.m; S.fold.has(m) ? S.fold.delete(m) : S.fold.add(m); render(); },
   'cal-month'(el) { S.calMonth = addMonths(S.calMonth, Number(el.dataset.n)); S.calDay = null; render(); },
   'cal-goto'(el) { S.calMonth = el.dataset.m; S.calDay = null; render(); },
   'cal-day'(el) {
