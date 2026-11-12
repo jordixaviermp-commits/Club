@@ -650,6 +650,19 @@ export function raceMatchScore(query, race) {
   return score * (hits / q.length); // premia que coincidan todas las palabras
 }
 
+/**
+ * Personas (objetos con `name`) que encajan con lo escrito: cada palabra escrita tiene que empezar una palabra del nombre
+ * (sin tildes ni mayúsculas) o, si tiene 3 letras o más, estar dentro del nombre. Devuelve todas, por orden alfabético.
+ */
+export function matchPeople(query, people) {
+  const toks = normalize(query).split(/\s+/).filter(Boolean);
+  if (!toks.length || toks.join('').length < 2) return [];
+  return people.filter((p) => {
+    const n = normalize(p.name), words = n.split(/\s+/);
+    return toks.every((t) => words.some((w) => w.startsWith(t)) || (t.length >= 3 && n.includes(t)));
+  }).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
+}
+
 /** Carreras parecidas a lo buscado, de más a menos parecidas. */
 export function searchRaces(query, races, min = 1) {
   return races.map((r) => ({ race: r, score: raceMatchScore(query, r) }))

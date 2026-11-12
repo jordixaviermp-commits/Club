@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, parseKm, kmText, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
+  extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -554,21 +554,76 @@ function fedMatches(q, existing, limit = 5) {
 const miniRow = (g, right, href = '') => `<li class="mini ${modClass(g.modality)}${href ? ' tappable' : ''}">${href ? `<a class="mini-main" href="${href}">` : '<div>'}<b>${esc(g.name)}</b>
   <small class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''} · ${esc(g.modality)}</small>${href ? '</a>' : '</div>'}${right}</li>`;
 
-/** Resultados del buscador del corredor: carreras del club (apuntarse) y de las federaciones (añadir). */
+// ---------- Compañeros: buscarlos por nombre y ver dónde se han apuntado ----------
+
+/** Compañeros (sin el propio corredor): del resumen del equipo si ya cargó; si no, los que aparecen apuntados en alguna carrera. */
+function teamRoster() {
+  const d = S.runnerData, mine = d?.me?.id, m = new Map();
+  for (const r of S.team?.runners || []) m.set(r.id, r.name);
+  for (const g of d?.registrations || []) for (const e of g.entries || []) if (e.name && !m.has(e.runner_id)) m.set(e.runner_id, e.name);
+  m.delete(mine);
+  return [...m].map(([id, name]) => ({ id, name }));
+}
+/** Carga el resumen del equipo (la lista completa de compañeros) sin repintar la pantalla, para no cortar lo que se está escribiendo. */
+async function ensureTeamQuiet() {
+  if (S.team || S.teamLoading || !(S.code || S.previewCode)) return;
+  S.teamLoading = true;
+  try { S.team = await api.runnerTeam(S.code || S.previewCode); } catch { /* sin el resumen del equipo valen los apuntados */ }
+  S.teamLoading = false;
+  updateSearch('runner');
+}
+const upcomingOf = (id) => (S.runnerData?.registrations || []).filter((g) => g.date >= (S.runnerData.today || todayISO())
+  && (g.entries || []).some((e) => e.runner_id === id));
+
+/** Ventana con dónde se ha apuntado un compañero (próximas carreras) y cómo le fue en las últimas. */
+function openMate(id) {
+  const d = S.runnerData, today = d.today || todayISO(), meId = d.me.id;
+  const person = teamRoster().find((x) => x.id === id);
+  if (!person) return;
+  const regs = d.registrations.filter((g) => (g.entries || []).some((e) => e.runner_id === id)).sort((a, b) => a.date.localeCompare(b.date));
+  const upcoming = regs.filter((g) => g.date >= today), waiting = regs.filter((g) => g.date < today);
+  const done = (S.team?.races || []).filter((r) => (r.results || []).some((x) => x.runner_id === id))
+    .sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+  const row = (g, right = '') => `<li class="mini ${modClass(g.modality)} tappable"><a class="mini-main" href="#/carrera/${g.id}"><b>${esc(g.name)}</b>
+    <small class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''} · ${esc(g.modality)}${g.suspended ? ' · ⛔ anulada' : ''}</small></a>${right}</li>`;
+  const withMe = (g) => ((g.entries || []).some((e) => e.runner_id === meId) ? '<span class="done">✓ Tú también</span>' : '');
+  const dlg = document.getElementById('dialog');
+  dlg.innerHTML = `<form method="dialog" class="dlg mate">
+    <h2>👤 ${esc(person.name)}</h2>
+    <p class="hint">${upcoming.length ? `Apuntado a <b>${upcoming.length}</b> carrera${upcoming.length === 1 ? '' : 's'} próxima${upcoming.length === 1 ? '' : 's'}. Toca una para verla${S.preview ? '' : ' o apuntarte'}.` : 'No está apuntado a ninguna carrera próxima.'}</p>
+    ${upcoming.length ? `<ul class="mini-list">${upcoming.map((g) => row(g, withMe(g))).join('')}</ul>` : ''}
+    ${waiting.length ? `<h3 class="mate-h">🏁 Ya disputadas, sin resultado</h3><ul class="mini-list">${waiting.map((g) => row(g)).join('')}</ul>` : ''}
+    ${done.length ? `<h3 class="mate-h">Últimas carreras</h3><ul class="mini-list">${done.map((r) => {
+      const x = r.results.find((y) => y.runner_id === id);
+      return `<li class="mini ${modClass(r.modality)} tappable"><a class="mini-main" href="#/carrera/race_${r.id}"><b>${esc(r.name)}</b>
+        <small class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</small></a>
+        ${x.position ? `<span class="pos">${medal(x.position)} ${x.position}º</span>` : ''}</li>`; }).join('')}</ul>` : ''}
+    <div class="dlg-actions"><button value="" class="btn ghost">Cerrar</button></div></form>`;
+  dlg.onclose = null;
+  dlg.showModal();
+}
+
+/** Resultados del buscador del corredor: compañeros, carreras del club (apuntarse) y de las federaciones (añadir). */
 function runnerSearchResults(q) {
   const d = S.runnerData;
   if (!d || normalize(q).length < 2) return '';
   const today = d.today || todayISO();
+  const mates = matchPeople(q, teamRoster());
   const mine = (g) => g.entries.some((e) => e.runner_id === d.me.id);
   const club = searchRaces(q, d.registrations.filter((g) => g.date >= today)).slice(0, 6);
   const fed = fedMatches(q, d.registrations, 10);
   return `
+    ${mates.length ? `<p class="hint"><b>Compañeros</b>: toca un nombre para ver dónde se ha apuntado.</p>
+      <ul class="mini-list">${mates.slice(0, 6).map((m) => { const n = upcomingOf(m.id).length;
+        return `<li class="mini tappable mate-row"><button type="button" class="mini-main" data-act="mate-open" data-id="${esc(m.id)}"><b>👤 ${esc(m.name)}</b>
+          <small class="muted">${n ? `${n} carrera${n === 1 ? '' : 's'} próxima${n === 1 ? '' : 's'}` : 'Sin carreras próximas'}</small></button></li>`; }).join('')}</ul>
+      ${mates.length > 6 ? `<p class="hint">…y ${mates.length - 6} más: escribe más letras del nombre.</p>` : ''}` : ''}
     ${club.length ? `<p class="hint"><b>Ya están en el club</b> (apúntate aquí, no hace falta crearla):</p>
       <ul class="mini-list">${club.map((g) => miniRow(g, mine(g) ? '<span class="done">✓ Apuntado</span>'
         : `<button class="btn primary small" data-act="r-join" data-id="${g.id}">Apuntarme</button>`)).join('')}</ul>` : ''}
     ${fed.length ? `<p class="hint"><b>En los calendarios de las federaciones y ligas</b>:</p>
       <ul class="mini-list">${fed.map((r) => miniRow(r, `<button class="btn small" data-act="r-new-fed" data-i="${S.fed.races.indexOf(r)}">Añadir y apuntarme</button>`)).join('')}</ul>` : ''}
-    ${!club.length && !fed.length ? `<p class="hint">No hay ninguna carrera parecida a «${esc(q)}». Puedes añadirla:</p>` : ''}`;
+    ${!club.length && !fed.length && !mates.length ? `<p class="hint">No hay ninguna carrera parecida a «${esc(q)}». Puedes añadirla:</p>` : ''}`;
 }
 
 function updateSearch(scope) {
@@ -889,7 +944,7 @@ function viewRunnerHome() {
   return frame(runnerTitle(), `
     ${previewBanner()}
     <div class="toolbar">
-      ${searchBox('runner', 'Buscar carrera o pueblo…')}
+      ${searchBox('runner', 'Buscar carrera, pueblo o compañero…')}
       <button class="btn primary add-btn" data-act="r-new" aria-label="Añadir una carrera que no está" title="Añadir carrera">＋</button>
     </div>
     ${modFilterBar(d.registrations, me)}
@@ -2351,6 +2406,7 @@ const actions = {
     render();
   },
   'fed-seguro'(el) { S.fedSeguro = el.dataset.f; store.set(FED_KEY, S.fedSeguro); render(); },
+  'mate-open'(el) { openMate(el.dataset.id); },
   'copy-text'(el) { copyText(el.dataset.text, el.dataset.msg || 'Copiado'); },
   'mod-filter'(el) {
     S.mod = el.dataset.m; S.sub = 'all'; S.calDay = null; store.set(MOD_KEY, S.mod); render();
@@ -2834,6 +2890,8 @@ document.addEventListener('visibilitychange', async () => {
 // ---------- eventos (delegados) ----------
 
 const RUNNER_ACTIONS = new Set(['r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'corr-cancel', 'news-reply']);
+// los enlaces de la ventana emergente (p. ej. las carreras de un compañero) cierran la ventana al navegar
+document.getElementById('dialog').addEventListener('click', (ev) => { if (ev.target.closest('a[href^="#/"]')) ev.currentTarget.close(); });
 $app.addEventListener('click', (ev) => {
   const el = ev.target.closest('[data-act]');
   if (!el || !actions[el.dataset.act]) return;
@@ -2856,6 +2914,7 @@ $app.addEventListener('input', (ev) => {
   if (t.dataset.search) {
     S.q[t.dataset.search] = t.value;
     if (t.dataset.search === 'runner' && !S.fed) loadFed().then(() => updateSearch('runner'));
+    if (t.dataset.search === 'runner') ensureTeamQuiet();
     updateSearch(t.dataset.search);
     return;
   }
