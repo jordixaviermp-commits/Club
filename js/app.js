@@ -2551,7 +2551,14 @@ const actions = {
   },
   async 'circ-cancel'(el) {
     if (!await confirmAction('Retirar', '¿Retirar este plus que pediste?', 'Retirar')) return;
-    await run(async () => { await api.runnerCancelCircuit(S.code, el.dataset.id); await loadRunner(); }, 'Retirado'); render();
+    await run(async () => {
+      try { await api.runnerCancelCircuit(S.code, el.dataset.id); }
+      catch (e) { // solo se retiran los pendientes: si la dirección lo confirmó mientras tanto, la base de datos no lo borra
+        await loadRunner();
+        throw new Error(/no_es_tuya/.test(String(e?.message)) ? 'plus_confirmado' : e?.message);
+      }
+      await loadRunner();
+    }, 'Retirado'); render();
   },
   'csv-all'() { download(`monzon-resultados-todos.csv`, toCsv(csvRows(S.data.races)), 'text/csv;charset=utf-8'); },
 };

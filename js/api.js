@@ -14,6 +14,7 @@ export function friendlyError(e) {
   if (/puesto_no_valido/.test(msg)) return 'Pon un puesto válido (1, 2, 3…).';
   if (/carrera_suspendida/.test(msg)) return 'Esta carrera se ha suspendido: no se puede poner resultado ni pasarla a resultados.';
   if (/otros_apuntados/.test(msg)) return 'No puedes borrarla: hay más compañeros apuntados. Pídeselo a la dirección del club.';
+  if (/plus_confirmado/.test(msg)) return 'La dirección ya ha confirmado este plus, así que no se puede retirar. Si hay un error, díselo a la dirección.';
   if (/no_es_tuya/.test(msg)) return 'Solo puedes cambiar las carreras que has añadido tú.';
   if (/ya_existe/.test(msg)) return 'Ya existe: otra carrera con ese nombre ese día, un circuito ya comunicado o una petición tuya pendiente.';
   if (/sin_cambios/.test(msg)) return 'Eso es lo mismo que ya pusiste: cambia el puesto, la categoría o el tipo de podio.';
