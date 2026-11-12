@@ -356,6 +356,70 @@ select pg_temp.expect_fail($q$select runner_complete_race('XXXXXXXXXXXX', 'race'
 reset role;
 select pg_temp.check((select count(*) from change_log where actor = 'Dani Test' and summary like '%Completa Esta%' and summary like '%place:%') = 1, 'completar: queda en el historial con su nombre');
 set role anon;
+-- noticias con confirmación (quedadas)
+reset role;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+insert into announcements (id, title, body, rsvp) values ('40000000-0000-0000-0000-000000000001', 'Quedada con RSVP', 'Cena', true);
+insert into announcements (id, title, body) values ('40000000-0000-0000-0000-000000000002', 'Aviso sin RSVP', 'Solo informa');
+insert into announcements (id, title, body, rsvp, expires_at) values ('40000000-0000-0000-0000-000000000003', 'RSVP caducado', 'x', true, current_date - 1);
+set role anon;
+select set_config('request.jwt.claim.sub', '', false);
+select pg_temp.check((select (n->>'rsvp')::boolean from jsonb_array_elements(runner_news('DDDDDDDDDD')) n where n->>'id' = '40000000-0000-0000-0000-000000000001'), 'rsvp: la noticia lo pide');
+select pg_temp.check((select n->>'my_answer' from jsonb_array_elements(runner_news('DDDDDDDDDD')) n where n->>'id' = '40000000-0000-0000-0000-000000000001') is null, 'rsvp: aún sin responder');
+select runner_reply_news('DDDDDDDDDD', '40000000-0000-0000-0000-000000000001', 'si', 2);
+select runner_reply_news('CCCCCCCCCC', '40000000-0000-0000-0000-000000000001', 'no', 5);
+select pg_temp.check((select (n->>'yes_count')::int from jsonb_array_elements(runner_news('CCCCCCCCCC')) n where n->>'id' = '40000000-0000-0000-0000-000000000001') = 3, 'rsvp: cuenta él y sus 2 acompañantes');
+select pg_temp.check((select (n->>'no_count')::int from jsonb_array_elements(runner_news('DDDDDDDDDD')) n where n->>'id' = '40000000-0000-0000-0000-000000000001') = 1 and (select (n->>'my_guests')::int from jsonb_array_elements(runner_news('CCCCCCCCCC')) n where n->>'id' = '40000000-0000-0000-0000-000000000001') = 0, 'rsvp: un «no» no lleva acompañantes');
+select runner_reply_news('DDDDDDDDDD', '40000000-0000-0000-0000-000000000001', 'no', 0);
+select pg_temp.check((select (n->>'yes_count')::int from jsonb_array_elements(runner_news('DDDDDDDDDD')) n where n->>'id' = '40000000-0000-0000-0000-000000000001') = 0, 'rsvp: puede cambiar su respuesta');
+select pg_temp.expect_fail($q$select runner_reply_news('DDDDDDDDDD', '40000000-0000-0000-0000-000000000002', 'si', 0)$q$, 'rsvp: una noticia que no lo pide no se responde');
+select pg_temp.expect_fail($q$select runner_reply_news('DDDDDDDDDD', '40000000-0000-0000-0000-000000000003', 'si', 0)$q$, 'rsvp: ni una caducada');
+select pg_temp.expect_fail($q$select runner_reply_news('DDDDDDDDDD', '40000000-0000-0000-0000-000000000001', 'quizas', 0)$q$, 'rsvp: respuesta inválida');
+select pg_temp.expect_fail($q$select runner_reply_news('XXXXXXXXXXXX', '40000000-0000-0000-0000-000000000001', 'si', 0)$q$, 'rsvp: sin enlace no');
+select pg_temp.expect_fail('select * from announcement_replies', 'rsvp: anon no lee las respuestas');
+-- correcciones de puesto
+select pg_temp.check((select count(*) from jsonb_array_elements(runner_corrections('CCCCCCCCCC'))) = 0, 'corrección: ninguna al principio');
+select runner_request_correction('CCCCCCCCCC', 'race', :'rp', 6, null, null, 'Me equivoqué al teclear') as corr \gset
+select pg_temp.check((select c->>'status' from jsonb_array_elements(runner_corrections('CCCCCCCCCC')) c where c->>'id' = :'corr') = 'pendiente' and (select (c->>'old_position')::int from jsonb_array_elements(runner_corrections('CCCCCCCCCC')) c) = 7, 'corrección: queda pendiente con el puesto de antes');
+select pg_temp.expect_fail($q$select runner_request_correction('CCCCCCCCCC', 'race', '$q$ || :'rp' || $q$', 5, null, null, null)$q$, 'corrección: no dos pendientes de la misma carrera');
+select pg_temp.expect_fail($q$select runner_request_correction('CCCCCCCCCC', 'race', '$q$ || :'rp' || $q$', 7, null, null, null)$q$, 'corrección: sin cambios no');
+reset role;
+select id as autouno from races where name = 'Auto Uno' \gset
+set role anon;
+select pg_temp.expect_fail($q$select runner_request_correction('CCCCCCCCCC', 'race', '$q$ || :'autouno' || $q$', 1, null, null, null)$q$, 'corrección: solo de una carrera donde corrió');
+select pg_temp.expect_fail($q$select runner_request_correction('CCCCCCCCCC', 'race', '$q$ || :'rp' || $q$', 1000, null, null, null)$q$, 'corrección: puesto válido');
+select pg_temp.expect_fail('select * from correction_requests', 'corrección: anon no lee la tabla');
+reset role;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000b', false);
+select pg_temp.expect_fail($q$select resolve_correction('$q$ || :'corr' || $q$', true, null)$q$, 'corrección: quien no es dirección no resuelve');
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+select resolve_correction(:'corr', true, 'Corregido');
+select pg_temp.check((select position from results where race_id = :'rp' and runner_id = '10000000-0000-0000-0000-000000000003') = 6, 'corrección: al aceptar se aplica el puesto nuevo');
+select pg_temp.check((select count(*) from change_log where actor = 'Dirección' and summary like '%aceptó la corrección%') = 1, 'corrección: queda en el historial');
+select pg_temp.expect_fail($q$select resolve_correction('$q$ || :'corr' || $q$', true, null)$q$, 'corrección: no se resuelve dos veces');
+reset role;
+-- corrección de una inscripción que ya pasó a resultados (se busca por nombre y fecha)
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+insert into registrations (id, name, date) values ('20000000-0000-0000-0000-000000000095', 'Corrige Despues', current_date - 5);
+insert into registration_entries (registration_id, runner_id, self_position) values ('20000000-0000-0000-0000-000000000095', '10000000-0000-0000-0000-000000000004', 4);
+set role anon;
+select set_config('request.jwt.claim.sub', '', false);
+select runner_request_correction('DDDDDDDDDD', 'reg', '20000000-0000-0000-0000-000000000095', 3, null, 'campeonato', null) as corr2 \gset
+select runner_view('DDDDDDDDDD') is not null as vio2 \gset
+reset role;
+select pg_temp.check(exists (select 1 from races where name = 'Corrige Despues') and not exists (select 1 from registrations where name = 'Corrige Despues'), 'corrección: la inscripción ya pasó sola a resultados');
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+select resolve_correction(:'corr2', true, null);
+select pg_temp.check((select x.position from results x join races r on r.id = x.race_id where r.name = 'Corrige Despues') = 3 and (select x.podium_type from results x join races r on r.id = x.race_id where r.name = 'Corrige Despues') = 'campeonato', 'corrección: se aplica en la carrera aunque la inscripción ya no exista');
+reset role;
+set role anon;
+select set_config('request.jwt.claim.sub', '', false);
+select pg_temp.check((select c->>'status' from jsonb_array_elements(runner_corrections('DDDDDDDDDD')) c where c->>'id' = :'corr2') = 'aceptada', 'corrección: el corredor ve que se aceptó');
+select runner_request_correction('CCCCCCCCCC', 'race', :'rp', 2, null, null, null) as corr3 \gset
+select runner_cancel_correction('CCCCCCCCCC', :'corr3');
+select pg_temp.expect_fail($q$select runner_cancel_correction('CCCCCCCCCC', '$q$ || :'corr' || $q$')$q$, 'corrección: una ya resuelta no se retira');
 -- documentos (contratos)
 reset role;
 set role authenticated;
