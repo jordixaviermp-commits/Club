@@ -599,3 +599,4 @@ header .icon-btn.sos { display: inline-flex; align-items: center; justify-conten
 ol.bullets { list-style: decimal; }
 .sos-pick { margin: .6rem 0 .2rem; font-weight: 600; }
 .fedbar .chip { flex: 1; justify-content: center; }
+.sos-img img { display: block; width: 100%; height: auto; border-radius: 14px; border: 1px solid var(--line); margin-bottom: .7rem; }

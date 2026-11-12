@@ -50,6 +50,14 @@ test('seguros aragonesa: llamar antes de ir al médico, parte en 48 h y resumen 
   assert.equal(FEDERACIONES.fcc.accidente.pasos[0].tel.numero.replace(/\D/g, ''), '981941111'); // la catalana llama al mismo Gerosalud
 });
 
+test('seguros: cada federación tiene su imagen resumen', async () => {
+  for (const id of ORDEN_FEDERACIONES) {
+    const f = FEDERACIONES[id];
+    assert.match(f.imagen, /^img\/accidente-[a-z]+\.png$/);
+    await access(new URL('../' + f.imagen, import.meta.url));
+  }
+});
+
 test('seguros: todos los PDF enlazados están en la app', async () => {
   for (const id of ORDEN_FEDERACIONES) {
     const { accidente, rc } = FEDERACIONES[id];

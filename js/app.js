@@ -296,11 +296,17 @@ const polizaRow = (etiqueta, valor, msg = 'Número de póliza copiado') => `<p c
 const pdfLinks = (list = []) => list.map((l) => `<a class="btn" href="${esc(l.href)}" download="${esc(l.href.split('/').pop())}" target="_blank" rel="noopener noreferrer">${esc(l.etiqueta)} ⬇️</a>`).join('');
 /** Todos los documentos de una federación en un solo sitio, para descargarlos. */
 function accidentDocs(fed) {
-  const docs = [...(fed.accidente.pdfs || []), ...(fed.rc.pdfs || [])];
+  const docs = [...(fed.imagen ? [{ etiqueta: '🖼️ Imagen resumen', href: fed.imagen }] : []), ...(fed.accidente.pdfs || []), ...(fed.rc.pdfs || [])];
   if (!docs.length) return '';
   return `<section class="card sos-card"><h2>📥 Documentos para descargar</h2>
     <p class="hint">Descárgalos con cobertura y los tendrás en el móvil por si los necesitas sin ella.</p>${pdfLinks(docs)}</section>`;
 }
+
+/** Imagen resumen de la federación elegida (se genera con scripts/imagenes-seguros.mjs). */
+const accidentImage = (fed) => (fed.imagen ? `<section class="card sos-card sos-img"><h2>🖼️ Resumen en una imagen</h2>
+  <a href="${esc(fed.imagen)}" target="_blank" rel="noopener noreferrer"><img src="${esc(fed.imagen)}" alt="Qué hacer en caso de accidente con licencia ${esc(fed.corto.toLowerCase())}: llamar a Gerosalud al 981 941 111 antes de ir al médico, enviar el parte y pedir autorización para más asistencia"></a>
+  <a class="btn primary" href="${esc(fed.imagen)}" download="${esc(fed.imagen.split('/').pop())}">⬇️ Descargar la imagen</a>
+  <p class="hint">Tócala para verla a tamaño completo. Guárdala en tu galería y la tendrás también sin cobertura.</p></section>` : '');
 
 function accidentSteps(a) {
   return `${a.aviso ? `<p class="card sos-urgent">⚠️ <b>${esc(a.aviso)}</b></p>` : ''}
@@ -343,7 +349,8 @@ function viewAccident() {
   return frame('Accidente', `
     <p class="card sos-urgent">🚨 <b>Urgencia grave: llama primero al 112.</b> Lo de abajo es para comunicar el accidente al seguro de la federación.</p>
     ${chips}
-    ${fed ? `${accidentSteps(fed.accidente)}
+    ${fed ? `${accidentImage(fed)}
+      ${accidentSteps(fed.accidente)}
       ${accidentRc(fed.rc)}
       ${accidentDocs(fed)}
       <p class="hint center">Datos de la ${esc(fed.nombre)}. Si tu licencia es de otra federación, cambia arriba. Toda la información, en <a href="${esc(fed.info)}" target="_blank" rel="noopener noreferrer">${esc(fed.info.replace('https://', ''))}</a>.</p>`
