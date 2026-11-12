@@ -1053,11 +1053,11 @@ function viewRunnerMine() {
 function viewRunnerContract() {
   return frame(runnerTitle(), `
     ${previewBanner()}
-    ${myDocsCard()}
-    ${licenseCard()}
-    ${clubLinksCard()}
     ${runnerBonusCard(S.runnerData)}
-    ${circuitsCard(S.runnerData)}`,
+    ${circuitsCard(S.runnerData)}
+    ${clubLinksCard()}
+    ${myDocsCard()}
+    ${licenseCard()}`,
   { rtab: 'contrato' });
 }
 
@@ -1503,8 +1503,12 @@ function circuitsCard(d) {
   const year = d.bonus?.year || new Date().getFullYear();
   const per = d.bonus?.config?.circuitExtra ?? 4;
   const mine = d.circuits.filter((c) => c.year >= year - 1);
-  return `<section class="card circ-card">
-    <h2>🏆 Plus de bonificación</h2>
+  const ok = mine.filter((c) => c.status === 'confirmado').length, wait = mine.length - ok;
+  // cerrado por defecto: título, una frase y el estado; todo lo demás (explicación, lista y formulario) se despliega
+  return `<details class="card circ-card">
+    <summary class="circ-sum"><span class="circ-t">🏆 Plus de bonificación</span>
+      <span class="circ-chips">${ok ? `<span class="extra-chip">✅ ${ok} confirmado${ok === 1 ? '' : 's'}</span>` : ''}${wait ? `<span class="pending-chip">⏳ ${wait} pendiente${wait === 1 ? '' : 's'}</span>` : ''}</span>
+      <small class="muted circ-one">Un extra por podio en la general de una liga: +${per} carreras para la bonificación, no para el mínimo.</small></summary>
     <p class="hint"><b>Un extra por ganar puestos en la general de una liga.</b> Ligas como la Xallenger, la Open Maxxis Marathon, las Copas o los Críteriums tienen una <b>clasificación general final</b>, al terminar todas sus pruebas. Si acabas entre los <b>3 primeros</b> (absoluta o de tu categoría), el club te da un plus de <b>+${per} carreras para tu bonificación</b> (cláusula 9).</p>
     <ul class="bullets">
       <li>✅ <b>Sí cuenta para la bonificación</b>: puede subirte de tramo y, con ello, el dinero.</li>
@@ -1527,7 +1531,7 @@ function circuitsCard(d) {
         <label>Temporada<select name="year">${opt(String(year), String(year), String(year))}${opt(String(year - 1), String(year - 1), '')}</select></label>
         <button class="btn primary">Pedir el plus a la dirección</button>
       </form></details>`}
-  </section>`;
+  </details>`;
 }
 
 // ======================================================================
