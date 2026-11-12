@@ -555,14 +555,17 @@ function viewRunnerReport(key) {
         <label>Tu puesto<input type="number" name="position" inputmode="numeric" min="1" max="999" required autofocus></label>
         <label>Categoría${catSelect('name="category"', cat || d.me.category || '', 'Categoría')}</label>
       </div>
-      <label>Si es podio (1º, 2º o 3º), ¿de qué tipo?
-        <select name="podium">${PODIUM_TYPES.map((t) => opt(t.id, t.label, race.race_type === 'campeonato' ? 'campeonato' : 'suelta')).join('')}</select></label>
+      <input type="hidden" name="podium" value="${podiumKind(race)}">
+      ${race.race_type === 'circuito' ? `<p class="hint">🏆 Esta carrera es puntuable de <b>${esc(race.circuit || 'un circuito')}</b>. Aquí pones solo tu puesto en <b>esta prueba</b>. Si acabas en el podio de la <b>general final</b>, se pide aparte, al terminar la liga, en <b>Contrato → Plus de bonificación</b>.</p>` : ''}
       <p class="pen bad-box">⚠️ Revísalo bien: <b>una vez enviado no podrás cambiarlo</b>. Si te equivocas, tendrá que corregirlo la dirección.</p>
       <button class="btn primary">Enviar mi resultado</button>
     </form>`, { back });
 }
 
 /** El resultado ya está puesto: el corredor puede pedir que lo corrija la dirección. */
+/** Tipo de podio que lleva un resultado del corredor: no lo elige él (solo sirve para las estadísticas); la dirección puede cambiarlo. */
+const podiumKind = (race, current) => (PODIUM_TYPES.some((t) => t.id === current) ? current : race?.race_type === 'campeonato' ? 'campeonato' : 'suelta');
+
 function viewCorrection(kind, id, race, back) {
   const d = S.runnerData;
   const cur = kind === 'reg' ? race.my_result.position : race.position;
@@ -586,8 +589,7 @@ function viewCorrection(kind, id, race, back) {
             <label>Puesto correcto<input type="number" name="position" inputmode="numeric" min="1" max="999" required></label>
             <label>Categoría${catSelect('name="category"', curCat || '', 'Sin cambio')}</label>
           </div>
-          <label>Si es podio (1º, 2º o 3º), ¿de qué tipo?
-            <select name="podium">${PODIUM_TYPES.map((t) => opt(t.id, t.label, 'suelta')).join('')}</select></label>
+          <input type="hidden" name="podium" value="${podiumKind(race, kind === 'reg' ? race.my_result?.podium_type : race.podium_type)}">
           <label>Motivo (opcional)<input name="note" maxlength="300" placeholder="Me equivoqué al teclear"></label>
           <button class="btn primary">Enviar a la dirección</button></form>`}`, { back });
 }
@@ -2573,7 +2575,7 @@ const forms = {
     const position = Number(f.position.value);
     if (!Number.isInteger(position) || position < 1) return toast('Pon un puesto válido (1, 2, 3…).', true);
     const cat = f.category.value || null, pod = f.podium.value;
-    const txt = `${position}º${cat ? ' en ' + cat : ''}${position <= 3 ? ` · ${podiumLabel(pod)}` : ''}`;
+    const txt = `${position}º${cat ? ' en ' + cat : ''}${position <= 3 && pod === 'campeonato' ? ` · ${podiumLabel(pod)}` : ''}`;
     if (!await confirmAction('Enviar resultado', `Vas a enviar: <b>${esc(txt)}</b>.<br>Después no podrás cambiarlo.`, 'Enviar', 'primary')) return;
     const ok = await run(async () => { await api.runnerReport(S.code, f.dataset.kind, f.dataset.id, position, cat, pod); await loadRunner(); return true; },
       position <= 3 ? `${medal(position)} ¡Enhorabuena! Resultado enviado` : 'Resultado enviado');
