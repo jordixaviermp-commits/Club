@@ -9,6 +9,7 @@ import {
 
 const CODE_KEY = 'monzon-code';
 import { FEDERACIONES, ORDEN_FEDERACIONES } from './seguros.js';
+import { ENLACES_CONTRATO } from './enlaces.js';
 const VIEW_KEY = 'monzon-regview';
 const FED_KEY = 'monzon-federacion';
 const MOD_KEY = 'monzon-modfilter';
@@ -1002,6 +1003,12 @@ function viewRunnerRace(id) {
 }
 
 /** «Mi temporada»: bono, mis carreras e instalación. */
+/** Enlaces del club (pedido de ropa…): se editan en js/enlaces.js. */
+const clubLinksCard = () => ENLACES_CONTRATO.map((l) => `<section class="card club-link">
+  <h3>${esc(l.icono || '🔗')} ${esc(l.titulo)}</h3>
+  <p class="hint">${esc(l.texto)}</p>
+  <a class="btn primary block" href="${esc(l.href)}" target="_blank" rel="noopener noreferrer">${esc(l.boton || 'Abrir')} ↗</a></section>`).join('');
+
 /** «Mi licencia»: enlaces a la web de cada federación, donde el corredor ve su licencia digital con su propia cuenta. */
 function licenseCard() {
   const link = (id) => {
@@ -1031,6 +1038,7 @@ function viewRunnerContract() {
     ${previewBanner()}
     ${myDocsCard()}
     ${licenseCard()}
+    ${clubLinksCard()}
     ${runnerBonusCard(S.runnerData)}
     ${circuitsCard(S.runnerData)}`,
   { rtab: 'contrato' });
