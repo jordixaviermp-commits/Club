@@ -143,6 +143,17 @@ create table if not exists public.circuit_podiums (
 create index if not exists circuit_podiums_runner_idx on public.circuit_podiums(runner_id);
 alter table public.circuit_podiums enable row level security;  -- permisos: ver «Seguridad» más abajo
 
+-- Noticias de la dirección para los corredores (quedadas, pedidos de ropa…). Las escribe la dirección;
+-- cada corredor las ve (solo lectura) con la campanita. `expires_at` = último día en que se muestra (vacío = siempre).
+create table if not exists public.announcements (
+  id         uuid primary key default gen_random_uuid(),
+  title      text not null check (length(btrim(title)) between 3 and 120),
+  body       text not null default '' check (length(body) <= 4000),
+  expires_at date,
+  created_at timestamptz not null default now()
+);
+alter table public.announcements enable row level security;  -- permisos: ver «Seguridad» más abajo
+
 -- Ajustes del club (p. ej. los bonos por temporada). Solo los ve y cambia la dirección.
 --   key 'bonus' → {"2026": {"tiers":[{"races":12,"amount":150},…], "minimum":12,
 --                           "penalty":{"renovado":100,"nuevo":175}, "nuevos":[<runner_id>,…]}}
@@ -173,16 +184,16 @@ $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['runners','registrations','registration_entries','races','results','settings','runner_documents','circuit_podiums'] loop
+  foreach t in array array['runners','registrations','registration_entries','races','results','settings','runner_documents','circuit_podiums','announcements'] loop
     execute format('drop policy if exists admin_all on public.%I', t);
     execute format('create policy admin_all on public.%I for all to authenticated using (public.is_admin()) with check (public.is_admin())', t);
   end loop;
 end $$;
 
 revoke all on public.runners, public.registrations, public.registration_entries,
-              public.races, public.results, public.admins, public.settings, public.runner_documents, public.circuit_podiums from anon, public;
+              public.races, public.results, public.admins, public.settings, public.runner_documents, public.circuit_podiums, public.announcements from anon, public;
 grant select, insert, update, delete on public.runners, public.registrations,
-              public.registration_entries, public.races, public.results, public.settings, public.runner_documents, public.circuit_podiums to authenticated;
+              public.registration_entries, public.races, public.results, public.settings, public.runner_documents, public.circuit_podiums, public.announcements to authenticated;
 revoke all on public.admins from authenticated;
 
 -- ---------- Funciones de dirección (respetan la seguridad de arriba) ---
@@ -653,6 +664,20 @@ begin
   if not found then raise exception 'no_es_tuya' using errcode = '42501'; end if;
 end $$;
 
+-- Noticias vigentes para el corredor (las más recientes primero). Solo lectura.
+create or replace function public.runner_news(p_code text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+begin
+  if not exists (select 1 from runners where code = p_code) then
+    raise exception 'enlace_no_valido' using errcode = '28000';
+  end if;
+  return coalesce((select jsonb_agg(jsonb_build_object('id', n.id, 'title', n.title, 'body', n.body,
+                                                       'created_at', n.created_at, 'expires_at', n.expires_at)
+                                    order by n.created_at desc)
+                     from (select * from announcements where expires_at is null or expires_at >= current_date
+                            order by created_at desc limit 30) n), '[]'::jsonb);
+end $$;
+
 create or replace function public.runner_leave(p_code text, p_registration uuid)
 returns void language plpgsql security definer set search_path = public as $$
 declare v_runner uuid;
@@ -683,7 +708,7 @@ grant execute on function public.runner_view(text), public.runner_join(text, uui
                           public.runner_team(text),
                           public.runner_leave(text, uuid), public.runner_join_race(text, uuid, text),
                           public.runner_set_race_type(text, uuid, text, text), public.runner_propose_circuit(text, text, int, int, text),
-                          public.runner_cancel_circuit(text, uuid), public.ping() to anon, authenticated;
+                          public.runner_cancel_circuit(text, uuid), public.runner_news(text), public.ping() to anon, authenticated;
 grant execute on function public.is_admin(), public.require_admin(),
                           public.save_registration(jsonb, jsonb), public.save_race(jsonb, jsonb),
                           public.promote_registration(uuid), public.delete_runner(uuid, boolean),

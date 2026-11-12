@@ -24,8 +24,9 @@ const store = {
 const api = CONFIG.SUPABASE_URL && CONFIG.SUPABASE_KEY && window.supabase
   ? supabaseApi(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY) : demoApi();
 
+const NEWS_KEY = 'monzon-news-seen';
 const S = {
-  session: null, code: store.get(CODE_KEY),
+  session: null, code: store.get(CODE_KEY), news: null, newsFresh: new Set(),
   data: null, runnerData: null,
   year: new Date().getFullYear(), draft: null, busy: false, showPast: false, installEvt: null,
   regView: store.get(VIEW_KEY) === 'cal' ? 'cal' : 'list', calMonth: null, calDay: null,
@@ -40,6 +41,22 @@ const modClass = (m) => 'm-' + normalize(m || 'Otra').replace(/[^a-z]/g, '');
 const modTag = (m) => `<span class="tag ${modClass(m)}">${esc(m)}</span>`;
 const modLegend = (mods) => `<div class="mod-legend">${MODALITIES.filter((m) => !mods || mods.includes(m))
   .map((m) => `<span class="${modClass(m)}"><i></i>${esc(m)}</span>`).join('')}</div>`;
+/** Texto de una noticia: escapado, con enlaces pulsables y saltos de línea. */
+const newsText = (t) => esc(t).replace(/https?:\/\/[^\s<]+/g, (u) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`).replace(/\n/g, '<br>');
+const newsSeen = () => { try { return new Set(JSON.parse(store.get(NEWS_KEY) || '[]')); } catch { return new Set(); } };
+/** Noticias que este móvil aún no ha abierto (en la vista previa de la dirección no cuenta ninguna). */
+const unreadNews = () => (S.preview || !S.news ? [] : S.news.filter((n) => !newsSeen().has(n.id)));
+const markNewsSeen = () => { if (S.preview || !S.news) return; store.set(NEWS_KEY, JSON.stringify([...new Set([...newsSeen(), ...S.news.map((n) => n.id)])].slice(-200))); };
+/** Carga las noticias del corredor (null si aún falta el SQL: entonces no hay campanita). */
+async function loadNews() {
+  try { S.news = await api.runnerNews(S.code || S.previewCode); } catch { S.news = null; }
+}
+/** Campanita de los corredores: noticias nuevas de la dirección. */
+function newsBell() {
+  if (!S.news) return '';
+  const n = unreadNews().length;
+  return `<a class="icon-btn bell news-bell${n ? ' on' : ''}" href="${runnerHref('noticias')}" aria-label="Noticias del club${n ? `: ${n} nueva${n === 1 ? '' : 's'}` : ''}" title="Noticias del club">${icon(ICON_BELL)}${n ? `<span class="bell-n">${n}</span>` : ''}</a>`;
+}
 /** Etiqueta del tipo de carrera (campeonato o circuito). */
 const typeTag = (x) => (x.race_type === 'campeonato' ? '<p class="type-line"><span class="tag t-champ">🏆 Campeonato</span></p>'
   : x.race_type === 'circuito' ? `<p class="type-line"><span class="tag t-circ">🔗 ${esc(x.circuit || 'Circuito')}</span></p>` : '');
@@ -141,6 +158,7 @@ async function onRoute() {
       if (sub === 'equipo' || (sub === '' && S.regView === 'cal' && !S.team)) loadTeam();
       if (sub === 'federaciones' && !S.fed) loadFed();
       if (sub === 'contrato') loadMyDocs();
+      if (sub === 'noticias') enterNews();
       if (sub === 'nueva' && !S.team) loadTeam();
     }
   }
@@ -154,7 +172,7 @@ async function onRoute() {
 }
 
 async function loadRunner() {
-  try { S.runnerData = await api.runnerView(S.code); }
+  try { S.runnerData = await api.runnerView(S.code); await loadNews(); }
   catch (e) {
     S.runnerData = null;
     if (/enlace_no_valido/.test(String(e?.message))) { store.del(CODE_KEY); S.code = null; }
@@ -201,7 +219,7 @@ function frame(title, body, { back, actions = '', rtab = null } = {}) {
     ${api.mode === 'demo' ? `<div class="demo-bar">Modo demostración: datos de prueba guardados solo en este móvil.</div>` : ''}
     <header class="top">
       ${back ? `<a class="back" href="${back}" aria-label="Volver">‹</a>` : '<img class="logo" src="icons/logo.png" alt="">'}
-      <h1>${esc(title)}</h1>${actions}${admin && rtab === null && !back && S.data ? bellButton() : ''}
+      <h1>${esc(title)}</h1>${actions}${admin && rtab === null && !back && S.data ? bellButton() : ''}${rtab !== null ? newsBell() : ''}
     </header>
     <main>${body}</main>
     ${tabs}`;
@@ -216,7 +234,7 @@ function render() {
     html = ({
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
       carreras: S.draft ? viewRaceEdit : viewRaces,
-      resumen: viewSummary, corredores: viewRunners, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, docs: () => viewDocs(parseRoute().id),
+      resumen: viewSummary, corredores: viewRunners, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, docs: () => viewDocs(parseRoute().id),
       vista: () => (S.preview && S.runnerData ? runnerScreen(parseRoute().id || '') : viewRunners()),
       equipo: () => (S.preview ? viewTeam() : viewSummary()),
     }[view] || viewRegistrations)();
@@ -555,6 +573,7 @@ function runnerScreen(sub) {
   }
   if (sub === 'mi') return viewRunnerMine();
   if (sub === 'contrato') return viewRunnerContract();
+  if (sub === 'noticias') return viewNews();
   if (sub === 'equipo') return viewTeam();
   if (sub === 'federaciones') return viewFed();
   return viewRunnerHome();
@@ -680,7 +699,7 @@ function viewRegistrations() {
   const card = (g) => `<a class="card race link-card ${g.date < today ? 'past-reg ' : ''}${modClass(g.modality)}" href="#/inscripciones/${g.id}">
       <div class="race-head"><div><h3>${esc(g.name)}</h3>
       <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality)}</div>${typeTag(g)}
-      ${g.date < today ? `<p class="state-tag">🏁 Ya disputada: pásala a resultados${g.entries.some((e) => e.self_position) ? ` · 📝 ${g.entries.filter((e) => e.self_position).length} de ${g.entries.length} han puesto su resultado` : ''}</p>` : ''}
+      ${g.date < today ? `<p class="state-tag">🏁 Ya disputada${g.entries.some((e) => e.self_position) ? ` · 📝 ${g.entries.filter((e) => e.self_position).length} de ${g.entries.length} han puesto su resultado` : ''}</p>` : ''}
       <p class="count">👥 ${g.entries.length} del club${g.entries.length ? ': ' +
         esc(g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p>
       ${g.created_by ? `<p class="count">Añadida por ${esc(runnerById(g.created_by)?.name || 'un corredor')}</p>` : ''}</a>`;
@@ -707,7 +726,7 @@ function adminRegList(card = adminCard) {
   }
   const up = regs.filter((g) => g.date >= today), past = regs.filter((g) => g.date < today);
   return `${up.length ? `<h2 class="section">📅 Próximas (${up.length})</h2>${up.map(card).join('')}` : '<p class="empty">No hay inscripciones próximas.</p>'}
-    ${past.length ? `<h2 class="section past-head">🏁 Ya disputadas, pendientes de pasar a resultados (${past.length})</h2>${past.map(card).join('')}` : ''}`;
+    ${past.length ? `<h2 class="section past-head">🏁 Ya disputadas (${past.length})</h2>${past.map(card).join('')}` : ''}`;
 }
 
 // ---------- Carreras de las federaciones (leídas cada semana por GitHub) ----------
@@ -851,6 +870,52 @@ function viewRegistrationEdit() {
   { back: '#/inscripciones' });
 }
 
+/** Corredor: noticias de la dirección. Se marcan como leídas al abrir la pantalla. */
+async function enterNews() {
+  await loadNews();
+  S.newsFresh = new Set(unreadNews().map((n) => n.id));
+  markNewsSeen();
+  if (S.runnerData) render();
+}
+function viewNews() {
+  const list = S.news;
+  return frame('Noticias del club', `
+    ${previewBanner()}
+    ${list === null ? '<p class="card warn">Las noticias aún no están activadas: la dirección tiene que ejecutar un cambio en la base de datos.</p>'
+      : list.length ? list.map((n) => `<article class="card news${S.newsFresh.has(n.id) ? ' fresh' : ''}">
+        <div class="race-head"><h3>${esc(n.title)}</h3>${S.newsFresh.has(n.id) ? '<span class="tag t-new">Nueva</span>' : ''}</div>
+        <p class="muted">${formatDate(String(n.created_at).slice(0, 10))}${n.expires_at ? ` · hasta el ${formatDate(n.expires_at, false)}` : ''}</p>
+        ${n.body ? `<p class="news-body">${newsText(n.body)}</p>` : ''}</article>`).join('')
+      : '<p class="empty">No hay noticias por ahora. Cuando el club tenga algo que contaros (quedadas, pedidos de ropa…), lo verás aquí.</p>'}`, { rtab: 'noticias' });
+}
+
+/** Dirección: escribir las noticias que verán los corredores. */
+function viewAdminNews() {
+  const list = S.data.announcements;
+  const today = todayISO();
+  if (!list) return frame('Noticias para los corredores', `<p class="card warn">Falta ejecutar en Supabase <code>supabase/cambios/2026-11-12-noticias.sql</code>.</p>`, { back: '#/avisos' });
+  const e = S.annEdit ? list.find((x) => x.id === S.annEdit) : null;
+  const sorted = [...list].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  return frame('Noticias para los corredores', `
+    <p class="hint">Lo que escribas aquí les sale a todos los corredores con la campanita 🔔 de arriba, como una noticia para leer. No suena el teléfono: la ven al abrir la app.</p>
+    <form class="card stack" data-form="ann-save">
+      <h3>${e ? 'Editar noticia' : 'Nueva noticia'}</h3>
+      <label>Título<input name="title" value="${esc(e?.title || '')}" placeholder="Quedada social del club" minlength="3" maxlength="120" required autocomplete="off"></label>
+      <label>Texto<textarea name="body" rows="6" maxlength="4000" placeholder="Qué, cuándo, dónde y qué tienen que hacer. Los enlaces se pueden pulsar.">${esc(e?.body || '')}</textarea></label>
+      <label>Mostrar hasta (opcional)<input type="date" name="expires_at" value="${esc(e?.expires_at || '')}" min="${today}"></label>
+      <p class="hint">Si pones fecha, la noticia desaparece sola al pasar ese día. Sin fecha se queda hasta que la borres.</p>
+      <div class="row"><button class="btn primary">${e ? 'Guardar cambios' : 'Publicar'}</button>${e ? '<button type="button" class="btn ghost" data-act="ann-cancel">Cancelar</button>' : ''}</div>
+    </form>
+    <h2 class="section">Publicadas (${sorted.length})</h2>
+    ${sorted.length ? sorted.map((n) => { const gone = n.expires_at && n.expires_at < today;
+      return `<article class="card news${gone ? ' gone' : ''}"><div class="race-head"><h3>${esc(n.title)}</h3>${gone ? '<span class="tag">Caducada</span>' : ''}</div>
+        <p class="muted">${formatDate(String(n.created_at).slice(0, 10))}${n.expires_at ? ` · hasta el ${formatDate(n.expires_at, false)}` : ''}</p>
+        ${n.body ? `<p class="news-body">${newsText(n.body)}</p>` : ''}
+        <div class="row"><button class="btn small" data-act="ann-edit" data-id="${n.id}">Editar</button>
+          <button class="btn small danger ghost" data-act="ann-del" data-id="${n.id}">Borrar</button></div></article>`; }).join('')
+      : '<p class="empty">Todavía no has publicado ninguna.</p>'}`, { back: '#/avisos' });
+}
+
 /** Corredor: podios en la general final de un circuito (cláusula NOVENA): los comunica y la dirección los confirma. */
 function circuitsCard(d) {
   if (!d.circuits) return ''; // base de datos aún sin actualizar
@@ -887,17 +952,17 @@ function adminAlerts() {
   const today = todayISO();
   return {
     circuits: (S.data.circuitPodiums || []).filter((c) => c.status === 'pendiente'),
-    past: S.data.registrations.filter((g) => g.date < today).sort((a, b) => a.date.localeCompare(b.date)),
     noContract: S.data.runners.filter((r) => !r.contract).sort(byName),
   };
 }
-const alertCount = () => { const a = adminAlerts(); return a.circuits.length + a.past.length; };
+const alertCount = () => adminAlerts().circuits.length;
 
 function viewAlerts() {
   const a = adminAlerts();
   const per = bonusCfg(new Date().getFullYear()).circuitExtra ?? 4;
-  const none = !a.circuits.length && !a.past.length && !a.noContract.length;
+  const none = !a.circuits.length && !a.noContract.length;
   return frame('Avisos', `
+    <a class="btn primary block" href="#/noticias">📣 Noticias para los corredores${S.data.announcements ? ` (${S.data.announcements.length})` : ''}</a>
     ${none ? '<p class="card pen ok">✅ No tienes nada pendiente.</p>' : ''}
     ${a.circuits.length ? `<h2 class="section">🏆 Podios de circuito por confirmar (${a.circuits.length})</h2>
       <p class="hint">Un corredor dice que ha hecho podio en la general final de un circuito. Si lo confirmas, se le suman +${per} carreras para el bono.</p>
@@ -905,11 +970,6 @@ function viewAlerts() {
         <p>${medal(c.position)} <b>${c.position}º</b> en <b>${esc(c.circuit)}</b> · ${c.year} · clasificación ${scopeLabel(c.scope)}</p>
         <div class="row"><button class="btn primary" data-act="circ-confirm" data-id="${c.id}">Confirmar (+${per})</button>
           <button class="btn danger ghost" data-act="circ-del" data-id="${c.id}">Rechazar</button></div></article>`).join('')}` : ''}
-    ${a.past.length ? `<h2 class="section">🏁 Carreras ya disputadas por pasar a resultados (${a.past.length})</h2>
-      <p class="hint">Si el corredor ya puso su puesto, a él ya le cuenta para el bono. Pásala a resultados para que salga en el resumen del equipo y para completar los puestos de los demás.</p>
-      <ul class="mini-list card">${a.past.map((g) => { const n = g.entries.filter((e) => e.self_position).length;
-        return `<li><div><b>${esc(g.name)}</b><small class="muted">${when(g)} · ${g.entries.length} del club${n ? ` · 📝 ${n} con resultado puesto` : ''}</small></div>
-          <a class="btn small" href="#/inscripciones/${g.id}">Abrir</a></li>`; }).join('')}</ul>` : ''}
     ${a.noContract.length ? `<h2 class="section">📄 Corredores sin tipo de contrato (${a.noContract.length})</h2>
       <p class="hint">Sin contrato indicado se les aplican los bonos y la penalización de renovación: ${esc(a.noContract.map((r) => r.name).join(', '))}.</p>
       <a class="btn block" href="#/bonos">Indicarlo en Bonos</a>` : ''}`, { back: '#/inscripciones' });
@@ -1249,9 +1309,9 @@ function adminRunnerRaces(r, year) {
   const res = (x) => { const y = x.results.find((z) => z.runner_id === r.id);
     return y.position ? `${isPodium(y.position) ? medal(y.position) + ' ' : ''}${y.position}º` : '<span class="muted">sin puesto</span>'; };
   return `<details class="runner-races"${S.open?.[key] ? ' open' : ''} data-open-key="${key}">
-    <summary>Carreras ${year}: <b>${races.length}</b>${days !== races.length ? ` (${days} días)` : ''} · apuntado a ${upcoming.length} próxima${upcoming.length === 1 ? '' : 's'}${pending.length ? ` · <span class="bad">${pending.length} sin resultado</span>` : ''}</summary>
+    <summary>Carreras ${year}: <b>${races.length}</b>${days !== races.length ? ` (${days} días)` : ''} · apuntado a ${upcoming.length} próxima${upcoming.length === 1 ? '' : 's'}${pending.length ? ` · ${pending.length} ya disputada${pending.length === 1 ? '' : 's'} sin pasar a resultados` : ''}</summary>
     ${races.length ? `<ul class="mini-list">${races.map((x) => miniRow(x, `<a class="pos" href="#/carreras/${x.id}">${res(x)}</a>`)).join('')}</ul>` : `<p class="hint">Sin carreras con resultados en ${year}.</p>`}
-    ${pending.length ? `<p class="hint"><b>Ya disputadas, pendientes de pasar a resultados:</b></p><ul class="mini-list">${pending.map((g) => miniRow(g, `<a class="btn small" href="#/inscripciones/${g.id}">Abrir</a>`)).join('')}</ul>` : ''}
+    ${pending.length ? `<p class="hint"><b>Ya disputadas, aún sin pasar a resultados</b> (le cuentan para el bono si puso su puesto):</p><ul class="mini-list">${pending.map((g) => miniRow(g, `<a class="btn small" href="#/inscripciones/${g.id}">Abrir</a>`)).join('')}</ul>` : ''}
     ${upcoming.length ? `<p class="hint"><b>Próximas:</b></p><ul class="mini-list">${upcoming.map((g) => miniRow(g, `<a class="btn small" href="#/inscripciones/${g.id}">Abrir</a>`)).join('')}</ul>` : ''}
   </details>`;
 }
@@ -1583,7 +1643,7 @@ const actions = {
       const view = await run(() => api.runnerView(r.code));
       if (!view) return;
       S.preview = { name: r.name, sqlOk: Array.isArray(view.my_results) }; S.previewCode = r.code;
-      S.runnerData = view; S.myOpen = true;
+      S.runnerData = view; S.myOpen = true; await loadNews();
       go('#/vista');
     } else if (choice === 'open') {
       await api.signOut(); S.session = null; S.data = null; go('#/c/' + r.code);
@@ -1630,6 +1690,14 @@ const actions = {
       r.next ? r.next.races : '', r.next ? r.missingToNext : '', r.planned, r.projected.count]);
     download(`monzon-bonos-${S.year}.csv`, toCsv(rows, ['Corredor', 'Contrato', 'Carreras', 'Extra por circuitos', 'Total para el bono', 'Bono actual (€)', 'Llega al mínimo',
       'Penalización (€)', 'Siguiente tramo', 'Faltan', 'Inscritas pendientes', 'Previsión']), 'text/csv;charset=utf-8');
+  },
+  'ann-edit'(el) { S.annEdit = el.dataset.id; render(); window.scrollTo(0, 0); },
+  'ann-cancel'() { S.annEdit = null; render(); },
+  async 'ann-del'(el) {
+    if (!await confirmAction('Borrar noticia', 'Los corredores dejarán de verla.', 'Borrar')) return;
+    await run(async () => { await api.deleteAnnouncement(el.dataset.id); await reload(); }, 'Noticia borrada');
+    if (S.annEdit === el.dataset.id) S.annEdit = null;
+    render();
   },
   async 'circ-confirm'(el) { await run(async () => { await api.confirmCircuitPodium(el.dataset.id); await reload(); }, 'Podio de circuito confirmado'); render(); },
   async 'circ-del'(el) {
@@ -1744,6 +1812,13 @@ const forms = {
     }, 'Documento subido');
     if (ok) render();
   },
+  async 'ann-save'(f) {
+    const title = cleanName(f.title.value);
+    if (title.length < 3) return toast('Pon un título de al menos 3 letras.', true);
+    const ok = await run(async () => { await api.saveAnnouncement({ id: S.annEdit, title, body: f.body.value.trim(), expires_at: f.expires_at.value || null }); await reload(); return true; },
+      S.annEdit ? 'Noticia guardada' : 'Noticia publicada: ya la ven los corredores');
+    if (ok) { S.annEdit = null; render(); window.scrollTo(0, 0); }
+  },
   async 'circ-propose'(f) {
     const name = cleanName(f.circuit.value);
     if (name.length < 3) return toast('Escribe el nombre del circuito.', true);
@@ -1840,6 +1915,16 @@ const fileHandlers = {
     render();
   },
 };
+
+// Al volver a la app (desde el fondo), se mira si hay noticias nuevas y se actualiza solo la campanita.
+let lastNewsCheck = 0;
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState !== 'visible' || S.session?.isAdmin || !S.code || !S.runnerData || Date.now() - lastNewsCheck < 60000) return;
+  lastNewsCheck = Date.now();
+  await loadNews();
+  const bell = $app.querySelector('.news-bell');
+  if (bell && parseRoute().view !== 'noticias') bell.outerHTML = newsBell();
+});
 
 // ---------- eventos (delegados) ----------
 

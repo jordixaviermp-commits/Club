@@ -3,8 +3,8 @@
 //  - Demostración, guardada solo en este navegador, para probar la app sin montar nada.
 import { newCode, todayISO, pastLimit, numDays, yearOf } from './logic.js';
 
-const TABLES = ['runners', 'registrations', 'registration_entries', 'races', 'results', 'settings', 'circuit_podiums'];
-const OPTIONAL = new Set(['settings', 'circuit_podiums']); // tablas que pueden faltar si aún no se ha ejecutado su SQL
+const TABLES = ['runners', 'registrations', 'registration_entries', 'races', 'results', 'settings', 'circuit_podiums', 'announcements'];
+const OPTIONAL = new Set(['settings', 'circuit_podiums', 'announcements']); // tablas que pueden faltar si aún no se ha ejecutado su SQL
 
 /** Mensajes de error comprensibles. */
 export function friendlyError(e) {
@@ -42,6 +42,7 @@ function nest(data) {
     races: data.races.map((r) => ({ ...r, results: resultsBy.get(r.id) || [] })),
     settings: Object.fromEntries((data.settings || []).map((x) => [x.key, x.value])),
     circuitPodiums: data.circuit_podiums || null, // null = falta el SQL de circuitos
+    announcements: data.announcements || null,    // null = falta el SQL de noticias
   };
 }
 
@@ -106,6 +107,11 @@ export function supabaseApi(url, key) {
       await sb.from('races').update(typeFields(race)).eq('id', id);
       return id;
     },
+    async saveAnnouncement(a) {
+      const row = { title: a.title, body: a.body || '', expires_at: a.expires_at || null };
+      if (a.id) ok(await sb.from('announcements').update(row).eq('id', a.id)); else ok(await sb.from('announcements').insert(row));
+    },
+    async deleteAnnouncement(id) { ok(await sb.from('announcements').delete().eq('id', id)); },
     async saveCircuitPodium(row) { ok(await sb.from('circuit_podiums').insert(row)); },
     async confirmCircuitPodium(id) { ok(await sb.from('circuit_podiums').update({ status: 'confirmado' }).eq('id', id)); },
     async deleteCircuitPodium(id) { ok(await sb.from('circuit_podiums').delete().eq('id', id)); },
@@ -116,6 +122,7 @@ export function supabaseApi(url, key) {
 
     async runnerView(code) { return ok(await sb.rpc('runner_view', { p_code: code })); },
     async runnerTeam(code) { return ok(await sb.rpc('runner_team', { p_code: code })); },
+    async runnerNews(code) { return ok(await sb.rpc('runner_news', { p_code: code })); },
     async runnerDocuments(code) { return ok(await sb.rpc('runner_documents_list', { p_code: code })); },
     async runnerGetDocument(code, id) { return ok(await sb.rpc('runner_get_document', { p_code: code, p_id: id })); },
     async runnerReport(code, kind, id, position, category, podiumType) {
@@ -209,7 +216,7 @@ export function demoApi(storage = globalThis.localStorage) {
     async signOut() { admin = false; try { storage.removeItem(DEMO_KEY + '-admin'); } catch { /* nada */ } },
     async resetDemo() { mem = demoSeed(); save(); },
 
-    async loadAll() { requireAdmin(); return clone(nest({ circuit_podiums: [], ...load() })); },
+    async loadAll() { requireAdmin(); return clone(nest({ circuit_podiums: [], announcements: [], ...load() })); },
     async addRunners(list) {
       requireAdmin();
       for (const r of list) load().runners.push({ id: uuid(), name: r.name, category: r.category || null, code: newCode(), created_at: new Date().toISOString(), contract: r.contract || null });
@@ -290,6 +297,19 @@ export function demoApi(storage = globalThis.localStorage) {
       save();
     },
 
+    async saveAnnouncement(a) {
+      requireAdmin(); const d = load(); d.announcements = d.announcements || [];
+      const row = { title: String(a.title || '').trim(), body: String(a.body || ''), expires_at: a.expires_at || null };
+      if (row.title.length < 3) throw new Error('Pon un título de al menos 3 letras.');
+      const prev = a.id && d.announcements.find((x) => x.id === a.id);
+      if (prev) Object.assign(prev, row); else d.announcements.push({ id: uuid(), created_at: new Date().toISOString(), ...row });
+      save();
+    },
+    async deleteAnnouncement(id) { requireAdmin(); const d = load(); d.announcements = (d.announcements || []).filter((x) => x.id !== id); save(); },
+    async runnerNews(code) {
+      byCode(code); const t = todayISO();
+      return clone((load().announcements || []).filter((x) => !x.expires_at || x.expires_at >= t).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 30));
+    },
     async saveCircuitPodium(row) {
       requireAdmin(); const d = load(); d.circuit_podiums = d.circuit_podiums || [];
       d.circuit_podiums.push({ id: uuid(), status: 'confirmado', by_runner: false, scope: 'categoria', created_at: new Date().toISOString(), ...row }); save();
