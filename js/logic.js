@@ -663,6 +663,20 @@ export function matchPeople(query, people) {
   }).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
 }
 
+/**
+ * Valida y limpia un enlace de Google (hoja de cálculo, formulario, documento…): solo https y docs.google.com / drive.google.com.
+ * Quita los parámetros de compartir («usp», «ouid» —que lleva el identificador de la cuenta de quien lo creó—, «resourcekey» no se toca).
+ * Devuelve la dirección limpia o null si no vale.
+ */
+export function cleanGoogleLink(text) {
+  let u;
+  try { u = new URL(String(text || '').trim()); } catch { return null; }
+  if (u.protocol !== 'https:' || !['docs.google.com', 'drive.google.com'].includes(u.hostname)) return null;
+  if (u.username || u.password || u.pathname.length < 5) return null;
+  for (const k of ['usp', 'ouid']) u.searchParams.delete(k);
+  return u.toString();
+}
+
 /** Carreras parecidas a lo buscado, de más a menos parecidas. */
 export function searchRaces(query, races, min = 1) {
   return races.map((r) => ({ race: r, score: raceMatchScore(query, r) }))
