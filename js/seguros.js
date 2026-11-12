@@ -9,18 +9,35 @@ export const FEDERACIONES = {
     info: 'https://www.ciclisme.cat/contingut/en-cas-daccident',
     accidente: {
       aseguradora: 'Allianz', poliza: '044822137',
+      aviso: 'No vayas a un centro que no sea del cuadro médico (concertado) ni a urgencias de la Seguridad Social: si no, los gastos los pagas tú. Solo si peligra tu vida puedes ir a cualquier hospital; una rotura de hueso, una luxación o una brecha NO cuentan como urgencia vital.',
       pasos: [
-        { titulo: 'Llama al seguro', texto: 'Comunica el accidente por teléfono antes de 7 días a Gerosalud.',
-          tel: { numero: '98 194 11 11', etiqueta: 'Gerosalud' },
+        { titulo: 'Llama a Gerosalud ANTES de ir al médico', texto: 'Si no es urgente, te dan cita en un centro concertado; si es urgente, te dicen a cuál ir. Ten a mano tu licencia federativa en vigor (no vale la del año pasado) y el DNI. El accidente hay que comunicarlo dentro de los 7 días siguientes: pasado ese plazo, la aseguradora lo rechaza.',
+          tel: { numero: '981 941 111', etiqueta: 'Gerosalud' },
           copia: { etiqueta: 'Póliza de accidentes Allianz', valor: '044822137', msg: 'Número de póliza copiado' } },
-        { titulo: 'Rellena la declaración y envíala', texto: 'Rellena la declaración de accidente y envíala por correo a la federación.',
-          correo: { para: 'assegurances@ciclisme.cat', asunto: "Declaració d'accident" },
-          enlaces: [{ etiqueta: '📄 Declaración de accidente (web de la federación)', href: 'https://www.ciclisme.cat/contingut/en-cas-daccident' }] },
+        { titulo: 'Rellena el parte de accidente (en 7 días)', texto: 'Cumpliméntalo y que lo firme y selle el club o la federación. Envíalo a Gerosalud dentro de los 7 días siguientes al accidente. En una visita no urgente, llévalo ya firmado y sellado, junto con la licencia y el DNI. La web de la federación pide mandarlo también a assegurances@ciclisme.cat.',
+          correo: [{ para: 'siniestros@gerosalud.es', asunto: "Parte d'accident" }, { para: 'assegurances@ciclisme.cat', asunto: "Declaració d'accident" }],
+          enlaces: [{ etiqueta: '📄 Parte de accidente (web de la federación)', href: 'https://www.ciclisme.cat/contingut/en-cas-daccident' }] },
+        { titulo: 'Si necesitas más asistencia', texto: 'Pruebas (TAC, resonancia, ecografía…), artroscopias, operaciones, rehabilitación y material ortopédico necesitan autorización previa de Gerosalud. Pídela por correo con: copia del parte firmado y sellado, la licencia, el DNI, el informe médico de la primera asistencia y la prescripción del médico. Sin autorización, lo pagas tú (salvo urgencia vital objetiva).',
+          correo: { para: 'siniestros@gerosalud.es', asunto: 'Solicitud de autorización de asistencia' } },
       ],
+      // Resumen de la póliza Allianz Accidentes Colectivo (federados mayores de 16 años), temporada 2026. Manda siempre el texto de la póliza.
+      resumen: [
+        'Cubre la competición federada, los entrenos y las salidas del club (individuales o colectivas) y las actividades de la federación.',
+        'Asistencia sanitaria en el cuadro médico, hasta 18 meses desde el accidente: ambulancia, curas, pruebas, operaciones y rehabilitación. El material ortopédico curativo se reembolsa al 70 % con permiso previo.',
+        'Fallecimiento: 6.000 €. Incapacidad permanente: 12.000 € según baremo. Prótesis, gafas y ortopedia: 1.200 €. Búsqueda, salvamento y transporte del accidentado: 1.200 €.',
+        'No cubre lesiones o enfermedades previas, dolencias crónicas o degenerativas (tendinitis crónica, artrosis, hernias…), odontología por encima de 250 €, ni centros no concertados.',
+        'Mientras recibes asistencia por una lesión, no estás cubierto si te lesionas haciendo deporte.',
+        'Con licencia temporal de carretera y pista: asistencia de libre elección hasta 3.000 €.',
+      ],
+      pdfs: [{ etiqueta: '📄 Póliza de accidentes 2026 (PDF, 32 páginas)', href: 'data/poliza-accidentes-fcc-2026.pdf' }],
     },
     rc: {
       aseguradora: 'Hiscox', poliza: 'HD IP6 2124609',
-      datos: ['Franquicia: 120 € (lo que pagas tú de cada siniestro).', 'Categorías de Pre-benjamín a Cadete: Allianz 055276264.'],
+      datos: [
+        'Franquicia: 120 € según la web de la federación. La póliza (Hiscox, 2026) dice «sin franquicia» para la Federación: confírmalo con ellos si te reclaman algo.',
+        'Categorías de Pre-benjamín a Cadete: Allianz 055276264.',
+        'La póliza cubre la responsabilidad civil de la Federación (organización de pruebas y actividad habitual), hasta 1.200.000 € por siniestro y periodo, y considera a los federados con licencia terceros entre sí: se cubren las reclamaciones por daños personales entre ellos.',
+      ],
       antes: 'Primero, avisa a la policía para que quede constancia de quién es el responsable. Después, la documentación depende del caso:',
       // Qué se entrega, de forma conjunta, según quién tenga la responsabilidad
       casos: [
@@ -32,6 +49,7 @@ export const FEDERACIONES = {
       pdfs: [
         { etiqueta: '📄 Declaración de siniestros (PDF para rellenar)', href: 'data/declaracio-sinistres-rc-2026.pdf' }, // versión 19/07/2026
         { etiqueta: '📋 Protocolo de responsabilidad civil (PDF)', href: 'data/protocol-rc-llicencies-2026.pdf' }, // versión 19/07/2026
+        { etiqueta: '🛡️ Póliza de responsabilidad civil 2026 (PDF, 48 páginas)', href: 'data/poliza-rc-fcc-2026.pdf' },
       ],
       correo: { para: 'serveisjuridics@ciclisme.cat', asunto: 'Declaració de sinistre - Responsabilitat civil' }, // otro correo distinto al de accidentes
     },

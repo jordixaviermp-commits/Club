@@ -24,7 +24,7 @@ test('seguros: teléfonos de 9 cifras, correos válidos y cada paso con título 
     for (const p of f.accidente.pasos) {
       assert.ok(p.titulo && p.texto, `${id}: ${p.titulo}`);
       if (p.tel) assert.equal(digits(p.tel.numero), 9, `${id}: ${p.tel.numero}`);
-      if (p.correo) { assert.match(p.correo.para, EMAIL); assert.ok(p.correo.asunto); }
+      for (const c of [].concat(p.correo || [])) { assert.match(c.para, EMAIL); assert.ok(c.asunto); }
       if (p.copia) assert.ok(p.copia.valor && p.copia.etiqueta);
     }
     if (f.rc.tel) assert.equal(digits(f.rc.tel.numero), 9, `${id} rc`);
@@ -36,8 +36,9 @@ test('seguros catalana: los dos casos de RC, y accidentes y RC van a correos dis
   const f = FEDERACIONES.fcc;
   assert.equal(f.rc.casos.length, 2);
   for (const c of f.rc.casos) assert.ok(c.titulo && c.antes && c.adjuntar.length > 0);
-  const mailAcc = f.accidente.pasos.find((p) => p.correo).correo.para;
-  assert.notEqual(mailAcc, f.rc.correo.para);
+  const mailsAcc = f.accidente.pasos.flatMap((p) => [].concat(p.correo || [])).map((c) => c.para);
+  assert.ok(mailsAcc.includes('siniestros@gerosalud.es')); // el parte va a Gerosalud, según la póliza
+  assert.ok(!mailsAcc.includes(f.rc.correo.para)); // y la responsabilidad civil, a otro correo
 });
 
 test('seguros aragonesa: llamar antes de ir al médico, parte en 48 h y resumen de cobertura', () => {
@@ -46,6 +47,7 @@ test('seguros aragonesa: llamar antes de ir al médico, parte en 48 h y resumen 
   assert.ok(f.accidente.aviso && f.accidente.avisoFinal);
   assert.ok(f.accidente.resumen.length >= 3);
   assert.equal(f.accidente.pasos.filter((p) => p.correo).length, 2);
+  assert.equal(FEDERACIONES.fcc.accidente.pasos[0].tel.numero.replace(/\D/g, ''), '981941111'); // la catalana llama al mismo Gerosalud
 });
 
 test('seguros: todos los PDF enlazados están en la app', async () => {

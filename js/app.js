@@ -300,7 +300,7 @@ function accidentSteps(a) {
       <h2><span class="sos-n">${i + 1}</span> ${esc(p.titulo)}</h2>
       <p>${esc(p.texto)}</p>
       ${p.tel ? telBtn(p.tel) : ''}
-      ${p.correo ? mailBtn(p.correo) : ''}
+      ${[].concat(p.correo || []).map((c) => mailBtn(c)).join('')}
       ${p.copia ? polizaRow(p.copia.etiqueta, p.copia.valor, p.copia.msg) : ''}
       ${pdfLinks(p.enlaces)}</section>`).join('')}
     ${a.avisoFinal ? `<p class="card warn">${esc(a.avisoFinal)}</p>` : ''}
