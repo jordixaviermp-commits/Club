@@ -581,3 +581,6 @@ label.inline select { width: auto; }
 .month-head .mh-meta { font-size: .85rem; color: var(--muted, inherit); opacity: .8; }
 .month-head .mh-arrow { font-style: normal; transition: transform .15s; }
 .month-head.folded .mh-arrow { transform: rotate(-90deg); }
+
+.bullets { margin: .2rem 0 .6rem; padding-left: 1.1rem; font-size: .92rem; }
+.bullets li { margin: .3rem 0; }

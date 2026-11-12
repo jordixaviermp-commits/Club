@@ -91,7 +91,7 @@ const circuitList = () => `<datalist id="dl-circuit">${circuitNames().map((c) =>
 const typeFields = (d, attr) => `
     <label>Tipo de carrera<select ${attr}="race_type" data-retype>${RACE_TYPES.map((t) => opt(t.id, t.label, d.race_type || 'suelta')).join('')}</select></label>
     ${d.race_type === 'circuito' ? `<label>Nombre del circuito<input ${attr}="circuit" list="dl-circuit" value="${esc(d.circuit || '')}" placeholder="Copa Aragón XCM" maxlength="120" required autocomplete="off"></label>${circuitList()}
-      <p class="hint">Escríbelo igual en todas sus pruebas. El podio en la <b>general final</b> del circuito suma carreras extra para el bono.</p>` : ''}
+      <p class="hint">Escríbelo igual en todas sus pruebas. El podio en la <b>general final</b> de la liga da el <b>plus de bonificación</b> (carreras extra para la bonificación, no para el mínimo).</p>` : ''}
     ${d.race_type === 'campeonato' ? '<p class="hint">Los podios de esta carrera se guardarán como podios de campeonato.</p>' : ''}`;
 const scopeLabel = (id) => (CIRCUIT_SCOPES.find((x) => x.id === id) || CIRCUIT_SCOPES[0]).label.toLowerCase();
 const contractSelect = (attrs, sel) =>
@@ -715,7 +715,7 @@ function runnerBonusCard(d) {
     ${b.planned ? `<p class="hint">Con tus ${b.planned} inscripcion${b.planned === 1 ? '' : 'es'} de ${b.year} llegarías a ${proj.bonusCount}${proj.tier ? ` (${euros(proj.amount)})` : ''}${proj.reachesMinimum ? '' : ', aún por debajo del mínimo'}.</p>` : ''}
     <p class="hint">Tramos${st.contract ? ` (${esc(contractLabel(st.contract).toLowerCase())})` : ''}: ${tiersLine(st.tiers)}. Una carrera de varios días cuenta un día cada uno.
       <br>Penalización si no se llega al mínimo (${cfg.minimum}): ${penaltiesLine(cfg)}.
-      <br>🏆 Un podio en la general final de un circuito suma +${cfg.circuitExtra ?? 4} carreras para el bono, pero <b>no cuenta para el mínimo de ${cfg.minimum}</b>: para evitar la penalización hay que correr ${cfg.minimum} carreras.</p>
+      <br>🏆 <b>Plus de bonificación</b>: un podio en la general final de una liga suma +${cfg.circuitExtra ?? 4} carreras para la bonificación, pero <b>no cuenta para el mínimo de ${cfg.minimum}</b>: para evitar la penalización hay que correr ${cfg.minimum} carreras.</p>
   </section>`;
 }
 
@@ -1320,29 +1320,35 @@ function viewAdminNews() {
       : '<p class="empty">Todavía no has publicado ninguna.</p>'}`, { back: '#/avisos' });
 }
 
-/** Corredor: podios en la general final de un circuito (cláusula NOVENA): los comunica y la dirección los confirma. */
+/** Corredor: «plus de bonificación» por podio en la general final de una liga o circuito (cláusula NOVENA): los comunica y la dirección los confirma. */
 function circuitsCard(d) {
   if (!d.circuits) return ''; // base de datos aún sin actualizar
   const year = d.bonus?.year || new Date().getFullYear();
   const per = d.bonus?.config?.circuitExtra ?? 4;
   const mine = d.circuits.filter((c) => c.year >= year - 1);
   return `<section class="card circ-card">
-    <h2>🏆 General final de un circuito</h2>
-    <p class="hint">Si acabas entre los <b>3 primeros de la clasificación general final</b> de un circuito completo (Copa, Open, Critérium…), absoluta o de tu categoría,
-      se te suman <b>+${per} carreras para el bono</b>, pero <b>no cuentan para el mínimo de ${d.bonus?.config?.minimum ?? 12}</b>. No vale el podio de una prueba suelta. Comunícalo aquí y la dirección lo confirmará.</p>
+    <h2>🏆 Plus de bonificación</h2>
+    <p class="hint"><b>Un extra por ganar puestos en la general de una liga.</b> Ligas como la Xallenger, la Open Maxxis Marathon, las Copas o los Críteriums tienen una <b>clasificación general final</b>, al terminar todas sus pruebas. Si acabas entre los <b>3 primeros</b> (absoluta o de tu categoría), el club te da un plus de <b>+${per} carreras para tu bonificación</b> (cláusula 9).</p>
+    <ul class="bullets">
+      <li>✅ <b>Sí cuenta para la bonificación</b>: puede subirte de tramo y, con ello, el dinero.</li>
+      <li>⛔ <b>No cuenta para el mínimo de ${d.bonus?.config?.minimum ?? 12}</b>: para evitar la penalización tienes que correr ${d.bonus?.config?.minimum ?? 12} carreras igualmente.</li>
+      <li>Solo vale el podio de la <b>general final de la liga completa</b>, no el de una prueba suelta.</li>
+      <li>Al terminar la liga, <b>comunícalo aquí</b>; la dirección lo confirma y entonces se suma.</li>
+    </ul>
+    <p class="hint">Ejemplo: corres ${(d.bonus?.config?.minimum ?? 12) - 2} carreras y quedas 2º en la general de una liga: para la bonificación cuentas ${(d.bonus?.config?.minimum ?? 12) - 2 + per}, pero para el mínimo siguen siendo ${(d.bonus?.config?.minimum ?? 12) - 2} (aún te faltarían 2).</p>
     ${mine.length ? `<ul class="mini-list">${mine.map((c) => `<li><div><b>${medal(c.position)} ${esc(c.circuit)}</b>
       <small class="muted">${c.year} · ${c.position}º · ${scopeLabel(c.scope)}</small></div>
-      ${c.status === 'confirmado' ? `<span class="extra-chip">✅ +${per} carreras</span>`
+      ${c.status === 'confirmado' ? `<span class="extra-chip">✅ Plus +${per}</span>`
         : `<span class="row-btns"><span class="pending-chip">⏳ Pendiente</span>${S.preview ? '' : `<button class="btn small ghost" data-act="circ-cancel" data-id="${c.id}">Retirar</button>`}</span>`}</li>`).join('')}</ul>` : ''}
-    ${S.preview ? '' : `<details${mine.length ? '' : ' open'}><summary><b>+ Comunicar un podio de circuito</b></summary>
+    ${S.preview ? '' : `<details${mine.length ? '' : ' open'}><summary><b>+ Comunicar mi podio en la general de una liga</b></summary>
       <form class="stack" data-form="circ-propose">
-        <label>Circuito<input name="circuit" list="dl-circuit" placeholder="Copa Aragón XCM" minlength="3" maxlength="120" required autocomplete="off"></label>${circuitList()}
+        <label>Liga o circuito<input name="circuit" list="dl-circuit" placeholder="Open Maxxis Marathon" minlength="3" maxlength="120" required autocomplete="off"></label>${circuitList()}
         <div class="grid2">
           <label>Tu puesto final<select name="position"><option value="1">1º</option><option value="2">2º</option><option value="3">3º</option></select></label>
           <label>Clasificación<select name="scope">${CIRCUIT_SCOPES.map((x) => opt(x.id, x.label.replace('su ', 'mi '), 'categoria')).join('')}</select></label>
         </div>
         <label>Temporada<select name="year">${opt(String(year), String(year), String(year))}${opt(String(year - 1), String(year - 1), '')}</select></label>
-        <button class="btn primary">Enviar a la dirección</button>
+        <button class="btn primary">Pedir el plus a la dirección</button>
       </form></details>`}
   </section>`;
 }
@@ -1431,8 +1437,8 @@ function viewAlerts() {
         ${c.note ? `<p class="muted">«${esc(c.note)}»</p>` : ''}
         <div class="row"><button class="btn primary" data-act="corr-accept" data-id="${c.id}">Aceptar</button>
           <button class="btn danger ghost" data-act="corr-reject" data-id="${c.id}">Rechazar</button></div></article>`).join('')}` : ''}
-    ${a.circuits.length ? `<h2 class="section">🏆 Podios de circuito por confirmar (${a.circuits.length})</h2>
-      <p class="hint">Un corredor dice que ha hecho podio en la general final de un circuito. Si lo confirmas, se le suman +${per} carreras para el bono.</p>
+    ${a.circuits.length ? `<h2 class="section">🏆 Plus de bonificación por confirmar (${a.circuits.length})</h2>
+      <p class="hint">Un corredor dice que ha hecho podio en la general final de una liga o circuito. Si lo confirmas, se le suma el plus: +${per} carreras para la bonificación (no para el mínimo).</p>
       ${a.circuits.map((c) => `<article class="card"><h3>${esc(runnerById(c.runner_id)?.name || '?')}</h3>
         <p>${medal(c.position)} <b>${c.position}º</b> en <b>${esc(c.circuit)}</b> · ${c.year} · clasificación ${scopeLabel(c.scope)}</p>
         <div class="row"><button class="btn primary" data-act="circ-confirm" data-id="${c.id}">Confirmar (+${per})</button>
@@ -1734,7 +1740,7 @@ function bonusBar(st, cfg, planned = 0) {
   const extra = st.extra || 0, total = st.count + extra;
   const max = Math.max(...tiers.map((t) => t.races), cfg.minimum || 0, total + planned, 1);
   const pct = (n) => `${Math.min(100, (n / max) * 100).toFixed(1)}%`;
-  return `<div class="bbar" role="img" aria-label="${st.count} carreras${extra ? ` más ${extra} extra por podio de circuito` : ''}, de ${max}">
+  return `<div class="bbar" role="img" aria-label="${st.count} carreras${extra ? ` más ${extra} de plus por podio en una general` : ''}, de ${max}">
     <span class="bbar-plan" style="width:${pct(total + planned)}"></span>
     ${extra ? `<span class="bbar-extra" style="width:${pct(total)}"></span>` : ''}
     <span class="bbar-done ${st.reachesMinimum ? 'ok' : ''}" style="width:${pct(st.count)}"></span>
@@ -1782,7 +1788,7 @@ const balanceLine = (r) => { const n = r.amount - r.penalty;
 
 function bonusText(st, who = 'Llevas') {
   const parts = [`${who} <b>${st.count}</b> carrera${st.count === 1 ? '' : 's'}`];
-  if (st.extra) parts.push(`<span class="extra-chip">🏆 +${st.extra} por podio de circuito = <b>${st.bonusCount}</b> para el bono</span>`);
+  if (st.extra) parts.push(`<span class="extra-chip">🏆 plus +${st.extra} por podio en una general = <b>${st.bonusCount}</b> para el bono</span>`);
   if (st.suspended) parts.push(`<span class="extra-chip">⛔ +${st.suspended} suspendida${st.suspended === 1 ? '' : 's'}: cuenta${st.suspended === 1 ? '' : 'n'} para el mínimo, no para el bono</span>`);
   if (st.tier) parts.push(`tramo de <b>${euros(st.amount)}</b>`);
   if (!st.reachesMinimum && st.penalty) parts.push(`<span class="bad">faltan ${st.missingToMinimum} para el mínimo (${st.minimum}) · penalización ${euros(st.penalty)}</span>`);
@@ -1811,7 +1817,7 @@ function viewBonus() {
     <div class="pen bad-box">⚠️ <b>Mínimo del contrato: ${cfg.minimum} carreras</b> antes del 31 de diciembre.
       Penalización si no se llega: ${penaltiesLine(cfg)}.</div>
     <p class="hint">Bonos a partir del mínimo — ${tiersByContractLine(cfg)}</p>
-    <p class="hint">🏆 Un podio en la general final de un circuito suma +${cfg.circuitExtra ?? 4} carreras para el bono, pero no cuenta para el mínimo de ${cfg.minimum}. Una carrera suspendida cuenta para el mínimo, no para el bono.</p>
+    <p class="hint">🏆 Plus de bonificación: un podio en la general final de una liga suma +${cfg.circuitExtra ?? 4} carreras para la bonificación, pero no cuenta para el mínimo de ${cfg.minimum}. Una carrera suspendida cuenta para el mínimo, no para el bono.</p>
     <p class="hint">💶 <b>Saldo</b> = bono − penalización (si la temporada acabara hoy). El contrato permite descontar la penalización de lo que el club deba al corredor. Saldo total: <b>${balanceText(totalPay - totalPen)}</b>.</p>
     <p class="hint">Cuentan las carreras con resultados de ${S.year} y las ya disputadas en las que el corredor puso su puesto, aunque aún no las hayas pasado a resultados; una carrera de varios días cuenta un día cada uno. La parte clara de la barra suma las inscripciones de ${S.year} pendientes.</p>
     <ul class="bonus-list">${rows.map((r) => `<li>
@@ -1834,7 +1840,7 @@ function viewBonus() {
         ${tierInputs(tiersFor(cfg, 'renovacion_sin_licencia'), 'sl_')}
         <div class="grid2">
           <label>Mínimo del contrato<input type="number" min="0" name="minimum" value="${esc(cfg.minimum)}" required></label>
-          <label>Carreras extra por podio de circuito<input type="number" min="0" name="circuit_extra" value="${esc(cfg.circuitExtra ?? 4)}" required></label>
+          <label>Carreras de plus por podio en una general<input type="number" min="0" name="circuit_extra" value="${esc(cfg.circuitExtra ?? 4)}" required></label>
           <label>Penalización renovación (€)<input type="number" min="0" name="pen_ren" value="${esc(cfg.penalty.renovado)}" required></label>
           <label>Penalización nuevos (€)<input type="number" min="0" name="pen_new" value="${esc(cfg.penalty.nuevo)}" required></label>
           <label>Penalización renovación sin licencia (€)<input type="number" min="0" name="pen_sl" value="${esc(cfg.penalty.sin_licencia ?? 0)}" required></label>
@@ -1853,8 +1859,8 @@ function adminCircuits(cfg) {
   const list = all.filter((c) => c.year === S.year).sort((a, b) => a.circuit.localeCompare(b.circuit, 'es') || a.position - b.position);
   const per = cfg.circuitExtra ?? 4;
   return `<details class="card circ-card"${list.some((c) => c.status === 'pendiente') ? ' open' : ''}>
-    <summary><b>🏆 Podios en la general final de un circuito (${list.length})</b></summary>
-    <p class="hint">Cláusula 9: cada podio en la clasificación general final de un circuito completo (absoluta o de categoría) suma <b>+${per} carreras para el bono</b>. No cuentan para el mínimo.</p>
+    <summary><b>🏆 Plus de bonificación: podios en la general final (${list.length})</b></summary>
+    <p class="hint">Cláusula 9: cada podio en la clasificación general final de una liga o circuito completo (absoluta o de categoría) da el <b>plus de bonificación: +${per} carreras para el bono</b>. No cuentan para el mínimo.</p>
     ${list.length ? `<ul class="mini-list">${list.map((c) => `<li><div><b>${medal(c.position)} ${esc(runnerById(c.runner_id)?.name || '?')}</b>
       <small class="muted">${esc(c.circuit)} · ${c.position}º · ${scopeLabel(c.scope)}${c.by_runner ? ' · comunicado por el corredor' : ''}</small></div>
       <span class="row-btns">${c.status === 'pendiente' ? `<button class="btn small primary" data-act="circ-confirm" data-id="${c.id}">Confirmar</button>` : `<span class="extra-chip">+${per}</span>`}
@@ -1866,7 +1872,7 @@ function adminCircuits(cfg) {
         <label>Puesto final<select name="position"><option value="1">1º</option><option value="2">2º</option><option value="3">3º</option></select></label>
         <label>Clasificación<select name="scope">${CIRCUIT_SCOPES.map((x) => opt(x.id, x.label, 'categoria')).join('')}</select></label>
       </div>
-      <button class="btn">Añadir podio de circuito ${S.year}</button>
+      <button class="btn">Añadir plus por podio ${S.year}</button>
     </form>
   </details>`;
 }
@@ -2014,7 +2020,7 @@ function viewRunnerCard(id) {
       ${bonusBar(row, cfg, row.planned)}
       <p class="bonus-text">${bonusText(row, 'Lleva')}${row.planned ? ` · <span class="muted">con sus ${row.planned} inscrita${row.planned === 1 ? '' : 's'}: ${row.projected.bonusCount}</span>` : ''}</p>
       ${balanceLine(row)}
-      ${circuits.length ? `<p class="hint">🏆 Podios de circuito: ${circuits.map((c) => `${medal(c.position)} ${esc(c.circuit)}${c.status === 'confirmado' ? '' : ' (pendiente)'}`).join(' · ')}</p>` : ''}
+      ${circuits.length ? `<p class="hint">🏆 Plus por podio en la general: ${circuits.map((c) => `${medal(c.position)} ${esc(c.circuit)}${c.status === 'confirmado' ? '' : ' (pendiente)'}`).join(' · ')}</p>` : ''}
       <a class="btn small ghost" href="#/bonos">Ver todos los bonos</a></section>` : ''}
     ${sum ? `<section class="card"><h2>${S.year} en cifras</h2>
       <div class="sum-big sum-mini"><div><b>${sum.races}</b><span>carreras</span></div><div><b>${sum.p1}</b><span>🥇</span></div><div><b>${sum.p2}</b><span>🥈</span></div><div><b>${sum.p3}</b><span>🥉</span></div></div>
@@ -2451,13 +2457,13 @@ const actions = {
     if (S.annEdit === el.dataset.id) S.annEdit = null;
     render();
   },
-  async 'circ-confirm'(el) { await run(async () => { await api.confirmCircuitPodium(el.dataset.id); await reload(); }, 'Podio de circuito confirmado'); render(); },
+  async 'circ-confirm'(el) { await run(async () => { await api.confirmCircuitPodium(el.dataset.id); await reload(); }, 'Plus de bonificación confirmado'); render(); },
   async 'circ-del'(el) {
-    if (!await confirmAction('Quitar podio de circuito', 'Dejará de sumar carreras extra para el bono.', 'Quitar')) return;
+    if (!await confirmAction('Quitar el plus de bonificación', 'Dejará de sumar carreras extra para el bono.', 'Quitar')) return;
     await run(async () => { await api.deleteCircuitPodium(el.dataset.id); await reload(); }, 'Quitado'); render();
   },
   async 'circ-cancel'(el) {
-    if (!await confirmAction('Retirar', '¿Retirar este podio de circuito que comunicaste?', 'Retirar')) return;
+    if (!await confirmAction('Retirar', '¿Retirar este plus que pediste?', 'Retirar')) return;
     await run(async () => { await api.runnerCancelCircuit(S.code, el.dataset.id); await loadRunner(); }, 'Retirado'); render();
   },
   'csv-all'() { download(`monzon-resultados-todos.csv`, toCsv(csvRows(S.data.races)), 'text/csv;charset=utf-8'); },
@@ -2598,7 +2604,7 @@ const forms = {
     const name = cleanName(f.circuit.value);
     if (!f.runner.value || name.length < 3) return toast('Elige el corredor y escribe el circuito.', true);
     await run(async () => { await api.saveCircuitPodium({ runner_id: f.runner.value, year: S.year, circuit: name, position: Number(f.position.value), scope: f.scope.value, status: 'confirmado' }); await reload(); },
-      'Podio de circuito añadido');
+      'Plus de bonificación añadido');
     render();
   },
   async 'bonus-cfg'(f) {
