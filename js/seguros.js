@@ -8,6 +8,8 @@ export const FEDERACIONES = {
     id: 'fcc', corto: 'Catalana', nombre: 'Federació Catalana de Ciclisme (FCC)',
     info: 'https://www.ciclisme.cat/contingut/en-cas-daccident',
     imagen: 'img/accidente-fcc.png', // resumen en imagen; se genera con scripts/imagenes-seguros.mjs
+    // Dónde ve cada federado su licencia digital (entra con su propia cuenta; la app no accede a ella). Enlace de «Llicències online» de ciclisme.cat.
+    licencia: { etiqueta: 'Plataforma de licencias de la FCC', href: 'https://ciclisme.playoffinformatica.com/FormLogin.php' },
     accidente: {
       aseguradora: 'Allianz', poliza: '044822137',
       aviso: 'No vayas a un centro que no sea del cuadro médico (concertado) ni a urgencias de la Seguridad Social: si no, los gastos los pagas tú. Solo si peligra tu vida puedes ir a cualquier hospital; una rotura de hueso, una luxación o una brecha NO cuentan como urgencia vital.',
@@ -59,6 +61,8 @@ export const FEDERACIONES = {
     id: 'fac', corto: 'Aragonesa', nombre: 'Federación Aragonesa de Ciclismo (FAC)',
     info: 'https://aragonciclismo.com',
     imagen: 'img/accidente-fac.png', // resumen en imagen; se genera con scripts/imagenes-seguros.mjs
+    // OJO: es la web de la federación (aragonciclismo.com redirige a yosoyciclista.com/aragon); sin confirmar que lleve directo a la licencia. Cambiar por el enlace exacto cuando se sepa.
+    licencia: { etiqueta: 'Web de la Federación Aragonesa', href: 'https://aragonciclismo.com' },
     accidente: {
       aseguradora: 'Divina Seguros', poliza: '8626527',
       aviso: 'No acudas a ningún centro médico sin la autorización previa de la aseguradora: si no, los gastos los pagas tú.',

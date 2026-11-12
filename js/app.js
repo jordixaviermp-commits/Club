@@ -947,6 +947,17 @@ function viewRunnerRace(id) {
 }
 
 /** «Mi temporada»: bono, mis carreras e instalación. */
+/** «Mi licencia»: enlaces a la web de cada federación, donde el corredor ve su licencia digital con su propia cuenta. */
+function licenseCard() {
+  const link = (id) => {
+    const f = FEDERACIONES[id];
+    return `<a class="btn${S.fedSeguro === id ? ' primary' : ''}" href="${esc(f.licencia.href)}" target="_blank" rel="noopener noreferrer">${esc(f.corto)} ↗</a>`;
+  };
+  return `<section class="card lic-card"><h3>🪪 Mi licencia</h3>
+    <p class="hint">Tu licencia digital está en la web de tu federación: entra con tu cuenta de federado.</p>
+    <div class="row">${ORDEN_FEDERACIONES.map(link).join('')}</div></section>`;
+}
+
 function viewRunnerMine() {
   const d = S.runnerData, me = d.me;
   return frame(runnerTitle(), `
@@ -954,6 +965,7 @@ function viewRunnerMine() {
     <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
     ${myRacesCard(d)}
     <a class="btn block" href="${runnerHref('contrato')}">📄 Mi contrato y mi bonificación</a>
+    ${licenseCard()}
     ${installHint()}
     ${S.preview ? '' : `<p class="center"><button class="link muted" data-act="r-forget">No soy ${esc(me.name)}</button></p>`}`,
   { rtab: 'mi' });
