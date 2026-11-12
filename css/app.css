@@ -509,3 +509,9 @@ h2.section.past-head { color: var(--muted); margin-top: 1.4rem; }
 .sum-mini { grid-template-columns: repeat(4, 1fr); margin-bottom: .8rem; }
 .sum-mini b { color: var(--accent); font-size: 1.6rem; }
 .sum-mini span { color: var(--muted); }
+
+/* Formato y km de las carreras */
+.type-line { display: flex; flex-wrap: wrap; gap: .35rem; }
+.tag.t-sub { background: color-mix(in srgb, var(--mc, var(--accent)) 16%, var(--card)); color: var(--text); border: 1px solid color-mix(in srgb, var(--mc, var(--accent)) 55%, transparent); }
+.tag.t-km { background: var(--accent-2); color: var(--accent); }
+.pill .dot { margin-right: .3rem; }

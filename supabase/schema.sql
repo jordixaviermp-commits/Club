@@ -116,6 +116,16 @@ alter table public.races add constraint races_stages_check check (stages is null
 alter table public.results drop constraint if exists results_stage_positions_check;
 alter table public.results add constraint results_stage_positions_check check (stage_positions is null or jsonb_typeof(stage_positions) = 'array');
 
+-- Formato de la carrera (Critérium, Ciclodeportiva, Máster, XCO, XCM, UXCM…) y distancia del recorrido en km.
+alter table public.registrations add column if not exists subtype text;
+alter table public.registrations add column if not exists km numeric(6,1);
+alter table public.races         add column if not exists subtype text;
+alter table public.races         add column if not exists km numeric(6,1);
+alter table public.registrations drop constraint if exists registrations_details_check;
+alter table public.registrations add constraint registrations_details_check check ((subtype is null or length(subtype) <= 30) and (km is null or (km > 0 and km <= 1000)));
+alter table public.races drop constraint if exists races_details_check;
+alter table public.races add constraint races_details_check check ((subtype is null or length(subtype) <= 30) and (km is null or (km > 0 and km <= 1000)));
+
 -- Carrera suspendida (cláusula SEXTA del contrato): cuenta para el mínimo de participaciones, pero no para el bono.
 alter table public.registrations add column if not exists suspended boolean not null default false;
 
@@ -285,8 +295,8 @@ declare v_race uuid;
 begin
   perform public.require_admin();
   if exists (select 1 from registrations where id = p_id and suspended) then raise exception 'carrera_suspendida'; end if;
-  insert into races (name, date, end_date, place, province, country, modality, notes, race_type, circuit)
-  select name, date, end_date, place, province, country, modality, notes, race_type, circuit from registrations where id = p_id
+  insert into races (name, date, end_date, place, province, country, modality, notes, race_type, circuit, subtype, km)
+  select name, date, end_date, place, province, country, modality, notes, race_type, circuit, subtype, km from registrations where id = p_id
   returning id into v_race;
   if v_race is null then raise exception 'no_existe'; end if;
   insert into results (race_id, runner_id, runner_name, category, position, podium_type, self_reported)
@@ -382,7 +392,7 @@ begin
       select jsonb_agg(jsonb_build_object(
                'race_id', r.id, 'name', r.name, 'date', r.date, 'end_date', r.end_date, 'place', r.place,
                'province', r.province, 'country', r.country, 'modality', r.modality, 'stages', r.stages,
-               'race_type', r.race_type, 'circuit', r.circuit,
+               'race_type', r.race_type, 'circuit', r.circuit, 'subtype', r.subtype, 'km', r.km,
                'category', x.category, 'position', x.position, 'podium_type', x.podium_type,
                'stage_positions', x.stage_positions, 'self_reported', x.self_reported)
              order by r.date desc, r.name)
@@ -391,7 +401,7 @@ begin
     'registrations', coalesce((
       select jsonb_agg(jsonb_build_object(
                'id', g.id, 'name', g.name, 'date', g.date, 'end_date', g.end_date, 'place', g.place,
-               'mine_created', g.created_by = me.id, 'race_type', g.race_type, 'circuit', g.circuit, 'suspended', g.suspended,
+               'mine_created', g.created_by = me.id, 'race_type', g.race_type, 'circuit', g.circuit, 'suspended', g.suspended, 'subtype', g.subtype, 'km', g.km,
                'my_result', (select jsonb_build_object('position', e.self_position, 'podium_type', e.self_podium_type)
                                from registration_entries e where e.registration_id = g.id and e.runner_id = me.id and e.self_position is not null),
                'province', g.province, 'country', g.country, 'modality', g.modality, 'notes', g.notes,
@@ -418,7 +428,7 @@ begin
       select jsonb_agg(jsonb_build_object(
                'id', r.id, 'name', r.name, 'date', r.date, 'end_date', r.end_date, 'place', r.place,
                'province', r.province, 'country', r.country, 'modality', r.modality, 'stages', r.stages,
-               'race_type', r.race_type, 'circuit', r.circuit,
+               'race_type', r.race_type, 'circuit', r.circuit, 'subtype', r.subtype, 'km', r.km,
                'results', coalesce((
                   select jsonb_agg(jsonb_build_object('runner_id', x.runner_id, 'runner_name', x.runner_name, 'category', x.category,
                                    'position', x.position, 'podium_type', x.podium_type, 'stage_positions', x.stage_positions))
@@ -641,6 +651,19 @@ begin
   if not found then raise exception 'no_es_tuya' using errcode = '42501'; end if;
 end $$;
 
+-- El corredor indica el formato y los km de una carrera que creó él.
+create or replace function public.runner_set_race_details(p_code text, p_id uuid, p_subtype text, p_km numeric)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_runner uuid;
+begin
+  select id into v_runner from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  update registrations set subtype = nullif(left(btrim(coalesce(p_subtype, '')), 30), ''),
+         km = case when p_km > 0 and p_km <= 1000 then round(p_km, 1) end
+   where id = p_id and created_by = v_runner;
+  if not found then raise exception 'no_es_tuya' using errcode = '42501'; end if;
+end $$;
+
 -- El corredor comunica un podio en la general final de un circuito: queda pendiente hasta que la dirección lo confirme.
 create or replace function public.runner_propose_circuit(p_code text, p_circuit text, p_year int, p_position int, p_scope text)
 returns uuid language plpgsql security definer set search_path = public as $$
@@ -717,7 +740,7 @@ grant execute on function public.runner_view(text), public.runner_join(text, uui
                           public.runner_team(text),
                           public.runner_leave(text, uuid), public.runner_join_race(text, uuid, text),
                           public.runner_set_race_type(text, uuid, text, text), public.runner_propose_circuit(text, text, int, int, text),
-                          public.runner_cancel_circuit(text, uuid), public.runner_news(text), public.ping() to anon, authenticated;
+                          public.runner_cancel_circuit(text, uuid), public.runner_news(text), public.runner_set_race_details(text, uuid, text, numeric), public.ping() to anon, authenticated;
 grant execute on function public.is_admin(), public.require_admin(),
                           public.save_registration(jsonb, jsonb), public.save_race(jsonb, jsonb),
                           public.promote_registration(uuid), public.delete_runner(uuid, boolean),

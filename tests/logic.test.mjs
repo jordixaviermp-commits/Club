@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalize, matchCategory, parseBulkRunners, yearSummary, csvRows, toCsv, parseCsv, importResultsCsv,
-  parseDate, extractCode, newCode, formatDate, planRosterRenewal, monthGrid, addMonths, formatRange, daysOf, podiumsOf, bonusStatus, bonusConfigFor, yearBonuses, DEFAULT_BONUS, matchContract, searchRaces, pastLimit,
+  parseDate, extractCode, newCode, formatDate, planRosterRenewal, monthGrid, addMonths, formatRange, daysOf, podiumsOf, bonusStatus, bonusConfigFor, yearBonuses, DEFAULT_BONUS, matchContract, searchRaces, pastLimit, SUBTYPES, parseKm, kmText,
 } from '../js/logic.js';
 
 test('normalize ignora mayúsculas y tildes', () => {
@@ -39,7 +39,7 @@ const races = [
 
 test('resumen anual', () => {
   const s = yearSummary(2026, races, runners);
-  assert.deepEqual(s.totals, { races: 3, runners: 3, participations: 4, podiums: 3, wins: 1 });
+  assert.deepEqual(s.totals, { races: 3, runners: 3, participations: 4, podiums: 3, wins: 1, km: 0 });
   assert.deepEqual(s.byModality.map((m) => m.modality), ['Carretera', 'BTT', 'Gravel']); // Pista no aparece en 2026
   assert.deepEqual(s.byModality[1], { modality: 'BTT', races: 1, participations: 2, podiums: 2, wins: 0, runners: 2 });
   assert.deepEqual(s.countries, [{ name: 'España', races: 2 }, { name: 'Francia', races: 1 }]);
@@ -127,7 +127,7 @@ test('podios de etapa: cuentan como tipo «Etapa»', () => {
       { runner_id: 'b', runner_name: 'Biel', position: 7, podium_type: 'general', stage_positions: [null, 1, null, 1] }, // la 4.ª no existe
     ] }];
   const s = yearSummary(2027, races2, runners2);
-  assert.deepEqual(s.totals, { races: 1, runners: 2, participations: 2, podiums: 4, wins: 2 });
+  assert.deepEqual(s.totals, { races: 1, runners: 2, participations: 2, podiums: 4, wins: 2, km: 0 });
   assert.deepEqual(s.byPodiumType.map((t) => [t.type, t.podiums, t.wins]),
     [['suelta', 0, 0], ['general', 1, 0], ['campeonato', 0, 0], ['etapa', 3, 2]]);
   assert.deepEqual(s.perRunner.map((r) => [r.name, r.races, r.p1, r.p2, r.p3]), [['Anna', 1, 1, 1, 1], ['Biel', 1, 1, 0, 0]]);
@@ -296,4 +296,23 @@ test('bono: una carrera suspendida cuenta para el mínimo pero no para el bono',
   const regs = [{ date: '2026-05-01', end_date: '2026-05-02', suspended: true, entries: [{ runner_id: 'a', self_position: null }] }];
   const [row] = yearBonuses(2026, [], regs, runners, cfg);
   assert.equal(row.suspended, 2); assert.equal(row.count, 0); assert.equal(row.planned, 0); assert.equal(row.missingToMinimum, 10);
+});
+
+test('formato y km: parseKm, kmText y resumen', () => {
+  assert.equal(parseKm('85,46'), 85.5); assert.equal(parseKm('42'), 42);
+  assert.equal(parseKm(''), null); assert.equal(parseKm('-3'), null); assert.equal(parseKm('5000'), null); assert.equal(parseKm('abc'), null);
+  assert.ok(kmText(85.5).endsWith('km'));
+  assert.deepEqual(SUBTYPES.BTT, ['XCO', 'XCM', 'UXCM', 'Otra']); assert.ok(SUBTYPES.Carretera.includes('Critérium'));
+  const runners = [{ id: 'a', name: 'Ana' }, { id: 'b', name: 'Bea' }];
+  const races = [
+    { id: 'r1', name: 'A', date: '2026-03-01', modality: 'BTT', subtype: 'XCM', km: 80, results: [{ runner_id: 'a', runner_name: 'Ana', position: 1 }, { runner_id: 'b', runner_name: 'Bea', position: 5 }] },
+    { id: 'r2', name: 'B', date: '2026-04-01', modality: 'BTT', subtype: 'XCM', km: 60.5, results: [{ runner_id: 'a', runner_name: 'Ana', position: 2 }] },
+    { id: 'r3', name: 'C', date: '2026-05-01', modality: 'Carretera', subtype: 'Critérium', km: 40, results: [{ runner_id: 'a', runner_name: 'Ana', position: 9 }] },
+    { id: 'r4', name: 'D', date: '2026-06-01', modality: 'Carretera', results: [{ runner_id: 'b', runner_name: 'Bea', position: 3 }] },
+  ];
+  const s = yearSummary(2026, races, runners);
+  assert.equal(s.totals.km, 80 + 80 + 60.5 + 40);   // cada participante suma los km de su carrera
+  assert.equal(s.perRunner.find((r) => r.key === 'a').km, 180.5);
+  assert.equal(s.perRunner.find((r) => r.key === 'b').km, 80);
+  assert.deepEqual(s.bySubtype.map((x) => [x.modality, x.subtype, x.races]), [['BTT', 'XCM', 2], ['Carretera', 'Critérium', 1]]);
 });
