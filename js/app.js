@@ -1070,40 +1070,100 @@ function viewRaceEdit() {
 function summaryBody(races, runners, { admin = false, me = null } = {}) {
   const years = availableYears(races);
   if (!years.includes(S.year)) S.year = years[0];
-  const s = yearSummary(S.year, races, runners);
-  const kpi = (n, label) => `<div class="kpi"><b>${n}</b><span>${label}</span></div>`;
-  const table = (head, rows, cls = '') => `<div class="table-wrap"><table class="${cls}"><thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead>
-    <tbody>${rows.length ? rows.join('') : `<tr><td colspan="${head.length}" class="muted">Sin datos</td></tr>`}</tbody></table></div>`;
+  const all = yearSummary(S.year, races, runners);          // todas las modalidades (para los selectores)
+  if (S.sumMod && S.sumMod !== 'all' && !all.byModality.some((m) => m.modality === S.sumMod)) S.sumMod = 'all';
+  const mod = S.sumMod && S.sumMod !== 'all' ? S.sumMod : null;
+  const s = mod ? yearSummary(S.year, races.filter((r) => r.modality === mod), runners) : all;  // lo que se ve, filtrado
+  const cls = mod ? modClass(mod) : '';
   const raceLink = (id, name) => admin ? `<a href="#/carreras/${id}">${esc(name)}</a>` : `<b>${esc(name)}</b>`;
+  const names = (rows, n = 3) => rows.length <= n ? rows.map((r) => esc(r.name)).join(', ') : `${rows.slice(0, n).map((r) => esc(r.name)).join(', ')} y ${rows.length - n} más`;
+  const maxOf = (arr) => Math.max(1, ...arr);
+
+  // --- selector de modalidad
+  const chips = `<div class="years mod-chips" role="tablist" aria-label="Modalidad">
+    <button class="chip${mod ? '' : ' on'}" data-act="sum-mod" data-m="all">Todas</button>
+    ${all.byModality.map((m) => `<button class="chip mchip ${modClass(m.modality)}${mod === m.modality ? ' on' : ''}" data-act="sum-mod" data-m="${esc(m.modality)}"><i class="dot"></i>${esc(m.modality)}</button>`).join('')}</div>`;
+
+  // --- cabecera con los números grandes
+  const big = (n, label) => `<div><b>${n}</b><span>${label}</span></div>`;
+  const hero = `<section class="sum-hero ${cls}">
+    <p class="sum-hero-t">${mod ? `🏁 ${esc(mod)}` : '🏁 Todo el equipo'} · temporada ${S.year}</p>
+    <div class="sum-big">${big(s.totals.races, 'carreras')}${big(s.totals.runners, 'corredores')}${big(s.totals.podiums, 'podios')}${big(s.totals.wins, 'victorias')}</div>
+    <p class="sum-hero-s">${s.totals.participations} participaciones${s.totals.podiums ? ` · ${Math.round((s.totals.podiums / Math.max(1, s.totals.participations)) * 100)} % acaban en podio` : ''}</p>
+  </section>`;
+
+  // --- líderes
+  const people = s.perRunner;
+  const lead = (icon, label, score, unit) => {
+    const top = Math.max(0, ...people.map(score));
+    if (!top) return '';
+    const who = people.filter((r) => score(r) === top);
+    return `<div class="lead"><span class="lead-i">${icon}</span><small>${label}</small><b>${names(who, 2)}</b><em>${top} ${top === 1 ? unit : unit + 's'}</em></div>`;
+  };
+  const leaders = [lead('🏁', 'Más carreras', (r) => r.races, 'carrera'), lead('🏆', 'Más podios', (r) => r.p1 + r.p2 + r.p3, 'podio'), lead('🥇', 'Más victorias', (r) => r.p1, 'victoria')].join('');
+
+  // --- por modalidad (siempre todas; tocar una filtra)
+  const maxRaces = maxOf(all.byModality.map((m) => m.races));
+  const byMod = `<section class="card"><h2>Por modalidad</h2><p class="hint">Toca una modalidad para ver solo lo suyo.</p>
+    ${all.byModality.map((m) => `<button type="button" class="modrow ${modClass(m.modality)}${mod === m.modality ? ' sel' : ''}" data-act="sum-mod" data-m="${esc(m.modality)}">
+      <div class="modrow-h"><span><i class="dot"></i><b>${esc(m.modality)}</b></span><span class="muted">${m.races} carrera${m.races === 1 ? '' : 's'}</span></div>
+      <div class="bar"><span style="width:${(m.races / maxRaces) * 100}%"></span></div>
+      <div class="modrow-s"><span>👥 ${m.runners} corredor${m.runners === 1 ? '' : 'es'}</span><span>🏁 ${m.participations} part.</span><span>🏆 ${m.podiums}</span><span>🥇 ${m.wins}</span></div>
+    </button>`).join('')}</section>`;
+
+  // --- carreras por mes
+  const maxMonth = maxOf(s.byMonth.map((m) => m.total));
+  const MES = ['E', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+  const months = `<section class="card"><h2>Carreras por mes</h2>
+    <div class="months" role="img" aria-label="Carreras de cada mes">${s.byMonth.map((m) => `<div class="mcol${m.total ? '' : ' empty'}"><em>${m.total || ''}</em>
+      <div class="mstack" style="height:${(m.total / maxMonth) * 100}%">${MODALITIES.filter((x) => m.mods[x]).map((x) =>
+        `<span class="${modClass(x)}" style="flex:${m.mods[x]}" title="${esc(x)}: ${m.mods[x]}"></span>`).join('')}</div><b>${MES[m.month]}</b></div>`).join('')}</div>
+    ${mod ? '' : `<div class="mod-legend">${all.byModality.filter((m) => m.races).map((m) => `<span class="${modClass(m.modality)}"><i class="dot"></i>${esc(m.modality)}</span>`).join('')}</div>`}</section>`;
+
+  // --- clasificación de corredores
+  const active = people.filter((r) => r.races > 0);
+  const idle = people.filter((r) => !r.races && r.current);
+  const maxR = maxOf(active.map((r) => r.races));
+  const rank = `<section class="card"><h2>Corredores${mod ? ` de ${esc(mod)}` : ''}</h2>
+    ${active.length ? `<ol class="rank">${active.map((r, i) => `<li class="${me && r.key === me ? 'me-row' : ''}">
+      <span class="pos">${i + 1}</span>
+      <div class="rk"><div class="rk-h"><b>${esc(r.name)}</b>${r.current ? '' : ' <small class="muted">(baja)</small>'}
+          <span class="rk-m">${r.p1 ? `🥇${r.p1} ` : ''}${r.p2 ? `🥈${r.p2} ` : ''}${r.p3 ? `🥉${r.p3}` : ''}</span></div>
+        <div class="bar seg" style="width:${(r.races / maxR) * 100}%">${MODALITIES.filter((x) => r.mods[x]).map((x) => `<span class="${modClass(x)}" style="flex:${r.mods[x]}" title="${esc(x)}: ${r.mods[x]}"></span>`).join('')}</div></div>
+      <span class="rk-n">${r.races}</span></li>`).join('')}</ol>`
+      : `<p class="muted">Todavía no hay carreras${mod ? ` de ${esc(mod)}` : ''} este año.</p>`}
+    ${idle.length ? `<p class="muted small">Sin carreras${mod ? ` de ${esc(mod)}` : ''} todavía: ${names(idle, 30)}.</p>` : ''}</section>`;
+
+  // --- podios
+  const types = s.byPodiumType.filter((t) => t.podiums);
+  const pods = `<section class="card"><h2>Podios${mod ? ` de ${esc(mod)}` : ' del año'}</h2>
+    ${types.length ? `<div class="pills">${types.map((t) => `<span class="pill">${esc(t.label)} <b>${t.podiums}</b>${t.wins ? ` · 🥇 ${t.wins}` : ''}</span>`).join('')}</div>` : ''}
+    ${s.podiumList.length ? `<ul class="podium-list">${s.podiumList.map((p) => `<li class="${modClass(p.modality)}"><span class="medal">${medal(p.position)}</span><div>
+        <b>${esc(p.runner)}</b>${p.category ? ` <small class="muted">${esc(p.category)}</small>` : ''} · ${p.position}º ${mod ? '' : `<span class="tag ${modClass(p.modality)}">${esc(p.modality)}</span>`}
+        <br>${raceLink(p.raceId, p.race)} <span class="muted">· ${formatDate(p.date, false)} · ${esc(podiumLabel(p.type))}${p.stage ? ': ' + esc(p.stage) : ''}</span></div></li>`).join('')}</ul>`
+      : '<p class="muted">Sin podios este año.</p>'}</section>`;
+
+  // --- dónde
+  const where = (title, rows) => {
+    const top = rows.slice(0, 8), mx = maxOf(top.map((c) => c.races));
+    return `<div><h3>${title}</h3>${top.length ? top.map((c) => `<div class="hbar"><span>${esc(c.name)}</span><div class="bar"><span style="width:${(c.races / mx) * 100}%"></span></div><b>${c.races}</b></div>`).join('') : '<p class="muted small">Sin datos</p>'}</div>`;
+  };
+  const places = `<section class="card ${cls}"><h2>Dónde se ha competido</h2>
+    <div class="grid2 top-align">${where('País', s.countries)}${where('Provincia', s.provinces)}</div>
+    ${admin && s.missingPlace.length ? `<div class="warn"><b>Faltan datos en ${s.missingPlace.length} carrera${s.missingPlace.length === 1 ? '' : 's'}:</b>
+      <ul>${s.missingPlace.map((m) => `<li><a href="#/carreras/${m.id}">${esc(m.name)}</a> (${formatRange(m.date, m.end_date, false)}): sin ${m.missing.join(' ni ')}</li>`).join('')}</ul></div>` : ''}</section>`;
+
   return `
     ${yearPicker(years)}
-    <div class="kpis">${kpi(s.totals.races, 'carreras')}${kpi(s.totals.runners, 'corredores')}${kpi(s.totals.podiums, 'podios')}${kpi(s.totals.wins, 'victorias')}</div>
-
-    <section class="card"><h2>Por modalidad</h2>
-      ${table(['Modalidad', 'Carreras', 'Particip.', 'Podios'], s.byModality.map((m) =>
-        `<tr><td><span class="dot ${modClass(m.modality)}"></span>${esc(m.modality)}</td><td>${m.races}</td><td>${m.participations}</td><td>${m.podiums}</td></tr>`), 'num')}</section>
-
-    <section class="card"><h2>Dónde se ha competido</h2>
-      <div class="grid2 top-align">
-        ${table(['País', 'Carreras'], s.countries.map((c) => `<tr><td>${esc(c.name)}</td><td>${c.races}</td></tr>`), 'num')}
-        ${table(['Provincia', 'Carreras'], s.provinces.map((c) => `<tr><td>${esc(c.name)}</td><td>${c.races}</td></tr>`), 'num')}
-      </div>
-      ${admin && s.missingPlace.length ? `<div class="warn"><b>Faltan datos en ${s.missingPlace.length} carrera${s.missingPlace.length === 1 ? '' : 's'}:</b>
-        <ul>${s.missingPlace.map((m) => `<li><a href="#/carreras/${m.id}">${esc(m.name)}</a> (${formatRange(m.date, m.end_date, false)}): sin ${m.missing.join(' ni ')}</li>`).join('')}</ul></div>` : ''}
-    </section>
-
-    <section class="card"><h2>Participaciones por corredor</h2>
-      ${table(['Corredor', 'Carr.', 'Carret.', 'BTT', '1º', '2º', '3º'], s.perRunner.map((r) =>
-        `<tr class="${r.races ? '' : 'zero'}${me && r.key === me ? ' me-row' : ''}"><td>${esc(r.name)}${r.current ? '' : ' <small class="muted">(baja)</small>'}</td><td>${r.races}</td><td>${r.road}</td><td>${r.btt}</td><td>${r.p1}</td><td>${r.p2}</td><td>${r.p3}</td></tr>`), 'num')}</section>
-
-    <section class="card"><h2>Podios por tipo</h2>
-      ${table(['Tipo', 'Podios', 'Victorias'], s.byPodiumType.map((t) => `<tr><td>${esc(t.label)}</td><td>${t.podiums}</td><td>${t.wins}</td></tr>`), 'num')}
-      <h3>Podios del año</h3>
-      ${s.podiumList.length ? `<ul class="podium-list">${s.podiumList.map((p) => `<li><span class="medal">${medal(p.position)}</span><div>
-        <b>${esc(p.runner)}</b>${p.category ? ` <small class="muted">${esc(p.category)}</small>` : ''} · ${p.position}º
-        <br>${raceLink(p.raceId, p.race)} <span class="muted">· ${formatDate(p.date, false)} · ${esc(podiumLabel(p.type))}${p.stage ? ': ' + esc(p.stage) : ''}</span></div></li>`).join('')}</ul>`
-        : '<p class="muted">Sin podios este año.</p>'}
-    </section>
+    ${chips}
+    ${hero}
+    ${leaders ? `<div class="leads">${leaders}</div>` : ''}
+    ${mod ? '' : byMod}
+    ${months}
+    ${rank}
+    ${pods}
+    ${mod ? byMod : ''}
+    ${places}
     ${admin ? `<button class="btn block" data-act="csv-year">Exportar ${S.year} a CSV (Excel)</button>` : ''}`;
 }
 
@@ -1691,6 +1751,7 @@ const actions = {
     download(`monzon-bonos-${S.year}.csv`, toCsv(rows, ['Corredor', 'Contrato', 'Carreras', 'Extra por circuitos', 'Total para el bono', 'Bono actual (€)', 'Llega al mínimo',
       'Penalización (€)', 'Siguiente tramo', 'Faltan', 'Inscritas pendientes', 'Previsión']), 'text/csv;charset=utf-8');
   },
+  'sum-mod'(el) { S.sumMod = el.dataset.m; render(); },
   'ann-edit'(el) { S.annEdit = el.dataset.id; render(); window.scrollTo(0, 0); },
   'ann-cancel'() { S.annEdit = null; render(); },
   async 'ann-del'(el) {

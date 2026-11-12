@@ -150,7 +150,16 @@ export function yearSummary(year, races, runners) {
     races: yr.filter((r) => r.modality === m).length,
     participations: parts.filter((p) => p.race.modality === m).length,
     podiums: podiums.filter((p) => p.race.modality === m).length,
+    wins: podiums.filter((p) => p.race.modality === m && p.position === 1).length,
+    runners: new Set(parts.filter((p) => p.race.modality === m).map((p) => personKey(p.res))).size,
   })).filter((x) => x.modality === 'Carretera' || x.modality === 'BTT' || x.races > 0);
+
+  // Carreras de cada mes, repartidas por modalidad (para el gráfico de barras del resumen).
+  const byMonth = Array.from({ length: 12 }, (_, month) => ({ month, total: 0, mods: {} }));
+  for (const r of yr) {
+    const mo = byMonth[Number(String(r.date).slice(5, 7)) - 1];
+    if (mo) { mo.total++; mo.mods[r.modality] = (mo.mods[r.modality] || 0) + 1; }
+  }
 
   const countBy = (keyFn) => {
     const m = new Map();
@@ -164,12 +173,13 @@ export function yearSummary(year, races, runners) {
 
   // Participaciones por corredor: toda la plantilla (también con 0) y quien ya no está pero corrió ese año.
   const rows = new Map();
-  for (const rn of runners) rows.set(rn.id, { key: rn.id, name: rn.name, current: true, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0 });
+  for (const rn of runners) rows.set(rn.id, { key: rn.id, name: rn.name, current: true, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {} });
   for (const { race, res } of parts) {
     const k = personKey(res);
-    if (!rows.has(k)) rows.set(k, { key: k, name: res.runner_name, current: false, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0 });
+    if (!rows.has(k)) rows.set(k, { key: k, name: res.runner_name, current: false, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {} });
     const row = rows.get(k);
     row.races++;
+    row.mods[race.modality] = (row.mods[race.modality] || 0) + 1;
     if (race.modality === 'Carretera') row.road++;
     if (race.modality === 'BTT') row.btt++;
   }
@@ -186,11 +196,11 @@ export function yearSummary(year, races, runners) {
   }));
 
   const podiumList = podiums.map(({ race, res, position, type, stage }) => ({
-    date: race.date, race: race.name, raceId: race.id, runner: res.runner_name, category: res.category || '',
+    date: race.date, race: race.name, raceId: race.id, modality: race.modality, runner: res.runner_name, category: res.category || '',
     type, stage, position,
   }));
 
-  return { year, totals, byModality, countries, provinces, missingPlace, perRunner, byPodiumType, podiumList };
+  return { year, totals, byModality, byMonth, countries, provinces, missingPlace, perRunner, byPodiumType, podiumList };
 }
 
 // ---------- CSV ----------
