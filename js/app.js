@@ -289,7 +289,7 @@ const viewToggle = () => S.regView === 'cal'
  * Mes con las carreras marcadas y, debajo, las tarjetas de ese mes (o del día pulsado).
  * `isMine(g)` marca los días en que el corredor ya está apuntado.
  */
-function calendarView(regs, card, isMine = () => false, { done = [], doneCard = null } = {}) {
+function calendarView(regs, card, isMine = () => false, { done = [], doneCard = null, isPosted = null } = {}) {
   const today = todayISO();
   // Elementos del calendario: inscripciones (próximas o ya disputadas sin resultado) y carreras con resultados.
   const items = [
@@ -313,7 +313,8 @@ function calendarView(regs, card, isMine = () => false, { done = [], doneCard = 
     const up = list.filter((it) => !it.past);
     const people = list.reduce((n, it) => n + it.people, 0);
     const mods = new Set(list.map((it) => it.g.modality));
-    const cls = ['cal-cell', list.length ? 'has' : '', list.length && !up.length ? 'past-only' : '', d === today ? 'today' : '',
+    const pst = isPosted && list.length ? (list.every((it) => isPosted(it.g)) ? 'posted' : list.some((it) => isPosted(it.g)) ? 'part-posted' : '') : '';
+    const cls = ['cal-cell', pst, list.length ? 'has' : '', list.length && !up.length ? 'past-only' : '', d === today ? 'today' : '',
       d === S.calDay ? 'sel' : '', d < today ? 'past' : '', list.some((it) => isMine(it.g)) ? 'mine' : '',
       list.some((it) => it.g.end_date) ? 'stage' : '', list.length ? (mods.size === 1 ? modClass(list[0].g.modality) : 'multi-mod') : '']
       .filter(Boolean).join(' ');
@@ -337,7 +338,7 @@ function calendarView(regs, card, isMine = () => false, { done = [], doneCard = 
         ${monthGrid(ym).flat().map(cell).join('')}
       </div>
       ${modLegend([...new Set(items.map((it) => it.g.modality))])}
-      <div class="state-legend"><span><i class="sl-up"></i>Próxima (inscripción)</span><span><i class="sl-past"></i>Ya disputada</span><span><b class="sl-cnt">3</b> del club</span></div>
+      <div class="state-legend"><span><i class="sl-up"></i>Próxima (inscripción)</span><span><i class="sl-past"></i>Ya disputada</span><span><b class="sl-cnt">3</b> del club</span>${isPosted ? '<span><b class="sl-ok">✓</b> publicada</span><span><b class="sl-half">½</b> alguna sin publicar</span>' : ''}</div>
       ${months.length ? `<div class="cal-months">${months.map((mm) => {
         const [yy, mo] = mm.split('-').map(Number);
         const n = items.filter((it) => touches(it.g, mm)).length;
@@ -904,17 +905,38 @@ function weekText(days, list = weekRaces(days)) {
   const who = (g) => g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ');
   return `🚴 CC Monzón · carreras de los próximos ${days} días\n\n${list.map((g) => `📅 ${when(g)} · ${g.name}\n${place(g) || g.modality ? `📍 ${[place(g), g.modality].filter(Boolean).join(' · ')}\n` : ''}👥 ${who(g)}`).join('\n\n')}\n\n📸 Crónica y foto con la equipación, en las 48 h siguientes a la prueba.`;
 }
+/** Casilla «publicada en redes» (se guarda en este móvil). */
+const postCheck = (id) => `<label class="check post-check"><input type="checkbox" data-act-change="post" data-id="${id}" ${postedSet().has(id) ? 'checked' : ''}> ✓ Publicada en redes</label>`;
+/** Tarjeta de una carrera con inscritos (inscripción o carrera ya con resultados) y su casilla de publicada. */
+function postCard(g, done = false) {
+  const names = (done ? (g.results || []).map((x) => x.runner_name) : (g.entries || []).map((e) => runnerById(e.runner_id)?.name)).filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, 'es'));
+  const isDone = done || g.date < todayISO();
+  return `<article class="card race ${modClass(g.modality)}${postedSet().has(g.id) ? ' gone' : ''}"><div class="race-head"><div><h3>${esc(g.name)}</h3>
+    <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality)}</div>
+    <p class="count">${isDone ? '🏁 Disputada · ' : ''}👥 ${esc(names.join(', '))}</p>
+    ${g.suspended ? '<p class="state-tag">⛔ Suspendida</p>' : ''}
+    <div class="row">${postCheck(g.id)}<a class="btn small ghost" href="#/${done ? 'carreras' : 'inscripciones'}/${g.id}">Abrir</a></div></article>`;
+}
 function viewWeek() {
-  const days = S.weekDays || 14;
-  const list = weekRaces(days);
-  return frame('Próximas carreras', `
-    <p class="hint">Para avisar al encargado de redes con una semana de antelación (cláusula 8 del contrato). Salen las carreras con algún inscrito, sin las suspendidas.</p>
+  const days = S.weekDays || 14, cal = S.weekView === 'cal';
+  const views = `<div class="years"><button class="chip${cal ? '' : ' on'}" data-act="week-view" data-v="list">📋 Lista</button><button class="chip${cal ? ' on' : ''}" data-act="week-view" data-v="cal">📅 Calendario</button></div>`;
+  if (cal) {
+    const regs = S.data.registrations.filter((g) => g.entries.length && !g.suspended);
+    const done = S.data.races.filter((r) => (r.results || []).length);
+    return frame('Próximas carreras', `${views}
+      <p class="hint">Todas las carreras del club, próximas y ya hechas. En cada día sale ✓ si está publicada en redes (½ si hay alguna sin publicar). Toca un día y marca las casillas.</p>
+      ${calendarView(regs, (g) => postCard(g), () => false, { done, doneCard: (r) => postCard(r, true), isPosted: (g) => postedSet().has(g.id) })}`, { back: '#/inscripciones' });
+  }
+  const list = weekRaces(days), posted = postedSet(), todo = list.filter((g) => !posted.has(g.id));
+  return frame('Próximas carreras', `${views}
+    <p class="hint">Para avisar al encargado de redes con una semana de antelación (cláusula 8 del contrato). Salen las carreras con algún inscrito, sin las suspendidas. Marca ✓ las que ya has publicado.</p>
     <div class="years">${[7, 14, 30].map((n) => `<button class="chip${n === days ? ' on' : ''}" data-act="week-days" data-n="${n}">${n} días</button>`).join('')}</div>
-    ${list.length ? `<div class="row"><button class="btn primary" data-act="week-copy">📋 Copiar texto</button><button class="btn" data-act="week-wa">WhatsApp</button></div>
-      ${list.map((g) => `<article class="card race ${modClass(g.modality)}"><div class="race-head"><div><h3>${esc(g.name)}</h3>
-        <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality)}</div>
-        <p class="count">👥 ${esc(g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', '))}</p></article>`).join('')}
-      <details class="card"><summary><b>Ver el texto que se copia</b></summary><pre class="week-pre">${esc(weekText(days))}</pre></details>`
+    ${list.length ? `<p class="hint"><b>${todo.length}</b> sin publicar de ${list.length}.</p>
+      <div class="row">${todo.length ? `<button class="btn primary" data-act="week-copy">📋 Copiar texto</button><button class="btn" data-act="week-wa">WhatsApp</button>` : ''}
+        <button class="btn ghost" data-act="week-all">${todo.length ? '✓ Marcar todas' : '↺ Desmarcar todas'}</button></div>
+      ${list.map((g) => postCard(g)).join('')}
+      <details class="card"><summary><b>Ver el texto que se copia</b></summary><pre class="week-pre">${esc(weekText(days, todo.length ? todo : list))}</pre></details>`
       : `<p class="empty">No hay carreras con inscritos en los próximos ${days} días.</p>`}`, { back: '#/inscripciones' });
 }
 
@@ -994,12 +1016,7 @@ function viewAlerts() {
   const a = adminAlerts();
   const per = bonusCfg(new Date().getFullYear()).circuitExtra ?? 4;
   const none = !a.circuits.length && !a.week.length && !a.noContract.length;
-  const posted = postedSet();
-  const raceCard = (g) => { const done = posted.has(g.id);
-    return `<article class="card race ${modClass(g.modality)}${done ? ' gone' : ''}"><div class="race-head"><div><h3>${esc(g.name)}</h3>
-      <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality)}</div>
-      <p class="count">👥 ${esc(g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', '))}</p>
-      <button class="btn small${done ? ' ghost' : ' primary'}" data-act="post-toggle" data-id="${g.id}">${done ? '✓ Publicada · deshacer' : 'Marcar como publicada'}</button></article>`; };
+  const raceCard = (g) => postCard(g);
   return frame('Avisos', `
     <a class="btn primary block" href="#/noticias">📣 Noticias para los corredores${S.data.announcements ? ` (${S.data.announcements.length})` : ''}</a>
     <a class="btn block" href="#/semana">📅 Próximas carreras (para redes)</a>
@@ -1723,7 +1740,11 @@ const actions = {
       const id = await saveRegistrationDraft();
       const r = await api.promoteRegistration(id); await reload(); return r;
     }, 'Carrera creada: añade los puestos');
-    if (raceId) go('#/carreras/' + raceId);
+    if (raceId) {
+      const set = postedSet(); // si ya estaba publicada, sigue estándolo al pasar a resultados
+      if (S.draft?.id && set.has(S.draft.id)) { set.add(raceId); savePosted(set); }
+      go('#/carreras/' + raceId);
+    }
   },
   async 'del-reg'() {
     if (!await confirmAction('Borrar inscripción', `Se borrará «${esc(S.draft.name)}» con todos sus inscritos.`, 'Borrar')) return;
@@ -1809,7 +1830,8 @@ const actions = {
       'Penalización (€)', 'Saldo (€, + el club debe)', 'Siguiente tramo', 'Faltan', 'Inscritas pendientes', 'Previsión']), 'text/csv;charset=utf-8');
   },
   'sum-mod'(el) { S.sumMod = el.dataset.m; render(); },
-  'post-toggle'(el) { const set = postedSet(); if (set.has(el.dataset.id)) set.delete(el.dataset.id); else set.add(el.dataset.id); savePosted(set); render(); },
+  'week-view'(el) { S.weekView = el.dataset.v; render(); },
+  'week-all'() { const set = postedSet(), list = weekRaces(S.weekDays || 14); if (list.every((g) => set.has(g.id))) list.forEach((g) => set.delete(g.id)); else list.forEach((g) => set.add(g.id)); savePosted(set); render(); },
   'post-all'() { const set = postedSet(); for (const g of adminAlerts().week) set.add(g.id); savePosted(set); render(); },
   async 'alert-week-copy'() {
     const t = weekText(7, adminAlerts().weekTodo);
@@ -2127,6 +2149,7 @@ $app.addEventListener('change', async (ev) => {
   if ('rfMulti' in t.dataset && S.rdraft) {
     S.rdraft.multi = t.checked; if (!t.checked) S.rdraft.end_date = ''; render(); return;
   }
+  if (t.dataset.actChange === 'post') { const set = postedSet(); if (t.checked) set.add(t.dataset.id); else set.delete(t.dataset.id); savePosted(set); render(); return; }
   if (t.dataset.actChange === 'suspended' && S.draft) { S.draft.suspended = t.checked; render(); return; }
   if (t.dataset.actChange === 'multi') {
     S.draft.multi = t.checked;
