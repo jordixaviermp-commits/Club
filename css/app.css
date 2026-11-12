@@ -619,3 +619,5 @@ ol.bullets { list-style: decimal; }
 .mini-list li.tappable > button.mini-main b::after { content: " ›"; color: var(--muted); font-weight: 400; }
 .dlg.mate { max-height: 80vh; overflow-y: auto; }
 .mate-h { font-size: .95rem; margin: .8rem 0 .2rem; }
+.line-link { display: flex; gap: .5rem; align-items: stretch; margin-bottom: 10px; }
+.line-link .btn { flex: 1; min-width: 0; text-align: left; text-decoration: none; display: flex; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -2213,6 +2213,29 @@ function viewRunnerCard(id) {
       <a class="btn small" href="#/docs/${r.id}">Subir o borrar documentos</a></section>`, { back: '#/corredores' });
 }
 
+/** Una línea, arriba de Corredores, que abre la hoja con las respuestas del pedido de ropa. El enlace se guarda en los ajustes, que solo ve la dirección. */
+function clothingLine() {
+  const cur = S.data?.settings?.enlaces_direccion?.ropa_respuestas || '';
+  return cur
+    ? `<div class="line-link"><a class="btn" href="${esc(cur)}" target="_blank" rel="noopener noreferrer" title="Respuestas del pedido de ropa">📋 Pedidos de ropa ↗</a>
+        <button class="icon-btn" data-act="dir-link-edit" aria-label="Cambiar el enlace de las respuestas" title="Cambiar el enlace">✏️</button></div>`
+    : '<button class="btn block ghost" data-act="dir-link-edit">📋 Poner el enlace de los pedidos de ropa</button>';
+}
+
+/** Pregunta un enlace en una ventana. Devuelve el texto escrito, '' si se pide quitarlo, o null si se cancela. */
+function askLink(title, text, current) {
+  return new Promise((resolve) => {
+    const dlg = document.getElementById('dialog');
+    dlg.innerHTML = `<form method="dialog" class="dlg"><h2>${esc(title)}</h2><p>${esc(text)}</p>
+      <label>Enlace<input name="url" type="url" inputmode="url" placeholder="https://docs.google.com/spreadsheets/d/…" value="${esc(current)}" autocomplete="off"></label>
+      <p class="hint">🔒 Solo lo verá la dirección. La hoja lleva datos personales: en Google, déjala con acceso restringido.</p>
+      <div class="dlg-actions"><button value="save" class="btn primary">Guardar</button>${current ? '<button value="clear" class="btn danger ghost">Quitar el enlace</button>' : ''}<button value="" class="btn ghost">Cancelar</button></div></form>`;
+    dlg.onclose = () => { const v = dlg.returnValue; resolve(v === 'save' ? dlg.querySelector('input[name="url"]').value.trim() : v === 'clear' ? '' : null); };
+    dlg.returnValue = '';
+    dlg.showModal();
+  });
+}
+
 function viewRunners() {
   const counts = new Map();
   for (const r of S.data.races) for (const x of r.results) if (x.runner_id) counts.set(x.runner_id, (counts.get(x.runner_id) || 0) + 1);
@@ -2222,6 +2245,7 @@ function viewRunners() {
   const badge = (b) => !b ? '' : `<small class="bbadge ${b.reachesMinimum ? (b.tier ? 'ok' : '') : 'bad'}">Bono ${year}: ${b.count}/${b.next ? b.next.races : b.count}${b.tier ? ` · ${euros(b.amount)}` : ''}${b.reachesMinimum ? '' : ' · bajo mínimo'}</small>`;
   return frame(`Corredores (${runners.length})`, `
     <a class="btn block" href="#/bonos">Bonos por carreras ${year}</a>
+    ${clothingLine()}
     <details class="card" ${runners.length ? '' : 'open'}>
       <summary><b>+ Añadir corredores</b></summary>
       <form class="stack" data-form="bulk">
@@ -2257,24 +2281,8 @@ function viewRunners() {
 //  Datos: copias, migración, privacidad
 // ======================================================================
 
-/** Enlaces solo de la dirección (por ejemplo, la hoja con las respuestas del pedido de ropa). Se guardan en los ajustes, que solo ve la dirección. */
-function directionLinksCard() {
-  const cur = S.data?.settings?.enlaces_direccion?.ropa_respuestas || '';
-  return `<section class="card stack"><h2>📋 Respuestas del pedido de ropa</h2>
-    <p>La hoja de cálculo donde caen las respuestas del formulario del pedido de ropa (el que ven los corredores en Contrato).</p>
-    ${cur ? `<a class="btn primary" href="${esc(cur)}" target="_blank" rel="noopener noreferrer">Abrir la hoja de respuestas ↗</a>` : '<p class="hint">Aún no has puesto el enlace de la hoja.</p>'}
-    <details${cur ? '' : ' open'}><summary><b>${cur ? 'Cambiar el enlace' : 'Poner el enlace'}</b></summary>
-      <form class="stack" data-form="dir-links">
-        <label>Enlace de la hoja de Google<input name="ropa" type="url" inputmode="url" placeholder="https://docs.google.com/spreadsheets/d/…" value="${esc(cur)}" autocomplete="off"></label>
-        <button class="btn">Guardar enlace</button>
-        ${cur ? '<button type="button" class="btn ghost" data-act="dir-link-clear">Quitar el enlace</button>' : ''}
-      </form></details>
-    <p class="hint">🔒 El enlace se guarda en la base de datos, <b>solo lo ve la dirección</b> (los corredores no). La hoja lleva datos personales: en Google, en «Compartir», déjala con acceso <b>restringido</b>.</p></section>`;
-}
-
 function viewData() {
   return frame('Datos', `
-    ${directionLinksCard()}
     <section class="card stack"><h2>Copia de seguridad</h2>
       <p>Descarga todos los datos (corredores, inscripciones, carreras y resultados) en un archivo. Guárdalo en tu Drive o correo una vez al mes.</p>
       <button class="btn primary" data-act="backup">Descargar copia de datos</button>
@@ -2449,14 +2457,14 @@ const actions = {
   },
   'fed-seguro'(el) { S.fedSeguro = el.dataset.f; store.set(FED_KEY, S.fedSeguro); render(); },
   'mate-open'(el) { openMate(el.dataset.id); },
-  async 'dir-link-clear'() {
-    if (!await confirmAction('Quitar el enlace', 'Dejará de salir el botón de la hoja de respuestas en Datos.', 'Quitar')) return;
-    await run(async () => { await api.saveSetting('enlaces_direccion', { ...(S.data.settings?.enlaces_direccion || {}), ropa_respuestas: null }); await reload(); }, 'Enlace quitado');
+  async 'dir-link-edit'() {
+    const prev = S.data?.settings?.enlaces_direccion || {};
+    const r = await askLink('Respuestas del pedido de ropa', 'Pega el enlace de la hoja de Google donde caen las respuestas del formulario del pedido de ropa.', prev.ropa_respuestas || '');
+    if (r === null) return;
+    const url = r ? cleanGoogleLink(r) : '';
+    if (r && !url) return toast('Pega un enlace de Google (docs.google.com), que empiece por https://', true);
+    await run(async () => { await api.saveSetting('enlaces_direccion', { ...prev, ropa_respuestas: url || null }); await reload(); }, url ? 'Enlace guardado' : 'Enlace quitado');
     render();
-  },
-  async 'app-reload'() {
-    try { const reg = await navigator.serviceWorker?.getRegistration(); await reg?.update(); } catch { /* sin service worker */ }
-    location.reload();
   },
   'copy-text'(el) { copyText(el.dataset.text, el.dataset.msg || 'Copiado'); },
   'mod-filter'(el) {
@@ -2812,14 +2820,6 @@ const forms = {
     const ok = await run(async () => { await api.runnerProposeCircuit(S.code, name, Number(f.year.value), Number(f.position.value), f.scope.value); await loadRunner(); return true; },
       'Enviado: la dirección tiene que confirmarlo');
     if (ok) render();
-  },
-  async 'dir-links'(f) {
-    const raw = f.ropa.value.trim();
-    const url = raw ? cleanGoogleLink(raw) : '';
-    if (raw && !url) return toast('Pega un enlace de Google (docs.google.com), que empiece por https://', true);
-    await run(async () => { await api.saveSetting('enlaces_direccion', { ...(S.data.settings?.enlaces_direccion || {}), ropa_respuestas: url || null }); await reload(); },
-      url ? 'Enlace guardado' : 'Enlace quitado');
-    render();
   },
   async 'circ-add'(f) {
     const name = cleanName(f.circuit.value);
