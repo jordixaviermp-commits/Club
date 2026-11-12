@@ -222,10 +222,10 @@ const icon = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/
 // Menú de pie de página de los corredores (y de la vista previa de la dirección).
 const RUNNER_TABS = [
   ['', 'Carreras', 'M8 2v3M16 2v3M3 9h18M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z'],
+  ['federaciones', 'Federaciones', 'M5 21V4M5 4h11l-2 4 2 4H5'],
   ['mi', 'Mi temporada', 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1'],
   ['contrato', 'Contrato', 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M9 13h6M9 17h6'],
   ['equipo', 'Equipo', 'M4 20V10M10 20V4M16 20v-7M22 20H2'],
-  ['federaciones', 'Federaciones', 'M5 21V4M5 4h11l-2 4 2 4H5'],
 ];
 const runnerBase = () => (S.session?.isAdmin && S.preview ? '#/vista' : '#');
 const runnerHref = (sub) => (sub ? `${runnerBase()}/${sub}` : `${runnerBase()}/`);
