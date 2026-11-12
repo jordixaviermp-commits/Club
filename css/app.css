@@ -418,3 +418,9 @@ h2.section.past-head { color: var(--muted); margin-top: 1.4rem; }
 .bell { position: relative; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; color: var(--text); }
 .bell.on { color: var(--accent); }
 .bell-n { position: absolute; top: 5px; right: 4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--danger); color: #fff; font-size: .65rem; font-weight: 700; line-height: 16px; text-align: center; box-shadow: 0 0 0 2px var(--card); }
+
+/* Noticias de la dirección */
+.news-body { margin: .5rem 0 0; line-height: 1.45; overflow-wrap: anywhere; }
+.news.fresh { border-left: 4px solid var(--brand-cyan); }
+.news.gone { opacity: .6; }
+.tag.t-new { background: var(--brand-cyan); color: #fff; }

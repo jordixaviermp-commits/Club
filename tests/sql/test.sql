@@ -241,6 +241,27 @@ select (runner_view('DDDDDDDDDD')->'bonus'->>'done')::int as antes, (runner_view
 select runner_report_result('DDDDDDDDDD', 'reg', '20000000-0000-0000-0000-000000000060', 6, null, null);
 select pg_temp.check((runner_view('DDDDDDDDDD')->'bonus'->>'done')::int = :antes + 3, 'cuenta: al poner su puesto suma los 3 días a lo hecho');
 select pg_temp.check((runner_view('DDDDDDDDDD')->'bonus'->>'planned')::int = :plan_antes - 3, 'cuenta: y deja de ser prevista');
+-- noticias de la dirección
+reset role;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+insert into announcements (title, body) values ('Quedada social', E'Cena del club\nhttps://example.com');
+insert into announcements (title, body, expires_at) values ('Pedido de ropa', 'Hasta el viernes', current_date + 3);
+insert into announcements (title, body, expires_at) values ('Ya pasada', 'No debe verse', current_date - 1);
+select pg_temp.expect_fail($q$insert into announcements (title) values ('ab')$q$, 'noticia: título demasiado corto');
+reset role;
+set role anon;
+select pg_temp.check(jsonb_array_length(runner_news('BBBBBBBBBB')) = 2, 'noticias: el corredor ve las vigentes y no la caducada');
+select pg_temp.check(runner_news('BBBBBBBBBB')->0->>'title' = 'Pedido de ropa', 'noticias: la más reciente primero');
+select pg_temp.expect_fail($q$select runner_news('XXXXXXXXXXXX')$q$, 'noticias: sin enlace no');
+select pg_temp.expect_fail('select * from announcements', 'noticias: anon no lee la tabla');
+select pg_temp.expect_fail($q$insert into announcements (title) values ('Hack hack')$q$, 'noticias: anon no escribe');
+reset role;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000b', false);
+select pg_temp.expect_fail($q$insert into announcements (title) values ('No soy dirección')$q$, 'noticias: un usuario que no es dirección no escribe');
+reset role;
+set role anon;
 -- documentos (contratos)
 reset role;
 set role authenticated;
