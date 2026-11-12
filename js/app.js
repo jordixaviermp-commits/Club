@@ -25,6 +25,7 @@ const api = CONFIG.SUPABASE_URL && CONFIG.SUPABASE_KEY && window.supabase
   ? supabaseApi(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY) : demoApi();
 
 const NEWS_KEY = 'monzon-news-seen';
+const POSTED_KEY = 'monzon-posted'; // carreras ya publicadas en redes (en este móvil)
 const S = {
   session: null, code: store.get(CODE_KEY), news: null, newsFresh: new Set(),
   data: null, runnerData: null,
@@ -898,8 +899,7 @@ function weekRaces(days) {
   return S.data.registrations.filter((g) => !g.suspended && g.date >= from && g.date <= to && g.entries.length)
     .sort((a, b) => a.date.localeCompare(b.date) || byName(a, b));
 }
-function weekText(days) {
-  const list = weekRaces(days);
+function weekText(days, list = weekRaces(days)) {
   if (!list.length) return '';
   const who = (g) => g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ');
   return `🚴 CC Monzón · carreras de los próximos ${days} días\n\n${list.map((g) => `📅 ${when(g)} · ${g.name}\n${place(g) || g.modality ? `📍 ${[place(g), g.modality].filter(Boolean).join(' · ')}\n` : ''}👥 ${who(g)}`).join('\n\n')}\n\n📸 Crónica y foto con la equipación, en las 48 h siguientes a la prueba.`;
@@ -977,23 +977,39 @@ function circuitsCard(d) {
 // ======================================================================
 
 /** Cosas pendientes de la dirección. */
+const postedSet = () => { try { return new Set(JSON.parse(store.get(POSTED_KEY) || '[]')); } catch { return new Set(); } };
+const savePosted = (set) => store.set(POSTED_KEY, JSON.stringify([...set].slice(-300)));
 function adminAlerts() {
-  const today = todayISO();
+  const posted = postedSet();
+  const week = weekRaces(7);   // carreras de los próximos 7 días con inscritos (para publicar en redes)
   return {
     circuits: (S.data.circuitPodiums || []).filter((c) => c.status === 'pendiente'),
+    week, weekTodo: week.filter((g) => !posted.has(g.id)),
     noContract: S.data.runners.filter((r) => !r.contract).sort(byName),
   };
 }
-const alertCount = () => adminAlerts().circuits.length;
+const alertCount = () => { const a = adminAlerts(); return a.circuits.length + a.weekTodo.length; };
 
 function viewAlerts() {
   const a = adminAlerts();
   const per = bonusCfg(new Date().getFullYear()).circuitExtra ?? 4;
-  const none = !a.circuits.length && !a.noContract.length;
+  const none = !a.circuits.length && !a.week.length && !a.noContract.length;
+  const posted = postedSet();
+  const raceCard = (g) => { const done = posted.has(g.id);
+    return `<article class="card race ${modClass(g.modality)}${done ? ' gone' : ''}"><div class="race-head"><div><h3>${esc(g.name)}</h3>
+      <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality)}</div>
+      <p class="count">👥 ${esc(g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', '))}</p>
+      <button class="btn small${done ? ' ghost' : ' primary'}" data-act="post-toggle" data-id="${g.id}">${done ? '✓ Publicada · deshacer' : 'Marcar como publicada'}</button></article>`; };
   return frame('Avisos', `
     <a class="btn primary block" href="#/noticias">📣 Noticias para los corredores${S.data.announcements ? ` (${S.data.announcements.length})` : ''}</a>
     <a class="btn block" href="#/semana">📅 Próximas carreras (para redes)</a>
     ${none ? '<p class="card pen ok">✅ No tienes nada pendiente.</p>' : ''}
+    ${a.week.length ? `<h2 class="section">📅 Para publicar en redes: próximos 7 días (${a.weekTodo.length} sin publicar)</h2>
+      <p class="hint">Carreras con inscritos que empiezan esta semana. Copia el texto para el encargado de redes y marca cada una cuando esté publicada.</p>
+      ${a.weekTodo.length ? `<div class="row"><button class="btn primary" data-act="alert-week-copy">📋 Copiar texto</button><button class="btn" data-act="alert-week-wa">WhatsApp</button>
+        <button class="btn ghost" data-act="post-all">✓ Marcar todas</button></div>` : '<p class="pen ok">✅ Todas publicadas.</p>'}
+      ${a.week.map(raceCard).join('')}
+      <a class="btn block ghost" href="#/semana">Ver más días</a>` : ''}
     ${a.circuits.length ? `<h2 class="section">🏆 Podios de circuito por confirmar (${a.circuits.length})</h2>
       <p class="hint">Un corredor dice que ha hecho podio en la general final de un circuito. Si lo confirmas, se le suman +${per} carreras para el bono.</p>
       ${a.circuits.map((c) => `<article class="card"><h3>${esc(runnerById(c.runner_id)?.name || '?')}</h3>
@@ -1793,6 +1809,13 @@ const actions = {
       'Penalización (€)', 'Saldo (€, + el club debe)', 'Siguiente tramo', 'Faltan', 'Inscritas pendientes', 'Previsión']), 'text/csv;charset=utf-8');
   },
   'sum-mod'(el) { S.sumMod = el.dataset.m; render(); },
+  'post-toggle'(el) { const set = postedSet(); if (set.has(el.dataset.id)) set.delete(el.dataset.id); else set.add(el.dataset.id); savePosted(set); render(); },
+  'post-all'() { const set = postedSet(); for (const g of adminAlerts().week) set.add(g.id); savePosted(set); render(); },
+  async 'alert-week-copy'() {
+    const t = weekText(7, adminAlerts().weekTodo);
+    try { await navigator.clipboard.writeText(t); toast('Texto copiado: pégalo en WhatsApp'); } catch { prompt('Copia el texto:', t); }
+  },
+  'alert-week-wa'() { window.open('https://wa.me/?text=' + encodeURIComponent(weekText(7, adminAlerts().weekTodo)), '_blank'); },
   'week-days'(el) { S.weekDays = Number(el.dataset.n) || 14; render(); },
   async 'week-copy'() {
     const t = weekText(S.weekDays || 14);
