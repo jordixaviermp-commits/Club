@@ -542,3 +542,24 @@ label.inline { display: inline-flex; align-items: center; gap: .4rem; }
 label.inline select { width: auto; }
 .rsvp-admin { margin-top: .6rem; padding: .5rem .7rem; border: 1px solid var(--line); border-radius: 10px; }
 .rsvp-admin p { margin: .3rem 0; overflow-wrap: anywhere; }
+
+/* Resumen visual de Mi temporada */
+.sum-card h2 { margin-top: 0; }
+.tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: .6rem; }
+.tile { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: .6rem; padding: .7rem .8rem; border-radius: 14px; border: 2px solid var(--tc); background: color-mix(in srgb, var(--tc) 11%, var(--card)); color: var(--text); text-decoration: none; }
+.tile .t-i { grid-row: 1 / 4; font-size: 1.6rem; }
+.tile b { font-size: 1.9rem; line-height: 1; font-variant-numeric: tabular-nums; color: var(--tc-t, var(--text)); }
+.tile .t-l { font-weight: 700; font-size: .88rem; }
+.tile small { color: var(--muted); font-size: .74rem; }
+.t-next { --tc: var(--brand-cyan); } .t-done { --tc: #1e9e4a; --tc-t: #1e8a43; } .t-pend { --tc: var(--muted); border-style: dashed; } .t-canc { --tc: #b42318; --tc-t: #b42318; }
+.t-pend.alert { --tc: #c98a00; --tc-t: #9a6b00; border-style: solid; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .t-done { --tc-t: #6fd08f; } :root:not([data-theme="light"]) .t-canc { --tc: #ff7a6b; --tc-t: #ff7a6b; } :root:not([data-theme="light"]) .t-pend.alert { --tc: #e6b04a; --tc-t: #e6b04a; } }
+.sum-bar { margin: .8rem 0 .3rem; height: 12px; }
+.sum-bar span { min-width: 6px; }
+.sum-bar > .seg-done { background: #1e9e4a; } .sum-bar > .seg-pend { background: repeating-linear-gradient(45deg, var(--muted), var(--muted) 4px, var(--card) 4px, var(--card) 8px); } .sum-bar > .seg-next { background: var(--brand-cyan); } .sum-bar > .seg-canc { background: #b42318; }
+.sum-legend { display: flex; flex-wrap: wrap; gap: .3rem .9rem; font-size: .78rem; color: var(--muted); }
+.sum-legend span { background: none; }
+.podium-strip { margin: .7rem 0 0; font-weight: 700; }
+.alert-hint { color: #9a6b00; font-weight: 600; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .alert-hint { color: #e6b04a; } }
+.canc-block { border-left: 5px solid #b42318; }

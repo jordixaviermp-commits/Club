@@ -557,7 +557,8 @@ function myRacesCard(d) {
   const today = d.today || todayISO();
   const mineReg = d.registrations.filter((g) => g.entries.some((e) => e.runner_id === d.me.id));
   const pending = mineReg.filter((g) => g.date < today && !g.suspended);
-  const upcoming = mineReg.filter((g) => g.date >= today || g.suspended).sort((a, b) => a.date.localeCompare(b.date));
+  const upcoming = mineReg.filter((g) => g.date >= today && !g.suspended).sort((a, b) => a.date.localeCompare(b.date));
+  const cancelled = mineReg.filter((g) => g.suspended).sort((a, b) => a.date.localeCompare(b.date));
   const years = [...new Set([new Date().getFullYear(), ...results.map((r) => yearOf(r.date))])].sort((a, b) => b - a);
   if (!years.includes(S.myYear)) S.myYear = years[0];
   const list = results.filter((r) => yearOf(r.date) === S.myYear);
@@ -575,20 +576,29 @@ function myRacesCard(d) {
   const dleft = (g) => { const n = Math.round((new Date(g.date + 'T12:00:00Z') - new Date(today + 'T12:00:00Z')) / 864e5);
     return n === 0 ? 'hoy' : n === 1 ? 'mañana' : `en ${n} días`; };
   return `
-  <div class="season-chips">
-    <span class="sc done">✅ ${list.length} hecha${list.length === 1 ? '' : 's'}</span>
-    <span class="sc pend">🏁 ${pending.length} pendiente${pending.length === 1 ? '' : 's'}</span>
-    <span class="sc next">📅 ${upcoming.length} próxima${upcoming.length === 1 ? '' : 's'}</span>
-  </div>
+  <section class="card sum-card"><h2>🧭 Mis carreras ${S.myYear}</h2>
+    <div class="tiles">
+      <a href="#" class="tile t-next" data-act="goto-sec" data-to="sec-next"><span class="t-i">📅</span><b>${upcoming.length}</b><span class="t-l">Próximas</span><small>inscrito</small></a>
+      <a href="#" class="tile t-done" data-act="goto-sec" data-to="sec-done"><span class="t-i">✅</span><b>${list.length}</b><span class="t-l">Hechas</span><small>${days !== list.length ? `${days} días de competición` : 'con resultado'}</small></a>
+      <a href="#" class="tile t-pend${pending.length ? ' alert' : ''}" data-act="goto-sec" data-to="sec-pend"><span class="t-i">🏁</span><b>${pending.length}</b><span class="t-l">Pendientes</span><small>${pending.length ? 'falta tu resultado' : 'de resultado'}</small></a>
+      <a href="#" class="tile t-canc" data-act="goto-sec" data-to="sec-canc"><span class="t-i">⛔</span><b>${cancelled.length}</b><span class="t-l">Anuladas</span><small>suspendidas</small></a>
+    </div>
+    ${(() => { const tot = list.length + pending.length + upcoming.length + cancelled.length;
+      return tot ? `<div class="bar seg sum-bar" role="img" aria-label="Reparto de tus carreras">${[['seg-done', list.length], ['seg-pend', pending.length], ['seg-next', upcoming.length], ['seg-canc', cancelled.length]].filter(([, n]) => n).map(([c, n]) => `<span class="${c}" style="flex:${n}"></span>`).join('')}</div>
+        <div class="sum-legend"><span class="seg-done">✅ hechas</span><span class="seg-pend">🏁 pendientes</span><span class="seg-next">📅 próximas</span><span class="seg-canc">⛔ anuladas</span></div>` : ''; })()}
+    ${(() => { const pod = [1, 2, 3].map((k) => list.filter((x) => x.position === k).length);
+      return pod.some(Boolean) ? `<p class="podium-strip">🏅 Podios ${S.myYear}: ${pod[0] ? `🥇 ${pod[0]} ` : ''}${pod[1] ? `🥈 ${pod[1]} ` : ''}${pod[2] ? `🥉 ${pod[2]}` : ''}</p>` : ''; })()}
+    ${pending.length && !S.preview ? '<p class="hint alert-hint">👉 Tienes carreras ya corridas sin resultado: tócalas y pon tu puesto.</p>' : ''}
+  </section>
 
-  <section class="card season-block next-block">
+  <section class="card season-block next-block" id="sec-next">
     <h2>📅 Mis próximas inscripciones <small>(${upcoming.length})</small></h2>
     <p class="hint">Carreras a las que estás apuntado y que aún no se han corrido. <b>Toca una para abrirla</b>: ves quién va, puedes borrarte y, si la añadiste tú, editarla.</p>
     ${upcoming.length ? `<ul class="mini-list">${upcoming.map((g) => miniRow(g, `<span class="badge-next">${dleft(g)}${myCat(g) ? ` · ${esc(myCat(g))}` : ''}</span>`, `${runnerHref('carrera')}/${g.id}`)).join('')}</ul>`
       : '<p class="empty small">No estás apuntado a ninguna. Búscalas en la pestaña Carreras.</p>'}
   </section>
 
-  ${pending.length ? `<section class="card season-block pend-block">
+  ${pending.length ? `<section class="card season-block pend-block" id="sec-pend">
     <h2>🏁 Ya corridas, pendientes de resultado <small>(${pending.length})</small></h2>
     <p class="hint">Estabas apuntado y ya se han disputado. Pon tu resultado (una sola vez): <b>en cuanto lo pongas ya te cuenta para el bono</b>, y a los 3 días de acabar la carrera pasa sola a resultados. Si no fuiste, toca la carrera y pulsa «No fui: borrarme».</p>
     <ul class="mini-list">${pending.map((g) => miniRow(g, g.my_result
@@ -601,7 +611,13 @@ function myRacesCard(d) {
       <p class="hint">Les faltan datos (provincia, distancia o formato). Si los sabes, tócalas y rellénalos: así todos tenemos el resumen completo.</p>
       <ul class="mini-list">${todo.slice(0, 20).map((x) => miniRow(x, `<span class="badge-pend">${missingFields(x).map((k) => FIELD_LABELS[k]).join(', ')}</span>`, `${runnerHref('carrera')}/race_${x.race_id}`)).join('')}</ul></details>` : ''; })()}
 
-  <section class="card season-block done-block">
+  ${cancelled.length ? `<section class="card season-block canc-block" id="sec-canc">
+    <h2>⛔ Anuladas <small>(${cancelled.length})</small></h2>
+    <p class="hint">Carreras que se suspendieron. Cuentan para el mínimo de carreras, pero no para la bonificación.</p>
+    <ul class="mini-list">${cancelled.map((g) => miniRow(g, '<span class="badge-pend">⛔ anulada</span>', `${runnerHref('carrera')}/${g.id}`)).join('')}</ul>
+  </section>` : ''}
+
+  <section class="card season-block done-block" id="sec-done">
     <h2>✅ Carreras hechas ${S.myYear} <small>(${list.length}${days !== list.length ? ` · ${days} días para el bono` : ''})</small></h2>
     ${years.length > 1 ? `<div class="years">${years.map((y) => `<button class="chip${y === S.myYear ? ' on' : ''}" data-act="my-year" data-y="${y}">${y}</button>`).join('')}</div>` : ''}
     ${list.length ? `<ul class="mini-list">${list.map(row).join('')}</ul>`
@@ -617,7 +633,8 @@ function runnerBonusCard(d) {
   const c = b.contract || (b.nuevo ? 'nuevo' : null);
   const st = bonusStatus(b.done, cfg, c, b.extra || 0, b.suspended || 0);
   const proj = bonusStatus(b.done + (b.planned || 0), cfg, c, b.extra || 0, b.suspended || 0);
-  return `<section class="card bonus-card"><h2>Tu bono ${b.year}</h2>
+  return `<section class="card bonus-card"><h2>💶 Tu bonificación ${b.year}</h2>
+    <p class="hint">La <b>bonificación</b> es la ayuda económica del club según las carreras que corras en la temporada (cláusula 3 de tu contrato).</p>
     ${penaltyAlert(st, cfg, b.year)}
     ${bonusBar(st, cfg, b.planned || 0)}
     <p class="bonus-text">${bonusText(st)}</p>
@@ -775,9 +792,8 @@ function viewRunnerMine() {
   return frame(runnerTitle(), `
     ${previewBanner()}
     <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
-    ${runnerBonusCard(d)}
     ${myRacesCard(d)}
-    <a class="btn block" href="${runnerHref('contrato')}">📄 Ver mi contrato</a>
+    <a class="btn block" href="${runnerHref('contrato')}">📄 Mi contrato y mi bonificación</a>
     ${installHint()}
     ${S.preview ? '' : `<p class="center"><button class="link muted" data-act="r-forget">No soy ${esc(me.name)}</button></p>`}`,
   { rtab: 'mi' });
@@ -2292,6 +2308,7 @@ const actions = {
     await run(async () => { await api.runnerReplyNews(S.code, el.dataset.id, el.dataset.a, guests); await loadNews(); }, el.dataset.a === 'si' ? '¡Apuntado!' : 'Anotado: no vienes');
     render();
   },
+  'goto-sec'(el) { const t = document.getElementById(el.dataset.to); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); else toast('No tienes carreras en este apartado.'); },
   'hist-filter'(el) { S.histFilter = el.dataset.f; render(); },
   'week-view'(el) { S.weekView = el.dataset.v; render(); },
   'week-all'() { const set = postedSet(), list = weekRaces(S.weekDays || 14); setPostedKeys(list.map(postKey), !list.every((g) => set.has(postKey(g)))); },
