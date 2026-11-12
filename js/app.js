@@ -394,6 +394,9 @@ function updateSearch(scope) {
   } else if (scope === 'admin') {
     const box = $app.querySelector('#reg-list');
     if (box) box.innerHTML = adminRegList();
+  } else if (scope === 'races') {
+    const box = $app.querySelector('#race-list');
+    if (box) box.innerHTML = raceListHtml();
   } else if (scope === 'rname') {
     const box = $app.querySelector('#dup-list');
     if (box) box.innerHTML = dupSuggestions(S.rdraft?.name || '', S.runnerData.registrations, true);
@@ -848,7 +851,10 @@ function addRunnerSelect(d) {
   const taken = new Set(d.people.map((p) => p.runner_id));
   const free = S.data.runners.filter((r) => !taken.has(r.id)).sort(byName);
   if (!free.length) return S.data.runners.length ? '' : '<p class="muted">Primero da de alta corredores en «Corredores».</p>';
-  return `<select data-act-change="add-person"><option value="">+ Añadir corredor…</option>${free.map((r) => opt(r.id, r.name)).join('')}</select>`;
+  return `<select data-act-change="add-person"><option value="">+ Añadir corredor…</option>${free.map((r) => opt(r.id, r.name)).join('')}</select>
+    ${free.length > 1 ? `<details class="multi-add"><summary>+ Añadir varios corredores</summary>
+      <div class="multi-list">${free.map((r) => `<label class="check"><input type="checkbox" data-many="${r.id}"> ${esc(r.name)}${r.category ? ` <small class="muted">${esc(r.category)}</small>` : ''}</label>`).join('')}</div>
+      <button type="button" class="btn" data-act="add-many">Añadir los marcados</button></details>` : ''}`;
 }
 
 function viewRegistrationEdit() {
@@ -867,7 +873,7 @@ function viewRegistrationEdit() {
         ${catSelect(`data-p="${i}" data-pf="category" aria-label="Categoría"`, p.category)}
         <button type="button" class="icon-btn" data-act="del-person" data-i="${i}" aria-label="Quitar">✕</button></li>`).join('')}</ul>
       ${addRunnerSelect(d)}
-      <button class="btn primary">Guardar</button>
+      <div class="save-bar"><button class="btn primary block">Guardar</button></div>
     </form>
     ${d.id ? `<div class="stack">
       ${d.suspended ? '' : '<button class="btn" data-act="promote">Pasar a resultados</button>'}
@@ -1044,24 +1050,61 @@ function viewAlerts() {
 
 const medal = (p) => ['', '🥇', '🥈', '🥉'][p] || '';
 
-function viewRaces() {
-  const years = availableYears(S.data.races);
-  if (!years.includes(S.year)) S.year = years[0];
-  const races = S.data.races.filter((r) => yearOf(r.date) === S.year).sort((a, b) => b.date.localeCompare(a.date) || byName(a, b));
+/** Qué le falta a una carrera para que las estadísticas salgan bien. */
+function raceIssues(r) {
+  const out = [];
+  if (!cleanName(r.province)) out.push('sin provincia');
+  if (!cleanName(r.country)) out.push('sin país');
+  const sinPuesto = r.results.filter((x) => x.position == null || x.position === '').length;
+  if (sinPuesto) out.push(`${sinPuesto} sin puesto`);
+  if (!r.results.length) out.push('sin participantes');
+  return out;
+}
+
+/** Lista de carreras (con filtros). Se redibuja sola al escribir en el buscador. */
+function raceListHtml() {
+  const q = S.q.races || '';
+  const searching = normalize(q).length >= 2;
+  const pool = searching ? searchRaces(q, S.data.races) : S.data.races.filter((r) => yearOf(r.date) === S.year);
+  const mods = MODALITIES.filter((m) => pool.some((r) => r.modality === m));
+  if (S.raceMod && S.raceMod !== 'all' && !mods.includes(S.raceMod)) S.raceMod = 'all';
+  const byMod = S.raceMod && S.raceMod !== 'all' ? pool.filter((r) => r.modality === S.raceMod) : pool;
+  const todo = byMod.filter((r) => raceIssues(r).length);
+  const shown = (S.raceTodo ? todo : byMod).sort((a, b) => b.date.localeCompare(a.date) || byName(a, b));
+  const pods = shown.reduce((n, r) => n + r.results.filter((x) => isPodium(x.position)).length, 0);
   const card = (r) => {
-    const pods = r.results.filter((x) => isPodium(x.position)).sort((a, b) => a.position - b.position);
+    const res = r.results.filter((x) => isPodium(x.position)).sort((a, b) => a.position - b.position);
+    const n = (k) => res.filter((x) => x.position === k).length;
+    const medals = [n(1) ? `🥇${n(1)}` : '', n(2) ? `🥈${n(2)}` : '', n(3) ? `🥉${n(3)}` : ''].filter(Boolean).join(' ');
+    const issues = raceIssues(r);
+    const st = podiumsOf(r.results.map((x) => ({ race: r, res: x }))).filter((p) => p.stage);
     return `<a class="card race link-card ${modClass(r.modality)}" href="#/carreras/${r.id}">
       <div class="race-head"><div><h3>${esc(r.name)}</h3>
       <p class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div>${modTag(r.modality)}</div>${typeTag(r)}
-      <p class="count">${r.results.length} participante${r.results.length === 1 ? '' : 's'}</p>
-      ${pods.length ? `<p class="pods">${pods.map((x) => `${medal(x.position)} ${esc(x.runner_name)}${x.category ? ` <small>${esc(x.category)}</small>` : ''}`).join(' · ')}</p>` : ''}
-      ${(() => { const st = podiumsOf(r.results.map((res) => ({ race: r, res }))).filter((p) => p.stage);
-        return r.stages?.length ? `<p class="count">${r.stages.length} etapas${st.length ? ` · ${st.length} podio${st.length === 1 ? '' : 's'} de etapa (${st.filter((p) => p.position === 1).length} victoria${st.filter((p) => p.position === 1).length === 1 ? '' : 's'})` : ''}</p>` : ''; })()}</a>`;
+      <p class="count">${r.results.length} participante${r.results.length === 1 ? '' : 's'}${medals ? ` · ${medals}` : ''}${r.stages?.length ? ` · ${r.stages.length} etapas${st.length ? `, ${st.length} podio${st.length === 1 ? '' : 's'} de etapa` : ''}` : ''}</p>
+      ${res.length ? `<p class="pods">${res.map((x) => `${medal(x.position)} ${esc(x.runner_name)}${x.category ? ` <small>${esc(x.category)}</small>` : ''}`).join(' · ')}</p>` : ''}
+      ${issues.length ? `<p class="issues">${issues.map((x) => `<span class="issue">⚠️ ${esc(x)}</span>`).join('')}</p>` : ''}</a>`;
   };
+  return `
+    ${mods.length > 1 || S.raceMod !== 'all' ? `<div class="years mod-chips" role="tablist" aria-label="Modalidad">
+      <button class="chip${!S.raceMod || S.raceMod === 'all' ? ' on' : ''}" data-act="race-mod" data-m="all">Todas</button>
+      ${mods.map((m) => `<button class="chip mchip ${modClass(m)}${S.raceMod === m ? ' on' : ''}" data-act="race-mod" data-m="${esc(m)}"><i class="dot"></i>${esc(m)}</button>`).join('')}</div>` : ''}
+    <div class="row race-sum"><span class="muted">${searching ? `Resultados de «${esc(q)}» (todos los años)` : `${S.year}`}: <b>${shown.length}</b> carrera${shown.length === 1 ? '' : 's'} · ${pods} podio${pods === 1 ? '' : 's'}</span>
+      ${todo.length || S.raceTodo ? `<button class="chip${S.raceTodo ? ' on' : ''}" data-act="race-todo">⚠️ Por completar (${todo.length})</button>` : ''}</div>
+    ${shown.length ? shown.map(card).join('')
+      : `<p class="empty">${S.raceTodo ? 'No hay carreras por completar. 🎉' : searching ? `Ninguna carrera se parece a «${esc(q)}».` : `No hay carreras en ${S.year}.`}</p>`}`;
+}
+
+function viewRaces() {
+  const years = availableYears(S.data.races);
+  if (!years.includes(S.year)) S.year = years[0];
   return frame('Carreras', `
-    ${yearPicker(years)}
-    <a class="btn primary block" href="#/carreras/nueva">+ Nueva carrera</a>
-    ${races.length ? races.map(card).join('') : `<p class="empty">No hay carreras en ${S.year}.</p>`}`);
+    ${normalize(S.q.races || '').length >= 2 ? '' : yearPicker(years)}
+    <div class="toolbar">
+      ${searchBox('races', 'Buscar carrera o lugar…')}
+      <a class="btn primary add-btn" href="#/carreras/nueva" aria-label="Nueva carrera" title="Nueva carrera">＋</a>
+    </div>
+    <div id="race-list">${raceListHtml()}</div>`);
 }
 
 function yearPicker(years) {
@@ -1080,12 +1123,24 @@ function draftRace(id) {
     .sort((a, b) => (a.position || 9999) - (b.position || 9999) || a.runner_name.localeCompare(b.runner_name, 'es')) };
 }
 
+/** Al crear una carrera: avisa si ya hay una parecida (en resultados o como inscripción). */
+function raceDupes(name) {
+  if (normalize(name).length < 3) return '';
+  const races = searchRaces(name, S.data.races).slice(0, 4);
+  const regs = searchRaces(name, S.data.registrations).slice(0, 3);
+  if (!races.length && !regs.length) return '';
+  return `<div class="dup"><p><b>⚠️ ¿Ya existe? Míralo antes de crearla:</b></p><ul class="mini-list">
+    ${races.map((x) => miniRow(x, `<a class="btn small" href="#/carreras/${x.id}">Abrir</a>`)).join('')}
+    ${regs.map((g) => miniRow(g, `<a class="btn small" href="#/inscripciones/${g.id}">Inscripción</a>`)).join('')}</ul></div>`;
+}
+
 function viewRaceEdit() {
   const d = S.draft;
   if (!d) return frame('Carrera', '<p class="empty">Esta carrera ya no existe.</p>', { back: '#/carreras' });
   return frame(d.id ? 'Editar carrera' : 'Nueva carrera', `
     <form class="card stack" data-form="save-race">
       ${raceFields(d)}
+      ${d.id ? '' : `<div id="dup-race">${raceDupes(d.name)}</div>`}
       <label>Notas<textarea data-f="notes" rows="2">${esc(d.notes || '')}</textarea></label>
       <div class="stages-box">
         <div class="row stages-head"><h3>Etapas</h3>
@@ -1109,16 +1164,17 @@ function viewRaceEdit() {
           ${catSelect(`data-p="${i}" data-pf="category" aria-label="Categoría"`, p.category)}
           <input type="number" inputmode="numeric" min="1" placeholder="${d.stages.length ? 'General' : 'Puesto'}" aria-label="${d.stages.length ? 'Puesto en la general' : 'Puesto'}" data-p="${i}" data-pf="position" value="${esc(p.position)}">
           <select data-p="${i}" data-pf="podium_type" aria-label="Tipo de podio" ${pod ? '' : 'disabled'}>
-            ${PODIUM_TYPES.map((t) => opt(t.id, t.label, p.podium_type)).join('')}</select>
+            ${PODIUM_TYPES.map((t) => opt(t.id, { suelta: 'Suelta', general: 'General', campeonato: 'Campeonato' }[t.id] || t.label, p.podium_type)).join('')}</select>
         </div>
         ${d.stages.length ? `<div class="stage-pos">${d.stages.map((n, j) => `<label><span data-stage-label="${j}">${esc(n)}</span>
           <input type="number" inputmode="numeric" min="1" data-p="${i}" data-sp="${j}" value="${esc(p.stage_positions?.[j] ?? '')}"></label>`).join('')}</div>` : ''}
         </li>`;
       }).join('')}</ul>
       ${addRunnerSelect(d)}
-      <button class="btn primary">Guardar</button>
+      <div class="save-bar"><button class="btn primary block">Guardar</button></div>
     </form>
-    ${d.id ? `<button class="btn danger ghost block" data-act="del-race">Borrar carrera</button>` : ''}`,
+    ${d.id ? `<button class="btn block" data-act="race-repeat">📋 Repetir el año que viene</button>
+    <button class="btn danger ghost block" data-act="del-race">Borrar carrera</button>` : ''}`,
   { back: '#/carreras' });
 }
 
@@ -1830,6 +1886,27 @@ const actions = {
       'Penalización (€)', 'Saldo (€, + el club debe)', 'Siguiente tramo', 'Faltan', 'Inscritas pendientes', 'Previsión']), 'text/csv;charset=utf-8');
   },
   'sum-mod'(el) { S.sumMod = el.dataset.m; render(); },
+  'race-mod'(el) { S.raceMod = el.dataset.m; render(); },
+  'race-todo'() { S.raceTodo = !S.raceTodo; render(); },
+  'race-repeat'() {
+    const d = S.draft; if (!d?.id) return;
+    const next = (iso) => { if (!iso) return ''; const [y, m, dd] = iso.split('-'); return `${Number(y) + 1}-${m}-${m === '02' && dd === '29' ? '28' : dd}`; };
+    S.prefill = { name: d.name, date: next(d.date), place: d.place || '', province: d.province || '', country: d.country || DEFAULT_COUNTRY, modality: d.modality,
+      race_type: d.race_type || 'suelta', circuit: d.circuit || '', multi: !!d.end_date, end_date: next(d.end_date) };
+    toast('Inscripción nueva con los datos de esta carrera: ajusta la fecha si hace falta');
+    go('#/inscripciones/nueva');
+  },
+  'add-many'() {
+    const ids = [...$app.querySelectorAll('input[data-many]:checked')].map((el) => el.dataset.many);
+    if (!ids.length) return toast('Marca al menos un corredor.', true);
+    for (const id of ids) {
+      const rn = runnerById(id); if (!rn || S.draft.people.some((x) => x.runner_id === id)) continue;
+      S.draft.people.push({ runner_id: rn.id, runner_name: rn.name, category: rn.category || '', position: '',
+        podium_type: S.draft.race_type === 'campeonato' ? 'campeonato' : S.draft.stages?.length ? 'general' : 'suelta', stage_positions: (S.draft.stages || []).map(() => '') });
+    }
+    render();
+    toast(`${ids.length} corredor${ids.length === 1 ? '' : 'es'} añadido${ids.length === 1 ? '' : 's'}`);
+  },
   'week-view'(el) { S.weekView = el.dataset.v; render(); },
   'week-all'() { const set = postedSet(), list = weekRaces(S.weekDays || 14); if (list.every((g) => set.has(g.id))) list.forEach((g) => set.delete(g.id)); else list.forEach((g) => set.add(g.id)); savePosted(set); render(); },
   'post-all'() { const set = postedSet(); for (const g of adminAlerts().week) set.add(g.id); savePosted(set); render(); },
@@ -2002,6 +2079,15 @@ const forms = {
   },
   async 'save-race'() {
     const d = S.draft;
+    if (!d.id) { // misma fecha y mismo nombre: casi seguro es un duplicado
+      const same = S.data.races.find((x) => x.date === d.date && normalize(x.name) === normalize(cleanName(d.name)));
+      if (same) {
+        const c = await choose('Esta carrera ya existe', `Ya hay <b>${esc(same.name)}</b> el mismo día (${esc(when(same))}).`, [
+          { label: 'Abrir la que ya existe', value: 'open', kind: 'primary' }, { label: 'Crear otra igualmente', value: 'create' }]);
+        if (!c) return;
+        if (c === 'open') return go('#/carreras/' + same.id);
+      }
+    }
     const id = await run(async () => {
       const race = draftPayload();
       const results = d.people.map((p) => {
@@ -2118,6 +2204,11 @@ $app.addEventListener('input', (ev) => {
     if (!S.fed) loadFed();
     const box = $app.querySelector('#dup-admin');
     if (box) box.innerHTML = dupSuggestions(t.value, S.data.registrations, false);
+  }
+  if (S.draft.kind === 'race' && !S.draft.id && t.dataset.f === 'name') {
+    S.draft.name = t.value;
+    const box = $app.querySelector('#dup-race');
+    if (box) box.innerHTML = raceDupes(t.value);
   }
   if (t.dataset.f) S.draft[t.dataset.f] = t.value;
   if (t.dataset.stage) {

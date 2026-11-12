@@ -123,7 +123,7 @@ header .icon-btn { border: 0; }
 .edit-list .name { flex: 1 1 120px; font-weight: 600; }
 .edit-list li > select { flex: 0 1 150px; }
 .edit-list.results .res-fields { flex: 1 1 100%; display: grid; grid-template-columns: 1fr 90px 1.4fr; gap: .4rem; }
-@media (max-width: 420px) { .edit-list.results .res-fields { grid-template-columns: 1fr 80px; } .edit-list.results .res-fields select[data-pf="podium_type"] { grid-column: 1 / -1; } }
+@media (max-width: 420px) { .edit-list.results .res-fields { grid-template-columns: minmax(0, 1fr) 62px minmax(0, 1.15fr); gap: .3rem; } .edit-list.results .res-fields select, .edit-list.results .res-fields input { padding-left: .5rem; padding-right: .3rem; font-size: .92rem; } }
 
 .roster { list-style: none; padding: 0; margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
 .roster li { display: flex; align-items: center; gap: .5rem; padding: .55rem .6rem .55rem 1rem; border-bottom: 1px solid var(--line); }
@@ -491,3 +491,15 @@ h2.section.past-head { color: var(--muted); margin-top: 1.4rem; }
 .cal-cell.posted::after { content: "✓"; color: #1e9e4a; }
 .cal-cell.part-posted::after { content: "½"; color: #b87a00; }
 .sl-ok { color: #1e9e4a; } .sl-half { color: #c98a00; }
+
+/* Carreras: avisos de datos, filtros y formulario */
+.issues { display: flex; flex-wrap: wrap; gap: .35rem; margin: .4rem 0 0; }
+.issue { background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 999px; padding: .1rem .55rem; font-size: .78rem; font-weight: 600; }
+.race-sum { justify-content: space-between; align-items: center; margin: .2rem 0 .6rem; font-size: .9rem; }
+.multi-add { border: 1px solid var(--line); border-radius: 10px; padding: .1rem .7rem; }
+.multi-add summary { padding: .55rem 0; font-weight: 600; cursor: pointer; }
+.multi-list { display: flex; flex-direction: column; gap: .1rem; max-height: 14rem; overflow-y: auto; margin-bottom: .6rem; }
+.multi-list .check { padding: .35rem 0; }
+.multi-add > .btn { margin-bottom: .6rem; }
+.save-bar { position: sticky; bottom: calc(var(--tabs-h) + env(safe-area-inset-bottom) + 8px); z-index: 4; padding-top: .8rem;
+  background: linear-gradient(to top, var(--card) 65%, transparent); }
