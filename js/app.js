@@ -958,8 +958,9 @@ const LEAGUE_URLS = [
 ];
 const FED_NAMES = { FCC: 'Catalana', FAC: 'Aragonesa', LIGA: 'Liga' };
 /** Si la carrera es de un circuito con general (liga), tipo y nombre del circuito ya puestos. */
-const circuitOf = (r) => (r.circuit ? { race_type: 'circuito', circuit: r.circuit } : {});
+const circuitOf = (r) => ({ ...(r.circuit ? { race_type: 'circuito', circuit: r.circuit } : {}), ...(r.subtype ? { subtype: r.subtype } : {}) });
 const raceSrc = (r) => (r.source === 'LIGA' ? r.league || 'Liga' : `Federación ${FED_NAMES[r.source] || r.source}`);
+const srcNote = (r) => raceSrc(r) + (r.url ? `: ${r.url}` : '');
 const fedFilter = { source: 'all', modality: 'all', leisure: false };
 
 async function loadJson(urls) {
@@ -1025,7 +1026,7 @@ function viewFed() {
       <p class="fed-meta"><span class="src src-${esc(r.source)}">${esc(r.source === 'LIGA' ? 'Liga' : FED_NAMES[r.source] || r.source)}</span>
         ${esc(r.source === 'LIGA' ? '' : r.discipline || '')}${r.kind === 'Ocio' ? ' · ocio' : ''}${r.info ? `${r.source === 'LIGA' ? '' : ' · '}<span class="muted">${esc(r.info)}</span>` : ''}</p>
       <div class="row">
-        <a class="btn small" href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">Ver en la web ↗</a>
+        ${r.url ? `<a class="btn small" href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">Ver en la web ↗</a>` : ''}
         ${action(r)}
       </div></article>`;
   }).join('');
@@ -2174,7 +2175,7 @@ const actions = {
     const r = S.fed.races[Number(el.dataset.i)];
     const vals = { name: r.name, date: r.date, place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY, modality: r.modality, ...circuitOf(r) };
     if (S.rdraft && parseRoute().view === 'nueva') Object.assign(S.rdraft, vals);
-    else if (S.draft) Object.assign(S.draft, vals, { notes: S.draft.notes || `${raceSrc(r)}: ${r.url}` });
+    else if (S.draft) Object.assign(S.draft, vals, { notes: S.draft.notes || srcNote(r) });
     render();
   },
   async 'r-join-go'(el) {
@@ -2228,7 +2229,7 @@ const actions = {
   'fed-create'(el) {
     const r = S.fed.races[Number(el.dataset.i)];
     S.prefill = { name: r.name, date: r.date, place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY,
-      modality: r.modality, ...circuitOf(r), notes: `${raceSrc(r)}: ${r.url}` };
+      modality: r.modality, ...circuitOf(r), notes: srcNote(r) };
     go('#/inscripciones/nueva');
   },
   async 'insc-menu'() {

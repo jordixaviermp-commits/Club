@@ -16,17 +16,26 @@ test('ligas.json: cada carrera tiene los datos que usa la app', () => {
     assert.ok(!Number.isNaN(Date.parse(r.date)), r.date);
     assert.ok(MODALITIES.includes(r.modality), r.modality);
     assert.ok(PROVINCES.includes(r.province), r.province);
-    assert.match(r.url, /^https:\/\//);
-    assert.equal(r.circuit, "Xallenger BTT Terres de l'Ebre"); // mismo nombre en todas las pruebas: el podio de la general se agrupa por él
+    if (r.url) assert.match(r.url, /^https:\/\//);
+    assert.ok(r.circuit, r.name); // mismo nombre en todas las pruebas de la liga: el podio de la general se agrupa por él
     const k = r.date + '|' + r.name;
     assert.ok(!seen.has(k), 'repetida: ' + k);
     seen.add(k);
   }
 });
 
+test('cada liga usa un solo nombre de circuito', () => {
+  const por = new Map();
+  for (const r of data.races) (por.get(r.league) || por.set(r.league, new Set()).get(r.league)).add(r.circuit);
+  for (const [liga, nombres] of por) assert.equal(nombres.size, 1, liga);
+  assert.ok(por.has("Xallenger BTT Terres de l'Ebre 2027") && por.has('Open Maxxis Marathon by Bryton 2027'));
+});
+
 test('las carreras de la liga salen al buscar por liga, pueblo o nombre', () => {
   const names = (q) => searchRaces(q, data.races).map((r) => r.name);
-  assert.equal(names('xallenger').length, data.races.length);
+  assert.equal(names('xallenger').length, 9);
+  assert.equal(names('maxxis').length, 9);
+  assert.ok(names('vendrell').includes('Open Maxxis Marathon – El Vendrell'));
   assert.ok(names('gandesa').includes('5a Garnatxa Bike Race'));
   assert.ok(names('garnatxa')[0] === '5a Garnatxa Bike Race');
   assert.ok(names('ràpita').includes('Bandolers 11.0'));
