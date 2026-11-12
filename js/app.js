@@ -680,7 +680,7 @@ function viewRegistrations() {
   const card = (g) => `<a class="card race link-card ${g.date < today ? 'past-reg ' : ''}${modClass(g.modality)}" href="#/inscripciones/${g.id}">
       <div class="race-head"><div><h3>${esc(g.name)}</h3>
       <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality)}</div>${typeTag(g)}
-      ${g.date < today ? `<p class="state-tag">🏁 Ya disputada: pásala a resultados${g.entries.some((e) => e.self_position) ? ` · 📝 ${g.entries.filter((e) => e.self_position).length} de ${g.entries.length} han puesto su resultado` : ''}</p>` : ''}
+      ${g.date < today ? `<p class="state-tag">🏁 Ya disputada${g.entries.some((e) => e.self_position) ? ` · 📝 ${g.entries.filter((e) => e.self_position).length} de ${g.entries.length} han puesto su resultado` : ''}</p>` : ''}
       <p class="count">👥 ${g.entries.length} del club${g.entries.length ? ': ' +
         esc(g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p>
       ${g.created_by ? `<p class="count">Añadida por ${esc(runnerById(g.created_by)?.name || 'un corredor')}</p>` : ''}</a>`;
@@ -707,7 +707,7 @@ function adminRegList(card = adminCard) {
   }
   const up = regs.filter((g) => g.date >= today), past = regs.filter((g) => g.date < today);
   return `${up.length ? `<h2 class="section">📅 Próximas (${up.length})</h2>${up.map(card).join('')}` : '<p class="empty">No hay inscripciones próximas.</p>'}
-    ${past.length ? `<h2 class="section past-head">🏁 Ya disputadas, pendientes de pasar a resultados (${past.length})</h2>${past.map(card).join('')}` : ''}`;
+    ${past.length ? `<h2 class="section past-head">🏁 Ya disputadas (${past.length})</h2>${past.map(card).join('')}` : ''}`;
 }
 
 // ---------- Carreras de las federaciones (leídas cada semana por GitHub) ----------
@@ -887,16 +887,15 @@ function adminAlerts() {
   const today = todayISO();
   return {
     circuits: (S.data.circuitPodiums || []).filter((c) => c.status === 'pendiente'),
-    past: S.data.registrations.filter((g) => g.date < today).sort((a, b) => a.date.localeCompare(b.date)),
     noContract: S.data.runners.filter((r) => !r.contract).sort(byName),
   };
 }
-const alertCount = () => { const a = adminAlerts(); return a.circuits.length + a.past.length; };
+const alertCount = () => adminAlerts().circuits.length;
 
 function viewAlerts() {
   const a = adminAlerts();
   const per = bonusCfg(new Date().getFullYear()).circuitExtra ?? 4;
-  const none = !a.circuits.length && !a.past.length && !a.noContract.length;
+  const none = !a.circuits.length && !a.noContract.length;
   return frame('Avisos', `
     ${none ? '<p class="card pen ok">✅ No tienes nada pendiente.</p>' : ''}
     ${a.circuits.length ? `<h2 class="section">🏆 Podios de circuito por confirmar (${a.circuits.length})</h2>
@@ -905,11 +904,6 @@ function viewAlerts() {
         <p>${medal(c.position)} <b>${c.position}º</b> en <b>${esc(c.circuit)}</b> · ${c.year} · clasificación ${scopeLabel(c.scope)}</p>
         <div class="row"><button class="btn primary" data-act="circ-confirm" data-id="${c.id}">Confirmar (+${per})</button>
           <button class="btn danger ghost" data-act="circ-del" data-id="${c.id}">Rechazar</button></div></article>`).join('')}` : ''}
-    ${a.past.length ? `<h2 class="section">🏁 Carreras ya disputadas por pasar a resultados (${a.past.length})</h2>
-      <p class="hint">Si el corredor ya puso su puesto, a él ya le cuenta para el bono. Pásala a resultados para que salga en el resumen del equipo y para completar los puestos de los demás.</p>
-      <ul class="mini-list card">${a.past.map((g) => { const n = g.entries.filter((e) => e.self_position).length;
-        return `<li><div><b>${esc(g.name)}</b><small class="muted">${when(g)} · ${g.entries.length} del club${n ? ` · 📝 ${n} con resultado puesto` : ''}</small></div>
-          <a class="btn small" href="#/inscripciones/${g.id}">Abrir</a></li>`; }).join('')}</ul>` : ''}
     ${a.noContract.length ? `<h2 class="section">📄 Corredores sin tipo de contrato (${a.noContract.length})</h2>
       <p class="hint">Sin contrato indicado se les aplican los bonos y la penalización de renovación: ${esc(a.noContract.map((r) => r.name).join(', '))}.</p>
       <a class="btn block" href="#/bonos">Indicarlo en Bonos</a>` : ''}`, { back: '#/inscripciones' });
@@ -1249,9 +1243,9 @@ function adminRunnerRaces(r, year) {
   const res = (x) => { const y = x.results.find((z) => z.runner_id === r.id);
     return y.position ? `${isPodium(y.position) ? medal(y.position) + ' ' : ''}${y.position}º` : '<span class="muted">sin puesto</span>'; };
   return `<details class="runner-races"${S.open?.[key] ? ' open' : ''} data-open-key="${key}">
-    <summary>Carreras ${year}: <b>${races.length}</b>${days !== races.length ? ` (${days} días)` : ''} · apuntado a ${upcoming.length} próxima${upcoming.length === 1 ? '' : 's'}${pending.length ? ` · <span class="bad">${pending.length} sin resultado</span>` : ''}</summary>
+    <summary>Carreras ${year}: <b>${races.length}</b>${days !== races.length ? ` (${days} días)` : ''} · apuntado a ${upcoming.length} próxima${upcoming.length === 1 ? '' : 's'}${pending.length ? ` · ${pending.length} ya disputada${pending.length === 1 ? '' : 's'} sin pasar a resultados` : ''}</summary>
     ${races.length ? `<ul class="mini-list">${races.map((x) => miniRow(x, `<a class="pos" href="#/carreras/${x.id}">${res(x)}</a>`)).join('')}</ul>` : `<p class="hint">Sin carreras con resultados en ${year}.</p>`}
-    ${pending.length ? `<p class="hint"><b>Ya disputadas, pendientes de pasar a resultados:</b></p><ul class="mini-list">${pending.map((g) => miniRow(g, `<a class="btn small" href="#/inscripciones/${g.id}">Abrir</a>`)).join('')}</ul>` : ''}
+    ${pending.length ? `<p class="hint"><b>Ya disputadas, aún sin pasar a resultados</b> (le cuentan para el bono si puso su puesto):</p><ul class="mini-list">${pending.map((g) => miniRow(g, `<a class="btn small" href="#/inscripciones/${g.id}">Abrir</a>`)).join('')}</ul>` : ''}
     ${upcoming.length ? `<p class="hint"><b>Próximas:</b></p><ul class="mini-list">${upcoming.map((g) => miniRow(g, `<a class="btn small" href="#/inscripciones/${g.id}">Abrir</a>`)).join('')}</ul>` : ''}
   </details>`;
 }
