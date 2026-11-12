@@ -8,6 +8,7 @@ import {
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
+import { SEGUROS } from './seguros.js';
 const VIEW_KEY = 'monzon-regview';
 const MOD_KEY = 'monzon-modfilter';
 const FED_CALENDARS = [
@@ -240,6 +241,10 @@ function bellButton() {
   return `<a class="icon-btn bell${n ? ' on' : ''}" href="#/avisos" aria-label="Avisos${n ? `: ${n} pendientes` : ''}" title="Avisos">${icon(ICON_BELL)}${n ? `<span class="bell-n">${n}</span>` : ''}</a>`;
 }
 
+const ICON_AID = 'M9 3h6v6h6v6h-6v6H9v-6H3V9h6z';
+/** Botón «Accidente» (a la izquierda de la campanita): da los datos del seguro con un toque. */
+const accidentButton = () => `<a class="icon-btn sos" href="#/accidente" aria-label="En caso de accidente: teléfono y datos del seguro" title="Accidente">${icon(ICON_AID)}</a>`;
+
 function frame(title, body, { back, actions = '', rtab = null } = {}) {
   const { view } = parseRoute();
   const admin = S.session?.isAdmin;
@@ -252,7 +257,7 @@ function frame(title, body, { back, actions = '', rtab = null } = {}) {
     ${api.mode === 'demo' ? `<div class="demo-bar">Modo demostración: datos de prueba guardados solo en este móvil.</div>` : ''}
     <header class="top">
       ${back ? `<a class="back" href="${back}" aria-label="Volver">‹</a>` : '<img class="logo" src="icons/logo.png" alt="">'}
-      <h1>${esc(title)}</h1>${actions}${admin && rtab === null && !back && S.data ? bellButton() : ''}${rtab !== null ? newsBell() : ''}
+      <h1>${esc(title)}</h1>${actions}${(admin && rtab === null && !back && S.data) || rtab !== null ? accidentButton() : ''}${admin && rtab === null && !back && S.data ? bellButton() : ''}${rtab !== null ? newsBell() : ''}
     </header>
     <main>${body}</main>
     ${tabs}`;
@@ -263,6 +268,7 @@ function render() {
   const admin = S.session?.isAdmin;
   let html;
   if (view === 'entrar') html = viewLogin();
+  else if (view === 'accidente' && (admin || S.code)) html = viewAccident();
   else if (admin) {
     html = ({
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
@@ -276,6 +282,44 @@ function render() {
   else html = viewWelcome();
   $app.innerHTML = html;
   document.body.classList.toggle('has-tabs', !!$app.querySelector('nav.tabs'));
+}
+
+// ---------- En caso de accidente ----------
+const telHref = (t) => 'tel:' + String(t).replace(/[^\d+]/g, '');
+const copyBtn = (text, msg) => `<button class="btn small ghost" data-act="copy-text" data-text="${esc(text)}" data-msg="${esc(msg)}">Copiar</button>`;
+function viewAccident() {
+  const a = SEGUROS.accidentes, rc = SEGUROS.responsabilidadCivil;
+  const back = S.session?.isAdmin ? '#/inscripciones' : runnerHref('mi');
+  return frame('Accidente', `
+    <p class="card sos-urgent">🚨 <b>Urgencia grave: llama primero al 112.</b> Lo de abajo es para comunicar el accidente al seguro de la federación.</p>
+    <section class="card sos-card">
+      <h2><span class="sos-n">1</span> Llama al seguro</h2>
+      <p>Comunica el accidente <b>por teléfono antes de ${a.plazoDias} días</b> a <b>${esc(a.gestora)}</b>.</p>
+      <a class="btn primary big" href="${telHref(a.telefono)}">📞 Llamar · ${esc(a.telefono)}</a>
+      <p class="sos-row"><span>Póliza de accidentes <b>${esc(a.aseguradora)}</b>:<br><b class="sos-num">${esc(a.poliza)}</b></span>${copyBtn(a.poliza, 'Número de póliza copiado')}</p>
+    </section>
+    <section class="card sos-card">
+      <h2><span class="sos-n">2</span> Rellena la declaración y envíala</h2>
+      <p>Rellena la <b>declaración de accidente</b> y envíala por correo a la federación.</p>
+      <a class="btn primary big" href="mailto:${esc(a.email)}?subject=${encodeURIComponent('Declaració d\'accident')}">✉️ Escribir a ${esc(a.email)}</a>
+      <p class="sos-row"><span>${esc(a.email)}</span>${copyBtn(a.email, 'Correo copiado')}</p>
+      <a class="btn" href="${esc(SEGUROS.info)}" target="_blank" rel="noopener noreferrer">📄 Declaración de accidente (web de la federación) ↗</a>
+    </section>
+    <section class="card sos-card">
+      <h2>🛡️ Responsabilidad civil</h2>
+      <p>Si el daño lo has causado tú a otra persona o a sus cosas.</p>
+      <p class="sos-row"><span>Póliza <b>${esc(rc.aseguradora)}</b>:<br><b class="sos-num">${esc(rc.poliza)}</b></span>${copyBtn(rc.poliza, 'Número de póliza copiado')}</p>
+      <p class="hint">Franquicia: <b>${rc.franquicia} €</b> (lo que pagas tú de cada siniestro). Categorías de Pre-benjamín a Cadete: <b>${esc(rc.polizaMenores.aseguradora)} ${esc(rc.polizaMenores.poliza)}</b>.</p>
+      <p><b>Primero, avisa a la policía</b> para que quede constancia de quién es el responsable. Después, la documentación depende del caso:</p>
+      ${rc.casos.map((c) => `<details class="sos-case"><summary><b>${esc(c.titulo)}</b></summary>
+        <p>${esc(c.antes)}</p>
+        <p class="hint"><b>Entrega junta, a la federación:</b></p>
+        <ol class="bullets">${c.adjuntar.map((x) => `<li>${esc(x)}</li>`).join('')}</ol></details>`).join('')}
+      <a class="btn" href="${esc(rc.formulario)}" target="_blank" rel="noopener noreferrer">📄 Declaración de siniestros (PDF para rellenar)</a>
+      <a class="btn" href="${esc(rc.protocolo)}" target="_blank" rel="noopener noreferrer">📋 Protocolo de responsabilidad civil (PDF)</a>
+      <a class="btn primary big" href="mailto:${esc(rc.email)}?subject=${encodeURIComponent('Declaració de sinistre - Responsabilitat civil')}">✉️ Enviar a ${esc(rc.email)}</a>
+    </section>
+    <p class="hint center">Datos de la ${esc(SEGUROS.federacion)}, para licencias de esa federación. Si tu licencia es de otra (por ejemplo, la aragonesa), el seguro es otro: pregunta a la dirección. Toda la información, en <a href="${esc(SEGUROS.info)}" target="_blank" rel="noopener noreferrer">${esc(SEGUROS.info.replace('https://', ''))}</a>.</p>`, { back });
 }
 
 // ======================================================================
@@ -2259,6 +2303,7 @@ const actions = {
     if (S.regView === 'cal' && S.runnerData && !S.team && (S.code || S.previewCode)) loadTeam();
     render();
   },
+  'copy-text'(el) { copyText(el.dataset.text, el.dataset.msg || 'Copiado'); },
   'mod-filter'(el) {
     S.mod = el.dataset.m; S.sub = 'all'; S.calDay = null; store.set(MOD_KEY, S.mod); render();
   },
