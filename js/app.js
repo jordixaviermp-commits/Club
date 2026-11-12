@@ -292,7 +292,15 @@ const telBtn = (t) => `<a class="btn primary big" href="${telHref(t.numero)}">�
 const mailBtn = (c, verbo = 'Escribir a') => `<a class="btn primary big" href="mailto:${esc(c.para)}?subject=${encodeURIComponent(c.asunto || '')}">✉️ ${verbo} ${esc(c.para)}</a>
   <p class="sos-row"><span>${esc(c.para)}</span>${copyBtn(c.para, 'Correo copiado')}</p>`;
 const polizaRow = (etiqueta, valor, msg = 'Número de póliza copiado') => `<p class="sos-row"><span>${esc(etiqueta)}:<br><b class="sos-num">${esc(valor)}</b></span>${copyBtn(valor, msg)}</p>`;
-const pdfLinks = (list = []) => list.map((l) => `<a class="btn" href="${esc(l.href)}" target="_blank" rel="noopener noreferrer">${esc(l.etiqueta)}</a>`).join('');
+/** Enlaces a PDF: con `download`, un toque los descarga (en algunos móviles se abren en el visor, que también deja guardarlos). */
+const pdfLinks = (list = []) => list.map((l) => `<a class="btn" href="${esc(l.href)}" download="${esc(l.href.split('/').pop())}" target="_blank" rel="noopener noreferrer">${esc(l.etiqueta)} ⬇️</a>`).join('');
+/** Todos los documentos de una federación en un solo sitio, para descargarlos. */
+function accidentDocs(fed) {
+  const docs = [...(fed.accidente.pdfs || []), ...(fed.rc.pdfs || [])];
+  if (!docs.length) return '';
+  return `<section class="card sos-card"><h2>📥 Documentos para descargar</h2>
+    <p class="hint">Descárgalos con cobertura y los tendrás en el móvil por si los necesitas sin ella.</p>${pdfLinks(docs)}</section>`;
+}
 
 function accidentSteps(a) {
   return `${a.aviso ? `<p class="card sos-urgent">⚠️ <b>${esc(a.aviso)}</b></p>` : ''}
@@ -337,6 +345,7 @@ function viewAccident() {
     ${chips}
     ${fed ? `${accidentSteps(fed.accidente)}
       ${accidentRc(fed.rc)}
+      ${accidentDocs(fed)}
       <p class="hint center">Datos de la ${esc(fed.nombre)}. Si tu licencia es de otra federación, cambia arriba. Toda la información, en <a href="${esc(fed.info)}" target="_blank" rel="noopener noreferrer">${esc(fed.info.replace('https://', ''))}</a>.</p>`
       : '<p class="card">👆 <b>Elige la federación de tu licencia</b> (sale en tu carné de federado): el seguro y los pasos cambian. Se recordará en este móvil.</p>'}`, { back });
 }
