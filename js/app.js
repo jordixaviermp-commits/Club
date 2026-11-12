@@ -10,6 +10,7 @@ import {
 const CODE_KEY = 'monzon-code';
 import { FEDERACIONES, ORDEN_FEDERACIONES } from './seguros.js';
 import { ENLACES_CONTRATO } from './enlaces.js';
+import { VERSION } from './version.js';
 const VIEW_KEY = 'monzon-regview';
 const FED_KEY = 'monzon-federacion';
 const MOD_KEY = 'monzon-modfilter';
@@ -265,6 +266,20 @@ function frame(title, body, { back, actions = '', rtab = null } = {}) {
     ${tabs}`;
 }
 
+/** Línea «Versión de la app»; si el móvil ya tiene instalada una más nueva que la que se está ejecutando, lo avisa. */
+const versionLine = () => `<p class="muted center small app-ver" id="app-ver">Versión de la app: <b>${esc(VERSION)}</b></p>`;
+async function checkVersion() {
+  const el = document.getElementById('app-ver');
+  if (!el || !('caches' in window)) return;
+  try {
+    const nums = (await caches.keys()).map((k) => /^monzon-v(\d+)$/.exec(k)?.[1]).filter(Boolean).map(Number);
+    const newest = Math.max(0, ...nums), mine = Number(VERSION.slice(1));
+    if (newest > mine && document.getElementById('app-ver') === el) {
+      el.innerHTML += `<br>⚠️ Hay una versión más nueva (v${newest}). <button class="link" data-act="app-reload">Actualizar ahora</button>`;
+    }
+  } catch { /* sin acceso a la caché: solo se enseña la versión */ }
+}
+
 function render() {
   const { view } = parseRoute();
   const admin = S.session?.isAdmin;
@@ -283,6 +298,7 @@ function render() {
   else if (S.code && S.runnerData) html = runnerScreen(view);
   else html = viewWelcome();
   $app.innerHTML = html;
+  if ($app.querySelector('#app-ver')) checkVersion();
   document.body.classList.toggle('has-tabs', !!$app.querySelector('nav.tabs'));
 }
 
@@ -1028,7 +1044,8 @@ function viewRunnerMine() {
     ${myRacesCard(d)}
     <a class="btn block" href="${runnerHref('contrato')}">📄 Mi contrato y mi bonificación</a>
     ${installHint()}
-    ${S.preview ? '' : `<p class="center"><button class="link muted" data-act="r-forget">No soy ${esc(me.name)}</button></p>`}`,
+    ${S.preview ? '' : `<p class="center"><button class="link muted" data-act="r-forget">No soy ${esc(me.name)}</button></p>`}
+    ${versionLine()}`,
   { rtab: 'mi' });
 }
 
@@ -2280,6 +2297,7 @@ function viewData() {
       <p>Solo se guarda el nombre, la categoría y las carreras de cada corredor. Los datos están en un servidor de la UE (Frankfurt).
       Para dar a un corredor sus datos o borrarlos: «Corredores» → ⋯ junto a su nombre.</p></section>
     ${api.mode === 'demo' ? `<button class="btn ghost block" data-act="demo-reset">Reiniciar datos de demostración</button>` : ''}
+    ${versionLine()}
     <p class="muted center">Sesión: ${esc(S.session?.email)}</p>
     <button class="btn ghost block" data-act="logout">Cerrar sesión</button>`);
 }
@@ -2435,6 +2453,10 @@ const actions = {
     if (!await confirmAction('Quitar el enlace', 'Dejará de salir el botón de la hoja de respuestas en Datos.', 'Quitar')) return;
     await run(async () => { await api.saveSetting('enlaces_direccion', { ...(S.data.settings?.enlaces_direccion || {}), ropa_respuestas: null }); await reload(); }, 'Enlace quitado');
     render();
+  },
+  async 'app-reload'() {
+    try { const reg = await navigator.serviceWorker?.getRegistration(); await reg?.update(); } catch { /* sin service worker */ }
+    location.reload();
   },
   'copy-text'(el) { copyText(el.dataset.text, el.dataset.msg || 'Copiado'); },
   'mod-filter'(el) {
