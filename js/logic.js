@@ -636,7 +636,7 @@ function oneEditAway(a, b) {
 export function raceMatchScore(query, race) {
   const q = words(query);
   if (!q.length) return 0;
-  const name = words(race.name), place = words([race.place, race.province].filter(Boolean).join(' '));
+  const name = words([race.name, race.league].filter(Boolean).join(' ')), place = words([race.place, race.province].filter(Boolean).join(' '));
   let score = 0, hits = 0;
   for (const w of q) {
     const inName = name.some((n) => n.startsWith(w) || (w.length >= 4 && n.includes(w)) || oneEditAway(w, n));
