@@ -159,6 +159,7 @@ function parseRoute() {
 }
 const go = (hash) => { if (location.hash === hash) onRoute(); else location.hash = hash; };
 
+let landed = false;
 async function onRoute() {
   const { view, id } = parseRoute();
   if (view === 'c' && id) {               // llegada desde el enlace personal
@@ -172,6 +173,9 @@ async function onRoute() {
     history.replaceState(null, '', location.pathname + '#/redes');
     return onRoute();
   }
+  // al abrir la app, el corredor aterriza en «Mi temporada» (la pestaña del medio); después navega con normalidad
+  const firstOpen = !landed; landed = true;
+  if (firstOpen && !S.session?.isAdmin && S.code && view === '') return go('#/mi');
   if (!S.session?.isAdmin && !S.code && view === '' && store.get(SOCIAL_KEY)) return go('#/redes');
   if (S.session?.isAdmin && !S.data) await run(reload);
   if (S.session?.isAdmin) refreshPosts();
