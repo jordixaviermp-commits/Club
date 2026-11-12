@@ -298,6 +298,64 @@ select pg_temp.expect_fail($q$update races set km = 5000 where id = '$q$ || :'fm
 reset role;
 set role anon;
 select pg_temp.check((runner_team('DDDDDDDDDD')::text like '%"subtype": "XCO"%'), 'formato: el resumen del equipo lo lleva');
+-- historial de cambios, paso automático a resultados y completar datos
+reset role;
+truncate change_log;
+set role anon;
+select set_config('request.jwt.claim.sub', '', false);   -- los corredores no llevan sesión
+select runner_create_registration('DDDDDDDDDD', jsonb_build_object('name','Cursa Historial','date', current_date + 40, 'modality','Gravel'), null) as hist \gset
+select runner_update_registration('DDDDDDDDDD', :'hist', jsonb_build_object('name','Cursa Historial','date', current_date + 41, 'modality','Gravel'));
+reset role;
+select pg_temp.check((select count(*) from change_log where actor = 'Dani Test' and action = 'insert' and summary like '%Cursa Historial%') = 1, 'historial: la carrera que crea un corredor sale con su nombre');
+select pg_temp.check((select count(*) from change_log where actor = 'Dani Test' and action = 'update' and summary like '%date:%') = 1, 'historial: y el cambio de fecha, con antes y después');
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+update registrations set notes = 'nota nueva' where id = :'hist';
+select pg_temp.check((select count(*) from change_log where actor = 'Dirección' and summary like '%notes:%') = 1, 'historial: lo que cambia la dirección sale como «Dirección»');
+update registrations set notes = 'nota nueva' where id = :'hist';
+select pg_temp.check((select count(*) from change_log where actor = 'Dirección') = 1, 'historial: guardar sin cambios no apunta nada');
+select pg_temp.check((select count(*) from change_log) >= 3, 'historial: la dirección lo lee');
+reset role;
+set role anon;
+select pg_temp.expect_fail('select * from change_log', 'historial: anon no lo lee');
+select pg_temp.expect_fail($q$select log_change('x','race',null,'insert','x')$q$, 'historial: nadie de fuera apunta en él');
+-- paso automático
+reset role;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+insert into registrations (id, name, date, province) values
+  ('20000000-0000-0000-0000-000000000080', 'Auto Uno', current_date - 6, 'Huesca'),
+  ('20000000-0000-0000-0000-000000000081', 'Auto Reciente', current_date - 2, null),
+  ('20000000-0000-0000-0000-000000000082', 'Auto Sin Puesto', current_date - 9, null);
+insert into registration_entries (registration_id, runner_id, self_position, self_podium_type) values
+  ('20000000-0000-0000-0000-000000000080', '10000000-0000-0000-0000-000000000004', 2, 'campeonato'),
+  ('20000000-0000-0000-0000-000000000081', '10000000-0000-0000-0000-000000000004', 5, null);
+insert into registration_entries (registration_id, runner_id) values
+  ('20000000-0000-0000-0000-000000000080', '10000000-0000-0000-0000-000000000003'),
+  ('20000000-0000-0000-0000-000000000082', '10000000-0000-0000-0000-000000000003');
+truncate change_log;
+set role anon;
+select runner_view('DDDDDDDDDD') is not null as vio \gset
+reset role;
+select pg_temp.check((select count(*) from races where name = 'Auto Uno') = 1 and not exists (select 1 from registrations where name = 'Auto Uno'), 'auto: con puesto puesto y 3 días pasados, pasa sola a resultados');
+select pg_temp.check((select count(*) from results x join races r on r.id = x.race_id where r.name = 'Auto Uno') = 1, 'auto: solo entra quien puso su puesto');
+select pg_temp.check((select x.position from results x join races r on r.id = x.race_id where r.name = 'Auto Uno') = 2 and (select x.podium_type from results x join races r on r.id = x.race_id where r.name = 'Auto Uno') = 'campeonato', 'auto: con su puesto y tipo de podio');
+select pg_temp.check(exists (select 1 from registrations where name = 'Auto Reciente'), 'auto: no antes de 3 días');
+select pg_temp.check(exists (select 1 from registrations where name = 'Auto Sin Puesto'), 'auto: no si nadie puso su puesto');
+select pg_temp.check((select count(*) from change_log where actor = 'Sistema' and action = 'auto_resultados') = 1 and (select count(*) from change_log where summary like '%Auto Uno%' and action in ('insert','delete')) = 0, 'auto: queda una sola línea en el historial');
+-- completar datos: solo lo que falta
+insert into races (id, name, date, province, km) values ('30000000-0000-0000-0000-000000000090', 'Completa Esta', current_date - 20, 'Lleida', 50);
+insert into results (race_id, runner_id, runner_name) values ('30000000-0000-0000-0000-000000000090', '10000000-0000-0000-0000-000000000004', 'Dani Test');
+set role anon;
+select runner_complete_race('DDDDDDDDDD', 'race', '30000000-0000-0000-0000-000000000090', '{"province":"Huesca","place":"Graus","km":"99","subtype":"XCM"}');
+select pg_temp.check((select r->>'province' from jsonb_array_elements(runner_team('DDDDDDDDDD')->'races') r where r->>'id' = '30000000-0000-0000-0000-000000000090') = 'Lleida', 'completar: no cambia lo que ya está escrito');
+select pg_temp.check((select r->>'place' from jsonb_array_elements(runner_team('DDDDDDDDDD')->'races') r where r->>'id' = '30000000-0000-0000-0000-000000000090') = 'Graus', 'completar: rellena lo que faltaba (lugar)');
+select pg_temp.check((select (r->>'km')::numeric from jsonb_array_elements(runner_team('DDDDDDDDDD')->'races') r where r->>'id' = '30000000-0000-0000-0000-000000000090') = 50, 'completar: ni los km ya puestos');
+select pg_temp.check((select r->>'subtype' from jsonb_array_elements(runner_team('DDDDDDDDDD')->'races') r where r->>'id' = '30000000-0000-0000-0000-000000000090') = 'XCM', 'completar: y el formato que faltaba');
+select pg_temp.expect_fail($q$select runner_complete_race('CCCCCCCCCC', 'race', '30000000-0000-0000-0000-000000000090', '{"place":"x"}')$q$, 'completar: solo quien participó');
+select pg_temp.expect_fail($q$select runner_complete_race('XXXXXXXXXXXX', 'race', '30000000-0000-0000-0000-000000000090', '{}')$q$, 'completar: sin enlace no');
+reset role;
+select pg_temp.check((select count(*) from change_log where actor = 'Dani Test' and summary like '%Completa Esta%' and summary like '%place:%') = 1, 'completar: queda en el historial con su nombre');
+set role anon;
 -- documentos (contratos)
 reset role;
 set role authenticated;

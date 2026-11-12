@@ -521,3 +521,13 @@ h2.section.past-head { color: var(--muted); margin-top: 1.4rem; }
 .mini-list li.tappable { cursor: pointer; }
 .mini-list li.tappable > a.mini-main b::after { content: " ›"; color: var(--muted); font-weight: 400; }
 .mini-list li.tappable:active { background: var(--accent-2); }
+
+/* Completar datos, carrera hecha e historial */
+.complete-box { border-left: 5px solid var(--warn-line); }
+.rank-mini { margin: .3rem 0 0; padding: 0; list-style: none; display: grid; gap: .15rem; font-size: .92rem; }
+.rank-mini li.me { font-weight: 800; }
+.rank-mini li span { display: inline-block; min-width: 1.8rem; }
+.hist-list { list-style: none; margin: 0; padding: 0; }
+.hist-list li { padding: .6rem .7rem; margin-bottom: .45rem; border: 1px solid var(--line); border-left: 5px solid var(--muted); border-radius: 10px; background: var(--card); }
+.hist-list li p { margin: .15rem 0 0; overflow-wrap: anywhere; }
+.hist-list li.hist-cor { border-left-color: var(--brand-cyan); } .hist-list li.hist-dir { border-left-color: var(--accent); } .hist-list li.hist-sis { border-left-color: var(--gold); }

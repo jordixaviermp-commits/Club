@@ -167,6 +167,20 @@ create table if not exists public.announcements (
 );
 alter table public.announcements enable row level security;  -- permisos: ver «Seguridad» más abajo
 
+-- Historial de cambios: quién cambió qué y cuándo (carreras, inscripciones, resultados puestos por los corredores
+-- y pasos automáticos a resultados). Solo lo ve la dirección. Se rellena solo, con disparadores y funciones.
+create table if not exists public.change_log (
+  id        uuid primary key default gen_random_uuid(),
+  at        timestamptz not null default now(),
+  actor     text not null,
+  entity    text not null,
+  entity_id uuid,
+  action    text not null,
+  summary   text not null
+);
+create index if not exists change_log_at_idx on public.change_log(at desc);
+alter table public.change_log enable row level security;  -- permisos: ver «Seguridad» más abajo
+
 -- Ajustes del club (p. ej. los bonos por temporada). Solo los ve y cambia la dirección.
 --   key 'bonus' → {"2026": {"tiers":[{"races":12,"amount":150},…], "minimum":12,
 --                           "penalty":{"renovado":100,"nuevo":175}, "nuevos":[<runner_id>,…]}}
@@ -197,16 +211,16 @@ $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['runners','registrations','registration_entries','races','results','settings','runner_documents','circuit_podiums','announcements'] loop
+  foreach t in array array['runners','registrations','registration_entries','races','results','settings','runner_documents','circuit_podiums','announcements','change_log'] loop
     execute format('drop policy if exists admin_all on public.%I', t);
     execute format('create policy admin_all on public.%I for all to authenticated using (public.is_admin()) with check (public.is_admin())', t);
   end loop;
 end $$;
 
 revoke all on public.runners, public.registrations, public.registration_entries,
-              public.races, public.results, public.admins, public.settings, public.runner_documents, public.circuit_podiums, public.announcements from anon, public;
+              public.races, public.results, public.admins, public.settings, public.runner_documents, public.circuit_podiums, public.announcements, public.change_log from anon, public;
 grant select, insert, update, delete on public.runners, public.registrations,
-              public.registration_entries, public.races, public.results, public.settings, public.runner_documents, public.circuit_podiums, public.announcements to authenticated;
+              public.registration_entries, public.races, public.results, public.settings, public.runner_documents, public.circuit_podiums, public.announcements, public.change_log to authenticated;
 revoke all on public.admins from authenticated;
 
 -- ---------- Funciones de dirección (respetan la seguridad de arriba) ---
@@ -217,6 +231,124 @@ begin
   if not public.is_admin() then
     raise exception 'solo_direccion' using errcode = '42501';
   end if;
+end $$;
+
+-- ---------- Historial de cambios y paso automático a resultados -----------
+
+-- Apunta una línea en el historial (uso interno de las funciones y disparadores).
+create or replace function public.log_change(p_actor text, p_entity text, p_entity_id uuid, p_action text, p_summary text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  insert into change_log (actor, entity, entity_id, action, summary) values (p_actor, p_entity, p_entity_id, p_action, left(p_summary, 500));
+  if random() < 0.01 then delete from change_log where at < now() - interval '2 years'; end if;
+end $$;
+
+-- Disparador: registra los cambios de datos de carreras e inscripciones. Quién lo hizo sale de
+-- `app.actor` (lo pone la función del corredor), del creador de la inscripción o de ser la dirección.
+create or replace function public.log_row_change()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_old jsonb := case when tg_op = 'INSERT' then null else to_jsonb(old) end;
+  v_new jsonb := case when tg_op = 'DELETE' then null else to_jsonb(new) end;
+  v_row jsonb; v_actor text; v_what text; v_sum text; v_changes text := ''; k text;
+begin
+  if current_setting('app.skip_log', true) = 'on' then return coalesce(new, old); end if;
+  v_row := coalesce(v_new, v_old);
+  v_what := case tg_table_name when 'races' then 'la carrera' else 'la inscripción' end;
+  v_actor := nullif(current_setting('app.actor', true), '');
+  if v_actor is null and public.is_admin() then v_actor := 'Dirección'; end if;
+  if v_actor is null and (v_row->>'created_by') is not null then
+    select name into v_actor from runners where id = (v_row->>'created_by')::uuid;
+  end if;
+  v_actor := coalesce(v_actor, 'Corredor');
+  if tg_op = 'INSERT' then
+    v_sum := format('creó %s %s (%s)', v_what, v_row->>'name', v_row->>'date');
+  elsif tg_op = 'DELETE' then
+    v_sum := format('borró %s %s (%s)', v_what, v_row->>'name', v_row->>'date');
+  else
+    foreach k in array array['name','date','end_date','place','province','country','modality','notes','race_type','circuit','subtype','km','suspended'] loop
+      if v_old->k is distinct from v_new->k then
+        v_changes := v_changes || case when v_changes = '' then '' else '; ' end
+                     || k || ': ' || coalesce(v_old->>k, '—') || ' → ' || coalesce(v_new->>k, '—');
+      end if;
+    end loop;
+    if v_changes = '' then return new; end if;
+    v_sum := format('cambió %s %s: %s', v_what, v_new->>'name', v_changes);
+  end if;
+  perform public.log_change(v_actor, case tg_table_name when 'races' then 'race' else 'registration' end,
+                            (v_row->>'id')::uuid, lower(tg_op), v_sum);
+  return coalesce(new, old);
+end $$;
+
+drop trigger if exists registrations_log on public.registrations;
+create trigger registrations_log after insert or update or delete on public.registrations
+  for each row execute function public.log_row_change();
+drop trigger if exists races_log on public.races;
+create trigger races_log after insert or update or delete on public.races
+  for each row execute function public.log_row_change();
+
+-- Pasa solas a resultados las inscripciones ya disputadas (3 días después del último día) en las que
+-- al menos un inscrito ha puesto su puesto. Solo entran quienes lo pusieron: los demás pueden añadirse
+-- después con «La hice: añadirme». Se ejecuta cuando alguien abre la app (no necesita ningún servicio).
+create or replace function public.auto_promote_registrations()
+returns int language plpgsql security definer set search_path = public as $$
+declare g registrations; v_race uuid; v_n int := 0;
+begin
+  perform set_config('app.skip_log', 'on', true);
+  for g in select * from registrations r
+            where not r.suspended and coalesce(r.end_date, r.date) < current_date - 3
+              and exists (select 1 from registration_entries e where e.registration_id = r.id and e.self_position is not null)
+            for update skip locked loop
+    insert into races (name, date, end_date, place, province, country, modality, notes, race_type, circuit, subtype, km)
+    values (g.name, g.date, g.end_date, g.place, g.province, g.country, g.modality, g.notes, g.race_type, g.circuit, g.subtype, g.km)
+    returning id into v_race;
+    insert into results (race_id, runner_id, runner_name, category, position, podium_type, self_reported)
+    select v_race, e.runner_id, rn.name, e.category, e.self_position,
+           case when e.self_position between 1 and 3 then coalesce(e.self_podium_type, 'suelta') else 'suelta' end, true
+      from registration_entries e join runners rn on rn.id = e.runner_id
+     where e.registration_id = g.id and e.self_position is not null;
+    delete from registrations where id = g.id;
+    perform public.log_change('Sistema', 'race', v_race, 'auto_resultados', format('pasó sola a resultados: %s (%s)', g.name, g.date));
+    v_n := v_n + 1;
+  end loop;
+  perform set_config('app.skip_log', 'off', true);
+  return v_n;
+end $$;
+
+-- Un corredor que participó (o está inscrito) rellena SOLO los datos que faltan de una carrera:
+-- lugar, provincia, formato y km. Nunca cambia lo que ya está escrito.
+create or replace function public.runner_complete_race(p_code text, p_kind text, p_id uuid, p_data jsonb)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_runner uuid; v_name text;
+  v_place text := nullif(left(btrim(coalesce(p_data->>'place', '')), 120), '');
+  v_prov  text := nullif(left(btrim(coalesce(p_data->>'province', '')), 60), '');
+  v_sub   text := nullif(left(btrim(coalesce(p_data->>'subtype', '')), 30), '');
+  v_km    numeric := case when coalesce(p_data->>'km', '') ~ '^[0-9]+([.][0-9]+)?$' then (p_data->>'km')::numeric end;
+begin
+  select id, name into v_runner, v_name from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  if v_km is not null and not (v_km > 0 and v_km <= 1000) then v_km := null; end if;
+  perform set_config('app.actor', v_name, true);
+  if p_kind = 'reg' then
+    if not exists (select 1 from registration_entries where registration_id = p_id and runner_id = v_runner)
+       and not exists (select 1 from registrations where id = p_id and created_by = v_runner) then
+      raise exception 'no_es_tuya' using errcode = '42501';
+    end if;
+    update registrations set place = coalesce(nullif(place, ''), v_place), province = coalesce(nullif(province, ''), v_prov),
+           subtype = coalesce(nullif(subtype, ''), v_sub), km = coalesce(km, round(v_km, 1))
+     where id = p_id;
+  elsif p_kind = 'race' then
+    if not exists (select 1 from results where race_id = p_id and runner_id = v_runner) then
+      raise exception 'no_es_tuya' using errcode = '42501';
+    end if;
+    update races set place = coalesce(nullif(place, ''), v_place), province = coalesce(nullif(province, ''), v_prov),
+           subtype = coalesce(nullif(subtype, ''), v_sub), km = coalesce(km, round(v_km, 1))
+     where id = p_id;
+  else
+    raise exception 'tipo_no_valido';
+  end if;
+  perform set_config('app.actor', '', true);
 end $$;
 
 -- Guarda una inscripción y su lista de inscritos de una vez.
@@ -290,11 +422,12 @@ end $$;
 
 -- «Pasar a resultados»: crea la carrera con los inscritos y borra la inscripción.
 create or replace function public.promote_registration(p_id uuid)
-returns uuid language plpgsql set search_path = public as $$
+returns uuid language plpgsql security definer set search_path = public as $$
 declare v_race uuid;
 begin
   perform public.require_admin();
   if exists (select 1 from registrations where id = p_id and suspended) then raise exception 'carrera_suspendida'; end if;
+  perform set_config('app.skip_log', 'on', true);
   insert into races (name, date, end_date, place, province, country, modality, notes, race_type, circuit, subtype, km)
   select name, date, end_date, place, province, country, modality, notes, race_type, circuit, subtype, km from registrations where id = p_id
   returning id into v_race;
@@ -305,7 +438,9 @@ begin
          e.self_position is not null
     from registration_entries e join runners r on r.id = e.runner_id
    where e.registration_id = p_id;
+  perform public.log_change('Dirección', 'race', v_race, 'a_resultados', format('pasó a resultados: %s', (select name from races where id = v_race)));
   delete from registrations where id = p_id;
+  perform set_config('app.skip_log', 'off', true);
   return v_race;
 end $$;
 
@@ -323,9 +458,11 @@ end $$;
 
 -- Restaurar una copia de seguridad completa (sustituye todos los datos).
 create or replace function public.import_backup(p jsonb)
-returns void language plpgsql set search_path = public as $$
+returns void language plpgsql security definer set search_path = public as $$
 begin
   perform public.require_admin();
+  perform set_config('app.skip_log', 'on', true);
+  perform public.log_change('Dirección', 'backup', null, 'restaurar', 'restauró una copia de seguridad');
   delete from results where true;
   delete from races where true;
   delete from registration_entries where true;
@@ -350,11 +487,12 @@ end $$;
 -- pueden apuntarse o borrarse a sí mismos en carreras de hoy en adelante.
 
 create or replace function public.runner_view(p_code text)
-returns jsonb language plpgsql stable security definer set search_path = public as $$
+returns jsonb language plpgsql security definer set search_path = public as $$
 declare me runners; v_year int := extract(year from current_date)::int; v_cfg jsonb;
 begin
   select * into me from runners where code = p_code;
   if not found then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  perform public.auto_promote_registrations();   -- pasa solas a resultados las carreras ya disputadas con puestos
   select value -> v_year::text into v_cfg from settings where key = 'bonus';
   return jsonb_build_object(
     'me', jsonb_build_object('id', me.id, 'name', me.name, 'category', me.category),
@@ -549,9 +687,9 @@ end $$;
 create or replace function public.runner_report_result(p_code text, p_kind text, p_id uuid, p_position int,
                                                        p_category text, p_podium_type text)
 returns void language plpgsql security definer set search_path = public as $$
-declare v_runner uuid; v_pod text := case when p_position between 1 and 3 then coalesce(nullif(p_podium_type,''), 'suelta') else null end;
+declare v_runner uuid; v_who text; v_pod text := case when p_position between 1 and 3 then coalesce(nullif(p_podium_type,''), 'suelta') else null end;
 begin
-  select id into v_runner from runners where code = p_code;
+  select id, name into v_runner, v_who from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
   if p_position is null or p_position < 1 or p_position > 999 then raise exception 'puesto_no_valido'; end if;
   if p_kind = 'reg' then
@@ -564,6 +702,7 @@ begin
            category = coalesce(nullif(p_category, ''), category)
      where registration_id = p_id and runner_id = v_runner and self_position is null;
     if not found then raise exception 'resultado_ya_puesto'; end if;
+    perform public.log_change(v_who, 'result', p_id, 'resultado', format('puso su resultado: %sº en %s', p_position, (select name from registrations where id = p_id)));
   elsif p_kind = 'race' then
     if not exists (select 1 from results where race_id = p_id and runner_id = v_runner) then
       raise exception 'no_es_tuya' using errcode = '42501';
@@ -572,6 +711,7 @@ begin
            category = coalesce(nullif(p_category, ''), category)
      where race_id = p_id and runner_id = v_runner and position is null;
     if not found then raise exception 'resultado_ya_puesto'; end if;
+    perform public.log_change(v_who, 'result', p_id, 'resultado', format('puso su resultado: %sº en %s', p_position, (select name from races where id = p_id)));
   else
     raise exception 'tipo_no_valido';
   end if;
@@ -636,6 +776,9 @@ begin
   insert into results (race_id, runner_id, runner_name, category)
   values (p_race, v_runner, v_name, nullif(p_category, ''))
   on conflict (race_id, runner_id) do nothing;
+  if found then
+    perform public.log_change(v_name, 'result', p_race, 'la_hizo', format('se añadió a %s (la hizo)', (select name from races where id = p_race)));
+  end if;
 end $$;
 
 -- El corredor indica el tipo de una carrera que creó él (campeonato o puntuable de un circuito).
@@ -740,7 +883,7 @@ grant execute on function public.runner_view(text), public.runner_join(text, uui
                           public.runner_team(text),
                           public.runner_leave(text, uuid), public.runner_join_race(text, uuid, text),
                           public.runner_set_race_type(text, uuid, text, text), public.runner_propose_circuit(text, text, int, int, text),
-                          public.runner_cancel_circuit(text, uuid), public.runner_news(text), public.runner_set_race_details(text, uuid, text, numeric), public.ping() to anon, authenticated;
+                          public.runner_cancel_circuit(text, uuid), public.runner_news(text), public.runner_set_race_details(text, uuid, text, numeric), public.runner_complete_race(text, text, uuid, jsonb), public.auto_promote_registrations(), public.ping() to anon, authenticated;
 grant execute on function public.is_admin(), public.require_admin(),
                           public.save_registration(jsonb, jsonb), public.save_race(jsonb, jsonb),
                           public.promote_registration(uuid), public.delete_runner(uuid, boolean),

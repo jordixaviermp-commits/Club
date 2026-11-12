@@ -2,7 +2,7 @@
 import { CONFIG } from './config.js';
 import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
-  CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, parseKm, kmText, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
+  CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, parseKm, kmText, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
   extractCode, todayISO, pastLimit, formatDate, searchRaces, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
@@ -140,6 +140,7 @@ async function run(fn, okMsg) {
 }
 
 async function reload() {
+  try { await api.autoPromote(); } catch { /* aún falta su SQL */ } // pasa solas a resultados las carreras ya disputadas con puestos
   S.data = await api.loadAll();
   try { S.docs = await api.listDocuments(); } catch { S.docs = null; } // null = falta el SQL de contratos
 }
@@ -172,8 +173,10 @@ async function onRoute() {
       if (sub === 'contrato') loadMyDocs();
       if (sub === 'noticias') enterNews();
       if (sub === 'nueva' && !S.team) loadTeam();
+      if (sub === 'carrera' && !S.team) loadTeam();
     }
   }
+  if (S.session?.isAdmin && view === 'historial') loadChanges();
   if (S.session?.isAdmin) {
     if (view === 'inscripciones' && id) S.draft = draftRegistration(id);
     if (view === 'carreras' && id) S.draft = draftRace(id);
@@ -246,7 +249,7 @@ function render() {
     html = ({
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
       carreras: S.draft ? viewRaceEdit : viewRaces,
-      resumen: viewSummary, corredores: viewRunners, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
+      resumen: viewSummary, corredores: viewRunners, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
       vista: () => (S.preview && S.runnerData ? runnerScreen(parseRoute().id || '') : viewRunners()),
       equipo: () => (S.preview ? viewTeam() : viewSummary()),
     }[view] || viewRegistrations)();
@@ -519,9 +522,9 @@ function myRacesCard(d) {
     const stagePods = (r.stage_positions || []).slice(0, (r.stages || []).length).map((p, i) => ({ p, n: stageName(r, i) })).filter((x) => isPodium(x.p));
     const pos = r.position ? `${isPodium(r.position) ? medal(r.position) + ' ' : ''}${r.position}º${r.category ? ` ${esc(r.category)}` : ''}${r.self_reported ? '<br><small class="self-res">📝 puesto por ti</small>' : ''}`
       : (S.preview ? '<span class="muted">sin puesto</span>' : `<a class="btn primary small" href="#/resultado/race_${r.race_id}">Poner mi puesto</a>`);
-    return `<li class="mini ${modClass(r.modality)}"><div><b>${esc(r.name)}</b>
-      <small class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''} · ${esc(r.modality)}</small>
-      ${stagePods.length ? `<small>${stagePods.map((x) => `${medal(x.p)} ${esc(x.n)}`).join(' · ')}</small>` : ''}</div>
+    return `<li class="mini tappable ${modClass(r.modality)}"><a class="mini-main" href="${runnerHref('carrera')}/race_${r.race_id}"><b>${esc(r.name)}</b>
+      <small class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''} · ${esc(r.modality)}${r.km ? ` · ${kmText(r.km)}` : ''}</small>
+      ${stagePods.length ? `<small>${stagePods.map((x) => `${medal(x.p)} ${esc(x.n)}`).join(' · ')}</small>` : ''}</a>
       <span class="pos">${pos}</span></li>`;
   };
   const myCat = (g) => g.entries.find((e) => e.runner_id === d.me.id)?.category;
@@ -543,11 +546,16 @@ function myRacesCard(d) {
 
   ${pending.length ? `<section class="card season-block pend-block">
     <h2>🏁 Ya corridas, pendientes de resultado <small>(${pending.length})</small></h2>
-    <p class="hint">Estabas apuntado y ya se han disputado. Pon tu resultado (una sola vez): <b>en cuanto lo pongas ya te cuenta para el bono</b>. Si no fuiste, toca la carrera y pulsa «No fui: borrarme».</p>
+    <p class="hint">Estabas apuntado y ya se han disputado. Pon tu resultado (una sola vez): <b>en cuanto lo pongas ya te cuenta para el bono</b>, y a los 3 días de acabar la carrera pasa sola a resultados. Si no fuiste, toca la carrera y pulsa «No fui: borrarme».</p>
     <ul class="mini-list">${pending.map((g) => miniRow(g, g.my_result
       ? `<span class="badge-sent">📝 ${g.my_result.position}º · ya cuenta</span>`
       : (S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>`), `${runnerHref('carrera')}/${g.id}`)).join('')}</ul>
   </section>` : ''}
+
+  ${(() => { const todo = results.filter((x) => missingFields(x).length);
+    return todo.length && !S.preview ? `<details class="card season-block"><summary><b>📝 Ayuda a completar tus carreras (${todo.length})</b></summary>
+      <p class="hint">Les faltan datos (provincia, distancia o formato). Si los sabes, tócalas y rellénalos: así todos tenemos el resumen completo.</p>
+      <ul class="mini-list">${todo.slice(0, 20).map((x) => miniRow(x, `<span class="badge-pend">${missingFields(x).map((k) => FIELD_LABELS[k]).join(', ')}</span>`, `${runnerHref('carrera')}/race_${x.race_id}`)).join('')}</ul></details>` : ''; })()}
 
   <section class="card season-block done-block">
     <h2>✅ Carreras hechas ${S.myYear} <small>(${list.length}${days !== list.length ? ` · ${days} días para el bono` : ''})</small></h2>
@@ -669,12 +677,50 @@ function viewRunnerHome() {
   { rtab: '', actions: `${viewToggle()}${S.preview ? '' : '<button class="icon-btn" data-act="r-refresh" aria-label="Actualizar">↻</button>'}` });
 }
 
+const FIELD_LABELS = { province: 'provincia', km: 'distancia', subtype: 'formato' };
+/** Formulario para que el corredor rellene SOLO los datos que le faltan a una carrera. kind: 'reg' o 'race'. */
+function completeBox(x, kind, id) {
+  const miss = missingFields(x);
+  if (!miss.length || S.preview) return '';
+  const guess = guessSubtype(x.name, x.modality);
+  return `<section class="card complete-box"><h3>📝 Faltan datos: ${miss.map((k) => FIELD_LABELS[k]).join(', ')}</h3>
+    <p class="hint">Si los sabes, rellénalos: ayudas al club y a todos. Solo se guardan los que faltan; lo que ya está escrito no se cambia.</p>
+    <form class="stack" data-form="r-complete" data-kind="${kind}" data-id="${id}">
+      ${miss.includes('province') ? `<label>Provincia<input name="province" list="dl-prov" autocomplete="off"></label>` : ''}
+      ${miss.includes('km') ? `<label>Distancia (km)<input name="km" type="number" inputmode="decimal" step="0.1" min="0.1" max="1000" placeholder="85"></label>` : ''}
+      ${miss.includes('subtype') ? `<label>Formato<select name="subtype"><option value="">No lo sé</option>${SUBTYPES[x.modality].map((o) => opt(o, o, guess)).join('')}</select></label>` : ''}
+      <button class="btn primary">Guardar lo que sé</button></form></section>`;
+}
+
+/** Una carrera ya disputada (con resultados), abierta desde «Mi temporada»: datos, mi puesto, quién más corrió y completar datos. */
+function viewRunnerDoneRace(raceId) {
+  const back = runnerHref('mi');
+  const my = (S.runnerData.my_results || []).find((x) => x.race_id === raceId);
+  const team = Array.isArray(S.team?.races) ? S.team.races.find((x) => x.id === raceId) : null;
+  const r = team ? { ...my, ...team } : my;
+  if (!r) return frame('Carrera', `${previewBanner()}<p class="empty">No encuentro esta carrera.</p>`, { back });
+  const res = (team?.results || []).filter((x) => x.position).sort((a, b) => a.position - b.position);
+  const meId = S.runnerData.me.id;
+  return frame('Carrera', `${previewBanner()}
+    <article class="card race done-race ${modClass(r.modality)}"><div class="race-head"><div><h3>${esc(r.name)}</h3>
+      <p class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div>${modTag(r.modality)}</div>${typeTag(r)}
+      ${my ? `<p class="joined-done">${my.position ? `✓ Tu puesto: ${isPodium(my.position) ? medal(my.position) + ' ' : ''}${my.position}º${my.category ? ' · ' + esc(my.category) : ''}${my.self_reported ? ' · 📝 puesto por ti' : ''}`
+        : `Corriste esta carrera. ${S.preview ? '' : `<a class="btn primary small" href="#/resultado/race_${raceId}">Poner mi puesto</a>`}`}</p>` : ''}
+      ${team ? `<p class="count">🏁 ${team.results.length} del club${res.length ? ':' : ''}</p>
+        ${res.length ? `<ol class="rank-mini">${res.map((x) => `<li class="${x.runner_id === meId ? 'me' : ''}"><span>${isPodium(x.position) ? medal(x.position) : x.position + 'º'}</span> ${esc(x.runner_name)}${x.category ? ` <small>${esc(x.category)}</small>` : ''}</li>`).join('')}</ol>` : ''}`
+        : '<p class="muted small">Cargando quién más corrió…</p>'}
+    </article>
+    ${completeBox(r, 'race', raceId)}`, { back });
+}
+
 /** Una inscripción abierta desde «Mi temporada»: la tarjeta completa con todas sus acciones. */
 function viewRunnerRace(id) {
+  if (String(id || '').startsWith('race_')) return viewRunnerDoneRace(String(id).slice(5));
   const g = S.runnerData.registrations.find((x) => x.id === id);
   const back = runnerHref('mi');
   if (!g) return frame('Carrera', `${previewBanner()}<p class="empty">Esta carrera ya no está entre las inscripciones: puede que la dirección ya la haya pasado a resultados. Mírala en «Carreras hechas».</p>`, { back });
   return frame('Carrera', `${previewBanner()}${runnerRegCard(g)}
+    ${completeBox(g, 'reg', g.id)}
     ${g.mine_created || S.preview ? '' : '<p class="hint">Solo puede cambiar los datos de una carrera quien la añadió, o la dirección del club.</p>'}`, { back });
 }
 
@@ -971,6 +1017,32 @@ function viewWeek() {
       ${list.map((g) => postCard(g)).join('')}
       <details class="card"><summary><b>Ver el texto que se copia</b></summary><pre class="week-pre">${esc(weekText(days, todo.length ? todo : list))}</pre></details>`
       : `<p class="empty">No hay carreras con inscritos en los próximos ${days} días.</p>`}`, { back: '#/inscripciones' });
+}
+
+/** Dirección: historial de cambios (quién cambió qué y cuándo). */
+async function loadChanges() {
+  S.changes = undefined;
+  try { S.changes = await api.listChanges(); } catch { S.changes = null; }
+  if (parseRoute().view === 'historial') render();
+}
+const timeAgo = (iso) => {
+  const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  if (!Number.isFinite(m)) return '';
+  if (m < 2) return 'ahora mismo'; if (m < 60) return `hace ${m} min`;
+  if (m < 1440) return `hace ${Math.round(m / 60)} h`;
+  if (m < 2880) return 'ayer'; return formatDate(String(iso).slice(0, 10), false);
+};
+function viewHistory() {
+  const list = S.changes;
+  const f = S.histFilter || 'all';
+  const who = (c) => (c.actor === 'Dirección' ? 'dir' : c.actor === 'Sistema' ? 'sis' : 'cor');
+  const shown = (list || []).filter((c) => f === 'all' || who(c) === f);
+  return frame('Historial de cambios', `
+    <p class="hint">Quién ha cambiado qué y cuándo. Te sirve para delegar con tranquilidad: si un dato está mal, aquí ves quién lo puso.</p>
+    ${list === undefined ? '<p class="empty">Cargando…</p>' : list === null ? '<p class="card warn">Falta ejecutar en Supabase el SQL del historial: <code>supabase/cambios/2026-11-12-historial-1.sql</code>, <code>…-2.sql</code> y <code>…-3.sql</code>.</p>' : `
+    <div class="years">${[['all', 'Todo'], ['cor', 'Corredores'], ['dir', 'Dirección'], ['sis', 'Automático']].map(([k, l]) => `<button class="chip${f === k ? ' on' : ''}" data-act="hist-filter" data-f="${k}">${l}</button>`).join('')}</div>
+    ${shown.length ? `<ul class="hist-list">${shown.map((c) => `<li class="hist-${who(c)}"><div><b>${esc(c.actor)}</b> <span class="muted">${timeAgo(c.at)}</span></div><p>${esc(c.summary)}</p></li>`).join('')}</ul>`
+      : '<p class="empty">Todavía no hay cambios apuntados.</p>'}`}`, { back: '#/datos' });
 }
 
 /** Dirección: escribir las noticias que verán los corredores. */
@@ -1735,6 +1807,7 @@ function viewData() {
       <label class="btn file">Importar resultados desde CSV<input type="file" accept=".csv,text/csv,text/plain" data-file="csv" hidden></label>
       <p class="hint">Columnas: Fecha, Carrera, Lugar, Provincia, País, Modalidad, Corredor, Categoría, Puesto y Tipo de podio (las mismas que la exportación). Se añaden a lo que ya hay; las carreras que ya existan (misma fecha y nombre) se saltan.</p>
     </section>
+    <a class="btn block" href="#/historial">🕘 Historial de cambios</a>
     <section class="card"><h2>Privacidad</h2>
       <p>Solo se guarda el nombre, la categoría y las carreras de cada corredor. Los datos están en un servidor de la UE (Frankfurt).
       Para dar a un corredor sus datos o borrarlos: «Corredores» → ⋯ junto a su nombre.</p></section>
@@ -2031,6 +2104,7 @@ const actions = {
     render();
     toast(`${ids.length} corredor${ids.length === 1 ? '' : 'es'} añadido${ids.length === 1 ? '' : 's'}`);
   },
+  'hist-filter'(el) { S.histFilter = el.dataset.f; render(); },
   'week-view'(el) { S.weekView = el.dataset.v; render(); },
   'week-all'() { const set = postedSet(), list = weekRaces(S.weekDays || 14); if (list.every((g) => set.has(g.id))) list.forEach((g) => set.delete(g.id)); else list.forEach((g) => set.add(g.id)); savePosted(set); render(); },
   'post-all'() { const set = postedSet(); for (const g of adminAlerts().week) set.add(g.id); savePosted(set); render(); },
@@ -2066,6 +2140,13 @@ const actions = {
 };
 
 const forms = {
+  async 'r-complete'(f) {
+    if (S.preview) return toast('Vista previa: aquí no se puede cambiar nada.', true);
+    const data = { province: cleanName(f.province?.value || ''), km: f.km?.value || '', subtype: f.subtype?.value || '' };
+    if (!data.province && !parseKm(data.km) && !data.subtype) return toast('Rellena al menos un dato.', true);
+    const ok = await run(async () => { await api.runnerComplete(S.code, f.dataset.kind, f.dataset.id, data); await loadRunner(); S.team = null; await loadTeam(); return true; }, '¡Gracias! Datos guardados');
+    if (ok) render();
+  },
   async code(f) {
     const code = extractCode(f.code.value);
     if (!code) return toast('No reconozco ese enlace. Cópialo entero desde WhatsApp.', true);
@@ -2336,10 +2417,18 @@ $app.addEventListener('input', (ev) => {
   }
   if (t.dataset.rf && S.rdraft) {
     S.rdraft[t.dataset.rf] = t.value;
+    if (t.dataset.rf === 'name' && !S.rdraft.subtype) {
+      const g = guessSubtype(t.value, S.rdraft.modality);
+      if (g) { S.rdraft.subtype = g; const sel = $app.querySelector('select[data-rf="subtype"]'); if (sel) sel.value = g; }
+    }
     if (t.dataset.rf === 'name') updateSearch('rname');
     return;
   }
   if (!S.draft) return;
+  if (t.dataset.f === 'name' && !S.draft.subtype) { // el nombre da pistas del formato (XCM, Critérium…)
+    const g = guessSubtype(t.value, S.draft.modality);
+    if (g) { S.draft.subtype = g; const sel = $app.querySelector('select[data-f="subtype"]'); if (sel) sel.value = g; }
+  }
   if (S.draft.kind === 'reg' && !S.draft.id && t.dataset.f === 'name') {
     S.draft.name = t.value;
     if (!S.fed) loadFed();
