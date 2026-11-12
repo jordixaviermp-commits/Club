@@ -1,5 +1,5 @@
 {
- "_nota": "Ligas y circuitos que se corren cada año y a los que suele ir gente del club. Se escribe a mano (no lo toca el lector de las federaciones). Para añadir otra liga, copia un bloque de carrera y cambia source/league/fechas. Comprobar siempre las fechas en la web de la liga.",
+ "_nota": "Ligas y circuitos que se corren cada año y a los que suele ir gente del club. Se escribe a mano (no lo toca el lector de las federaciones). Para añadir otra liga, copia un bloque de carrera y cambia source/league/fechas. Comprobar siempre las fechas en la web de la liga. El campo «circuit» (opcional) marca la carrera como puntuable de un circuito con ese nombre: se usa para el podio en la general final (cláusula 9). Escríbelo igual en todas las pruebas de la liga.",
  "updated_at": "2026-11-12",
  "races": [
   {
@@ -14,7 +14,8 @@
    "discipline": "BTT",
    "kind": "Competición",
    "info": "Xallenger BTT Terres de l'Ebre 2027",
-   "url": "https://www.xallengerbtt.net"
+   "url": "https://www.xallengerbtt.net",
+   "circuit": "Xallenger BTT Terres de l'Ebre"
   },
   {
    "source": "LIGA",
@@ -28,7 +29,8 @@
    "discipline": "BTT",
    "kind": "Competición",
    "info": "Xallenger BTT Terres de l'Ebre 2027",
-   "url": "https://www.xallengerbtt.net"
+   "url": "https://www.xallengerbtt.net",
+   "circuit": "Xallenger BTT Terres de l'Ebre"
   },
   {
    "source": "LIGA",
@@ -42,7 +44,8 @@
    "discipline": "BTT",
    "kind": "Competición",
    "info": "Xallenger BTT Terres de l'Ebre 2027",
-   "url": "https://www.xallengerbtt.net"
+   "url": "https://www.xallengerbtt.net",
+   "circuit": "Xallenger BTT Terres de l'Ebre"
   },
   {
    "source": "LIGA",
@@ -56,7 +59,8 @@
    "discipline": "BTT",
    "kind": "Competición",
    "info": "Xallenger BTT Terres de l'Ebre 2027",
-   "url": "https://www.xallengerbtt.net"
+   "url": "https://www.xallengerbtt.net",
+   "circuit": "Xallenger BTT Terres de l'Ebre"
   },
   {
    "source": "LIGA",
@@ -70,7 +74,8 @@
    "discipline": "BTT",
    "kind": "Competición",
    "info": "Xallenger BTT Terres de l'Ebre 2027",
-   "url": "https://www.xallengerbtt.net"
+   "url": "https://www.xallengerbtt.net",
+   "circuit": "Xallenger BTT Terres de l'Ebre"
   },
   {
    "source": "LIGA",
@@ -84,7 +89,8 @@
    "discipline": "BTT",
    "kind": "Competición",
    "info": "Xallenger BTT Terres de l'Ebre 2027",
-   "url": "https://www.xallengerbtt.net"
+   "url": "https://www.xallengerbtt.net",
+   "circuit": "Xallenger BTT Terres de l'Ebre"
   },
   {
    "source": "LIGA",
@@ -98,7 +104,8 @@
    "discipline": "BTT",
    "kind": "Competición",
    "info": "Xallenger BTT Terres de l'Ebre 2027",
-   "url": "https://www.xallengerbtt.net"
+   "url": "https://www.xallengerbtt.net",
+   "circuit": "Xallenger BTT Terres de l'Ebre"
   },
   {
    "source": "LIGA",
@@ -112,7 +119,8 @@
    "discipline": "BTT",
    "kind": "Competición",
    "info": "Xallenger BTT Terres de l'Ebre 2027",
-   "url": "https://www.xallengerbtt.net"
+   "url": "https://www.xallengerbtt.net",
+   "circuit": "Xallenger BTT Terres de l'Ebre"
   },
   {
    "source": "LIGA",
@@ -126,7 +134,8 @@
    "discipline": "BTT",
    "kind": "Competición",
    "info": "Xallenger BTT Terres de l'Ebre 2027",
-   "url": "https://www.xallengerbtt.net"
+   "url": "https://www.xallengerbtt.net",
+   "circuit": "Xallenger BTT Terres de l'Ebre"
   }
  ]
 }

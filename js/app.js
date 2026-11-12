@@ -83,7 +83,7 @@ function circuitNames() {
   const src = S.data && !S.preview ? [...S.data.races, ...S.data.registrations, ...(S.data.circuitPodiums || [])]
     : [...(S.runnerData?.registrations || []), ...(S.runnerData?.my_results || []), ...(S.runnerData?.circuits || []), ...(Array.isArray(S.team?.races) ? S.team.races : [])];
   const seen = new Map();
-  for (const x of src) { const c = String(x.circuit || '').trim(); if (c && !seen.has(normalize(c))) seen.set(normalize(c), c); }
+  for (const x of [...src, ...(S.fed?.races || [])]) { const c = String(x.circuit || '').trim(); if (c && !seen.has(normalize(c))) seen.set(normalize(c), c); }
   return [...seen.values()].sort((a, b) => a.localeCompare(b, 'es'));
 }
 const circuitList = () => `<datalist id="dl-circuit">${circuitNames().map((c) => `<option value="${esc(c)}">`).join('')}</datalist>`;
@@ -957,6 +957,8 @@ const LEAGUE_URLS = [
   'data/ligas.json',
 ];
 const FED_NAMES = { FCC: 'Catalana', FAC: 'Aragonesa', LIGA: 'Liga' };
+/** Si la carrera es de un circuito con general (liga), tipo y nombre del circuito ya puestos. */
+const circuitOf = (r) => (r.circuit ? { race_type: 'circuito', circuit: r.circuit } : {});
 const raceSrc = (r) => (r.source === 'LIGA' ? r.league || 'Liga' : `Federación ${FED_NAMES[r.source] || r.source}`);
 const fedFilter = { source: 'all', modality: 'all', leisure: false };
 
@@ -2165,12 +2167,12 @@ const actions = {
   async 'r-new'() { S.rdraft = null; if (!S.fed) loadFed(); go('#/nueva'); },
   async 'r-new-fed'(el) {
     const r = S.fed.races[Number(el.dataset.i)];
-    S.rdraft = emptyRunnerDraft({ name: r.name, date: r.date, place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY, modality: r.modality });
+    S.rdraft = emptyRunnerDraft({ name: r.name, date: r.date, place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY, modality: r.modality, ...circuitOf(r) });
     go('#/nueva');
   },
   'fill-fed'(el) {
     const r = S.fed.races[Number(el.dataset.i)];
-    const vals = { name: r.name, date: r.date, place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY, modality: r.modality };
+    const vals = { name: r.name, date: r.date, place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY, modality: r.modality, ...circuitOf(r) };
     if (S.rdraft && parseRoute().view === 'nueva') Object.assign(S.rdraft, vals);
     else if (S.draft) Object.assign(S.draft, vals, { notes: S.draft.notes || `${raceSrc(r)}: ${r.url}` });
     render();
@@ -2226,7 +2228,7 @@ const actions = {
   'fed-create'(el) {
     const r = S.fed.races[Number(el.dataset.i)];
     S.prefill = { name: r.name, date: r.date, place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY,
-      modality: r.modality, notes: `${raceSrc(r)}: ${r.url}` };
+      modality: r.modality, ...circuitOf(r), notes: `${raceSrc(r)}: ${r.url}` };
     go('#/inscripciones/nueva');
   },
   async 'insc-menu'() {

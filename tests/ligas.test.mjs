@@ -17,6 +17,7 @@ test('ligas.json: cada carrera tiene los datos que usa la app', () => {
     assert.ok(MODALITIES.includes(r.modality), r.modality);
     assert.ok(PROVINCES.includes(r.province), r.province);
     assert.match(r.url, /^https:\/\//);
+    assert.equal(r.circuit, "Xallenger BTT Terres de l'Ebre"); // mismo nombre en todas las pruebas: el podio de la general se agrupa por él
     const k = r.date + '|' + r.name;
     assert.ok(!seen.has(k), 'repetida: ' + k);
     seen.add(k);
