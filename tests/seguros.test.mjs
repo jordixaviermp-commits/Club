@@ -13,9 +13,11 @@ test('seguros: teléfono, correos y pólizas con formato válido', () => {
   assert.ok(a.poliza && rc.poliza);
   assert.ok(a.plazoDias > 0 && rc.franquicia > 0);
   assert.match(SEGUROS.info, /^https:\/\//);
-  assert.ok(rc.adjuntar.length > 0);
+  assert.ok(rc.polizaMenores.poliza);
+  assert.equal(rc.casos.length, 2);
+  for (const c of rc.casos) assert.ok(c.titulo && c.antes && c.adjuntar.length > 0, c.id);
 });
 
-test('seguros: el PDF de la declaración de responsabilidad civil está en la app', async () => {
-  await access(new URL('../' + SEGUROS.responsabilidadCivil.formulario, import.meta.url));
+test('seguros: los PDF de la declaración y el protocolo de responsabilidad civil están en la app', async () => {
+  for (const f of [SEGUROS.responsabilidadCivil.formulario, SEGUROS.responsabilidadCivil.protocolo]) await access(new URL('../' + f, import.meta.url));
 });

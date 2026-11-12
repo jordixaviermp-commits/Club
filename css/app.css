@@ -593,3 +593,7 @@ header .icon-btn.sos { display: inline-flex; align-items: center; justify-conten
 .btn.big { display: flex; align-items: center; justify-content: center; text-align: center; min-height: 54px; font-size: 1.05rem; text-decoration: none; margin: .5rem 0; }
 .sos-row { display: flex; justify-content: space-between; align-items: center; gap: .8rem; margin: .6rem 0 .2rem; }
 .sos-num { font-size: 1.15rem; letter-spacing: .02em; word-break: break-all; }
+.sos-case { border: 1px solid var(--line); border-radius: 10px; padding: .55rem .8rem; margin: .5rem 0; }
+.sos-case summary { cursor: pointer; min-height: 32px; display: flex; align-items: center; }
+.sos-case[open] { background: var(--accent-2); }
+ol.bullets { list-style: decimal; }

@@ -309,10 +309,15 @@ function viewAccident() {
       <h2>🛡️ Responsabilidad civil</h2>
       <p>Si el daño lo has causado tú a otra persona o a sus cosas.</p>
       <p class="sos-row"><span>Póliza <b>${esc(rc.aseguradora)}</b>:<br><b class="sos-num">${esc(rc.poliza)}</b></span>${copyBtn(rc.poliza, 'Número de póliza copiado')}</p>
-      <p class="hint">Franquicia: <b>${rc.franquicia} €</b> (lo que pagas tú de cada siniestro).</p>
+      <p class="hint">Franquicia: <b>${rc.franquicia} €</b> (lo que pagas tú de cada siniestro). Categorías de Pre-benjamín a Cadete: <b>${esc(rc.polizaMenores.aseguradora)} ${esc(rc.polizaMenores.poliza)}</b>.</p>
+      <p><b>Primero, avisa a la policía</b> para que quede constancia de quién es el responsable. Después, la documentación depende del caso:</p>
+      ${rc.casos.map((c) => `<details class="sos-case"><summary><b>${esc(c.titulo)}</b></summary>
+        <p>${esc(c.antes)}</p>
+        <p class="hint"><b>Entrega junta, a la federación:</b></p>
+        <ol class="bullets">${c.adjuntar.map((x) => `<li>${esc(x)}</li>`).join('')}</ol></details>`).join('')}
       <a class="btn" href="${esc(rc.formulario)}" target="_blank" rel="noopener noreferrer">📄 Declaración de siniestros (PDF para rellenar)</a>
-      <a class="btn primary big" href="mailto:${esc(rc.email)}?subject=${encodeURIComponent('Declaració de sinistre - Responsabilitat civil')}">✉️ Enviarla a ${esc(rc.email)}</a>
-      <p class="hint"><b>Adjunta:</b> ${rc.adjuntar.map(esc).join('; ')}.</p>
+      <a class="btn" href="${esc(rc.protocolo)}" target="_blank" rel="noopener noreferrer">📋 Protocolo de responsabilidad civil (PDF)</a>
+      <a class="btn primary big" href="mailto:${esc(rc.email)}?subject=${encodeURIComponent('Declaració de sinistre - Responsabilitat civil')}">✉️ Enviar a ${esc(rc.email)}</a>
     </section>
     <p class="hint center">Datos de la ${esc(SEGUROS.federacion)}, para licencias de esa federación. Si tu licencia es de otra (por ejemplo, la aragonesa), el seguro es otro: pregunta a la dirección. Toda la información, en <a href="${esc(SEGUROS.info)}" target="_blank" rel="noopener noreferrer">${esc(SEGUROS.info.replace('https://', ''))}</a>.</p>`, { back });
 }
