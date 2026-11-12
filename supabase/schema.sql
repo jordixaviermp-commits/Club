@@ -200,6 +200,15 @@ create table if not exists public.correction_requests (
 create index if not exists correction_requests_runner_idx on public.correction_requests(runner_id);
 alter table public.correction_requests enable row level security;  -- permisos: ver «Seguridad» más abajo
 
+-- Carreras ya publicadas en redes (marca compartida entre la dirección y el encargado de redes).
+-- La clave es «fecha|nombre normalizado»: no cambia cuando una inscripción pasa a resultados.
+create table if not exists public.social_posts (
+  key       text primary key check (length(key) between 5 and 200),
+  posted_at timestamptz not null default now(),
+  posted_by text not null default 'Dirección'
+);
+alter table public.social_posts enable row level security;  -- permisos: ver «Seguridad» más abajo
+
 -- Historial de cambios: quién cambió qué y cuándo (carreras, inscripciones, resultados puestos por los corredores
 -- y pasos automáticos a resultados). Solo lo ve la dirección. Se rellena solo, con disparadores y funciones.
 create table if not exists public.change_log (
@@ -244,16 +253,16 @@ $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['runners','registrations','registration_entries','races','results','settings','runner_documents','circuit_podiums','announcements','change_log','announcement_replies','correction_requests'] loop
+  foreach t in array array['runners','registrations','registration_entries','races','results','settings','runner_documents','circuit_podiums','announcements','change_log','announcement_replies','correction_requests','social_posts'] loop
     execute format('drop policy if exists admin_all on public.%I', t);
     execute format('create policy admin_all on public.%I for all to authenticated using (public.is_admin()) with check (public.is_admin())', t);
   end loop;
 end $$;
 
 revoke all on public.runners, public.registrations, public.registration_entries,
-              public.races, public.results, public.admins, public.settings, public.runner_documents, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests from anon, public;
+              public.races, public.results, public.admins, public.settings, public.runner_documents, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts from anon, public;
 grant select, insert, update, delete on public.runners, public.registrations,
-              public.registration_entries, public.races, public.results, public.settings, public.runner_documents, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests to authenticated;
+              public.registration_entries, public.races, public.results, public.settings, public.runner_documents, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts to authenticated;
 revoke all on public.admins from authenticated;
 
 -- ---------- Funciones de dirección (respetan la seguridad de arriba) ---
@@ -995,6 +1004,60 @@ begin
     format('%s la corrección de %s en %s: %sº → %sº', case when p_accept then 'aceptó' else 'rechazó' end, v_name, c.race_name, c.old_position, c.new_position));
 end $$;
 
+-- Encargado de redes: entra con un enlace propio (su código está en settings, clave «social») y solo ve
+-- las carreras de los próximos días, los resultados recientes y qué está ya publicado.
+create or replace function public.social_check(p_code text)
+returns void language plpgsql stable security definer set search_path = public as $$
+begin
+  if p_code is null or length(p_code) < 10
+     or not exists (select 1 from settings where key = 'social' and value->>'code' = p_code) then
+    raise exception 'enlace_no_valido' using errcode = '28000';
+  end if;
+end $$;
+
+create or replace function public.social_view(p_code text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+begin
+  perform public.social_check(p_code);
+  return jsonb_build_object(
+    'today', current_date,
+    'upcoming', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'name', g.name, 'date', g.date, 'end_date', g.end_date, 'place', g.place, 'province', g.province, 'country', g.country,
+               'modality', g.modality, 'subtype', g.subtype, 'km', g.km, 'race_type', g.race_type, 'circuit', g.circuit,
+               'people', (select coalesce(jsonb_agg(rn.name order by rn.name), '[]'::jsonb)
+                            from registration_entries e join runners rn on rn.id = e.runner_id where e.registration_id = g.id))
+             order by g.date, g.name)
+        from registrations g
+       where not g.suspended and coalesce(g.end_date, g.date) >= current_date - 1 and g.date <= current_date + 45
+         and exists (select 1 from registration_entries e where e.registration_id = g.id)), '[]'::jsonb),
+    'recent', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'name', x.name, 'date', x.date, 'end_date', x.end_date, 'place', x.place, 'province', x.province, 'country', x.country,
+               'modality', x.modality, 'subtype', x.subtype, 'km', x.km, 'race_type', x.race_type, 'circuit', x.circuit,
+               'participants', (select count(*) from results s where s.race_id = x.id),
+               'podium', (select coalesce(jsonb_agg(jsonb_build_object('position', s.position, 'name', s.runner_name, 'category', s.category)
+                                                    order by s.position), '[]'::jsonb)
+                            from results s where s.race_id = x.id and s.position between 1 and 3))
+             order by x.date desc)
+        from races x
+       where x.date >= current_date - 21 and x.date <= current_date
+         and exists (select 1 from results s where s.race_id = x.id)), '[]'::jsonb),
+    'posted', coalesce((select jsonb_agg(key) from social_posts where posted_at > now() - interval '120 days'), '[]'::jsonb));
+end $$;
+
+create or replace function public.social_mark(p_code text, p_key text, p_posted boolean)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  perform public.social_check(p_code);
+  if p_key is null or length(p_key) not between 5 and 200 then raise exception 'tipo_no_valido'; end if;
+  if p_posted then
+    insert into social_posts (key, posted_by) values (p_key, 'Redes') on conflict (key) do nothing;
+  else
+    delete from social_posts where key = p_key;
+  end if;
+end $$;
+
 create or replace function public.runner_leave(p_code text, p_registration uuid)
 returns void language plpgsql security definer set search_path = public as $$
 declare v_runner uuid;
@@ -1027,7 +1090,8 @@ grant execute on function public.runner_view(text), public.runner_join(text, uui
                           public.runner_set_race_type(text, uuid, text, text), public.runner_propose_circuit(text, text, int, int, text),
                           public.runner_cancel_circuit(text, uuid), public.runner_news(text), public.runner_set_race_details(text, uuid, text, numeric), public.runner_complete_race(text, text, uuid, jsonb), public.auto_promote_registrations(),
                           public.runner_reply_news(text, uuid, text, int), public.runner_request_correction(text, text, uuid, int, text, text, text),
-                          public.runner_corrections(text), public.runner_cancel_correction(text, uuid), public.ping() to anon, authenticated;
+                          public.runner_corrections(text), public.runner_cancel_correction(text, uuid),
+                          public.social_view(text), public.social_mark(text, text, boolean), public.ping() to anon, authenticated;
 grant execute on function public.is_admin(), public.require_admin(),
                           public.save_registration(jsonb, jsonb), public.save_race(jsonb, jsonb),
                           public.promote_registration(uuid), public.delete_runner(uuid, boolean),
