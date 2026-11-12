@@ -234,7 +234,7 @@ function render() {
     html = ({
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
       carreras: S.draft ? viewRaceEdit : viewRaces,
-      resumen: viewSummary, corredores: viewRunners, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, docs: () => viewDocs(parseRoute().id),
+      resumen: viewSummary, corredores: viewRunners, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, docs: () => viewDocs(parseRoute().id),
       vista: () => (S.preview && S.runnerData ? runnerScreen(parseRoute().id || '') : viewRunners()),
       equipo: () => (S.preview ? viewTeam() : viewSummary()),
     }[view] || viewRegistrations)();
@@ -492,8 +492,8 @@ function myRacesCard(d) {
   if (!results) return ''; // base de datos aún sin actualizar
   const today = d.today || todayISO();
   const mineReg = d.registrations.filter((g) => g.entries.some((e) => e.runner_id === d.me.id));
-  const pending = mineReg.filter((g) => g.date < today);
-  const upcoming = mineReg.filter((g) => g.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+  const pending = mineReg.filter((g) => g.date < today && !g.suspended);
+  const upcoming = mineReg.filter((g) => g.date >= today || g.suspended).sort((a, b) => a.date.localeCompare(b.date));
   const years = [...new Set([new Date().getFullYear(), ...results.map((r) => yearOf(r.date))])].sort((a, b) => b - a);
   if (!years.includes(S.myYear)) S.myYear = years[0];
   const list = results.filter((r) => yearOf(r.date) === S.myYear);
@@ -546,8 +546,8 @@ function runnerBonusCard(d) {
   if (!b) return '';
   const cfg = bonusConfigFor(b.config ? { [b.year]: b.config } : {}, b.year);
   const c = b.contract || (b.nuevo ? 'nuevo' : null);
-  const st = bonusStatus(b.done, cfg, c, b.extra || 0);
-  const proj = bonusStatus(b.done + (b.planned || 0), cfg, c, b.extra || 0);
+  const st = bonusStatus(b.done, cfg, c, b.extra || 0, b.suspended || 0);
+  const proj = bonusStatus(b.done + (b.planned || 0), cfg, c, b.extra || 0, b.suspended || 0);
   return `<section class="card bonus-card"><h2>Tu bono ${b.year}</h2>
     ${penaltyAlert(st, cfg, b.year)}
     ${bonusBar(st, cfg, b.planned || 0)}
@@ -610,7 +610,8 @@ function viewRunnerHome() {
       <div class="race-head"><div><h3>${esc(g.name)}</h3>
         <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>
         ${modTag(g.modality)}</div>${typeTag(g)}
-      ${open ? '' : `<p class="state-tag">🏁 Ya disputada · pendiente de resultados</p>
+      ${g.suspended ? '<p class="state-tag">⛔ Suspendida: cuenta para el mínimo de carreras, no para el bono</p>' : ''}
+      ${open || g.suspended ? '' : `<p class="state-tag">🏁 Ya disputada · pendiente de resultados</p>
         ${mine && !S.preview ? (g.my_result ? `<p class="mine-created">📝 Tu resultado: ${g.my_result.position}º (enviado)</p>`
           : `<p class="row"><a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>
              <button class="btn ghost small" data-act="r-leave" data-id="${g.id}">No fui: borrarme</button></p>`) : ''}
@@ -621,7 +622,7 @@ function viewRunnerHome() {
       <p class="count">👥 ${g.entries.length} del club</p>
       ${g.entries.length ? `<ul class="people">${g.entries.map((e) =>
         `<li class="${e.runner_id === me.id ? 'me' : ''}">${esc(e.name)}${e.category ? ` <small>${esc(e.category)}</small>` : ''}</li>`).join('')}</ul>` : ''}
-      ${!open ? '' : mine
+      ${!open || g.suspended ? '' : mine
         ? `<div class="row joined"><span>✓ Estás inscrito${mine.category ? ' en ' + esc(mine.category) : ''}</span>
            <button class="btn ghost small" data-act="r-leave" data-id="${g.id}">Borrarme</button></div>`
         : `<div class="row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, me.category, 'Categoría')}
@@ -699,7 +700,7 @@ function viewRegistrations() {
   const card = (g) => `<a class="card race link-card ${g.date < today ? 'past-reg ' : ''}${modClass(g.modality)}" href="#/inscripciones/${g.id}">
       <div class="race-head"><div><h3>${esc(g.name)}</h3>
       <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality)}</div>${typeTag(g)}
-      ${g.date < today ? `<p class="state-tag">🏁 Ya disputada${g.entries.some((e) => e.self_position) ? ` · 📝 ${g.entries.filter((e) => e.self_position).length} de ${g.entries.length} han puesto su resultado` : ''}</p>` : ''}
+      ${g.suspended ? '<p class="state-tag">⛔ Suspendida: cuenta para el mínimo, no para el bono</p>' : g.date < today ? `<p class="state-tag">🏁 Ya disputada${g.entries.some((e) => e.self_position) ? ` · 📝 ${g.entries.filter((e) => e.self_position).length} de ${g.entries.length} han puesto su resultado` : ''}</p>` : ''}
       <p class="count">👥 ${g.entries.length} del club${g.entries.length ? ': ' +
         esc(g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p>
       ${g.created_by ? `<p class="count">Añadida por ${esc(runnerById(g.created_by)?.name || 'un corredor')}</p>` : ''}</a>`;
@@ -856,6 +857,8 @@ function viewRegistrationEdit() {
       ${raceFields(d)}
       ${d.id ? '' : `<div id="dup-admin">${dupSuggestions(d.name, S.data.registrations, false)}</div>`}
       <label>Notas<textarea data-f="notes" rows="2">${esc(d.notes || '')}</textarea></label>
+      <label class="check"><input type="checkbox" data-act-change="suspended" ${d.suspended ? 'checked' : ''}> ⛔ Carrera suspendida</label>
+      ${d.suspended ? '<p class="hint">Cláusula 6: a los inscritos les cuenta para el mínimo de participaciones, pero <b>no para el bono</b>. No se pasa a resultados.</p>' : ''}
       <h3>Inscritos (${d.people.length})</h3>
       <ul class="edit-list">${d.people.map((p, i) => `<li>
         <span class="name">${esc(p.runner_name)}${p.self_position ? ` <small class="self-res">📝 puso ${p.self_position}º</small>` : ''}</span>
@@ -865,7 +868,7 @@ function viewRegistrationEdit() {
       <button class="btn primary">Guardar</button>
     </form>
     ${d.id ? `<div class="stack">
-      <button class="btn" data-act="promote">Pasar a resultados</button>
+      ${d.suspended ? '' : '<button class="btn" data-act="promote">Pasar a resultados</button>'}
       <button class="btn danger ghost" data-act="del-reg">Borrar inscripción</button></div>` : ''}`,
   { back: '#/inscripciones' });
 }
@@ -887,6 +890,32 @@ function viewNews() {
         <p class="muted">${formatDate(String(n.created_at).slice(0, 10))}${n.expires_at ? ` · hasta el ${formatDate(n.expires_at, false)}` : ''}</p>
         ${n.body ? `<p class="news-body">${newsText(n.body)}</p>` : ''}</article>`).join('')
       : '<p class="empty">No hay noticias por ahora. Cuando el club tenga algo que contaros (quedadas, pedidos de ropa…), lo verás aquí.</p>'}`, { rtab: 'noticias' });
+}
+
+/** Dirección: carreras de los próximos días con quién va, para avisar al encargado de redes (cláusula 8). */
+function weekRaces(days) {
+  const from = todayISO(), to = (() => { const d = new Date(from + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); })();
+  return S.data.registrations.filter((g) => !g.suspended && g.date >= from && g.date <= to && g.entries.length)
+    .sort((a, b) => a.date.localeCompare(b.date) || byName(a, b));
+}
+function weekText(days) {
+  const list = weekRaces(days);
+  if (!list.length) return '';
+  const who = (g) => g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ');
+  return `🚴 CC Monzón · carreras de los próximos ${days} días\n\n${list.map((g) => `📅 ${when(g)} · ${g.name}\n${place(g) || g.modality ? `📍 ${[place(g), g.modality].filter(Boolean).join(' · ')}\n` : ''}👥 ${who(g)}`).join('\n\n')}\n\n📸 Crónica y foto con la equipación, en las 48 h siguientes a la prueba.`;
+}
+function viewWeek() {
+  const days = S.weekDays || 14;
+  const list = weekRaces(days);
+  return frame('Próximas carreras', `
+    <p class="hint">Para avisar al encargado de redes con una semana de antelación (cláusula 8 del contrato). Salen las carreras con algún inscrito, sin las suspendidas.</p>
+    <div class="years">${[7, 14, 30].map((n) => `<button class="chip${n === days ? ' on' : ''}" data-act="week-days" data-n="${n}">${n} días</button>`).join('')}</div>
+    ${list.length ? `<div class="row"><button class="btn primary" data-act="week-copy">📋 Copiar texto</button><button class="btn" data-act="week-wa">WhatsApp</button></div>
+      ${list.map((g) => `<article class="card race ${modClass(g.modality)}"><div class="race-head"><div><h3>${esc(g.name)}</h3>
+        <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality)}</div>
+        <p class="count">👥 ${esc(g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', '))}</p></article>`).join('')}
+      <details class="card"><summary><b>Ver el texto que se copia</b></summary><pre class="week-pre">${esc(weekText(days))}</pre></details>`
+      : `<p class="empty">No hay carreras con inscritos en los próximos ${days} días.</p>`}`, { back: '#/inscripciones' });
 }
 
 /** Dirección: escribir las noticias que verán los corredores. */
@@ -963,6 +992,7 @@ function viewAlerts() {
   const none = !a.circuits.length && !a.noContract.length;
   return frame('Avisos', `
     <a class="btn primary block" href="#/noticias">📣 Noticias para los corredores${S.data.announcements ? ` (${S.data.announcements.length})` : ''}</a>
+    <a class="btn block" href="#/semana">📅 Próximas carreras (para redes)</a>
     ${none ? '<p class="card pen ok">✅ No tienes nada pendiente.</p>' : ''}
     ${a.circuits.length ? `<h2 class="section">🏆 Podios de circuito por confirmar (${a.circuits.length})</h2>
       <p class="hint">Un corredor dice que ha hecho podio en la general final de un circuito. Si lo confirmas, se le suman +${per} carreras para el bono.</p>
@@ -1248,9 +1278,15 @@ function penaltyAlert(st, cfg, year, { who = 'Te' } = {}) {
     <br><small>Quedan ${daysLeft} días de temporada.</small>`}</div>`;
 }
 
+/** Saldo con el corredor: positivo = el club le debe; negativo = debe al club. */
+const balanceText = (n) => (n > 0 ? `el club debe ${euros(n)}` : n < 0 ? `a favor del club ${euros(-n)}` : 'sin saldo');
+const balanceLine = (r) => { const n = r.amount - r.penalty;
+  return `<p class="saldo ${n > 0 ? 'pos' : n < 0 ? 'neg' : ''}">💶 Saldo: <b>${n > 0 ? `+${euros(n)}` : n < 0 ? `−${euros(-n)}` : euros(0)}</b> <span class="muted">(${balanceText(n)})</span></p>`; };
+
 function bonusText(st, who = 'Llevas') {
   const parts = [`${who} <b>${st.count}</b> carrera${st.count === 1 ? '' : 's'}`];
   if (st.extra) parts.push(`<span class="extra-chip">🏆 +${st.extra} por podio de circuito = <b>${st.bonusCount}</b> para el bono</span>`);
+  if (st.suspended) parts.push(`<span class="extra-chip">⛔ +${st.suspended} suspendida${st.suspended === 1 ? '' : 's'}: cuenta${st.suspended === 1 ? '' : 'n'} para el mínimo, no para el bono</span>`);
   if (st.tier) parts.push(`tramo de <b>${euros(st.amount)}</b>`);
   if (!st.reachesMinimum && st.penalty) parts.push(`<span class="bad">faltan ${st.missingToMinimum} para el mínimo (${st.minimum}) · penalización ${euros(st.penalty)}</span>`);
   else if (!st.reachesMinimum) parts.push(st.next ? `faltan ${st.missingToNext} para ${euros(st.next.amount)}` : `faltan ${st.missingToMinimum} para el mínimo (${st.minimum})`);
@@ -1278,7 +1314,8 @@ function viewBonus() {
     <div class="pen bad-box">⚠️ <b>Mínimo del contrato: ${cfg.minimum} carreras</b> antes del 31 de diciembre.
       Penalización si no se llega: ${penaltiesLine(cfg)}.</div>
     <p class="hint">Bonos a partir del mínimo — ${tiersByContractLine(cfg)}</p>
-    <p class="hint">🏆 Un podio en la general final de un circuito suma +${cfg.circuitExtra ?? 4} carreras para el bono, pero no cuenta para el mínimo de ${cfg.minimum}.</p>
+    <p class="hint">🏆 Un podio en la general final de un circuito suma +${cfg.circuitExtra ?? 4} carreras para el bono, pero no cuenta para el mínimo de ${cfg.minimum}. Una carrera suspendida cuenta para el mínimo, no para el bono.</p>
+    <p class="hint">💶 <b>Saldo</b> = bono − penalización (si la temporada acabara hoy). El contrato permite descontar la penalización de lo que el club deba al corredor. Saldo total: <b>${balanceText(totalPay - totalPen)}</b>.</p>
     <p class="hint">Cuentan las carreras con resultados de ${S.year} y las ya disputadas en las que el corredor puso su puesto, aunque aún no las hayas pasado a resultados; una carrera de varios días cuenta un día cada uno. La parte clara de la barra suma las inscripciones de ${S.year} pendientes.</p>
     <ul class="bonus-list">${rows.map((r) => `<li>
       <div class="bonus-head"><span class="name">${esc(r.runner.name)}</span>
@@ -1286,6 +1323,7 @@ function viewBonus() {
       ${bonusBar(r, cfg, r.planned)}
       ${!r.reachesMinimum && r.penalty ? `<p class="pen-chip">⚠️ Penalización ${euros(r.penalty)} si no llega a ${r.minimum}</p>` : r.reachesMinimum ? '<p class="pen-chip ok">✅ Mínimo cumplido</p>' : ''}
       <p class="bonus-text">${bonusText(r, 'Lleva')}${r.planned ? ` · <span class="muted">con sus ${r.planned} inscrita${r.planned === 1 ? '' : 's'}: ${r.projected.bonusCount}</span>` : ''}</p>
+      ${balanceLine(r)}
       ${r.circuits.length ? `<p class="hint">${r.circuits.map((c) => `${medal(c.position)} ${esc(c.circuit)}`).join(' · ')}</p>` : ''}
     </li>`).join('')}</ul>
     ${rows.length ? '' : '<p class="empty">No hay corredores.</p>'}
@@ -1363,7 +1401,7 @@ function adminRunnerRaces(r, year) {
   const races = S.data.races.filter((x) => yearOf(x.date) === year && x.results.some((y) => y.runner_id === r.id))
     .sort((a, b) => b.date.localeCompare(a.date));
   const regs = S.data.registrations.filter((g) => g.entries.some((e) => e.runner_id === r.id)).sort((a, b) => a.date.localeCompare(b.date));
-  const pending = regs.filter((g) => g.date < today), upcoming = regs.filter((g) => g.date >= today);
+  const pending = regs.filter((g) => g.date < today && !g.suspended), upcoming = regs.filter((g) => g.date >= today || g.suspended);
   const days = races.reduce((n, x) => n + numDays(x.date, x.end_date), 0);
   const key = 'rr-' + r.id;
   const res = (x) => { const y = x.results.find((z) => z.runner_id === r.id);
@@ -1528,7 +1566,8 @@ function draftPayload() {
   const base = { id: d.id, name: cleanName(d.name), date: d.date, place: cleanName(d.place), province: cleanName(d.province),
     country: cleanName(d.country), modality: d.modality, notes: String(d.notes || '').trim(),
     end_date: d.multi && d.end_date ? d.end_date : null,
-    race_type: d.race_type || 'suelta', circuit: d.race_type === 'circuito' ? cleanName(d.circuit) : null };
+    race_type: d.race_type || 'suelta', circuit: d.race_type === 'circuito' ? cleanName(d.circuit) : null,
+    suspended: d.kind === 'reg' && !!d.suspended };
   if (!base.name) throw new Error('Falta el nombre de la carrera.');
   if (base.race_type === 'circuito' && !base.circuit) throw new Error('Falta el nombre del circuito.');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(base.date || '')) throw new Error('Falta la fecha.');
@@ -1643,9 +1682,11 @@ const actions = {
   async 'insc-menu'() {
     const c = await choose('Más opciones', '', [
       { label: 'Carreras de las federaciones', value: 'fed', kind: 'primary' },
+      { label: '📅 Próximas carreras (para redes)', value: 'week' },
       ...FED_CALENDARS.map((f, i) => ({ label: f.label + ' ↗', value: 'link' + i })),
     ]);
     if (c === 'fed') go('#/federaciones');
+    else if (c === 'week') go('#/semana');
     else if (c?.startsWith('link')) window.open(FED_CALENDARS[Number(c.slice(4))].url, '_blank', 'noopener,noreferrer');
   },
   'reg-view'() {
@@ -1746,12 +1787,18 @@ const actions = {
   'bonus-csv'() {
     const cfg = bonusCfg(S.year);
     const rows = yearBonuses(S.year, S.data.races, S.data.registrations, S.data.runners, cfg, S.data.circuitPodiums || []).map((r) => [
-      r.runner.name, contractLabel(r.contract), r.count, r.extra, r.bonusCount, r.amount, r.reachesMinimum ? 'Sí' : 'No', r.penalty,
+      r.runner.name, contractLabel(r.contract), r.count, r.extra, r.suspended, r.bonusCount, r.amount, r.reachesMinimum ? 'Sí' : 'No', r.penalty, r.amount - r.penalty,
       r.next ? r.next.races : '', r.next ? r.missingToNext : '', r.planned, r.projected.count]);
-    download(`monzon-bonos-${S.year}.csv`, toCsv(rows, ['Corredor', 'Contrato', 'Carreras', 'Extra por circuitos', 'Total para el bono', 'Bono actual (€)', 'Llega al mínimo',
-      'Penalización (€)', 'Siguiente tramo', 'Faltan', 'Inscritas pendientes', 'Previsión']), 'text/csv;charset=utf-8');
+    download(`monzon-bonos-${S.year}.csv`, toCsv(rows, ['Corredor', 'Contrato', 'Carreras', 'Extra por circuitos', 'Suspendidas (solo mínimo)', 'Total para el bono', 'Bono actual (€)', 'Llega al mínimo',
+      'Penalización (€)', 'Saldo (€, + el club debe)', 'Siguiente tramo', 'Faltan', 'Inscritas pendientes', 'Previsión']), 'text/csv;charset=utf-8');
   },
   'sum-mod'(el) { S.sumMod = el.dataset.m; render(); },
+  'week-days'(el) { S.weekDays = Number(el.dataset.n) || 14; render(); },
+  async 'week-copy'() {
+    const t = weekText(S.weekDays || 14);
+    try { await navigator.clipboard.writeText(t); toast('Texto copiado: pégalo en WhatsApp'); } catch { prompt('Copia el texto:', t); }
+  },
+  'week-wa'() { window.open('https://wa.me/?text=' + encodeURIComponent(weekText(S.weekDays || 14)), '_blank'); },
   'ann-edit'(el) { S.annEdit = el.dataset.id; render(); window.scrollTo(0, 0); },
   'ann-cancel'() { S.annEdit = null; render(); },
   async 'ann-del'(el) {
@@ -2057,6 +2104,7 @@ $app.addEventListener('change', async (ev) => {
   if ('rfMulti' in t.dataset && S.rdraft) {
     S.rdraft.multi = t.checked; if (!t.checked) S.rdraft.end_date = ''; render(); return;
   }
+  if (t.dataset.actChange === 'suspended' && S.draft) { S.draft.suspended = t.checked; render(); return; }
   if (t.dataset.actChange === 'multi') {
     S.draft.multi = t.checked;
     if (!t.checked) S.draft.end_date = '';

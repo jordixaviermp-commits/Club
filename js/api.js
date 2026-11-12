@@ -12,6 +12,7 @@ export function friendlyError(e) {
   if (/enlace_no_valido/.test(msg)) return 'Este enlace ya no es válido. Pide uno nuevo a la dirección del club.';
   if (/resultado_ya_puesto/.test(msg)) return 'Ya pusiste tu resultado en esta carrera. Si hay que corregirlo, pídeselo a la dirección del club.';
   if (/puesto_no_valido/.test(msg)) return 'Pon un puesto válido (1, 2, 3…).';
+  if (/carrera_suspendida/.test(msg)) return 'Esta carrera se ha suspendido: no se puede poner resultado ni pasarla a resultados.';
   if (/otros_apuntados/.test(msg)) return 'No puedes borrarla: hay más compañeros apuntados. Pídeselo a la dirección del club.';
   if (/no_es_tuya/.test(msg)) return 'Solo puedes cambiar las carreras que has añadido tú.';
   if (/ya_existe/.test(msg)) return 'Ya existe: hay otra carrera con ese nombre ese día, o ya comunicaste ese circuito.';
@@ -97,6 +98,7 @@ export function supabaseApi(url, key) {
     async saveRegistration(reg, entries) {
       const id = ok(await sb.rpc('save_registration', { p_reg: reg, p_entries: entries }));
       await sb.from('registrations').update(typeFields(reg)).eq('id', id);
+      await sb.from('registrations').update({ suspended: !!reg.suspended }).eq('id', id); // se ignora si aún falta su SQL
       return id;
     },
     async deleteRegistration(id) { ok(await sb.from('registrations').delete().eq('id', id)); },
@@ -197,6 +199,7 @@ export function demoApi(storage = globalThis.localStorage) {
     name: String(o.name || '').trim(), date: o.date, end_date: o.end_date && o.end_date > o.date ? o.end_date : null, place: o.place?.trim() || null, province: o.province?.trim() || null,
     country: o.country?.trim() || null, modality: o.modality || 'Carretera', notes: o.notes?.trim() || null,
     ...(o.race_type !== undefined ? typeFields(o) : {}),
+    ...(o.suspended !== undefined ? { suspended: !!o.suspended } : {}),
     ...(o.stages !== undefined ? { stages: o.stages?.length ? o.stages : null } : {}) });
   const byCode = (code) => {
     const r = load().runners.find((x) => x.code === code);
@@ -267,6 +270,7 @@ export function demoApi(storage = globalThis.localStorage) {
     async promoteRegistration(id) {
       requireAdmin(); const d = load();
       const g = d.registrations.find((x) => x.id === id);
+      if (g?.suspended) throw new Error('carrera_suspendida');
       const race = { ...g, id: uuid() };
       d.races.push(race);
       for (const e of d.registration_entries.filter((x) => x.registration_id === id)) {
@@ -350,9 +354,11 @@ export function demoApi(storage = globalThis.localStorage) {
             done: d.results.filter((x) => x.runner_id === me.id).map((x) => d.races.find((r) => r.id === x.race_id))
               .filter((r) => r && yearOf(r.date) === year).reduce((n, r) => n + days(r), 0)
               + d.registration_entries.filter((e) => e.runner_id === me.id && e.self_position).map((e) => d.registrations.find((g) => g.id === e.registration_id))
-                .filter((g) => g && yearOf(g.date) === year).reduce((n, g) => n + days(g), 0),
+                .filter((g) => g && !g.suspended && yearOf(g.date) === year).reduce((n, g) => n + days(g), 0),
             planned: d.registration_entries.filter((e) => e.runner_id === me.id && !e.self_position).map((e) => d.registrations.find((g) => g.id === e.registration_id))
-              .filter((g) => g && yearOf(g.date) === year).reduce((n, g) => n + days(g), 0),
+              .filter((g) => g && !g.suspended && yearOf(g.date) === year).reduce((n, g) => n + days(g), 0),
+            suspended: d.registration_entries.filter((e) => e.runner_id === me.id).map((e) => d.registrations.find((g) => g.id === e.registration_id))
+              .filter((g) => g && g.suspended && yearOf(g.date) === year).reduce((n, g) => n + days(g), 0),
           };
         })(),
         registrations: [...d.registrations].sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name)).map((g) => ({
@@ -373,6 +379,7 @@ export function demoApi(storage = globalThis.localStorage) {
       if (kind === 'reg') {
         const e = d.registration_entries.find((x) => x.registration_id === id && x.runner_id === me.id);
         const g = d.registrations.find((x) => x.id === id);
+        if (g?.suspended) throw new Error('carrera_suspendida');
         if (!e || !g || g.date > todayISO()) throw new Error('no_es_tuya');
         if (e.self_position) throw new Error('resultado_ya_puesto');
         Object.assign(e, { self_position: position, self_podium_type: pod, self_reported_at: new Date().toISOString() });

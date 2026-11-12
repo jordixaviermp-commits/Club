@@ -514,8 +514,10 @@ export const bonusRacesOf = (race) => numDays(race.date, race.end_date);
  * Situación de un corredor: { count, minimum, reachesMinimum, penalty, amount, tier, next, missingToNext, missingToMinimum }.
  * `amount` es lo que cobra con lo hecho; `penalty`, lo que pagaría si acabara la temporada así.
  */
-export function bonusStatus(count, cfg, contract, extra = 0) {
+export function bonusStatus(count, cfg, contract, extra = 0, suspended = 0) {
   // `extra`: carreras adicionales por podios de circuito. Suben el tramo del bono, pero NO cuentan para el mínimo.
+  // `suspended`: carreras suspendidas en las que estaba apuntado (cláusula 6): cuentan para el mínimo, NO para el bono.
+  const susp = Number(suspended) || 0;
   const raced = count;
   count = raced + (Number(extra) || 0);
   // `contract`: id de CONTRACTS (o true/false de versiones antiguas: true = nuevo)
@@ -527,14 +529,15 @@ export function bonusStatus(count, cfg, contract, extra = 0) {
   const tier = reached.at(-1) || null;
   const next = tiers.find((t) => count < t.races) || null;
   const minimum = Number(cfg.minimum) || 0;
-  const reachesMinimum = raced >= minimum;
+  const minCount = raced + susp;
+  const reachesMinimum = minCount >= minimum;
   return {
-    count: raced, extra: count - raced, bonusCount: count, minimum, reachesMinimum,
+    count: raced, extra: count - raced, suspended: susp, bonusCount: count, minimum, reachesMinimum,
     penalty: reachesMinimum ? 0 : Number(pen[penaltyKey] ?? pen.renovado) || 0,
     amount: tier ? tier.amount : 0,
     tier, next,
     missingToNext: next ? next.races - count : 0,
-    missingToMinimum: reachesMinimum ? 0 : minimum - raced,
+    missingToMinimum: reachesMinimum ? 0 : minimum - minCount,
     isNew: c === 'nuevo', contract: c, tiers,
   };
 }
@@ -544,13 +547,13 @@ export function yearBonuses(year, races, registrations, runners, cfg, circuitPod
   const per = Number(cfg.circuitExtra ?? DEFAULT_BONUS.circuitExtra) || 0;
   const circuits = new Map();
   for (const c of circuitPodiums) if (c.year === year && c.status === 'confirmado') circuits.set(c.runner_id, [...(circuits.get(c.runner_id) || []), c]);
-  const done = new Map(), planned = new Map();
+  const done = new Map(), planned = new Map(), susp = new Map();
   for (const r of races) if (yearOf(r.date) === year) for (const x of r.results || []) {
     if (x.runner_id) done.set(x.runner_id, (done.get(x.runner_id) || 0) + bonusRacesOf(r));
   }
   // inscripción ya disputada con el puesto puesto por el corredor: cuenta como hecha (aunque no esté en resultados)
   for (const g of registrations) if (yearOf(g.date) === year) for (const e of g.entries || []) {
-    const m = e.self_position ? done : planned;
+    const m = g.suspended ? susp : e.self_position ? done : planned;
     m.set(e.runner_id, (m.get(e.runner_id) || 0) + bonusRacesOf(g));
   }
   const nuevos = new Set(cfg.nuevos || []); // lista antigua: solo si el corredor no tiene contrato indicado
@@ -560,7 +563,8 @@ export function yearBonuses(year, races, registrations, runners, cfg, circuitPod
     const c = rn.contract || (nuevos.has(rn.id) ? 'nuevo' : null);
     const mine = circuits.get(rn.id) || [];
     const extra = mine.length * per;
-    return { runner: rn, planned: plan, circuits: mine, ...bonusStatus(count, cfg, c, extra), projected: bonusStatus(count + plan, cfg, c, extra) };
+    const sp = susp.get(rn.id) || 0;
+    return { runner: rn, planned: plan, circuits: mine, ...bonusStatus(count, cfg, c, extra, sp), projected: bonusStatus(count + plan, cfg, c, extra, sp) };
   }).sort((a, b) => b.count - a.count || a.runner.name.localeCompare(b.runner.name, 'es'));
 }
 

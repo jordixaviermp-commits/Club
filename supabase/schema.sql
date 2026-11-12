@@ -116,6 +116,9 @@ alter table public.races add constraint races_stages_check check (stages is null
 alter table public.results drop constraint if exists results_stage_positions_check;
 alter table public.results add constraint results_stage_positions_check check (stage_positions is null or jsonb_typeof(stage_positions) = 'array');
 
+-- Carrera suspendida (cláusula SEXTA del contrato): cuenta para el mínimo de participaciones, pero no para el bono.
+alter table public.registrations add column if not exists suspended boolean not null default false;
+
 -- Tipo de carrera: suelta, campeonato o puntuable de un circuito (Copa, Open, Critérium…; `circuit` = su nombre).
 alter table public.registrations add column if not exists race_type text not null default 'suelta';
 alter table public.registrations add column if not exists circuit text;
@@ -281,6 +284,7 @@ returns uuid language plpgsql set search_path = public as $$
 declare v_race uuid;
 begin
   perform public.require_admin();
+  if exists (select 1 from registrations where id = p_id and suspended) then raise exception 'carrera_suspendida'; end if;
   insert into races (name, date, end_date, place, province, country, modality, notes, race_type, circuit)
   select name, date, end_date, place, province, country, modality, notes, race_type, circuit from registrations where id = p_id
   returning id into v_race;
@@ -356,10 +360,14 @@ begin
                 where x.runner_id = me.id and extract(year from r.date) = v_year)
             + (select coalesce(sum(coalesce(g.end_date - g.date, 0) + 1), 0)
                  from registration_entries e join registrations g on g.id = e.registration_id
-                where e.runner_id = me.id and e.self_position is not null and extract(year from g.date) = v_year),
+                where e.runner_id = me.id and e.self_position is not null and not g.suspended and extract(year from g.date) = v_year),
       'planned', (select coalesce(sum(coalesce(g.end_date - g.date, 0) + 1), 0)
                     from registration_entries e join registrations g on g.id = e.registration_id
-                   where e.runner_id = me.id and e.self_position is null and extract(year from g.date) = v_year),
+                   where e.runner_id = me.id and e.self_position is null and not g.suspended and extract(year from g.date) = v_year),
+      -- carreras suspendidas en las que estaba apuntado: cuentan para el mínimo, no para el bono
+      'suspended', (select coalesce(sum(coalesce(g.end_date - g.date, 0) + 1), 0)
+                      from registration_entries e join registrations g on g.id = e.registration_id
+                     where e.runner_id = me.id and g.suspended and extract(year from g.date) = v_year),
       -- carreras extra por podios confirmados en la general final de un circuito (solo para el bono)
       'extra', (select count(*) from circuit_podiums c where c.runner_id = me.id and c.year = v_year and c.status = 'confirmado')
                * coalesce((v_cfg ->> 'circuitExtra')::int, 4),
@@ -383,7 +391,7 @@ begin
     'registrations', coalesce((
       select jsonb_agg(jsonb_build_object(
                'id', g.id, 'name', g.name, 'date', g.date, 'end_date', g.end_date, 'place', g.place,
-               'mine_created', g.created_by = me.id, 'race_type', g.race_type, 'circuit', g.circuit,
+               'mine_created', g.created_by = me.id, 'race_type', g.race_type, 'circuit', g.circuit, 'suspended', g.suspended,
                'my_result', (select jsonb_build_object('position', e.self_position, 'podium_type', e.self_podium_type)
                                from registration_entries e where e.registration_id = g.id and e.runner_id = me.id and e.self_position is not null),
                'province', g.province, 'country', g.country, 'modality', g.modality, 'notes', g.notes,
@@ -537,6 +545,7 @@ begin
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
   if p_position is null or p_position < 1 or p_position > 999 then raise exception 'puesto_no_valido'; end if;
   if p_kind = 'reg' then
+    if exists (select 1 from registrations where id = p_id and suspended) then raise exception 'carrera_suspendida'; end if;
     if not exists (select 1 from registration_entries e join registrations g on g.id = e.registration_id
                     where e.registration_id = p_id and e.runner_id = v_runner and g.date <= current_date) then
       raise exception 'no_es_tuya' using errcode = '42501';

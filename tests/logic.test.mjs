@@ -284,3 +284,16 @@ test('resumen: carreras por mes y por modalidad, y por corredor', () => {
   assert.equal(btt.races, 2); assert.equal(btt.wins, 1); assert.equal(btt.runners, 2);
   assert.equal(s.podiumList[0].modality, 'BTT');
 });
+
+test('bono: una carrera suspendida cuenta para el mínimo pero no para el bono', () => {
+  const cfg = bonusConfigFor({}, 2026);
+  const a = bonusStatus(11, cfg, 'nuevo', 0, 1);          // 11 corridas + 1 suspendida = 12 para el mínimo
+  assert.equal(a.reachesMinimum, true); assert.equal(a.penalty, 0);
+  assert.equal(a.count, 11); assert.equal(a.amount, 0);   // el bono no la cuenta
+  const b = bonusStatus(10, cfg, 'nuevo', 0, 1);
+  assert.equal(b.reachesMinimum, false); assert.equal(b.missingToMinimum, 1); assert.equal(b.penalty, 175);
+  const runners = [{ id: 'a', name: 'Ana', contract: 'renovacion' }];
+  const regs = [{ date: '2026-05-01', end_date: '2026-05-02', suspended: true, entries: [{ runner_id: 'a', self_position: null }] }];
+  const [row] = yearBonuses(2026, [], regs, runners, cfg);
+  assert.equal(row.suspended, 2); assert.equal(row.count, 0); assert.equal(row.planned, 0); assert.equal(row.missingToMinimum, 10);
+});
