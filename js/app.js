@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, parseKm, kmText, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  extractCode, todayISO, pastLimit, formatDate, searchRaces, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
+  extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -25,7 +25,8 @@ const api = CONFIG.SUPABASE_URL && CONFIG.SUPABASE_KEY && window.supabase
   ? supabaseApi(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY) : demoApi();
 
 const NEWS_KEY = 'monzon-news-seen';
-const POSTED_KEY = 'monzon-posted'; // carreras ya publicadas en redes (en este móvil)
+const POSTED_KEY = 'monzon-posted'; // marcas de «publicada» si aún falta el SQL de redes (en este móvil)
+const SOCIAL_KEY = 'monzon-social';  // enlace propio del encargado de redes (en su móvil)
 const BACKUP_KEY = 'monzon-backup-data', BACKUP_DOCS_KEY = 'monzon-backup-docs', BACKUP_SNOOZE_KEY = 'monzon-backup-snooze'; // fechas de las últimas copias (en este móvil)
 const S = {
   session: null, code: store.get(CODE_KEY), news: null, newsFresh: new Set(),
@@ -165,7 +166,15 @@ async function onRoute() {
     history.replaceState(null, '', location.pathname + '#/');
     return onRoute();
   }
+  if (view === 'r' && id) {               // llegada desde el enlace del encargado de redes
+    store.set(SOCIAL_KEY, String(id).toUpperCase().replace(/[^A-Z0-9]/g, '')); S.socialData = null;
+    history.replaceState(null, '', location.pathname + '#/redes');
+    return onRoute();
+  }
+  if (!S.session?.isAdmin && !S.code && view === '' && store.get(SOCIAL_KEY)) return go('#/redes');
   if (S.session?.isAdmin && !S.data) await run(reload);
+  if (S.session?.isAdmin) refreshPosts();
+  if (!S.session?.isAdmin && view === 'redes' && !S.socialData) loadSocial();
   if (!S.session?.isAdmin && S.code && !S.runnerData && !['entrar'].includes(view)) await loadRunner();
   S.draft = null;
   if (S.session?.isAdmin && !['vista', 'equipo'].includes(view) && S.preview) { S.preview = null; S.runnerData = null; } // salir de la vista previa
@@ -257,7 +266,8 @@ function render() {
       vista: () => (S.preview && S.runnerData ? runnerScreen(parseRoute().id || '') : viewRunners()),
       equipo: () => (S.preview ? viewTeam() : viewSummary()),
     }[view] || viewRegistrations)();
-  } else if (S.code && S.runnerData) html = runnerScreen(view);
+  } else if (view === 'redes' && store.get(SOCIAL_KEY)) html = viewSocial();
+  else if (S.code && S.runnerData) html = runnerScreen(view);
   else html = viewWelcome();
   $app.innerHTML = html;
   document.body.classList.toggle('has-tabs', !!$app.querySelector('nav.tabs'));
@@ -1022,6 +1032,66 @@ function viewNews() {
       : '<p class="empty">No hay noticias por ahora. Cuando el club tenga algo que contaros (quedadas, pedidos de ropa…), lo verás aquí.</p>'}`, { rtab: 'noticias' });
 }
 
+// ======================================================================
+//  Encargado de redes (entra con un enlace propio y solo ve esto)
+// ======================================================================
+async function loadSocial() {
+  const code = store.get(SOCIAL_KEY);
+  if (!code) return;
+  try { S.socialData = await api.socialView(code); }
+  catch (e) {
+    if (/enlace_no_valido/.test(String(e?.message))) { store.del(SOCIAL_KEY); S.socialData = null; toast('Este enlace ya no es válido. Pide uno nuevo a la dirección.', true); return go('#/'); }
+    toast(friendlyError(e), true);
+  }
+  if (parseRoute().view === 'redes') render();
+}
+const socialLink = (code) => `${location.origin}${location.pathname}#/r/${code}`;
+function socialUpcoming() {
+  const d = S.socialData, days = S.socDays || 14;
+  const lim = (() => { const x = new Date(d.today + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + days); return x.toISOString().slice(0, 10); })();
+  return d.upcoming.filter((g) => g.date <= lim);
+}
+function socialText(list, days) {
+  return `🚴 CC Monzón · carreras de los próximos ${days} días\n\n${list.map((g) => `📅 ${when(g)} · ${g.name}\n${place(g) || g.modality ? `📍 ${[place(g), [g.modality, g.subtype].filter(Boolean).join(' '), g.km ? kmText(g.km) : ''].filter(Boolean).join(' · ')}\n` : ''}👥 ${g.people.join(', ')}`).join('\n\n')}\n\n📸 Crónica y foto con la equipación, en las 48 h siguientes a la prueba.`;
+}
+function resultText(x) {
+  return `🏁 ${x.name} · ${when(x)}${place(x) ? ' · ' + place(x) : ''}\n${x.podium.map((p) => `${medal(p.position)} ${p.name}${p.category ? ` (${p.category})` : ''}`).join('\n')}\n${x.participants} del club ${x.participants === 1 ? 'participó' : 'participaron'} 💪`;
+}
+function viewSocial() {
+  const d = S.socialData, days = S.socDays || 14;
+  if (!d) return frame('Redes · CC Monzón', '<p class="empty">Cargando…</p>', { actions: '' });
+  const posted = new Set(d.posted);
+  const up = socialUpcoming(), todo = up.filter((g) => !posted.has(postKey(g)));
+  const chk = (g) => `<label class="check post-check"><input type="checkbox" data-act-change="socpost" data-key="${esc(postKey(g))}" ${posted.has(postKey(g)) ? 'checked' : ''}> ✓ Publicada</label>`;
+  const head = (g) => `<div class="race-head"><div><h3>${esc(g.name)}</h3><p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality)}</div>${typeTag(g)}`;
+  return frame('Redes · CC Monzón', `
+    <p class="hint">Hola 👋 Estas son las carreras del club para publicar. Marca ✓ las que ya has publicado: la dirección lo verá.</p>
+    <div class="years">${[7, 14, 30].map((n) => `<button class="chip${n === days ? ' on' : ''}" data-act="soc-days" data-n="${n}">${n} días</button>`).join('')}</div>
+    <h2 class="section">📅 Próximas (${up.length}) · ${todo.length} sin publicar</h2>
+    ${todo.length ? `<div class="row"><button class="btn primary" data-act="soc-copy">📋 Copiar texto</button><button class="btn" data-act="soc-wa">WhatsApp</button></div>` : ''}
+    ${up.length ? up.map((g) => `<article class="card race ${modClass(g.modality)}${posted.has(postKey(g)) ? ' gone' : ''}">${head(g)}
+      <p class="count">👥 ${esc(g.people.join(', '))}</p><div class="row">${chk(g)}</div></article>`).join('') : `<p class="empty">No hay carreras con inscritos en los próximos ${days} días.</p>`}
+    <h2 class="section">🏁 Resultados recientes (${d.recent.length})</h2>
+    ${d.recent.length ? d.recent.map((x) => `<article class="card race done-race ${modClass(x.modality)}${posted.has(postKey(x)) ? ' gone' : ''}">${head(x)}
+      ${x.podium.length ? `<p class="pods">${x.podium.map((p) => `${medal(p.position)} ${esc(p.name)}${p.category ? ` <small>${esc(p.category)}</small>` : ''}`).join(' · ')}</p>` : '<p class="muted small">Sin podio.</p>'}
+      <p class="count">${x.participants} del club</p>
+      <div class="row">${chk(x)}<button class="btn small" data-act="soc-copy-res" data-key="${esc(postKey(x))}">📋 Copiar</button></div></article>`).join('') : '<p class="empty">No hay resultados de las últimas semanas.</p>'}`,
+  { actions: '<button class="icon-btn" data-act="soc-refresh" aria-label="Actualizar">↻</button>' });
+}
+async function copyText(t, okMsg) { try { await navigator.clipboard.writeText(t); toast(okMsg); } catch { prompt('Copia el texto:', t); } }
+
+/** Dirección: tarjeta con el enlace del encargado de redes. */
+function socialAdminCard() {
+  const code = S.data.settings?.social?.code;
+  return `<section class="card"><h3>👤 Encargado de redes</h3>
+    <p class="hint">Dale un enlace propio y verá solo esto: las próximas carreras con quién va y los resultados recientes. Marca lo que publica y tú lo ves aquí, sin escribirte.</p>
+    ${S.data.socialPosts === null ? '<p class="warn card">Falta ejecutar en Supabase <code>supabase/cambios/2026-11-12-redes.sql</code>.</p>'
+      : code ? `<p><code class="break">${esc(socialLink(code))}</code></p>
+        <div class="row"><button class="btn primary small" data-act="soc-link-copy">Copiar enlace</button><button class="btn small" data-act="soc-link-wa">WhatsApp</button>
+          <button class="btn small danger ghost" data-act="soc-link-off">Anular enlace</button></div>`
+      : '<button class="btn primary" data-act="soc-link-new">Crear enlace para el encargado de redes</button>'}</section>`;
+}
+
 /** Dirección: carreras de los próximos días con quién va, para avisar al encargado de redes (cláusula 8). */
 function weekRaces(days) {
   const from = todayISO(), to = (() => { const d = new Date(from + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); })();
@@ -1034,17 +1104,17 @@ function weekText(days, list = weekRaces(days)) {
   return `🚴 CC Monzón · carreras de los próximos ${days} días\n\n${list.map((g) => `📅 ${when(g)} · ${g.name}\n${place(g) || g.modality ? `📍 ${[place(g), [g.modality, g.subtype].filter(Boolean).join(' '), g.km ? kmText(g.km) : ''].filter(Boolean).join(' · ')}\n` : ''}👥 ${who(g)}`).join('\n\n')}\n\n📸 Crónica y foto con la equipación, en las 48 h siguientes a la prueba.`;
 }
 /** Casilla «publicada en redes» (se guarda en este móvil). */
-const postCheck = (id) => `<label class="check post-check"><input type="checkbox" data-act-change="post" data-id="${id}" ${postedSet().has(id) ? 'checked' : ''}> ✓ Publicada en redes</label>`;
+const postCheck = (g) => `<label class="check post-check"><input type="checkbox" data-act-change="post" data-key="${esc(postKey(g))}" ${postedSet().has(postKey(g)) ? 'checked' : ''}> ✓ Publicada en redes</label>`;
 /** Tarjeta de una carrera con inscritos (inscripción o carrera ya con resultados) y su casilla de publicada. */
 function postCard(g, done = false) {
   const names = (done ? (g.results || []).map((x) => x.runner_name) : (g.entries || []).map((e) => runnerById(e.runner_id)?.name)).filter(Boolean)
     .sort((a, b) => a.localeCompare(b, 'es'));
   const isDone = done || g.date < todayISO();
-  return `<article class="card race ${modClass(g.modality)}${postedSet().has(g.id) ? ' gone' : ''}"><div class="race-head"><div><h3>${esc(g.name)}</h3>
-    <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality)}</div>
+  return `<article class="card race ${modClass(g.modality)}${postedSet().has(postKey(g)) ? ' gone' : ''}"><div class="race-head"><div><h3>${esc(g.name)}</h3>
+    <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality)}</div>${typeTag(g)}
     <p class="count">${isDone ? '🏁 Disputada · ' : ''}👥 ${esc(names.join(', '))}</p>
     ${g.suspended ? '<p class="state-tag">⛔ Suspendida</p>' : ''}
-    <div class="row">${postCheck(g.id)}<a class="btn small ghost" href="#/${done ? 'carreras' : 'inscripciones'}/${g.id}">Abrir</a></div></article>`;
+    <div class="row">${postCheck(g)}<a class="btn small ghost" href="#/${done ? 'carreras' : 'inscripciones'}/${g.id}">Abrir</a></div></article>`;
 }
 function viewWeek() {
   const days = S.weekDays || 14, cal = S.weekView === 'cal';
@@ -1054,9 +1124,9 @@ function viewWeek() {
     const done = S.data.races.filter((r) => (r.results || []).length);
     return frame('Próximas carreras', `${views}
       <p class="hint">Todas las carreras del club, próximas y ya hechas. En cada día sale ✓ si está publicada en redes (½ si hay alguna sin publicar). Toca un día y marca las casillas.</p>
-      ${calendarView(regs, (g) => postCard(g), () => false, { done, doneCard: (r) => postCard(r, true), isPosted: (g) => postedSet().has(g.id) })}`, { back: '#/inscripciones' });
+      ${calendarView(regs, (g) => postCard(g), () => false, { done, doneCard: (r) => postCard(r, true), isPosted: (g) => postedSet().has(postKey(g)) })}`, { back: '#/inscripciones' });
   }
-  const list = weekRaces(days), posted = postedSet(), todo = list.filter((g) => !posted.has(g.id));
+  const list = weekRaces(days), posted = postedSet(), todo = list.filter((g) => !posted.has(postKey(g)));
   return frame('Próximas carreras', `${views}
     <p class="hint">Para avisar al encargado de redes con una semana de antelación (cláusula 8 del contrato). Salen las carreras con algún inscrito, sin las suspendidas. Marca ✓ las que ya has publicado.</p>
     <div class="years">${[7, 14, 30].map((n) => `<button class="chip${n === days ? ' on' : ''}" data-act="week-days" data-n="${n}">${n} días</button>`).join('')}</div>
@@ -1065,7 +1135,8 @@ function viewWeek() {
         <button class="btn ghost" data-act="week-all">${todo.length ? '✓ Marcar todas' : '↺ Desmarcar todas'}</button></div>
       ${list.map((g) => postCard(g)).join('')}
       <details class="card"><summary><b>Ver el texto que se copia</b></summary><pre class="week-pre">${esc(weekText(days, todo.length ? todo : list))}</pre></details>`
-      : `<p class="empty">No hay carreras con inscritos en los próximos ${days} días.</p>`}`, { back: '#/inscripciones' });
+      : `<p class="empty">No hay carreras con inscritos en los próximos ${days} días.</p>`}
+    ${socialAdminCard()}`, { back: '#/inscripciones' });
 }
 
 /** Dirección: historial de cambios (quién cambió qué y cuándo). */
@@ -1182,14 +1253,43 @@ function backupDue() {
   if ((S.docs || []).length && (c === null || c > 60)) out.push({ kind: 'docs', days: c });
   return out;
 }
-const postedSet = () => { try { return new Set(JSON.parse(store.get(POSTED_KEY) || '[]')); } catch { return new Set(); } };
+/** Clave estable de una carrera para la marca de «publicada» (no cambia al pasar de inscripción a resultados). */
+const postKey = (g) => `${g.date}|${normalize(g.name)}`;
+/** Marcas de «publicada en redes»: compartidas en la base de datos (o, si falta el SQL, solo en este móvil). */
+const postedSet = () => {
+  if (Array.isArray(S.data?.socialPosts)) return new Set(S.data.socialPosts.map((x) => x.key));
+  try { return new Set(JSON.parse(store.get(POSTED_KEY) || '[]')); } catch { return new Set(); }
+};
 const savePosted = (set) => store.set(POSTED_KEY, JSON.stringify([...set].slice(-300)));
+async function setPostedKeys(keys, value) {
+  if (Array.isArray(S.data?.socialPosts)) {
+    const set = new Set(keys);
+    S.data.socialPosts = S.data.socialPosts.filter((x) => !set.has(x.key));
+    if (value) for (const k of keys) S.data.socialPosts.push({ key: k, posted_by: 'Dirección' });
+    render();
+    try { await api.setPosted(keys, value); } catch (e) { toast(friendlyError(e), true); await refreshPosts(true); }
+  } else {
+    const set = postedSet(); for (const k of keys) { if (value) set.add(k); else set.delete(k); } savePosted(set); render();
+  }
+}
+/** Trae las marcas de la base de datos (las que pone el encargado de redes). */
+async function refreshPosts(force = false) {
+  if (!Array.isArray(S.data?.socialPosts)) return;
+  try {
+    const rows = await api.listPosts();
+    if (!Array.isArray(rows)) return;
+    const sig = (a) => a.map((x) => x.key).sort().join('\n');
+    const changed = sig(rows) !== sig(S.data.socialPosts);
+    S.data.socialPosts = rows;
+    if ((changed || force) && ['semana', 'avisos', 'inscripciones', ''].includes(parseRoute().view) && !S.draft) render();
+  } catch { /* sin conexión */ }
+}
 function adminAlerts() {
   const posted = postedSet();
   const week = weekRaces(7);   // carreras de los próximos 7 días con inscritos (para publicar en redes)
   return {
     circuits: (S.data.circuitPodiums || []).filter((c) => c.status === 'pendiente'),
-    week, weekTodo: week.filter((g) => !posted.has(g.id)),
+    week, weekTodo: week.filter((g) => !posted.has(postKey(g))),
     noContract: S.data.runners.filter((r) => !r.contract).sort(byName),
     backup: backupDue(),
     corrections: (S.data.corrections || []).filter((c) => c.status === 'pendiente'),
@@ -2049,11 +2149,7 @@ const actions = {
       const id = await saveRegistrationDraft();
       const r = await api.promoteRegistration(id); await reload(); return r;
     }, 'Carrera creada: añade los puestos');
-    if (raceId) {
-      const set = postedSet(); // si ya estaba publicada, sigue estándolo al pasar a resultados
-      if (S.draft?.id && set.has(S.draft.id)) { set.add(raceId); savePosted(set); }
-      go('#/carreras/' + raceId);
-    }
+    if (raceId) go('#/carreras/' + raceId);
   },
   async 'del-reg'() {
     if (!await confirmAction('Borrar inscripción', `Se borrará «${esc(S.draft.name)}» con todos sus inscritos.`, 'Borrar')) return;
@@ -2198,13 +2294,30 @@ const actions = {
   },
   'hist-filter'(el) { S.histFilter = el.dataset.f; render(); },
   'week-view'(el) { S.weekView = el.dataset.v; render(); },
-  'week-all'() { const set = postedSet(), list = weekRaces(S.weekDays || 14); if (list.every((g) => set.has(g.id))) list.forEach((g) => set.delete(g.id)); else list.forEach((g) => set.add(g.id)); savePosted(set); render(); },
-  'post-all'() { const set = postedSet(); for (const g of adminAlerts().week) set.add(g.id); savePosted(set); render(); },
+  'week-all'() { const set = postedSet(), list = weekRaces(S.weekDays || 14); setPostedKeys(list.map(postKey), !list.every((g) => set.has(postKey(g)))); },
+  'post-all'() { setPostedKeys(adminAlerts().week.map(postKey), true); },
   async 'alert-week-copy'() {
     const t = weekText(7, adminAlerts().weekTodo);
     try { await navigator.clipboard.writeText(t); toast('Texto copiado: pégalo en WhatsApp'); } catch { prompt('Copia el texto:', t); }
   },
   'alert-week-wa'() { window.open('https://wa.me/?text=' + encodeURIComponent(weekText(7, adminAlerts().weekTodo)), '_blank'); },
+  'soc-days'(el) { S.socDays = Number(el.dataset.n) || 14; render(); },
+  'soc-refresh'() { loadSocial(); },
+  async 'soc-copy'() { const up = socialUpcoming().filter((g) => !new Set(S.socialData.posted).has(postKey(g))); await copyText(socialText(up, S.socDays || 14), 'Texto copiado: pégalo donde publiques'); },
+  'soc-wa'() { const up = socialUpcoming().filter((g) => !new Set(S.socialData.posted).has(postKey(g))); window.open('https://wa.me/?text=' + encodeURIComponent(socialText(up, S.socDays || 14)), '_blank'); },
+  async 'soc-copy-res'(el) { const x = S.socialData.recent.find((r) => postKey(r) === el.dataset.key); if (x) await copyText(resultText(x), 'Texto copiado'); },
+  async 'soc-link-new'() {
+    await run(async () => { await api.saveSetting('social', { code: newCode() }); await reload(); }, 'Enlace creado: envíaselo al encargado de redes'); render();
+  },
+  async 'soc-link-copy'() { await copyText(socialLink(S.data.settings.social.code), 'Enlace copiado'); },
+  'soc-link-wa'() {
+    const msg = `Hola! Este es tu enlace para ver las carreras del Club Ciclista Monzón que hay que publicar en redes (próximas con quién va, y resultados recientes). Marca ✓ lo que ya hayas publicado:\n${socialLink(S.data.settings.social.code)}\n\nEs solo tuyo: no lo reenvíes.`;
+    window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+  },
+  async 'soc-link-off'() {
+    if (!await confirmAction('Anular el enlace', 'El enlace actual dejará de funcionar. Podrás crear uno nuevo cuando quieras.', 'Anular enlace')) return;
+    await run(async () => { await api.saveSetting('social', { code: null }); await reload(); }, 'Enlace anulado'); render();
+  },
   'week-days'(el) { S.weekDays = Number(el.dataset.n) || 14; render(); },
   async 'week-copy'() {
     const t = weekText(S.weekDays || 14);
@@ -2576,7 +2689,13 @@ $app.addEventListener('change', async (ev) => {
   if ('rfMulti' in t.dataset && S.rdraft) {
     S.rdraft.multi = t.checked; if (!t.checked) S.rdraft.end_date = ''; render(); return;
   }
-  if (t.dataset.actChange === 'post') { const set = postedSet(); if (t.checked) set.add(t.dataset.id); else set.delete(t.dataset.id); savePosted(set); render(); return; }
+  if (t.dataset.actChange === 'socpost') { // el encargado de redes marca lo publicado
+    const key = t.dataset.key, v = t.checked, d = S.socialData;
+    d.posted = v ? [...new Set([...d.posted, key])] : d.posted.filter((k) => k !== key); render();
+    try { await api.socialMark(store.get(SOCIAL_KEY), key, v); } catch (e) { toast(friendlyError(e), true); loadSocial(); }
+    return;
+  }
+  if (t.dataset.actChange === 'post') { setPostedKeys([t.dataset.key], t.checked); return; }
   if (t.dataset.actChange === 'suspended' && S.draft) { S.draft.suspended = t.checked; render(); return; }
   if (t.dataset.actChange === 'multi') {
     S.draft.multi = t.checked;

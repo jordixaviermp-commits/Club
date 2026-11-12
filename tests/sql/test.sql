@@ -420,6 +420,38 @@ select pg_temp.check((select c->>'status' from jsonb_array_elements(runner_corre
 select runner_request_correction('CCCCCCCCCC', 'race', :'rp', 2, null, null, null) as corr3 \gset
 select runner_cancel_correction('CCCCCCCCCC', :'corr3');
 select pg_temp.expect_fail($q$select runner_cancel_correction('CCCCCCCCCC', '$q$ || :'corr' || $q$')$q$, 'corrección: una ya resuelta no se retira');
+-- encargado de redes
+reset role;
+insert into settings (key, value) values ('social', '{"code":"SOCIALCODE12345"}') on conflict (key) do update set value = excluded.value;
+insert into registrations (id, name, date) values ('20000000-0000-0000-0000-0000000000a1', 'Redes Proxima', current_date + 5);
+insert into registration_entries (registration_id, runner_id) values ('20000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-000000000004'), ('20000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-000000000003');
+insert into registrations (id, name, date, suspended) values ('20000000-0000-0000-0000-0000000000a2', 'Redes Suspendida', current_date + 5, true);
+insert into registration_entries (registration_id, runner_id) values ('20000000-0000-0000-0000-0000000000a2', '10000000-0000-0000-0000-000000000004');
+insert into registrations (id, name, date) values ('20000000-0000-0000-0000-0000000000a3', 'Redes Sin Inscritos', current_date + 6);
+insert into registrations (id, name, date) values ('20000000-0000-0000-0000-0000000000a4', 'Redes Lejana', current_date + 90);
+insert into registration_entries (registration_id, runner_id) values ('20000000-0000-0000-0000-0000000000a4', '10000000-0000-0000-0000-000000000004');
+insert into races (id, name, date) values ('30000000-0000-0000-0000-0000000000b1', 'Redes Reciente', current_date - 4);
+insert into results (race_id, runner_id, runner_name, position) values ('30000000-0000-0000-0000-0000000000b1', '10000000-0000-0000-0000-000000000004', 'Dani Test', 2), ('30000000-0000-0000-0000-0000000000b1', '10000000-0000-0000-0000-000000000003', 'Carla Test', 9);
+set role anon;
+select set_config('request.jwt.claim.sub', '', false);
+select pg_temp.check(exists (select 1 from jsonb_array_elements(social_view('SOCIALCODE12345')->'upcoming') u where u->>'name' = 'Redes Proxima')
+                  and not exists (select 1 from jsonb_array_elements(social_view('SOCIALCODE12345')->'upcoming') u where u->>'name' in ('Redes Suspendida', 'Redes Sin Inscritos', 'Redes Lejana')), 'redes: próximas con inscritos, sin suspendidas, sin inscritos ni lejanas');
+select pg_temp.check((select jsonb_array_length(u->'people') from jsonb_array_elements(social_view('SOCIALCODE12345')->'upcoming') u where u->>'name' = 'Redes Proxima') = 2, 'redes: con los nombres de quién va');
+select pg_temp.check((select jsonb_array_length(x->'podium') from jsonb_array_elements(social_view('SOCIALCODE12345')->'recent') x where x->>'name' = 'Redes Reciente') = 1
+                 and (select x->'podium'->0->>'name' from jsonb_array_elements(social_view('SOCIALCODE12345')->'recent') x where x->>'name' = 'Redes Reciente') = 'Dani Test', 'redes: resultados recientes con su podio');
+select pg_temp.check(social_view('SOCIALCODE12345')::text not like '%code%' and social_view('SOCIALCODE12345')::text not like '%contract%', 'redes: sin enlaces ni contratos');
+select pg_temp.expect_fail($q$select social_view('OTROCODIGO12345')$q$, 'redes: código equivocado');
+select pg_temp.expect_fail($q$select social_view('')$q$, 'redes: sin código');
+select pg_temp.expect_fail($q$select social_view('AAAAAAAAAA')$q$, 'redes: el enlace de un corredor no vale');
+select pg_temp.expect_fail($q$select social_check('SOCIALCODE12345')$q$, 'redes: la comprobación interna no es pública');
+select social_mark('SOCIALCODE12345', '2026-11-20|redes proxima', true);
+select pg_temp.check(social_view('SOCIALCODE12345')->'posted' ? '2026-11-20|redes proxima', 'redes: marca como publicada');
+select social_mark('SOCIALCODE12345', '2026-11-20|redes proxima', false);
+select pg_temp.check(not (social_view('SOCIALCODE12345')->'posted' ? '2026-11-20|redes proxima'), 'redes: y la desmarca');
+select pg_temp.expect_fail($q$select social_mark('SOCIALCODE12345', 'a', true)$q$, 'redes: clave inválida');
+select pg_temp.expect_fail($q$select social_mark('OTROCODIGO12345', '2026-11-20|redes proxima', true)$q$, 'redes: marcar sin código válido');
+select pg_temp.expect_fail('select * from social_posts', 'redes: anon no lee las marcas');
+select pg_temp.expect_fail('select * from settings', 'redes: ni los ajustes (donde está el código)');
 -- documentos (contratos)
 reset role;
 set role authenticated;

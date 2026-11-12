@@ -3,8 +3,8 @@
 //  - Demostración, guardada solo en este navegador, para probar la app sin montar nada.
 import { newCode, todayISO, pastLimit, numDays, yearOf, SUBTYPES, parseKm } from './logic.js';
 
-const TABLES = ['runners', 'registrations', 'registration_entries', 'races', 'results', 'settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests'];
-const OPTIONAL = new Set(['settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests']); // tablas que pueden faltar si aún no se ha ejecutado su SQL
+const TABLES = ['runners', 'registrations', 'registration_entries', 'races', 'results', 'settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests', 'social_posts'];
+const OPTIONAL = new Set(['settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests', 'social_posts']); // tablas que pueden faltar si aún no se ha ejecutado su SQL
 
 /** Mensajes de error comprensibles. */
 export function friendlyError(e) {
@@ -50,6 +50,7 @@ function nest(data) {
     announcements: data.announcements || null,    // null = falta el SQL de noticias
     announcementReplies: data.announcement_replies || null,
     corrections: data.correction_requests || null,
+    socialPosts: data.social_posts || null,       // null = falta el SQL de redes
   };
 }
 
@@ -147,6 +148,14 @@ export function supabaseApi(url, key) {
     async autoPromote() { try { return ok(await sb.rpc('auto_promote_registrations')); } catch { return 0; } },
     async runnerComplete(code, kind, id, data) { ok(await sb.rpc('runner_complete_race', { p_code: code, p_kind: kind, p_id: id, p_data: data })); },
     async listChanges() { try { return ok(await sb.from('change_log').select('*').order('at', { ascending: false }).limit(300)); } catch { return null; } },
+    async socialView(code) { return ok(await sb.rpc('social_view', { p_code: code })); },
+    async socialMark(code, key, posted) { ok(await sb.rpc('social_mark', { p_code: code, p_key: key, p_posted: !!posted })); },
+    async listPosts() { try { return ok(await sb.from('social_posts').select('key,posted_at,posted_by').limit(1000)); } catch { return null; } },
+    async setPosted(keys, value) {
+      if (!keys.length) return;
+      if (value) ok(await sb.from('social_posts').upsert(keys.map((key) => ({ key })), { onConflict: 'key', ignoreDuplicates: true }));
+      else ok(await sb.from('social_posts').delete().in('key', keys));
+    },
     async runnerReplyNews(code, id, answer, guests) { ok(await sb.rpc('runner_reply_news', { p_code: code, p_id: id, p_answer: answer, p_guests: guests || 0 })); },
     async runnerRequestCorrection(code, kind, id, position, category, podiumType, note) {
       return ok(await sb.rpc('runner_request_correction', { p_code: code, p_kind: kind, p_id: id, p_position: position, p_category: category || null, p_podium_type: podiumType || null, p_note: note || null }));
@@ -267,7 +276,7 @@ export function demoApi(storage = globalThis.localStorage) {
     async signOut() { admin = false; try { storage.removeItem(DEMO_KEY + '-admin'); } catch { /* nada */ } },
     async resetDemo() { mem = demoSeed(); save(); },
 
-    async loadAll() { requireAdmin(); autoPromote(); return clone(nest({ circuit_podiums: [], announcements: [], announcement_replies: [], correction_requests: [], ...load() })); },
+    async loadAll() { requireAdmin(); autoPromote(); return clone(nest({ circuit_podiums: [], announcements: [], announcement_replies: [], correction_requests: [], social_posts: [], ...load() })); },
     async autoPromote() { requireAdmin(); return autoPromote(); },
     async listChanges() { requireAdmin(); return clone([...(load().change_log || [])].sort((a, b) => b.at.localeCompare(a.at))); },
     async runnerComplete(code, kind, id, data) {
@@ -379,6 +388,35 @@ export function demoApi(storage = globalThis.localStorage) {
         return { ...n, rsvp: !!n.rsvp, my_answer: mine?.answer || null, my_guests: mine?.guests ?? null,
           yes_count: all.filter((r) => r.answer === 'si').reduce((c, r) => c + 1 + r.guests, 0), no_count: all.filter((r) => r.answer === 'no').length };
       }));
+    },
+    async socialView(code) {
+      const d = load(); if (!code || (d.settings || []).find((x) => x.key === 'social')?.value?.code !== code) throw new Error('enlace_no_valido');
+      const t = todayISO(); const a = new Date(); a.setDate(a.getDate() - 1); const lim1 = todayISO(a); const b = new Date(); b.setDate(b.getDate() + 45); const lim2 = todayISO(b);
+      const c = new Date(); c.setDate(c.getDate() - 21); const lim3 = todayISO(c);
+      const nm = (id) => d.runners.find((r) => r.id === id)?.name;
+      const base = (x) => ({ name: x.name, date: x.date, end_date: x.end_date || null, place: x.place || null, province: x.province || null, country: x.country || null,
+        modality: x.modality, subtype: x.subtype || null, km: x.km ?? null, race_type: x.race_type || 'suelta', circuit: x.circuit || null });
+      return clone({ today: t,
+        upcoming: d.registrations.filter((g) => !g.suspended && (g.end_date || g.date) >= lim1 && g.date <= lim2 && d.registration_entries.some((e) => e.registration_id === g.id))
+          .sort((x, y) => x.date.localeCompare(y.date) || x.name.localeCompare(y.name))
+          .map((g) => ({ ...base(g), people: d.registration_entries.filter((e) => e.registration_id === g.id).map((e) => nm(e.runner_id)).filter(Boolean).sort((p, q) => p.localeCompare(q)) })),
+        recent: d.races.filter((r) => r.date >= lim3 && r.date <= t && d.results.some((x) => x.race_id === r.id)).sort((x, y) => y.date.localeCompare(x.date))
+          .map((r) => ({ ...base(r), participants: d.results.filter((x) => x.race_id === r.id).length,
+            podium: d.results.filter((x) => x.race_id === r.id && x.position >= 1 && x.position <= 3).sort((p, q) => p.position - q.position).map((x) => ({ position: x.position, name: x.runner_name, category: x.category || null })) })),
+        posted: (d.social_posts || []).map((x) => x.key) });
+    },
+    async socialMark(code, key, posted) {
+      const d = load(); if (!code || (d.settings || []).find((x) => x.key === 'social')?.value?.code !== code) throw new Error('enlace_no_valido');
+      d.social_posts = (d.social_posts || []).filter((x) => x.key !== key);
+      if (posted) d.social_posts.push({ key, posted_at: new Date().toISOString(), posted_by: 'Redes' });
+      save();
+    },
+    async listPosts() { requireAdmin(); return clone(load().social_posts || []); },
+    async setPosted(keys, value) {
+      requireAdmin(); const d = load(); const set = new Set(keys);
+      d.social_posts = (d.social_posts || []).filter((x) => !set.has(x.key));
+      if (value) for (const key of keys) d.social_posts.push({ key, posted_at: new Date().toISOString(), posted_by: 'Dirección' });
+      save();
     },
     async runnerReplyNews(code, id, answer, guests) {
       const me = byCode(code); const d = load(); const n = (d.announcements || []).find((x) => x.id === id);
