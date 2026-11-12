@@ -600,3 +600,13 @@ ol.bullets { list-style: decimal; }
 .sos-pick { margin: .6rem 0 .2rem; font-weight: 600; }
 .fedbar .chip { flex: 1; justify-content: center; }
 .sos-img img { display: block; width: 100%; height: auto; border-radius: 14px; border: 1px solid var(--line); margin-bottom: .7rem; }
+
+/* Cabecera compacta en móviles estrechos: con logo + título + hasta 4 botones, el título no debe cortarse */
+@media (max-width: 400px) {
+  header.top { gap: .15rem; padding-left: 10px; padding-right: 6px; }
+  header.top .logo { width: 30px; height: 30px; margin-right: .3rem; }
+  header.top .icon-btn { width: 38px; }
+  header.top h1 { font-size: 1.1rem; }
+  header.top .back { padding-right: .25rem; }
+}
+@media (max-width: 340px) { header.top .logo { display: none; } }
