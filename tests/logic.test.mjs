@@ -41,7 +41,7 @@ test('resumen anual', () => {
   const s = yearSummary(2026, races, runners);
   assert.deepEqual(s.totals, { races: 3, runners: 3, participations: 4, podiums: 3, wins: 1 });
   assert.deepEqual(s.byModality.map((m) => m.modality), ['Carretera', 'BTT', 'Gravel']); // Pista no aparece en 2026
-  assert.deepEqual(s.byModality[1], { modality: 'BTT', races: 1, participations: 2, podiums: 2 });
+  assert.deepEqual(s.byModality[1], { modality: 'BTT', races: 1, participations: 2, podiums: 2, wins: 0, runners: 2 });
   assert.deepEqual(s.countries, [{ name: 'España', races: 2 }, { name: 'Francia', races: 1 }]);
   assert.deepEqual(s.provinces, [{ name: 'Girona', races: 1 }, { name: 'Lleida', races: 1 }]);
   assert.deepEqual(s.missingPlace.map((m) => [m.name, m.missing]), [['Dos', ['provincia']]]);
@@ -265,4 +265,22 @@ test('bono: una inscripción ya disputada con el puesto puesto por el corredor c
   ];
   const [row] = yearBonuses(2026, [], regs, runners, cfg);
   assert.equal(row.count, 3); assert.equal(row.planned, 1);
+});
+
+test('resumen: carreras por mes y por modalidad, y por corredor', () => {
+  const runners = [{ id: 'a', name: 'Ana' }, { id: 'b', name: 'Bea' }];
+  const races = [
+    { id: 'r1', name: 'A', date: '2026-03-01', modality: 'BTT', results: [{ runner_id: 'a', runner_name: 'Ana', position: 1, podium_type: 'suelta' }, { runner_id: 'b', runner_name: 'Bea', position: 9 }] },
+    { id: 'r2', name: 'B', date: '2026-03-15', modality: 'Carretera', results: [{ runner_id: 'a', runner_name: 'Ana', position: 2, podium_type: 'suelta' }] },
+    { id: 'r3', name: 'C', date: '2026-11-02', modality: 'BTT', results: [{ runner_id: 'a', runner_name: 'Ana', position: 5 }] },
+  ];
+  const s = yearSummary(2026, races, runners);
+  assert.equal(s.byMonth.length, 12);
+  assert.equal(s.byMonth[2].total, 2); assert.deepEqual(s.byMonth[2].mods, { BTT: 1, Carretera: 1 });
+  assert.equal(s.byMonth[10].total, 1);
+  const ana = s.perRunner.find((r) => r.key === 'a');
+  assert.deepEqual(ana.mods, { BTT: 2, Carretera: 1 }); assert.equal(ana.p1 + ana.p2, 2);
+  const btt = s.byModality.find((m) => m.modality === 'BTT');
+  assert.equal(btt.races, 2); assert.equal(btt.wins, 1); assert.equal(btt.runners, 2);
+  assert.equal(s.podiumList[0].modality, 'BTT');
 });
