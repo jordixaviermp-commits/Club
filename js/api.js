@@ -1,7 +1,7 @@
 // Acceso a datos. Dos versiones con la misma interfaz:
 //  - Supabase (real), cuando config.js tiene URL y clave.
 //  - Demostración, guardada solo en este navegador, para probar la app sin montar nada.
-import { newCode, todayISO, pastLimit, numDays, yearOf } from './logic.js';
+import { newCode, todayISO, pastLimit, numDays, yearOf, SUBTYPES, parseKm } from './logic.js';
 
 const TABLES = ['runners', 'registrations', 'registration_entries', 'races', 'results', 'settings', 'circuit_podiums', 'announcements'];
 const OPTIONAL = new Set(['settings', 'circuit_podiums', 'announcements']); // tablas que pueden faltar si aún no se ha ejecutado su SQL
@@ -26,6 +26,9 @@ export function friendlyError(e) {
   if (/Failed to fetch|NetworkError|network/i.test(msg)) return 'Sin conexión. Revisa la cobertura y vuelve a intentarlo.';
   return msg || 'Error desconocido.';
 }
+
+/** Formato (Critérium, XCM…) y km de la carrera, listos para guardar. */
+const detailFields = (o) => ({ subtype: SUBTYPES[o.modality]?.includes(o.subtype) ? o.subtype : null, km: parseKm(o.km) });
 
 /** Tipo de carrera y nombre del circuito, listos para guardar. */
 const typeFields = (o) => {
@@ -98,6 +101,7 @@ export function supabaseApi(url, key) {
     async saveRegistration(reg, entries) {
       const id = ok(await sb.rpc('save_registration', { p_reg: reg, p_entries: entries }));
       await sb.from('registrations').update(typeFields(reg)).eq('id', id);
+      await sb.from('registrations').update(detailFields(reg)).eq('id', id); // se ignora si aún falta su SQL
       await sb.from('registrations').update({ suspended: !!reg.suspended }).eq('id', id); // se ignora si aún falta su SQL
       return id;
     },
@@ -107,6 +111,7 @@ export function supabaseApi(url, key) {
     async saveRace(race, results) {
       const id = ok(await sb.rpc('save_race', { p_race: race, p_results: results }));
       await sb.from('races').update(typeFields(race)).eq('id', id);
+      await sb.from('races').update(detailFields(race)).eq('id', id);
       return id;
     },
     async saveAnnouncement(a) {
@@ -136,6 +141,7 @@ export function supabaseApi(url, key) {
     async runnerJoin(code, regId, category) { ok(await sb.rpc('runner_join', { p_code: code, p_registration: regId, p_category: category || null })); },
     async runnerLeave(code, regId) { ok(await sb.rpc('runner_leave', { p_code: code, p_registration: regId })); },
     async runnerJoinRace(code, raceId, category) { ok(await sb.rpc('runner_join_race', { p_code: code, p_race: raceId, p_category: category || null })); },
+    async runnerSetDetails(code, id, subtype, km) { ok(await sb.rpc('runner_set_race_details', { p_code: code, p_id: id, p_subtype: subtype || null, p_km: parseKm(km) })); },
     async runnerSetType(code, id, type, circuit) { ok(await sb.rpc('runner_set_race_type', { p_code: code, p_id: id, p_type: type, p_circuit: circuit || null })); },
     async runnerProposeCircuit(code, circuit, year, position, scope) {
       return ok(await sb.rpc('runner_propose_circuit', { p_code: code, p_circuit: circuit, p_year: year, p_position: position, p_scope: scope }));
@@ -200,6 +206,7 @@ export function demoApi(storage = globalThis.localStorage) {
     country: o.country?.trim() || null, modality: o.modality || 'Carretera', notes: o.notes?.trim() || null,
     ...(o.race_type !== undefined ? typeFields(o) : {}),
     ...(o.suspended !== undefined ? { suspended: !!o.suspended } : {}),
+    ...(o.subtype !== undefined || o.km !== undefined ? detailFields(o) : {}),
     ...(o.stages !== undefined ? { stages: o.stages?.length ? o.stages : null } : {}) });
   const byCode = (code) => {
     const r = load().runners.find((x) => x.code === code);
@@ -337,7 +344,7 @@ export function demoApi(storage = globalThis.localStorage) {
         my_results: d.results.filter((x) => x.runner_id === me.id).map((x) => {
           const r = d.races.find((y) => y.id === x.race_id);
           return r && { race_id: r.id, name: r.name, date: r.date, end_date: r.end_date || null, place: r.place, province: r.province,
-            country: r.country, modality: r.modality, stages: r.stages || null, race_type: r.race_type || 'suelta', circuit: r.circuit || null,
+            country: r.country, modality: r.modality, stages: r.stages || null, race_type: r.race_type || 'suelta', circuit: r.circuit || null, subtype: r.subtype || null, km: r.km ?? null,
             category: x.category, position: x.position,
             podium_type: x.podium_type, stage_positions: x.stage_positions || null, self_reported: !!x.self_reported };
         }).filter(Boolean).sort((a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name)),
@@ -415,7 +422,7 @@ export function demoApi(storage = globalThis.localStorage) {
       return clone({
         runners: d.runners.map((r) => ({ id: r.id, name: r.name })).sort((a, b) => a.name.localeCompare(b.name)),
         races: d.races.map((r) => ({ id: r.id, name: r.name, date: r.date, end_date: r.end_date || null, place: r.place, province: r.province,
-          country: r.country, modality: r.modality, stages: r.stages || null, race_type: r.race_type || 'suelta', circuit: r.circuit || null,
+          country: r.country, modality: r.modality, stages: r.stages || null, race_type: r.race_type || 'suelta', circuit: r.circuit || null, subtype: r.subtype || null, km: r.km ?? null,
           results: d.results.filter((x) => x.race_id === r.id).map((x) => ({ runner_id: x.runner_id, runner_name: x.runner_name,
             category: x.category, position: x.position, podium_type: x.podium_type, stage_positions: x.stage_positions || null })) })),
       });
@@ -452,6 +459,11 @@ export function demoApi(storage = globalThis.localStorage) {
       if (!race || race.date > todayISO() || race.date < pastLimit()) throw new Error('inscripcion_cerrada');
       if (!d.results.some((x) => x.race_id === raceId && x.runner_id === me.id)) d.results.push({ id: uuid(), race_id: raceId, runner_id: me.id, runner_name: me.name, category: category || null, position: null, podium_type: 'suelta' });
       save();
+    },
+    async runnerSetDetails(code, id, subtype, km) {
+      const me = byCode(code); const g = load().registrations.find((x) => x.id === id && x.created_by === me.id);
+      if (!g) throw new Error('no_es_tuya');
+      Object.assign(g, detailFields({ modality: g.modality, subtype, km })); save();
     },
     async runnerSetType(code, id, type, circuit) {
       const me = byCode(code); const g = load().registrations.find((x) => x.id === id && x.created_by === me.id);

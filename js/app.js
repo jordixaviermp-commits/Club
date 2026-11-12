@@ -2,7 +2,7 @@
 import { CONFIG } from './config.js';
 import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
-  CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
+  CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, parseKm, kmText, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
   extractCode, todayISO, pastLimit, formatDate, searchRaces, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
@@ -26,6 +26,7 @@ const api = CONFIG.SUPABASE_URL && CONFIG.SUPABASE_KEY && window.supabase
 
 const NEWS_KEY = 'monzon-news-seen';
 const POSTED_KEY = 'monzon-posted'; // carreras ya publicadas en redes (en este móvil)
+const BACKUP_KEY = 'monzon-backup-data', BACKUP_DOCS_KEY = 'monzon-backup-docs', BACKUP_SNOOZE_KEY = 'monzon-backup-snooze'; // fechas de las últimas copias (en este móvil)
 const S = {
   session: null, code: store.get(CODE_KEY), news: null, newsFresh: new Set(),
   data: null, runnerData: null,
@@ -59,8 +60,18 @@ function newsBell() {
   return `<a class="icon-btn bell news-bell${n ? ' on' : ''}" href="${runnerHref('noticias')}" aria-label="Noticias del club${n ? `: ${n} nueva${n === 1 ? '' : 's'}` : ''}" title="Noticias del club">${icon(ICON_BELL)}${n ? `<span class="bell-n">${n}</span>` : ''}</a>`;
 }
 /** Etiqueta del tipo de carrera (campeonato o circuito). */
-const typeTag = (x) => (x.race_type === 'campeonato' ? '<p class="type-line"><span class="tag t-champ">🏆 Campeonato</span></p>'
-  : x.race_type === 'circuito' ? `<p class="type-line"><span class="tag t-circ">🔗 ${esc(x.circuit || 'Circuito')}</span></p>` : '');
+const typeTag = (x) => {
+  const chips = [];
+  if (x.race_type === 'campeonato') chips.push('<span class="tag t-champ">🏆 Campeonato</span>');
+  else if (x.race_type === 'circuito') chips.push(`<span class="tag t-circ">🔗 ${esc(x.circuit || 'Circuito')}</span>`);
+  if (x.subtype) chips.push(`<span class="tag t-sub">${esc(x.subtype)}</span>`);
+  if (x.km) chips.push(`<span class="tag t-km">📏 ${kmText(x.km)}</span>`);
+  return chips.length ? `<p class="type-line">${chips.join('')}</p>` : '';
+};
+/** Campos «Formato» (según la modalidad) y «Distancia» de los formularios. `attr` = data-f (dirección) o data-rf (corredor). */
+const detailInputs = (d, attr) => `<div class="grid2">
+    ${SUBTYPES[d.modality] ? `<label>Formato<select ${attr}="subtype"><option value="">Sin indicar</option>${SUBTYPES[d.modality].map((x) => opt(x, x, d.subtype)).join('')}</select></label>` : '<span></span>'}
+    <label>Distancia (km)<input type="number" inputmode="decimal" step="0.1" min="0.1" max="1000" ${attr}="km" value="${esc(d.km ?? '')}" placeholder="85"></label></div>`;
 /** Nombres de circuitos ya usados (para sugerirlos y no escribirlos de dos maneras). */
 function circuitNames() {
   const src = S.data && !S.preview ? [...S.data.races, ...S.data.registrations, ...(S.data.circuitPodiums || [])]
@@ -235,7 +246,7 @@ function render() {
     html = ({
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
       carreras: S.draft ? viewRaceEdit : viewRaces,
-      resumen: viewSummary, corredores: viewRunners, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, docs: () => viewDocs(parseRoute().id),
+      resumen: viewSummary, corredores: viewRunners, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
       vista: () => (S.preview && S.runnerData ? runnerScreen(parseRoute().id || '') : viewRunners()),
       equipo: () => (S.preview ? viewTeam() : viewSummary()),
     }[view] || viewRegistrations)();
@@ -431,7 +442,7 @@ const isPastReg = (id) => { const g = S.runnerData?.registrations.find((x) => x.
 /** Pantalla para poner el resultado: de una inscripción (reg_) o de una carrera ya en resultados (race_). */
 const resultHref = (id) => (S.runnerData?.registrations.some((g) => g.id === id) ? `#/resultado/reg_${id}` : `#/resultado/race_${id}`);
 const emptyRunnerDraft = (pre = {}) => ({ name: '', date: '', multi: false, end_date: '', place: '', province: '', country: DEFAULT_COUNTRY,
-  modality: 'Carretera', race_type: 'suelta', circuit: '', category: S.runnerData?.me?.category || '', ...pre });
+  modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', category: S.runnerData?.me?.category || '', ...pre });
 
 /** Formulario para que el corredor ponga SU resultado (una sola vez). id = «reg_<uuid>» o «race_<uuid>». */
 function viewRunnerReport(key) {
@@ -474,6 +485,7 @@ function viewRunnerNew() {
         <label>${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-rf="date" value="${esc(d.date)}" min="${pastLimit()}" required></label>
         <label>Modalidad<select data-rf="modality">${MODALITIES.map((m) => opt(m, m, d.modality)).join('')}</select></label>
       </div>
+      ${detailInputs(d, 'data-rf')}
       ${S.runnerData.circuits ? typeFields(d, 'data-rf') : ''}
       <label class="check"><input type="checkbox" data-rf-multi ${d.multi ? 'checked' : ''}> Carrera de varios días (por etapas)</label>
       ${d.multi ? `<label>Último día<input type="date" data-rf="end_date" value="${esc(d.end_date)}" min="${esc(d.date || pastLimit())}" required></label>` : ''}
@@ -573,7 +585,7 @@ function runnerScreen(sub) {
     const g = S.runnerData.registrations.find((x) => x.id === id && x.mine_created);
     if (!g) return frame('Editar carrera', '<p class="empty">Esta carrera no existe o no la añadiste tú.</p>', { back: runnerHref('') });
     if (S.rdraft?.id !== id) S.rdraft = emptyRunnerDraft({ id, name: g.name, date: g.date, multi: !!g.end_date, end_date: g.end_date || '',
-      place: g.place || '', province: g.province || '', country: g.country || DEFAULT_COUNTRY, modality: g.modality, notes: g.notes || '', race_type: g.race_type || 'suelta', circuit: g.circuit || '' });
+      place: g.place || '', province: g.province || '', country: g.country || DEFAULT_COUNTRY, modality: g.modality, notes: g.notes || '', race_type: g.race_type || 'suelta', circuit: g.circuit || '', subtype: g.subtype || '', km: g.km ?? '' });
     return viewRunnerNew();
   }
   if (sub === 'mi') return viewRunnerMine();
@@ -823,7 +835,7 @@ function viewFed() {
 function draftRegistration(id) {
   if (id === 'nueva') {
     const pre = S.prefill; S.prefill = null;   // viene de «Carreras de las federaciones»
-    return { kind: 'reg', id: null, name: '', date: '', place: '', province: '', country: DEFAULT_COUNTRY, modality: 'Carretera', race_type: 'suelta', circuit: '', notes: '', people: [], ...pre };
+    return { kind: 'reg', id: null, name: '', date: '', place: '', province: '', country: DEFAULT_COUNTRY, modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', notes: '', people: [], ...pre };
   }
   const g = S.data.registrations.find((x) => x.id === id);
   if (!g) return null;
@@ -837,6 +849,7 @@ function raceFields(d) {
       <label>${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-f="date" value="${esc(d.date)}" required></label>
       <label>Modalidad<select data-f="modality">${MODALITIES.map((m) => opt(m, m, d.modality)).join('')}</select></label>
     </div>
+    ${detailInputs(d, 'data-f')}
     ${typeFields(d, 'data-f')}
     <label class="check"><input type="checkbox" data-act-change="multi" ${d.multi ? 'checked' : ''}> Carrera de varios días (por etapas)</label>
     ${d.multi ? `<label>Último día<input type="date" data-f="end_date" value="${esc(d.end_date || '')}" min="${esc(d.date || '')}" required></label>` : ''}
@@ -909,7 +922,7 @@ function weekRaces(days) {
 function weekText(days, list = weekRaces(days)) {
   if (!list.length) return '';
   const who = (g) => g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ');
-  return `🚴 CC Monzón · carreras de los próximos ${days} días\n\n${list.map((g) => `📅 ${when(g)} · ${g.name}\n${place(g) || g.modality ? `📍 ${[place(g), g.modality].filter(Boolean).join(' · ')}\n` : ''}👥 ${who(g)}`).join('\n\n')}\n\n📸 Crónica y foto con la equipación, en las 48 h siguientes a la prueba.`;
+  return `🚴 CC Monzón · carreras de los próximos ${days} días\n\n${list.map((g) => `📅 ${when(g)} · ${g.name}\n${place(g) || g.modality ? `📍 ${[place(g), [g.modality, g.subtype].filter(Boolean).join(' '), g.km ? kmText(g.km) : ''].filter(Boolean).join(' · ')}\n` : ''}👥 ${who(g)}`).join('\n\n')}\n\n📸 Crónica y foto con la equipación, en las 48 h siguientes a la prueba.`;
 }
 /** Casilla «publicada en redes» (se guarda en este móvil). */
 const postCheck = (id) => `<label class="check post-check"><input type="checkbox" data-act-change="post" data-id="${id}" ${postedSet().has(id) ? 'checked' : ''}> ✓ Publicada en redes</label>`;
@@ -1005,6 +1018,18 @@ function circuitsCard(d) {
 // ======================================================================
 
 /** Cosas pendientes de la dirección. */
+/** Días desde una fecha guardada (null si nunca). */
+const daysSince = (key) => { const v = store.get(key); const t = v ? Date.parse(v) : NaN; return Number.isFinite(t) ? Math.max(0, Math.floor((Date.now() - t) / 864e5)) : null; };
+const agoText = (d) => (d === null ? 'nunca desde este móvil' : d === 0 ? 'hoy' : d === 1 ? 'ayer' : `hace ${d} días`);
+/** Copias de seguridad que tocan: datos cada 30 días, contratos cada 60 (si los hay). Se puede posponer 7 días. */
+function backupDue() {
+  const snooze = store.get(BACKUP_SNOOZE_KEY);
+  if (snooze && Date.now() < Date.parse(snooze)) return [];
+  const out = [], d = daysSince(BACKUP_KEY), c = daysSince(BACKUP_DOCS_KEY);
+  if (d === null || d > 30) out.push({ kind: 'data', days: d });
+  if ((S.docs || []).length && (c === null || c > 60)) out.push({ kind: 'docs', days: c });
+  return out;
+}
 const postedSet = () => { try { return new Set(JSON.parse(store.get(POSTED_KEY) || '[]')); } catch { return new Set(); } };
 const savePosted = (set) => store.set(POSTED_KEY, JSON.stringify([...set].slice(-300)));
 function adminAlerts() {
@@ -1014,14 +1039,15 @@ function adminAlerts() {
     circuits: (S.data.circuitPodiums || []).filter((c) => c.status === 'pendiente'),
     week, weekTodo: week.filter((g) => !posted.has(g.id)),
     noContract: S.data.runners.filter((r) => !r.contract).sort(byName),
+    backup: backupDue(),
   };
 }
-const alertCount = () => { const a = adminAlerts(); return a.circuits.length + a.weekTodo.length; };
+const alertCount = () => { const a = adminAlerts(); return a.circuits.length + a.weekTodo.length + a.backup.length; };
 
 function viewAlerts() {
   const a = adminAlerts();
   const per = bonusCfg(new Date().getFullYear()).circuitExtra ?? 4;
-  const none = !a.circuits.length && !a.week.length && !a.noContract.length;
+  const none = !a.circuits.length && !a.week.length && !a.noContract.length && !a.backup.length;
   const raceCard = (g) => postCard(g);
   return frame('Avisos', `
     <a class="btn primary block" href="#/noticias">📣 Noticias para los corredores${S.data.announcements ? ` (${S.data.announcements.length})` : ''}</a>
@@ -1039,6 +1065,11 @@ function viewAlerts() {
         <p>${medal(c.position)} <b>${c.position}º</b> en <b>${esc(c.circuit)}</b> · ${c.year} · clasificación ${scopeLabel(c.scope)}</p>
         <div class="row"><button class="btn primary" data-act="circ-confirm" data-id="${c.id}">Confirmar (+${per})</button>
           <button class="btn danger ghost" data-act="circ-del" data-id="${c.id}">Rechazar</button></div></article>`).join('')}` : ''}
+    ${a.backup.length ? `<h2 class="section">💾 Copia de seguridad</h2>
+      <p class="hint">Tus datos solo están en Supabase: una copia tuya es la mejor seguridad. Guárdala en tu Drive o correo.</p>
+      ${a.backup.map((b) => `<article class="card"><p>${b.kind === 'data' ? '<b>Datos</b> (corredores, inscripciones, carreras y resultados)' : '<b>Contratos y documentos</b> subidos'}: última copia <b>${agoText(b.days)}</b>.</p>
+        <button class="btn primary" data-act="${b.kind === 'data' ? 'backup' : 'backup-docs'}">Descargar ahora</button></article>`).join('')}
+      <button class="btn ghost block" data-act="backup-snooze">Recordármelo en 7 días</button>` : ''}
     ${a.noContract.length ? `<h2 class="section">📄 Corredores sin tipo de contrato (${a.noContract.length})</h2>
       <p class="hint">Sin contrato indicado se les aplican los bonos y la penalización de renovación: ${esc(a.noContract.map((r) => r.name).join(', '))}.</p>
       <a class="btn block" href="#/bonos">Indicarlo en Bonos</a>` : ''}`, { back: '#/inscripciones' });
@@ -1113,7 +1144,7 @@ function yearPicker(years) {
 }
 
 function draftRace(id) {
-  if (id === 'nueva') return { kind: 'race', id: null, name: '', date: '', place: '', province: '', country: DEFAULT_COUNTRY, modality: 'Carretera', race_type: 'suelta', circuit: '', notes: '', people: [], stages: [] };
+  if (id === 'nueva') return { kind: 'race', id: null, name: '', date: '', place: '', province: '', country: DEFAULT_COUNTRY, modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', notes: '', people: [], stages: [] };
   const r = S.data.races.find((x) => x.id === id);
   if (!r) return null;
   const stages = (r.stages || []).map((_, i) => stageName(r, i));
@@ -1208,7 +1239,7 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
   const hero = `<section class="sum-hero ${cls}">
     <p class="sum-hero-t">${mod ? `🏁 ${esc(mod)}` : '🏁 Todo el equipo'} · temporada ${S.year}</p>
     <div class="sum-big">${big(s.totals.races, 'carreras')}${big(s.totals.runners, 'corredores')}${big(s.totals.podiums, 'podios')}${big(s.totals.wins, 'victorias')}</div>
-    <p class="sum-hero-s">${s.totals.participations} participaciones${s.totals.podiums ? ` · ${Math.round((s.totals.podiums / Math.max(1, s.totals.participations)) * 100)} % acaban en podio` : ''}</p>
+    <p class="sum-hero-s">${s.totals.km ? `📏 ${kmText(s.totals.km)} recorridos entre todos · ` : ''}${s.totals.participations} participaciones${s.totals.podiums ? ` · ${Math.round((s.totals.podiums / Math.max(1, s.totals.participations)) * 100)} % acaban en podio` : ''}</p>
   </section>`;
 
   // --- líderes
@@ -1239,6 +1270,10 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
         `<span class="${modClass(x)}" style="flex:${m.mods[x]}" title="${esc(x)}: ${m.mods[x]}"></span>`).join('')}</div><b>${MES[m.month]}</b></div>`).join('')}</div>
     ${mod ? '' : `<div class="mod-legend">${all.byModality.filter((m) => m.races).map((m) => `<span class="${modClass(m.modality)}"><i class="dot"></i>${esc(m.modality)}</span>`).join('')}</div>`}</section>`;
 
+  // --- por formato (Critérium, XCM…)
+  const fmt = s.bySubtype.length ? `<section class="card"><h2>Por formato</h2><div class="pills">${s.bySubtype.map((x) =>
+    `<span class="pill ${modClass(x.modality)}"><i class="dot"></i>${mod ? '' : `${esc(x.modality)} · `}${esc(x.subtype)} <b>${x.races}</b></span>`).join('')}</div></section>` : '';
+
   // --- clasificación de corredores
   const active = people.filter((r) => r.races > 0);
   const idle = people.filter((r) => !r.races && r.current);
@@ -1246,7 +1281,7 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
   const rank = `<section class="card"><h2>Corredores${mod ? ` de ${esc(mod)}` : ''}</h2>
     ${active.length ? `<ol class="rank">${active.map((r, i) => `<li class="${me && r.key === me ? 'me-row' : ''}">
       <span class="pos">${i + 1}</span>
-      <div class="rk"><div class="rk-h"><b>${esc(r.name)}</b>${r.current ? '' : ' <small class="muted">(baja)</small>'}
+      <div class="rk"><div class="rk-h"><b>${esc(r.name)}</b>${r.km ? ` <small class="muted">${kmText(r.km)}</small>` : ''}${r.current ? '' : ' <small class="muted">(baja)</small>'}
           <span class="rk-m">${r.p1 ? `🥇${r.p1} ` : ''}${r.p2 ? `🥈${r.p2} ` : ''}${r.p3 ? `🥉${r.p3}` : ''}</span></div>
         <div class="bar seg" style="width:${(r.races / maxR) * 100}%">${MODALITIES.filter((x) => r.mods[x]).map((x) => `<span class="${modClass(x)}" style="flex:${r.mods[x]}" title="${esc(x)}: ${r.mods[x]}"></span>`).join('')}</div></div>
       <span class="rk-n">${r.races}</span></li>`).join('')}</ol>`
@@ -1279,6 +1314,7 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
     ${leaders ? `<div class="leads">${leaders}</div>` : ''}
     ${mod ? '' : byMod}
     ${months}
+    ${fmt}
     ${rank}
     ${pods}
     ${mod ? byMod : ''}
@@ -1407,7 +1443,7 @@ function viewBonus() {
     <p class="hint">💶 <b>Saldo</b> = bono − penalización (si la temporada acabara hoy). El contrato permite descontar la penalización de lo que el club deba al corredor. Saldo total: <b>${balanceText(totalPay - totalPen)}</b>.</p>
     <p class="hint">Cuentan las carreras con resultados de ${S.year} y las ya disputadas en las que el corredor puso su puesto, aunque aún no las hayas pasado a resultados; una carrera de varios días cuenta un día cada uno. La parte clara de la barra suma las inscripciones de ${S.year} pendientes.</p>
     <ul class="bonus-list">${rows.map((r) => `<li>
-      <div class="bonus-head"><span class="name">${esc(r.runner.name)}</span>
+      <div class="bonus-head"><span class="name"><a class="name-link" href="#/corredor/${r.runner.id}">${esc(r.runner.name)} ›</a></span>
         ${contractSelect(`data-runner-contract="${r.runner.id}" aria-label="Tipo de contrato de ${esc(r.runner.name)}"`, r.runner.contract || (r.isNew ? 'nuevo' : ''))}</div>
       ${bonusBar(r, cfg, r.planned)}
       ${!r.reachesMinimum && r.penalty ? `<p class="pen-chip">⚠️ Penalización ${euros(r.penalty)} si no llega a ${r.minimum}</p>` : r.reachesMinimum ? '<p class="pen-chip ok">✅ Mínimo cumplido</p>' : ''}
@@ -1485,7 +1521,7 @@ async function saveBonus(year, cfg) {
 }
 
 /** Desplegable en la plantilla: carreras de un corredor en el año e inscripciones. */
-function adminRunnerRaces(r, year) {
+function adminRunnerRaces(r, year, forceOpen = false) {
   const today = todayISO();
   const races = S.data.races.filter((x) => yearOf(x.date) === year && x.results.some((y) => y.runner_id === r.id))
     .sort((a, b) => b.date.localeCompare(a.date));
@@ -1495,7 +1531,7 @@ function adminRunnerRaces(r, year) {
   const key = 'rr-' + r.id;
   const res = (x) => { const y = x.results.find((z) => z.runner_id === r.id);
     return y.position ? `${isPodium(y.position) ? medal(y.position) + ' ' : ''}${y.position}º` : '<span class="muted">sin puesto</span>'; };
-  return `<details class="runner-races"${S.open?.[key] ? ' open' : ''} data-open-key="${key}">
+  return `<details class="runner-races"${forceOpen || S.open?.[key] ? ' open' : ''} data-open-key="${key}">
     <summary>Carreras ${year}: <b>${races.length}</b>${days !== races.length ? ` (${days} días)` : ''} · apuntado a ${upcoming.length} próxima${upcoming.length === 1 ? '' : 's'}${pending.length ? ` · ${pending.length} ya disputada${pending.length === 1 ? '' : 's'} sin pasar a resultados` : ''}</summary>
     ${races.length ? `<ul class="mini-list">${races.map((x) => miniRow(x, `<a class="pos" href="#/carreras/${x.id}">${res(x)}</a>`)).join('')}</ul>` : `<p class="hint">Sin carreras con resultados en ${year}.</p>`}
     ${pending.length ? `<p class="hint"><b>Ya disputadas, aún sin pasar a resultados</b> (le cuentan para el bono si puso su puesto):</p><ul class="mini-list">${pending.map((g) => miniRow(g, `<a class="btn small" href="#/inscripciones/${g.id}">Abrir</a>`)).join('')}</ul>` : ''}
@@ -1581,6 +1617,47 @@ function myDocsCard() {
   </section>`;
 }
 
+/** Ficha del corredor (dirección): todo lo suyo en una pantalla. */
+function viewRunnerCard(id) {
+  const r = runnerById(id);
+  if (!r) return frame('Corredor', '<p class="empty">Este corredor no existe.</p>', { back: '#/corredores' });
+  const years = availableYears(S.data.races);
+  if (!years.includes(S.year)) S.year = years[0];
+  const cfg = bonusCfg(S.year);
+  const row = yearBonuses(S.year, S.data.races, S.data.registrations, S.data.runners, cfg, S.data.circuitPodiums || []).find((b) => b.runner.id === r.id);
+  const sum = yearSummary(S.year, S.data.races, S.data.runners).perRunner.find((x) => x.key === r.id);
+  const docs = (S.docs || []).filter((x) => x.runner_id === r.id);
+  const circuits = (S.data.circuitPodiums || []).filter((c) => c.runner_id === r.id && c.year === S.year);
+  const tot = S.data.races.reduce((n, x) => n + x.results.filter((y) => y.runner_id === r.id).length, 0);
+  return frame(r.name, `
+    <section class="card stack">
+      <label>Categoría${catSelect(`data-runner-cat="${r.id}"`, r.category || '')}</label>
+      <label>Contrato${contractSelect(`data-runner-contract="${r.id}"`, r.contract || '')}</label>
+      <p class="muted small">${tot} carrera${tot === 1 ? '' : 's'} en total${r.created_at ? ` · en el club desde ${formatDate(String(r.created_at).slice(0, 10), false)}` : ''}</p>
+      <div class="row"><button class="btn primary" data-act="runner-menu" data-id="${r.id}">Enlace y opciones ⋯</button></div>
+    </section>
+    ${yearPicker(years)}
+    ${row ? `<section class="card bonus-card"><h2>Bono ${S.year}</h2>
+      ${penaltyAlert(row, cfg, S.year, { who: 'Le' })}
+      ${bonusBar(row, cfg, row.planned)}
+      <p class="bonus-text">${bonusText(row, 'Lleva')}${row.planned ? ` · <span class="muted">con sus ${row.planned} inscrita${row.planned === 1 ? '' : 's'}: ${row.projected.bonusCount}</span>` : ''}</p>
+      ${balanceLine(row)}
+      ${circuits.length ? `<p class="hint">🏆 Podios de circuito: ${circuits.map((c) => `${medal(c.position)} ${esc(c.circuit)}${c.status === 'confirmado' ? '' : ' (pendiente)'}`).join(' · ')}</p>` : ''}
+      <a class="btn small ghost" href="#/bonos">Ver todos los bonos</a></section>` : ''}
+    ${sum ? `<section class="card"><h2>${S.year} en cifras</h2>
+      <div class="sum-big sum-mini"><div><b>${sum.races}</b><span>carreras</span></div><div><b>${sum.p1}</b><span>🥇</span></div><div><b>${sum.p2}</b><span>🥈</span></div><div><b>${sum.p3}</b><span>🥉</span></div></div>
+      ${sum.km ? `<p class="muted small">📏 ${kmText(sum.km)} recorridos en ${S.year}</p>` : ''}
+      ${sum.races ? `<div class="bar seg">${MODALITIES.filter((x) => sum.mods[x]).map((x) => `<span class="${modClass(x)}" style="flex:${sum.mods[x]}" title="${esc(x)}: ${sum.mods[x]}"></span>`).join('')}</div>
+        <div class="mod-legend">${MODALITIES.filter((x) => sum.mods[x]).map((x) => `<span class="${modClass(x)}"><i class="dot"></i>${esc(x)} ${sum.mods[x]}</span>`).join('')}</div>` : '<p class="muted small">Sin carreras este año.</p>'}</section>` : ''}
+    <h2 class="section">Carreras ${S.year}</h2>
+    ${adminRunnerRaces(r, S.year, true)}
+    <section class="card"><h2>📄 Contrato y documentos</h2>
+      ${S.docs === null ? '<p class="muted">Aún no están activados los documentos.</p>'
+        : docs.length ? `<ul class="mini-list">${docs.map((x) => `<li><div><b>${docIcon(x.mime)} ${esc(x.title)}</b><small class="muted">Temporada ${x.year} · ${fmtSize(x.size)}</small></div>
+          <button class="btn small" data-act="doc-open" data-id="${x.id}">Ver</button></li>`).join('')}</ul>` : '<p class="empty small">Todavía no hay documentos.</p>'}
+      <a class="btn small" href="#/docs/${r.id}">Subir o borrar documentos</a></section>`, { back: '#/corredores' });
+}
+
 function viewRunners() {
   const counts = new Map();
   for (const r of S.data.races) for (const x of r.results) if (x.runner_id) counts.set(x.runner_id, (counts.get(x.runner_id) || 0) + 1);
@@ -1611,7 +1688,7 @@ function viewRunners() {
     </details>
     ${runners.length ? '<button class="btn block" data-act="all-links">Copiar todos los enlaces</button>' : ''}
     <ul class="roster">${runners.map((r) => `<li>
-      <div><span class="name">${esc(r.name)}${(S.docs || []).some((x) => x.runner_id === r.id && x.year === year) ? ' <a class="doc-badge" href="#/docs/' + r.id + '" title="Contrato ' + year + ' subido">📄</a>' : ''}</span><small class="muted">${counts.get(r.id) || 0} carreras en total</small>${badge(bonusBy.get(r.id))}</div>
+      <div><span class="name"><a class="name-link" href="#/corredor/${r.id}">${esc(r.name)} ›</a>${(S.docs || []).some((x) => x.runner_id === r.id && x.year === year) ? ' <a class="doc-badge" href="#/docs/' + r.id + '" title="Contrato ' + year + ' subido">📄</a>' : ''}</span><small class="muted">${counts.get(r.id) || 0} carreras en total</small>${badge(bonusBy.get(r.id))}</div>
       <div class="roster-sel">
         ${catSelect(`data-runner-cat="${r.id}" aria-label="Categoría habitual de ${esc(r.name)}"`, r.category || '')}
         ${contractSelect(`data-runner-contract="${r.id}" aria-label="Tipo de contrato de ${esc(r.name)}"`, r.contract || '')}
@@ -1629,12 +1706,18 @@ function viewData() {
   return frame('Datos', `
     <section class="card stack"><h2>Copia de seguridad</h2>
       <p>Descarga todos los datos (corredores, inscripciones, carreras y resultados) en un archivo. Guárdalo en tu Drive o correo una vez al mes.</p>
-      <button class="btn primary" data-act="backup">Descargar copia completa</button>
+      <button class="btn primary" data-act="backup">Descargar copia de datos</button>
+      <p class="hint">Última copia de datos: <b>${agoText(daysSince(BACKUP_KEY))}</b>.</p>
+      <p>Los contratos y documentos subidos no van en esa copia: se descargan aparte, en otro archivo.</p>
+      <button class="btn" data-act="backup-docs">Descargar contratos y documentos${S.docs ? ` (${S.docs.length})` : ''}</button>
+      <p class="hint">${S.docs === null ? 'Aún no están activados los documentos.' : `Última copia de documentos: <b>${agoText(daysSince(BACKUP_DOCS_KEY))}</b>.`}</p>
       <button class="btn" data-act="csv-all">Exportar todos los resultados a CSV</button>
     </section>
     <section class="card stack"><h2>Restaurar o migrar</h2>
       <label class="btn file">Restaurar copia completa (.json)<input type="file" accept=".json,application/json" data-file="restore" hidden></label>
       <p class="hint">Sustituye <b>todos</b> los datos actuales por los de la copia.</p>
+      <label class="btn file">Restaurar contratos y documentos (.json)<input type="file" accept=".json,application/json" data-file="restore-docs" hidden></label>
+      <p class="hint">Añade los documentos de la copia a sus corredores. Los que ya existen (mismo corredor, temporada y título) se saltan. Restaura antes los datos, para que los corredores existan.</p>
       <label class="btn file">Importar resultados desde CSV<input type="file" accept=".csv,text/csv,text/plain" data-file="csv" hidden></label>
       <p class="hint">Columnas: Fecha, Carrera, Lugar, Provincia, País, Modalidad, Corredor, Categoría, Puesto y Tipo de podio (las mismas que la exportación). Se añaden a lo que ya hay; las carreras que ya existan (misma fecha y nombre) se saltan.</p>
     </section>
@@ -1656,7 +1739,9 @@ function draftPayload() {
     country: cleanName(d.country), modality: d.modality, notes: String(d.notes || '').trim(),
     end_date: d.multi && d.end_date ? d.end_date : null,
     race_type: d.race_type || 'suelta', circuit: d.race_type === 'circuito' ? cleanName(d.circuit) : null,
-    suspended: d.kind === 'reg' && !!d.suspended };
+    suspended: d.kind === 'reg' && !!d.suspended,
+    subtype: SUBTYPES[d.modality]?.includes(d.subtype) ? d.subtype : null, km: parseKm(d.km) };
+  if (String(d.km ?? '').trim() !== '' && base.km === null) throw new Error('La distancia tiene que estar entre 0 y 1000 km.');
   if (!base.name) throw new Error('Falta el nombre de la carrera.');
   if (base.race_type === 'circuito' && !base.circuit) throw new Error('Falta el nombre del circuito.');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(base.date || '')) throw new Error('Falta la fecha.');
@@ -1673,6 +1758,12 @@ async function saveRegistrationDraft() {
 }
 
 /** Guarda el tipo de una carrera creada por el corredor (si ya existía y es de otro, no se toca). */
+/** Guarda el formato y los km de una carrera creada por el corredor (se ignora si falta el SQL o no es suya). */
+async function setMyDetails(id, d) {
+  const subtype = SUBTYPES[d.modality]?.includes(d.subtype) ? d.subtype : null, km = parseKm(d.km);
+  if (!subtype && km === null && !d.id) return;
+  try { await api.runnerSetDetails(S.code, id, subtype, km); } catch (e) { console.warn(e); }
+}
 async function setMyRaceType(id, d) {
   if (!S.runnerData?.circuits) return; // base de datos sin el cambio de circuitos
   try { await api.runnerSetType(S.code, id, d.race_type || 'suelta', d.race_type === 'circuito' ? cleanName(d.circuit) : null); } catch (e) { console.warn(e); }
@@ -1874,8 +1965,27 @@ const actions = {
   },
   async backup() {
     const data = await run(() => api.exportAll());
-    if (data) download(`monzon-copia-${todayISO()}.json`, JSON.stringify(data, null, 1), 'application/json');
+    if (!data) return;
+    download(`monzon-copia-${todayISO()}.json`, JSON.stringify(data, null, 1), 'application/json');
+    store.set(BACKUP_KEY, new Date().toISOString()); render();
   },
+  async 'backup-docs'() {
+    const docs = S.docs || [];
+    if (!docs.length) return toast(S.docs === null ? 'Los documentos aún no están activados.' : 'Todavía no hay contratos subidos.', true);
+    const parts = [];
+    const ok = await run(async () => {
+      for (const [i, d] of docs.entries()) {
+        toast(`Descargando documento ${i + 1} de ${docs.length}…`);
+        const x = await api.getDocument(d.id);
+        parts.push(JSON.stringify({ runner_id: d.runner_id, runner: runnerById(d.runner_id)?.name || null, year: d.year, title: d.title, filename: x.filename, mime: x.mime, b64: x.b64 }));
+      }
+      return true;
+    });
+    if (!ok) return;
+    download(`monzon-documentos-${todayISO()}.json`, `{"app":"cc-monzon-documentos","version":1,"exported_at":"${new Date().toISOString()}","documentos":[\n${parts.join(',\n')}\n]}`, 'application/json');
+    store.set(BACKUP_DOCS_KEY, new Date().toISOString()); toast(`${docs.length} documento${docs.length === 1 ? '' : 's'} descargado${docs.length === 1 ? '' : 's'}`); render();
+  },
+  'backup-snooze'() { store.set(BACKUP_SNOOZE_KEY, new Date(Date.now() + 7 * 864e5).toISOString()); toast('Te lo recordaré en 7 días'); render(); },
   'csv-year'() { download(`monzon-resultados-${S.year}.csv`, toCsv(csvRows(S.data.races.filter((r) => yearOf(r.date) === S.year))), 'text/csv;charset=utf-8'); },
   'bonus-csv'() {
     const cfg = bonusCfg(S.year);
@@ -1998,7 +2108,7 @@ const forms = {
       const ok = await run(async () => {
         await api.runnerUpdate(S.code, d.id, { name, date: d.date, end_date: d.multi ? d.end_date : null, place: cleanName(d.place),
           province: cleanName(d.province), country: d.country, modality: d.modality, notes: d.notes || '' });
-        await setMyRaceType(d.id, d);
+        await setMyRaceType(d.id, d); await setMyDetails(d.id, d);
         await loadRunner(); return true;
       }, 'Carrera actualizada');
       if (ok) { S.rdraft = null; go('#/'); }
@@ -2017,6 +2127,7 @@ const forms = {
       const newId = await api.runnerCreate(S.code, { name, date: d.date, end_date: d.multi ? d.end_date : null, place: cleanName(d.place),
         province: cleanName(d.province), country: d.country, modality: d.modality }, d.category || null);
       if (newId && d.race_type && d.race_type !== 'suelta') await setMyRaceType(newId, d);
+      if (newId) await setMyDetails(newId, d);
       await loadRunner(); return newId || true;
     }, past ? 'Carrera añadida: ahora pon tu resultado' : 'Carrera añadida y te has apuntado');
     if (id) { S.rdraft = null; S.q.runner = ''; go(past ? resultHref(id) : '#/'); }
@@ -2120,6 +2231,22 @@ const fileHandlers = {
     const msg = `La copia tiene ${data.runners.length} corredores, ${data.races.length} carreras y ${(data.registrations || []).length} inscripciones. <b>Se borrará todo lo actual.</b> Antes descarga una copia por si acaso.`;
     if (!await confirmAction('Restaurar copia', msg, 'Restaurar')) return;
     await run(async () => { await api.importAll(data); await reload(); }, 'Copia restaurada'); render();
+  },
+  async 'restore-docs'(file) {
+    let data;
+    try { data = JSON.parse(await file.text()); } catch { return toast('El archivo no es una copia válida.', true); }
+    if (data?.app !== 'cc-monzon-documentos' || !Array.isArray(data.documentos)) return toast('El archivo no es una copia de documentos de esta app.', true);
+    const have = new Set((S.docs || []).map((x) => `${x.runner_id}|${x.year}|${x.title}`));
+    const todo = data.documentos.filter((x) => runnerById(x.runner_id) && !have.has(`${x.runner_id}|${x.year}|${x.title}`));
+    const missing = data.documentos.filter((x) => !runnerById(x.runner_id)).length;
+    if (!todo.length) return toast(missing ? 'Ninguno de los corredores de esa copia existe ahora: restaura antes los datos.' : 'Todos esos documentos ya están.', true);
+    if (!await confirmAction('Restaurar documentos', `Se añadirán <b>${todo.length}</b> documento${todo.length === 1 ? '' : 's'}${missing ? ` (${missing} se saltan porque su corredor ya no existe)` : ''}.`, 'Restaurar', 'primary')) return;
+    const n = await run(async () => {
+      let done = 0;
+      for (const x of todo) { toast(`Subiendo documento ${done + 1} de ${todo.length}…`); await api.uploadDocument(x.runner_id, x.year, x.title, x.filename, x.mime, x.b64); done++; }
+      await reload(); return done;
+    });
+    if (n) { toast(`${n} documento${n === 1 ? '' : 's'} restaurado${n === 1 ? '' : 's'}`); render(); }
   },
   async csv(file) {
     const { races, errors } = importResultsCsv(await file.text());
@@ -2232,6 +2359,12 @@ $app.addEventListener('input', (ev) => {
 
 $app.addEventListener('change', async (ev) => {
   const t = ev.target;
+  if (t.dataset.f === 'modality' && S.draft) { // cambia la modalidad: el formato depende de ella
+    S.draft.modality = t.value; if (!SUBTYPES[t.value]?.includes(S.draft.subtype)) S.draft.subtype = ''; render(); return;
+  }
+  if (t.dataset.rf === 'modality' && S.rdraft) {
+    S.rdraft.modality = t.value; if (!SUBTYPES[t.value]?.includes(S.rdraft.subtype)) S.rdraft.subtype = ''; render(); return;
+  }
   if ('retype' in t.dataset) { // cambia el tipo de carrera: mostrar u ocultar el nombre del circuito
     const d = t.dataset.rf ? S.rdraft : S.draft;
     if (d) { d.race_type = t.value; render(); $app.querySelector('[list="dl-circuit"]')?.focus(); }

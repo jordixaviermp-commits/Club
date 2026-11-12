@@ -13,6 +13,17 @@ export const RACE_TYPES = [
   { id: 'campeonato', label: 'Campeonato' },
   { id: 'circuito', label: 'Puntuable de un circuito (Copa, Open, Critérium…)' },
 ];
+/** Formato de la carrera según la modalidad (el resto de modalidades no lo piden). */
+export const SUBTYPES = {
+  Carretera: ['Critérium', 'Ciclodeportiva', 'Máster', 'Contrarreloj', 'Otra'],
+  BTT: ['XCO', 'XCM', 'UXCM', 'Otra'],
+};
+/** Km de un valor de formulario: número entre 0 y 1000 con un decimal, o null. */
+export function parseKm(v) {
+  const n = Number(String(v ?? '').replace(',', '.'));
+  return Number.isFinite(n) && n > 0 && n <= 1000 ? Math.round(n * 10) / 10 : null;
+}
+export const kmText = (km) => `${Number(km).toLocaleString('es-ES', { maximumFractionDigits: 1 })} km`;
 export const CIRCUIT_SCOPES = [{ id: 'categoria', label: 'De su categoría' }, { id: 'absoluta', label: 'Absoluta (scratch)' }];
 export const DEFAULT_COUNTRY = 'España';
 export const PROVINCES = [
@@ -143,7 +154,15 @@ export function yearSummary(year, races, runners) {
     participations: parts.length,
     podiums: podiums.length,
     wins: podiums.filter((p) => p.position === 1).length,
+    km: Math.round(parts.reduce((n, p) => n + (Number(p.race.km) || 0), 0) * 10) / 10, // km recorridos entre todos
   };
+  // Carreras por formato (Critérium, XCM…), para el resumen.
+  const bySubtype = [];
+  for (const r of yr) if (r.subtype) {
+    const e = bySubtype.find((x) => x.modality === r.modality && x.subtype === r.subtype);
+    if (e) e.races++; else bySubtype.push({ modality: r.modality, subtype: r.subtype, races: 1 });
+  }
+  bySubtype.sort((a, b) => b.races - a.races || byText(a.subtype, b.subtype));
 
   const byModality = MODALITIES.map((m) => ({
     modality: m,
@@ -173,12 +192,13 @@ export function yearSummary(year, races, runners) {
 
   // Participaciones por corredor: toda la plantilla (también con 0) y quien ya no está pero corrió ese año.
   const rows = new Map();
-  for (const rn of runners) rows.set(rn.id, { key: rn.id, name: rn.name, current: true, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {} });
+  for (const rn of runners) rows.set(rn.id, { key: rn.id, name: rn.name, current: true, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {}, km: 0 });
   for (const { race, res } of parts) {
     const k = personKey(res);
-    if (!rows.has(k)) rows.set(k, { key: k, name: res.runner_name, current: false, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {} });
+    if (!rows.has(k)) rows.set(k, { key: k, name: res.runner_name, current: false, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {}, km: 0 });
     const row = rows.get(k);
     row.races++;
+    row.km = Math.round((row.km + (Number(race.km) || 0)) * 10) / 10;
     row.mods[race.modality] = (row.mods[race.modality] || 0) + 1;
     if (race.modality === 'Carretera') row.road++;
     if (race.modality === 'BTT') row.btt++;
@@ -196,11 +216,11 @@ export function yearSummary(year, races, runners) {
   }));
 
   const podiumList = podiums.map(({ race, res, position, type, stage }) => ({
-    date: race.date, race: race.name, raceId: race.id, modality: race.modality, runner: res.runner_name, category: res.category || '',
+    date: race.date, race: race.name, raceId: race.id, modality: race.modality, subtype: race.subtype || null, km: race.km ?? null, runner: res.runner_name, category: res.category || '',
     type, stage, position,
   }));
 
-  return { year, totals, byModality, byMonth, countries, provinces, missingPlace, perRunner, byPodiumType, podiumList };
+  return { year, totals, byModality, byMonth, bySubtype, countries, provinces, missingPlace, perRunner, byPodiumType, podiumList };
 }
 
 // ---------- CSV ----------

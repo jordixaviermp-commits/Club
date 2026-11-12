@@ -278,6 +278,26 @@ select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a
 select pg_temp.expect_fail($q$select promote_registration('20000000-0000-0000-0000-000000000070')$q$, 'suspendida: no se pasa a resultados');
 reset role;
 set role anon;
+-- formato y km de la carrera
+reset role;
+set role anon;
+select runner_create_registration('DDDDDDDDDD', jsonb_build_object('name','Cursa de Formato','date', current_date + 30, 'modality','BTT'), null) as fmt \gset
+select runner_set_race_details('DDDDDDDDDD', :'fmt', ' XCM ', 85.46);
+select pg_temp.check((select g->>'subtype' from jsonb_array_elements(runner_view('DDDDDDDDDD')->'registrations') g where g->>'id' = :'fmt') = 'XCM', 'formato: el corredor indica el formato de su carrera');
+select pg_temp.check((select (g->>'km')::numeric from jsonb_array_elements(runner_view('DDDDDDDDDD')->'registrations') g where g->>'id' = :'fmt') = 85.5, 'formato: y los km (redondeados a 1 decimal)');
+select runner_set_race_details('DDDDDDDDDD', :'fmt', '', -5);
+select pg_temp.check((select g->>'km' from jsonb_array_elements(runner_view('DDDDDDDDDD')->'registrations') g where g->>'id' = :'fmt') is null, 'formato: km inválidos se dejan vacíos');
+select runner_set_race_details('DDDDDDDDDD', :'fmt', 'XCO', 42);
+select pg_temp.expect_fail($q$select runner_set_race_details('CCCCCCCCCC', '$q$ || :'fmt' || $q$', 'XCO', 10)$q$, 'formato: no cambia el de otro');
+reset role;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+select promote_registration(:'fmt') as fmtr \gset
+select pg_temp.check((select subtype from races where id = :'fmtr') = 'XCO' and (select km from races where id = :'fmtr') = 42, 'formato: pasar a resultados conserva formato y km');
+select pg_temp.expect_fail($q$update races set km = 5000 where id = '$q$ || :'fmtr' || $q$'$q$, 'formato: km fuera de rango');
+reset role;
+set role anon;
+select pg_temp.check((runner_team('DDDDDDDDDD')::text like '%"subtype": "XCO"%'), 'formato: el resumen del equipo lo lleva');
 -- documentos (contratos)
 reset role;
 set role authenticated;
