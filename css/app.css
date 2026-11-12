@@ -503,3 +503,9 @@ h2.section.past-head { color: var(--muted); margin-top: 1.4rem; }
 .multi-add > .btn { margin-bottom: .6rem; }
 .save-bar { position: sticky; bottom: calc(var(--tabs-h) + env(safe-area-inset-bottom) + 8px); z-index: 4; padding-top: .8rem;
   background: linear-gradient(to top, var(--card) 65%, transparent); }
+
+/* Ficha del corredor */
+.name-link { color: inherit; text-decoration: none; }
+.sum-mini { grid-template-columns: repeat(4, 1fr); margin-bottom: .8rem; }
+.sum-mini b { color: var(--accent); font-size: 1.6rem; }
+.sum-mini span { color: var(--muted); }
