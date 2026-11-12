@@ -484,3 +484,10 @@ h2.section.past-head { color: var(--muted); margin-top: 1.4rem; }
 .saldo { margin: .3rem 0 0; font-size: .9rem; }
 .saldo.pos b { color: #1e9e4a; } .saldo.neg b { color: var(--danger); }
 .week-pre { white-space: pre-wrap; font: inherit; font-size: .88rem; margin: .6rem 0 0; }
+
+/* Publicada en redes */
+.post-check { margin: 0; font-weight: 600; }
+.cal-cell.posted::after, .cal-cell.part-posted::after { position: absolute; top: 1px; left: 4px; font-size: .85rem; font-weight: 800; line-height: 1; }
+.cal-cell.posted::after { content: "✓"; color: #1e9e4a; }
+.cal-cell.part-posted::after { content: "½"; color: #b87a00; }
+.sl-ok { color: #1e9e4a; } .sl-half { color: #c98a00; }
