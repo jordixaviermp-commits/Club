@@ -965,7 +965,6 @@ function viewRunnerMine() {
     <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
     ${myRacesCard(d)}
     <a class="btn block" href="${runnerHref('contrato')}">📄 Mi contrato y mi bonificación</a>
-    ${licenseCard()}
     ${installHint()}
     ${S.preview ? '' : `<p class="center"><button class="link muted" data-act="r-forget">No soy ${esc(me.name)}</button></p>`}`,
   { rtab: 'mi' });
@@ -976,6 +975,7 @@ function viewRunnerContract() {
   return frame(runnerTitle(), `
     ${previewBanner()}
     ${myDocsCard()}
+    ${licenseCard()}
     ${runnerBonusCard(S.runnerData)}
     ${circuitsCard(S.runnerData)}`,
   { rtab: 'contrato' });
