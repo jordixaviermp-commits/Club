@@ -610,3 +610,6 @@ ol.bullets { list-style: decimal; }
   header.top .back { padding-right: .25rem; }
 }
 @media (max-width: 340px) { header.top .logo { display: none; } }
+.lic-card h3 { margin: 0 0 .3rem; }
+.lic-card .row { display: flex; gap: .6rem; flex-wrap: wrap; }
+.lic-card .btn { flex: 1; text-align: center; text-decoration: none; }

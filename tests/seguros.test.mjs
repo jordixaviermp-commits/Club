@@ -15,6 +15,8 @@ test('seguros: hay catalana y aragonesa, cada una con accidente y responsabilida
     assert.ok(f.corto && f.nombre && f.info.startsWith('https://'), id);
     assert.ok(f.accidente.poliza && f.accidente.aseguradora && f.rc.poliza && f.rc.aseguradora, id);
     assert.ok(f.accidente.pasos.length >= 2, id);
+    assert.match(f.licencia.href, /^https:\/\//, id + ' licencia');
+    assert.ok(f.licencia.etiqueta, id);
   }
 });
 
