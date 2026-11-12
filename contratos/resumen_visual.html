@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Contratos 2027 visual - CC Monzón</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; background: #eef1f6; font-family: Arial, "Liberation Sans", Helvetica, "Noto Color Emoji", sans-serif; color: #1d2433; }
+.wrap { width: 1200px; padding: 40px 36px 30px; background: #eef1f6; }
+header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 26px; }
+h1 { margin: 0; font-size: 40px; letter-spacing: .3px; }
+h1 span { color: #d32f2f; }
+.club { color: #5b6680; font-size: 19px; margin-top: 6px; }
+.min { background: #1d2433; color: #fff; border-radius: 16px; padding: 14px 22px; text-align: center; }
+.min b { display: block; font-size: 40px; line-height: 1; }
+.min small { font-size: 14px; opacity: .85; }
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.card { background: #fff; border-radius: 22px; overflow: hidden; box-shadow: 0 4px 14px rgba(30,40,70,.10); display: flex; flex-direction: column; }
+.top { color: #fff; padding: 20px 22px 18px; }
+.top h2 { margin: 0; font-size: 26px; letter-spacing: .5px; }
+.top p { margin: 4px 0 0; font-size: 15px; opacity: .9; }
+.c1 .top { background: linear-gradient(135deg, #1f6fb2, #2a8bd6); }
+.c2 .top { background: linear-gradient(135deg, #2e8b57, #3aab6d); }
+.c3 .top { background: linear-gradient(135deg, #6a43a3, #8a5fc7); }
+.body { padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 16px; flex: 1; }
+.lbl { font-size: 13px; font-weight: bold; letter-spacing: 1px; color: #6b7590; text-transform: uppercase; margin-bottom: 8px; }
+.pay { display: flex; align-items: baseline; gap: 8px; }
+.pay b { font-size: 46px; line-height: 1; }
+.pay span { color: #6b7590; font-size: 15px; }
+.pay.zero b { color: #1e7d3c; font-size: 34px; }
+.kit { display: flex; flex-wrap: wrap; gap: 7px; }
+.kit span { background: #f1f4f9; border-radius: 999px; padding: 7px 12px; font-size: 15px; font-weight: bold; color: #2b3550; }
+.kit span i { font-style: normal; margin-right: 4px; }
+.kit .gift { background: #e7f6ec; color: #1e7d3c; }
+.kit .none { background: #f6f6f6; color: #8a93a6; font-weight: normal; }
+.stairs { display: flex; align-items: flex-end; gap: 8px; height: 150px; }
+.step { flex: 1; border-radius: 12px 12px 4px 4px; color: #fff; display: flex; flex-direction: column; justify-content: flex-start; align-items: center; padding-top: 10px; }
+.step b { font-size: 24px; }
+.step small { font-size: 13px; opacity: .95; margin-top: 2px; }
+.c1 .step { background: #2a8bd6; } .c2 .step { background: #3aab6d; } .c3 .step { background: #8a5fc7; }
+.s1 { height: 52%; opacity: .75; } .s2 { height: 76%; opacity: .88; } .s3 { height: 100%; }
+.pen { border-radius: 14px; padding: 13px 15px; font-size: 16px; line-height: 1.35; }
+.pen.bad { background: #fdecec; color: #8e1c1c; border: 2px solid #f3b6b6; }
+.pen.bad b { font-size: 26px; color: #c62828; display: block; }
+.pen.good { background: #e7f6ec; color: #1e5f33; border: 2px solid #b9e2c6; }
+.pen.good b { font-size: 22px; display: block; }
+.pen small { display: block; margin-top: 6px; font-size: 13.5px; color: #5b6680; }
+.prices { margin-top: 22px; background: #fff; border-radius: 22px; padding: 20px 24px; box-shadow: 0 4px 14px rgba(30,40,70,.10); }
+.prices h3 { margin: 0 0 14px; font-size: 21px; }
+.pgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.pgrid div { background: #f4f6f9; border-radius: 12px; padding: 11px 14px; display: flex; justify-content: space-between; align-items: center; font-size: 16px; font-weight: bold; color: #39445c; }
+.pgrid div b { font-size: 19px; color: #1d2433; text-align: right; }
+.pgrid div b small { display: block; font-size: 11.5px; font-weight: normal; color: #6b7590; }
+.pgrid .free b { color: #1e7d3c; }
+.rules { margin-top: 22px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.rules div { background: #fff; border-radius: 16px; padding: 14px 16px; font-size: 15px; line-height: 1.4; color: #39445c; display: flex; gap: 12px; align-items: flex-start; }
+.rules i { font-style: normal; font-size: 26px; line-height: 1; }
+.foot { margin-top: 18px; color: #7a8399; font-size: 14px; text-align: center; }
+</style></head><body><div class="wrap">
+<header>
+  <div><h1>Contratos de corredor <span>2027</span></h1><div class="club">Club Ciclista Monzón · temporada 01/01 – 31/12/2027</div></div>
+  <div class="min"><small>MÍNIMO</small><b>12</b><small>carreras</small></div>
+</header>
+
+<div class="cards">
+  <div class="card c1">
+    <div class="top"><h2>NUEVO</h2><p>Primer año en el equipo</p></div>
+    <div class="body">
+      <div><div class="lbl">Pagas al firmar</div><div class="pay"><b>175 €</b><span>licencia + ropa</span></div></div>
+      <div><div class="lbl">Te damos</div><div class="kit">
+        <span><i>🪪</i>Licencia</span><span><i>👕</i>2 maillots</span><span><i>🩳</i>2 culotes</span>
+        <span><i>🧥</i>Hyder</span><span><i>🧦</i>1 par aero</span><span class="gift"><i>🧢</i>Gorra sponsors</span><span class="gift"><i>👕</i>Camiseta sponsors</span></div></div>
+      <div><div class="lbl">Bono por carreras</div><div class="stairs">
+        <div class="step s1"><b>50 €</b><small>12 carreras</small></div>
+        <div class="step s2"><b>100 €</b><small>17 carreras</small></div>
+        <div class="step s3"><b>150 €</b><small>22 carreras</small></div></div></div>
+      <div class="pen bad">Si no llegas a 12 carreras pagas<b>175 €</b><small>🩹 Exento si es por lesión compitiendo con el Club</small></div>
+    </div>
+  </div>
+
+  <div class="card c2">
+    <div class="top"><h2>RENOVACIÓN</h2><p>Sigues en el equipo, con licencia</p></div>
+    <div class="body">
+      <div><div class="lbl">Pagas al firmar</div><div class="pay"><b>65 €</b><span>licencia + ropa</span></div></div>
+      <div><div class="lbl">Te damos</div><div class="kit">
+        <span><i>🪪</i>Licencia</span><span><i>👕</i>1 maillot</span><span><i>🩳</i>1 culote</span><span><i>🧦</i>1 par aero</span></div></div>
+      <div><div class="lbl">Bono por carreras</div><div class="stairs">
+        <div class="step s1"><b>50 €</b><small>12 carreras</small></div>
+        <div class="step s2"><b>100 €</b><small>17 carreras</small></div>
+        <div class="step s3"><b>150 €</b><small>22 carreras</small></div></div></div>
+      <div class="pen bad">Si no llegas a 12 carreras pagas<b>100 €</b><small>🩹 Exento si es por lesión compitiendo con el Club</small></div>
+    </div>
+  </div>
+
+  <div class="card c3">
+    <div class="top"><h2>RENOVACIÓN<br>SIN LICENCIA</h2><p>Licencia y ropa por tu cuenta</p></div>
+    <div class="body">
+      <div><div class="lbl">Pagas al firmar</div><div class="pay zero"><b>Nada</b></div></div>
+      <div><div class="lbl">Te damos</div><div class="kit"><span class="none">Sin licencia ni material</span></div></div>
+      <div><div class="lbl">Bono por carreras</div><div class="stairs">
+        <div class="step s1"><b>100 €</b><small>12 carreras</small></div>
+        <div class="step s2"><b>150 €</b><small>17 carreras</small></div>
+        <div class="step s3"><b>200 €</b><small>22 carreras</small></div></div></div>
+      <div class="pen good"><b>✅ Sin penalización</b>Sin mínimo: solo cuenta para el bono</div>
+    </div>
+  </div>
+</div>
+
+<div class="rules">
+  <div><i>📅</i><span>Carreras de varios días: <b>cada día cuenta como una carrera</b>.</span></div>
+  <div><i>🏆</i><span>Podio en la general final de un circuito completo: <b>+4 carreras</b> para el bono.</span></div>
+  <div><i>🌧️</i><span>Carrera suspendida estando inscrito: cuenta para el <b>mínimo</b>, no para el bono.</span></div>
+  <div><i>🩹</i><span>Lesión compitiendo: <b>informe médico</b> y aviso al Club en <b>7 días</b>.</span></div>
+  <div><i>💶</i><span>Penalización a pagar en <b>30 días</b> tras el 31/12 (se puede descontar de los bonos).</span></div>
+  <div><i>📸</i><span>Crónica y foto con la equipación en <b>48 h</b> tras cada prueba.</span></div>
+</div>
+
+<div class="prices">
+  <h3>🛒 Precios 2027 del material</h3>
+  <div class="pgrid">
+    <div>Maillot<b>25 €</b></div>
+    <div>Culote<b>40 €</b></div>
+    <div>Hyder<b>45 €</b></div>
+    <div>Chaleco<b>35 €</b></div>
+    <div>Calcetines aero<b>15 €<small>1.º gratis: nuevo y renov.</small></b></div>
+    <div>Manguitos<b>15 €</b></div>
+    <div>Camiseta interior<b>20 €</b></div>
+    <div class="free">Gorra y camiseta sponsors<b>Gratis<small>solo nuevo</small></b></div>
+  </div>
+</div>
+<p class="foot">Detalle completo en cada contrato · Club Ciclista Monzón</p>
+</div></body></html>
