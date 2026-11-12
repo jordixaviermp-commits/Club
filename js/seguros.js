@@ -61,8 +61,8 @@ export const FEDERACIONES = {
     id: 'fac', corto: 'Aragonesa', nombre: 'Federación Aragonesa de Ciclismo (FAC)',
     info: 'https://aragonciclismo.com',
     imagen: 'img/accidente-fac.png', // resumen en imagen; se genera con scripts/imagenes-seguros.mjs
-    // OJO: es la web de la federación (aragonciclismo.com redirige a yosoyciclista.com/aragon); sin confirmar que lleve directo a la licencia. Cambiar por el enlace exacto cuando se sepa.
-    licencia: { etiqueta: 'Web de la Federación Aragonesa', href: 'https://aragonciclismo.com' },
+    // Acceso de los federados aragoneses a su licencia (Yosoyciclista; entra cada uno con su cuenta; la app no accede a ella).
+    licencia: { etiqueta: 'Licencia (Yosoyciclista, FAC)', href: 'https://aragonciclismo.com/index.php/es/smartweb/seccion/login/aragon' },
     accidente: {
       aseguradora: 'Divina Seguros', poliza: '8626527',
       aviso: 'No acudas a ningún centro médico sin la autorización previa de la aseguradora: si no, los gastos los pagas tú.',
