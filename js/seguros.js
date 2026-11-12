@@ -35,7 +35,7 @@ export const FEDERACIONES = {
     rc: {
       aseguradora: 'Hiscox', poliza: 'HD IP6 2124609',
       datos: [
-        'Franquicia: 120 € según la web de la federación. La póliza (Hiscox, 2026) dice «sin franquicia» para la Federación: confírmalo con ellos si te reclaman algo.',
+        'Franquicia: 120 € (lo que pagas tú de cada siniestro), según la federación.',
         'Categorías de Pre-benjamín a Cadete: Allianz 055276264.',
         'La póliza cubre la responsabilidad civil de la Federación (organización de pruebas y actividad habitual), hasta 1.200.000 € por siniestro y periodo, y considera a los federados con licencia terceros entre sí: se cubren las reclamaciones por daños personales entre ellos.',
       ],
