@@ -563,3 +563,11 @@ label.inline select { width: auto; }
 .alert-hint { color: #9a6b00; font-weight: 600; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .alert-hint { color: #e6b04a; } }
 .canc-block { border-left: 5px solid #b42318; }
+
+/* Filtro rápido por modalidad */
+.modbar { display: flex; gap: .45rem; overflow-x: auto; padding: 2px 1px 8px; margin: 0 -2px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.modbar::-webkit-scrollbar { display: none; }
+.modchip { display: inline-flex; align-items: center; gap: .4rem; white-space: nowrap; }
+.modchip b { font-size: .78rem; min-width: 1.35rem; text-align: center; padding: .05rem .35rem; border-radius: 999px; background: var(--accent-2); color: var(--accent); }
+.modchip.on b { background: rgba(255,255,255,.25); color: inherit; }
+.modsum { margin: 0 0 .6rem; }
