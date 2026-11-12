@@ -515,3 +515,9 @@ h2.section.past-head { color: var(--muted); margin-top: 1.4rem; }
 .tag.t-sub { background: color-mix(in srgb, var(--mc, var(--accent)) 16%, var(--card)); color: var(--text); border: 1px solid color-mix(in srgb, var(--mc, var(--accent)) 55%, transparent); }
 .tag.t-km { background: var(--accent-2); color: var(--accent); }
 .pill .dot { margin-right: .3rem; }
+
+/* Filas tocables (Mi temporada) */
+.mini-list li > a.mini-main { display: flex; flex-direction: column; flex: 1; min-width: 0; color: inherit; text-decoration: none; }
+.mini-list li.tappable { cursor: pointer; }
+.mini-list li.tappable > a.mini-main b::after { content: " ›"; color: var(--muted); font-weight: 400; }
+.mini-list li.tappable:active { background: var(--accent-2); }

@@ -148,7 +148,7 @@ async function reload() {
 
 function parseRoute() {
   const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
-  return { view: parts[0] || '', id: parts[1] || null };
+  return { view: parts[0] || '', id: parts[1] || null, rest: parts[2] || null };
 }
 const go = (hash) => { if (location.hash === hash) onRoute(); else location.hash = hash; };
 
@@ -378,8 +378,8 @@ function fedMatches(q, existing, limit = 5) {
   return searchRaces(q, S.fed.races.filter((r) => r.date >= today && !have.has(r.date + '|' + normalize(r.name)))).slice(0, limit);
 }
 
-const miniRow = (g, right) => `<li class="mini ${modClass(g.modality)}"><div><b>${esc(g.name)}</b>
-  <small class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''} · ${esc(g.modality)}</small></div>${right}</li>`;
+const miniRow = (g, right, href = '') => `<li class="mini ${modClass(g.modality)}${href ? ' tappable' : ''}">${href ? `<a class="mini-main" href="${href}">` : '<div>'}<b>${esc(g.name)}</b>
+  <small class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''} · ${esc(g.modality)}</small>${href ? '</a>' : '</div>'}${right}</li>`;
 
 /** Resultados del buscador del corredor: carreras del club (apuntarse) y de las federaciones (añadir). */
 function runnerSearchResults(q) {
@@ -536,17 +536,17 @@ function myRacesCard(d) {
 
   <section class="card season-block next-block">
     <h2>📅 Mis próximas inscripciones <small>(${upcoming.length})</small></h2>
-    <p class="hint">Carreras a las que estás apuntado y que aún no se han corrido.</p>
-    ${upcoming.length ? `<ul class="mini-list">${upcoming.map((g) => miniRow(g, `<span class="badge-next">${dleft(g)}${myCat(g) ? ` · ${esc(myCat(g))}` : ''}</span>`)).join('')}</ul>`
+    <p class="hint">Carreras a las que estás apuntado y que aún no se han corrido. <b>Toca una para abrirla</b>: ves quién va, puedes borrarte y, si la añadiste tú, editarla.</p>
+    ${upcoming.length ? `<ul class="mini-list">${upcoming.map((g) => miniRow(g, `<span class="badge-next">${dleft(g)}${myCat(g) ? ` · ${esc(myCat(g))}` : ''}</span>`, `${runnerHref('carrera')}/${g.id}`)).join('')}</ul>`
       : '<p class="empty small">No estás apuntado a ninguna. Búscalas en la pestaña Carreras.</p>'}
   </section>
 
   ${pending.length ? `<section class="card season-block pend-block">
     <h2>🏁 Ya corridas, pendientes de resultado <small>(${pending.length})</small></h2>
-    <p class="hint">Estabas apuntado y ya se han disputado. Pon tu resultado (una sola vez): <b>en cuanto lo pongas ya te cuenta para el bono</b>. Si no fuiste, pulsa «No fui: borrarme» en la lista de carreras.</p>
+    <p class="hint">Estabas apuntado y ya se han disputado. Pon tu resultado (una sola vez): <b>en cuanto lo pongas ya te cuenta para el bono</b>. Si no fuiste, toca la carrera y pulsa «No fui: borrarme».</p>
     <ul class="mini-list">${pending.map((g) => miniRow(g, g.my_result
       ? `<span class="badge-sent">📝 ${g.my_result.position}º · ya cuenta</span>`
-      : (S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>`))).join('')}</ul>
+      : (S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>`), `${runnerHref('carrera')}/${g.id}`)).join('')}</ul>
   </section>` : ''}
 
   <section class="card season-block done-block">
@@ -591,6 +591,7 @@ function runnerScreen(sub) {
   if (sub === 'mi') return viewRunnerMine();
   if (sub === 'contrato') return viewRunnerContract();
   if (sub === 'noticias') return viewNews();
+  if (sub === 'carrera') return viewRunnerRace(S.session?.isAdmin && S.preview ? parseRoute().rest : parseRoute().id);
   if (sub === 'equipo') return viewTeam();
   if (sub === 'federaciones') return viewFed();
   return viewRunnerHome();
@@ -616,11 +617,9 @@ function doneRaceCard(r, { admin = false, meId = null } = {}) {
     : `<article class="card race done-race ${modClass(r.modality)}">${inner}</article>`;
 }
 
-function viewRunnerHome() {
+/** Tarjeta de una inscripción para el corredor: datos, quién va y sus acciones (apuntarse, borrarse, resultado, editar). */
+function runnerRegCard(g) {
   const d = S.runnerData, me = d.me, today = d.today || todayISO();
-  const upcoming = d.registrations.filter((g) => g.date >= today);
-  const past = d.registrations.filter((g) => g.date < today);
-  const card = (g) => {
     const mine = g.entries.find((e) => e.runner_id === me.id);
     const open = g.date >= today;
     return `<article class="card race ${open ? '' : 'past-reg '}${modClass(g.modality)}">
@@ -645,7 +644,13 @@ function viewRunnerHome() {
         : `<div class="row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, me.category, 'Categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">Apuntarme</button></div>`}
     </article>`;
-  };
+  }
+
+function viewRunnerHome() {
+  const d = S.runnerData, me = d.me, today = d.today || todayISO();
+  const upcoming = d.registrations.filter((g) => g.date >= today);
+  const past = d.registrations.filter((g) => g.date < today);
+  const card = runnerRegCard;
   const isMine = (g) => (g.entries || []).some((e) => e.runner_id === me.id) || (g.results || []).some((x) => x.runner_id === me.id);
   const done = (S.team?.races || []).filter((r) => (r.results || []).length);
   const body = S.regView === 'cal'
@@ -662,6 +667,15 @@ function viewRunnerHome() {
     <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
     ${body}`,
   { rtab: '', actions: `${viewToggle()}${S.preview ? '' : '<button class="icon-btn" data-act="r-refresh" aria-label="Actualizar">↻</button>'}` });
+}
+
+/** Una inscripción abierta desde «Mi temporada»: la tarjeta completa con todas sus acciones. */
+function viewRunnerRace(id) {
+  const g = S.runnerData.registrations.find((x) => x.id === id);
+  const back = runnerHref('mi');
+  if (!g) return frame('Carrera', `${previewBanner()}<p class="empty">Esta carrera ya no está entre las inscripciones: puede que la dirección ya la haya pasado a resultados. Mírala en «Carreras hechas».</p>`, { back });
+  return frame('Carrera', `${previewBanner()}${runnerRegCard(g)}
+    ${g.mine_created || S.preview ? '' : '<p class="hint">Solo puede cambiar los datos de una carrera quien la añadió, o la dirección del club.</p>'}`, { back });
 }
 
 /** «Mi temporada»: bono, mis carreras e instalación. */
