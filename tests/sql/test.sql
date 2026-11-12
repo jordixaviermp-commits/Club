@@ -262,6 +262,22 @@ select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000b
 select pg_temp.expect_fail($q$insert into announcements (title) values ('No soy dirección')$q$, 'noticias: un usuario que no es dirección no escribe');
 reset role;
 set role anon;
+-- carrera suspendida: cuenta para el mínimo, no para el bono ni para poner resultado
+reset role;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+insert into registrations (id, name, date, end_date, suspended) values ('20000000-0000-0000-0000-000000000070', 'Suspendida Test', current_date + 15, current_date + 16, true);
+insert into registration_entries (registration_id, runner_id) values ('20000000-0000-0000-0000-000000000070', '10000000-0000-0000-0000-000000000004');
+set role anon;
+select pg_temp.check((runner_view('DDDDDDDDDD')->'bonus'->>'suspended')::int = 2, 'suspendida: sus días se cuentan aparte');
+select pg_temp.check((select (g->>'suspended')::boolean from jsonb_array_elements(runner_view('DDDDDDDDDD')->'registrations') g where g->>'id' = '20000000-0000-0000-0000-000000000070'), 'suspendida: el corredor la ve marcada');
+select pg_temp.check((runner_view('CCCCCCCCCC')->'bonus'->>'suspended')::int = 0, 'suspendida: no afecta a otros');
+select pg_temp.expect_fail($q$select runner_report_result('DDDDDDDDDD', 'reg', '20000000-0000-0000-0000-000000000070', 3, null, null)$q$, 'suspendida: no se pone resultado');
+reset role;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+select pg_temp.expect_fail($q$select promote_registration('20000000-0000-0000-0000-000000000070')$q$, 'suspendida: no se pasa a resultados');
+reset role;
+set role anon;
 -- documentos (contratos)
 reset role;
 set role authenticated;
