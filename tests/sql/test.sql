@@ -435,6 +435,7 @@ reset role;
 insert into settings (key, value) values ('social', '{"code":"SOCIALCODE12345"}') on conflict (key) do update set value = excluded.value;
 insert into registrations (id, name, date) values ('20000000-0000-0000-0000-0000000000a1', 'Redes Proxima', current_date + 5);
 insert into registration_entries (registration_id, runner_id) values ('20000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-000000000004'), ('20000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-000000000003');
+update registration_entries set category = 'M40' where registration_id = '20000000-0000-0000-0000-0000000000a1' and runner_id = '10000000-0000-0000-0000-000000000004';
 insert into registrations (id, name, date, suspended) values ('20000000-0000-0000-0000-0000000000a2', 'Redes Suspendida', current_date + 5, true);
 insert into registration_entries (registration_id, runner_id) values ('20000000-0000-0000-0000-0000000000a2', '10000000-0000-0000-0000-000000000004');
 insert into registrations (id, name, date) values ('20000000-0000-0000-0000-0000000000a3', 'Redes Sin Inscritos', current_date + 6);
@@ -447,6 +448,7 @@ select set_config('request.jwt.claim.sub', '', false);
 select pg_temp.check(exists (select 1 from jsonb_array_elements(social_view('SOCIALCODE12345')->'upcoming') u where u->>'name' = 'Redes Proxima')
                   and not exists (select 1 from jsonb_array_elements(social_view('SOCIALCODE12345')->'upcoming') u where u->>'name' in ('Redes Suspendida', 'Redes Sin Inscritos', 'Redes Lejana')), 'redes: próximas con inscritos, sin suspendidas, sin inscritos ni lejanas');
 select pg_temp.check((select jsonb_array_length(u->'people') from jsonb_array_elements(social_view('SOCIALCODE12345')->'upcoming') u where u->>'name' = 'Redes Proxima') = 2, 'redes: con los nombres de quién va');
+select pg_temp.check((select u->'people_cat' from jsonb_array_elements(social_view('SOCIALCODE12345')->'upcoming') u where u->>'name' = 'Redes Proxima') @> '["Dani Test (M40)"]'::jsonb, 'redes: cada inscrito sale con su categoría');
 select pg_temp.check((select jsonb_array_length(x->'podium') from jsonb_array_elements(social_view('SOCIALCODE12345')->'recent') x where x->>'name' = 'Redes Reciente') = 1
                  and (select x->'podium'->0->>'name' from jsonb_array_elements(social_view('SOCIALCODE12345')->'recent') x where x->>'name' = 'Redes Reciente') = 'Dani Test', 'redes: resultados recientes con su podio');
 select pg_temp.check(social_view('SOCIALCODE12345')::text not like '%code%' and social_view('SOCIALCODE12345')::text not like '%contract%', 'redes: sin enlaces ni contratos');
