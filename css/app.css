@@ -801,3 +801,7 @@ dialog:has(.gsearch) { width: min(94vw, 560px); max-height: 88vh; padding: .8rem
 .pr-who { margin: .2rem 0 0; font-size: .9rem; line-height: 1.5; }
 .pod-more { margin-top: .4rem; }
 .pod-more summary { cursor: pointer; font-weight: 600; color: var(--accent); padding: .3rem 0; }
+.new-tag { display: inline-block; vertical-align: middle; font-size: .65rem; font-weight: 800; letter-spacing: .04em; color: #fff; background: #d9534f; border-radius: 999px; padding: .08rem .5rem; margin-left: .3rem; }
+.ruta-card h3 { margin-bottom: .3rem; }
+.ruta-link { display: flex !important; flex-direction: column; align-items: flex-start; gap: .1rem; text-align: left; margin-bottom: .6rem; padding: .6rem .9rem; }
+.ruta-link small { font-weight: 400; }

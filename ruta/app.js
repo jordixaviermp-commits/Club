@@ -25,6 +25,8 @@ const compass = (d) => COMPASS[Math.round(d / 22.5) % 16];
 const KIND = { cara: 'De cara', lateral: 'Cruzado', favor: 'A favor' };
 const localInput = (ms) => { const d = new Date(ms); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
 const defaultStart = () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d.getTime(); };
+// «ruta/?fecha=AAAA-MM-DD»: desde una carrera de la app del club, la salida empieza ese día a las 9:00 (se puede cambiar)
+const paramStart = () => { const f = new URLSearchParams(location.search).get('fecha'); if (!/^\d{4}-\d{2}-\d{2}$/.test(f || '')) return null; const t = new Date(f + 'T09:00:00').getTime(); return t > Date.now() - 3600000 ? t : null; };
 const startOfDay = (ms) => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); };
 
 let toastTimer;
@@ -48,7 +50,7 @@ const wpType = (id) => WP_TYPES.find((t) => t[0] === id) || WP_TYPES[WP_TYPES.le
 // ---------- Estado ----------
 const S = {
   id: null, name: '', raw: null, reversed: false, track: null, climbs: [], samples: [], tl: null, etas: [], along: null,
-  start: defaultStart(), flat: 27, mass: 80, stops: 0,
+  start: paramStart() || defaultStart(), flat: 27, mass: 80, stops: 0,
   wx: null, wxKey: '', wxErr: '', wxLoading: false,
   view: 'completa', mode: 'viento', arrowsKm: 4, wps: [], addingWp: false,
   feeding: false, gph: 90, every: 30, feedOnMap: true, feedMode: 'smart', custom: null,
