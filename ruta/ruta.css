@@ -80,13 +80,3 @@ dialog .dlg h3 { display: flex; justify-content: space-between; align-items: cen
 .map-wrap { position: relative; }
 .foot { margin: 2.5rem 0 1rem; font-size: .8rem; color: var(--muted); }
 @media (max-width: 420px) { .facts b { font-size: 1.15rem; } }
-.btn.strava { background: #fc4c02; border-color: #fc4c02; color: #fff; font-weight: 700; }
-.strava-ic { border-color: #fc4c02 !important; }
-.powered { font-size: .78rem; color: var(--muted); margin: .4rem 0; }
-.powered b { color: #fc4c02; }
-.powered a { color: #fc4c02; }
-.sv input[type=search] { width: 100%; margin: .3rem 0 .6rem; }
-.sv .mini-list { max-height: 55vh; overflow-y: auto; }
-.sv-item { all: unset; display: flex; flex-direction: column; width: 100%; cursor: pointer; }
-.sv-item b { font-size: .95rem; }
-[hidden] { display: none !important; }

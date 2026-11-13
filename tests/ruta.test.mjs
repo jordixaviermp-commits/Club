@@ -105,15 +105,3 @@ test('tomas de avituallamiento y GPX exportado con waypoints y horas', async () 
   assert.match(gpx, /<time>1970-01-01T00:00:00.000Z<\/time>/);
   assert.equal(R.parseGPX(gpx).points.length, 3);
 });
-
-test('Strava: streams a puntos, elementos de la lista y búsqueda sin tildes', async () => {
-  const SV = await import('../ruta/strava.js');
-  const pts = [{ lat: 41.9, lon: 0.19, ele: 280 }, { lat: 42, lon: 0.13, ele: null }];
-  assert.deepEqual(SV.streamsToPoints([{ type: 'latlng', data: [[41.9, 0.19], [42, 0.13]] }, { type: 'altitude', data: [280] }]), pts);
-  assert.deepEqual(SV.streamsToPoints({ latlng: { data: [[41.9, 0.19], [42, 0.13]] }, altitude: { data: [280] } }), pts);
-  // los id de las rutas no caben en un número de JavaScript: se usa id_str
-  assert.equal(SV.toItem('routes', { id: 3344556677889900000, id_str: '3344556677889900123', name: 'X' }).id, '3344556677889900123');
-  assert.equal(SV.toItem('activities', { id: 1, map: { summary_polyline: '' } }).hasMap, false);
-  assert.ok(SV.matches('monzon VUELTA', 'Vuelta a Monzón'));
-  assert.ok(!SV.matches('barbastro', 'Vuelta a Monzón'));
-});
