@@ -17,7 +17,7 @@ test('ligas.json: cada carrera tiene los datos que usa la app', () => {
     assert.ok(MODALITIES.includes(r.modality), r.modality);
     assert.ok(PROVINCES.includes(r.province), r.province);
     if (r.url) assert.match(r.url, /^https:\/\//);
-    assert.ok(r.circuit, r.name); // mismo nombre en todas las pruebas de la liga: el podio de la general se agrupa por él
+    // «circuit» es opcional (solo las ligas con clasificación general); si lo lleva, igual en todas las pruebas de la liga
     const k = r.date + '|' + r.name;
     assert.ok(!seen.has(k), 'repetida: ' + k);
     seen.add(k);
@@ -26,7 +26,7 @@ test('ligas.json: cada carrera tiene los datos que usa la app', () => {
 
 test('cada liga usa un solo nombre de circuito', () => {
   const por = new Map();
-  for (const r of data.races) (por.get(r.league) || por.set(r.league, new Set()).get(r.league)).add(r.circuit);
+  for (const r of data.races) if (r.circuit) (por.get(r.league) || por.set(r.league, new Set()).get(r.league)).add(r.circuit);
   for (const [liga, nombres] of por) assert.equal(nombres.size, 1, liga);
   assert.ok(por.has("Xallenger BTT Terres de l'Ebre 2027") && por.has('Open Maxxis Marathon by Bryton 2027'));
 });
@@ -39,4 +39,15 @@ test('las carreras de la liga salen al buscar por liga, pueblo o nombre', () => 
   assert.ok(names('gandesa').includes('5a Garnatxa Bike Race'));
   assert.ok(names('garnatxa')[0] === '5a Garnatxa Bike Race');
   assert.ok(names('ràpita').includes('Bandolers 11.0'));
+});
+
+test('Hivernal de Resistència BTT: las 3 pruebas salen al buscar por liga, pueblo o equipo', () => {
+  const names = (q) => searchRaces(q, data.races).map((r) => r.name);
+  assert.equal(names('hivernal').length, 3);
+  assert.ok(names('la granada').includes('6a Hivernal de Resistència BTT – Tot Vici en Bici'));
+  assert.ok(names('monjos').includes('6a Hivernal de Resistència BTT – KPT'));
+  assert.ok(names('vilafranca').includes('6a Hivernal de Resistència BTT – Metalbikers'));
+  assert.ok(names('resistencia').length >= 3);   // sin tildes
+  const h = data.races.filter((r) => /Hivernal/.test(r.name));
+  assert.deepEqual(h.map((r) => r.date), ['2026-12-27', '2027-01-10', '2027-01-17']);
 });
