@@ -2266,6 +2266,9 @@ function viewSeasonCount() {
   const idle = rows.filter((r) => r[ix('Carreras')] === 0 && !String(r[0]).endsWith('(baja)'));
   return frame('Corredores', `${runnersTabs('computo')}
     ${yearPicker(years)}
+    <section class="card stack"><h2>✅ Control antes de cerrar ${S.year}</h2>
+      <ul class="chk-list">${seasonChecks(S.year).map((c) => `<li class="${c.info ? 'info' : c.bad ? 'bad' : 'ok'}">${c.info ? 'ℹ️' : c.bad ? '⚠️' : '✅'} ${c.bad ? `<a href="${c.href}">${esc(c.text)} ›</a>` : esc(c.text)}</li>`).join('')}</ul>
+    </section>
     <section class="card stack"><h2>📥 Cómputo de la temporada ${S.year}</h2>
       <p class="hint">Descarga los datos de participación para hacer el cómputo final. Se abren en Excel o Hojas de cálculo.</p>
       <a class="btn primary block" href="#/informe">🖨️ Informe visual de la temporada (para imprimir o PDF)</a>
@@ -2286,60 +2289,157 @@ function viewSeasonCount() {
     </section>`);
 }
 
+/** Cifras de una temporada: filas por corredor y totales. Es lo que se guarda al congelar el cierre. */
+function seasonTotals(rows, year) {
+  const t = rows.reduce((n, r) => ({ races: n.races + r.races, p: [n.p[0] + r.p[0], n.p[1] + r.p[1], n.p[2] + r.p[2]], km: n.km + r.km, time: n.time + r.time, timed: n.timed + r.timed,
+    pay: n.pay + (r.b?.amount || 0), pen: n.pen + (r.b?.penalty || 0) }), { races: 0, p: [0, 0, 0], km: 0, time: 0, timed: 0, pay: 0, pen: 0 });
+  return { ...t, podiums: t.p[0] + t.p[1] + t.p[2], bal: t.pay - t.pen, clubRaces: S.data.races.filter((r) => yearOf(r.date) === year).length,
+    runners: rows.filter((r) => r.id).length, raced: rows.filter((r) => r.races).length };
+}
+function seasonModel(year) {
+  const cfg = bonusCfg(year);
+  const bonus = yearBonuses(year, S.data.races, S.data.registrations, S.data.runners, cfg, S.data.circuitPodiums || []);
+  const bOf = new Map(bonus.map((b) => [b.runner.id, b]));
+  const rows = seasonStats(year, S.data.races, S.data.runners, contractLabel).map((r) => { const b = bOf.get(r.id);
+    return { id: r.id, name: r.name, cat: r.cat, contract: r.contract, races: r.races, days: r.days, p: r.p, podiums: r.podiums, km: r.km, time: r.time, timed: r.timed, provinces: r.provinces,
+      b: b ? { count: b.bonusCount, extra: b.extra, reach: b.reachesMinimum, missing: b.missingToMinimum, tier: b.tier ? b.tier.races : null, top: b.tiers.at(-1)?.races || 1,
+        amount: b.amount, penalty: b.penalty, planned: b.planned } : null }; });
+  return { year, date: todayISO(), minimum: cfg.minimum, rows, tot: seasonTotals(rows, year) };
+}
+
+/** Control antes de cerrar: lo que puede falsear los números. */
+function seasonChecks(year) {
+  const today = todayISO(), yr = S.data.races.filter((r) => yearOf(r.date) === year);
+  const names = (arr, n = 6) => arr.slice(0, n).join(', ') + (arr.length > n ? `… (+${arr.length - n})` : '');
+  const noContract = S.data.runners.filter((r) => !CONTRACTS.some((c) => c.id === r.contract));
+  const pending = S.data.registrations.filter((g) => !g.suspended && (g.end_date || g.date) < today && yearOf(g.date) === year);
+  const noPos = yr.flatMap((r) => (r.results || []).filter((x) => x.position == null).map((x) => `${x.runner_name} (${r.name})`));
+  const missing = yr.filter((r) => missingFields(r).length);
+  const results = yr.flatMap((r) => r.results || []);
+  const noTime = results.filter((x) => !(Number(x.time_seconds) > 0)).length;
+  const pl = (n, a, b) => (n === 1 ? a : b);
+  return [
+    { bad: noContract.length, href: '#/corredores', text: noContract.length ? `${noContract.length} corredor${pl(noContract.length, '', 'es')} sin tipo de contrato (cambia el bono y la penalización): ${names(noContract.map((r) => r.name))}` : 'Todos los corredores tienen tipo de contrato' },
+    { bad: pending.length, href: '#/inscripciones', text: pending.length ? `${pending.length} inscripci${pl(pending.length, 'ón', 'ones')} ya disputada${pl(pending.length, '', 's')} sin pasar a resultados: ${names(pending.map((g) => g.name))}` : 'No hay inscripciones disputadas pendientes de pasar a resultados' },
+    { bad: noPos.length, href: '#/carreras', text: noPos.length ? `${noPos.length} participaci${pl(noPos.length, 'ón', 'ones')} sin puesto: ${names(noPos)}` : 'Todas las participaciones tienen puesto' },
+    { bad: missing.length, href: '#/carreras', text: missing.length ? `${missing.length} carrera${pl(missing.length, '', 's')} sin provincia, km o formato (afecta a «dónde ha ido» y a los km): ${names(missing.map((r) => r.name))}` : 'Todas las carreras tienen provincia, km y formato' },
+    { info: true, text: results.length ? `${results.length - noTime} de ${results.length} participaciones tienen tiempo (dato opcional)` : '' },
+  ].filter((c) => c.text);
+}
+
+/** Cambios desde el cierre congelado (por corredor). */
+function sinceClosing(live, frozen) {
+  const old = new Map(frozen.rows.map((r) => [r.id || r.name, r]));
+  const out = [];
+  for (const r of live.rows) {
+    const o = old.get(r.id || r.name);
+    if (!o) { if (r.races) out.push(`${r.name}: nuevo (${r.races} carreras)`); continue; }
+    const d = [];
+    if (o.races !== r.races) d.push(`carreras ${o.races} → ${r.races}`);
+    if ((o.b?.amount || 0) !== (r.b?.amount || 0)) d.push(`bono ${euros(o.b?.amount || 0)} → ${euros(r.b?.amount || 0)}`);
+    if ((o.b?.penalty || 0) !== (r.b?.penalty || 0)) d.push(`penalización ${euros(o.b?.penalty || 0)} → ${euros(r.b?.penalty || 0)}`);
+    if (d.length) out.push(`${r.name}: ${d.join(', ')}`);
+  }
+  return out;
+}
+
+const signEuros = (n) => (n > 0 ? `+${euros(n)}` : n < 0 ? `−${euros(-n)}` : euros(0));
+const dateEs = (iso) => new Date(iso + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
+const podText = (r) => (r.podiums ? `${r.p[0] ? '🥇' + r.p[0] + ' ' : ''}${r.p[1] ? '🥈' + r.p[1] + ' ' : ''}${r.p[2] ? '🥉' + r.p[2] : ''}` : '—');
+const barOf = (b) => `<div class="rp-bar ${b.reach ? (b.tier ? 'ok' : 'mid') : 'low'}"><i style="width:${Math.min(100, Math.round((b.count / b.top) * 100))}%"></i></div>`;
+const barText = (b) => `${b.count}${b.extra ? ` (+${b.extra} plus)` : ''} · ${b.reach ? '✅ mínimo' : `⚠️ faltan ${b.missing}`}${b.tier ? ` · tramo ${b.tier}` : ''}${b.planned ? ` · ${b.planned} inscrita${b.planned === 1 ? '' : 's'}` : ''}`;
+
+/** Hoja de un corredor: su bono y todas sus carreras de la temporada. */
+function runnerSheet(r, year, minimum) {
+  const list = S.data.races.filter((x) => yearOf(x.date) === year).flatMap((x) => (x.results || []).filter((y) => y.runner_id === r.id).map((y) => ({ x, y })))
+    .sort((a, b) => a.x.date.localeCompare(b.x.date));
+  const planned = S.data.registrations.filter((g) => yearOf(g.date) === year && !g.suspended && (g.entries || []).some((e) => e.runner_id === r.id && !e.self_position))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const b = r.b, sal = b ? b.amount - b.penalty : 0;
+  return `<article class="report sheet">
+    <header class="rp-head"><img src="icons/logo.png" alt=""><div><h2>${esc(r.name)}</h2><p>CC Monzón · Temporada ${year} · ${esc(r.contract)}${r.cat ? ' · ' + esc(r.cat) : ''}</p></div></header>
+    <div class="rp-kpis">
+      <div class="rp-kpi"><b>${r.races}</b><span>carreras${r.days !== r.races ? ` · ${r.days} días` : ''}</span></div>
+      <div class="rp-kpi"><b>${podText(r)}</b><span>podios</span></div>
+      <div class="rp-kpi"><b>${r.km ? kmText(r.km) : '—'}</b><span>km</span></div>
+      <div class="rp-kpi"><b>${r.timed ? formatTime(r.time, true) : '—'}</b><span>tiempo en carrera</span></div>
+      ${b ? `<div class="rp-kpi good"><b>${euros(b.amount)}</b><span>bono</span></div><div class="rp-kpi bad"><b>${euros(b.penalty)}</b><span>penalización</span></div>
+      <div class="rp-kpi ${sal > 0 ? 'good' : sal < 0 ? 'bad' : ''}"><b>${signEuros(sal)}</b><span>${sal > 0 ? 'el club debe' : sal < 0 ? 'a favor del club' : 'saldo'}</span></div>` : ''}
+    </div>
+    ${b ? `<div class="rp-box"><b>Camino al bono · mínimo ${minimum}</b>${barOf(b)}<small>${barText(b)}</small></div>` : ''}
+    ${list.length ? `<div class="rp-scroll"><table class="rp-table"><thead><tr><th>Fecha</th><th>Carrera</th><th>Lugar</th><th>Modalidad</th><th>Km</th><th>Puesto</th><th>Tiempo</th></tr></thead><tbody>
+      ${list.map(({ x, y }) => `<tr><td class="num">${esc(formatRange(x.date, x.end_date))}</td><td><b>${esc(x.name)}</b>${x.race_type === 'circuito' && x.circuit ? `<small>${esc(x.circuit)}</small>` : ''}</td>
+        <td>${esc([x.place, x.province].filter(Boolean).join(', ') || '—')}</td><td>${esc(x.modality)}${x.subtype ? `<small>${esc(x.subtype)}</small>` : ''}</td><td class="num">${x.km ? kmText(x.km) : '—'}</td>
+        <td class="num">${y.position ? `${isPodium(y.position) ? medal(y.position) + ' ' : ''}${y.position}º` : '—'}</td><td class="num">${y.time_seconds ? formatTime(y.time_seconds) : '—'}</td></tr>`).join('')}</tbody></table></div>`
+      : '<p class="empty">Sin carreras con resultado esta temporada.</p>'}
+    ${planned.length ? `<p class="rp-note"><b>Inscrito, pendiente:</b> ${esc(planned.map((g) => `${g.name} (${formatRange(g.date, g.end_date)})`).join(' · '))}.</p>` : ''}
+    <p class="rp-note">Cifras registradas a fecha de ${dateEs(todayISO())}. El saldo es el bono menos la penalización, si la hubiera.</p>
+  </article>`;
+}
+
 /** Informe de fin de temporada: bono, penalizaciones, saldo y participación de cada corredor, en una página para imprimir o guardar en PDF. */
 function viewSeasonReport() {
   const years = availableYears(S.data.races);
   if (!years.includes(S.year)) S.year = years[0];
+  const { id } = parseRoute();
   const cfg = bonusCfg(S.year);
-  const bonus = yearBonuses(S.year, S.data.races, S.data.registrations, S.data.runners, cfg, S.data.circuitPodiums || []);
-  const stats = seasonStats(S.year, S.data.races, S.data.runners, contractLabel);
-  const bOf = new Map(bonus.map((b) => [b.runner.id, b]));
-  const yr = S.data.races.filter((r) => yearOf(r.date) === S.year);
-  const tot = stats.reduce((t, r) => ({ races: t.races + r.races, p: [t.p[0] + r.p[0], t.p[1] + r.p[1], t.p[2] + r.p[2]], km: t.km + r.km, time: t.time + r.time, timed: t.timed + r.timed }),
-    { races: 0, p: [0, 0, 0], km: 0, time: 0, timed: 0 });
-  const pay = bonus.reduce((n, b) => n + b.amount, 0), pen = bonus.reduce((n, b) => n + b.penalty, 0), bal = pay - pen;
-  const nTiers = (b) => b.tiers.at(-1)?.races || 1;
-  const sign = (n) => (n > 0 ? `+${euros(n)}` : n < 0 ? `−${euros(-n)}` : euros(0));
-  const kpi = (v, l, cls = '') => `<div class="rp-kpi ${cls}"><b>${v}</b><span>${l}</span></div>`;
-  const rows = stats.filter((r) => r.races || (bOf.get(r.id) && (bOf.get(r.id).planned || bOf.get(r.id).penalty)));
-  const today = new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
+  const live = seasonModel(S.year);
+  const frozen = S.data.settings?.[`cierre_${S.year}`] || null;
+  const m = S.repFrozen && frozen ? frozen : live;
+  if (id) { // hoja de un corredor, o de todos
+    const rs = id === 'todos' ? m.rows.filter((r) => r.id && r.races) : m.rows.filter((r) => r.id === id);
+    return frame(id === 'todos' ? 'Hojas de los corredores' : (rs[0]?.name || 'Hoja del corredor'), `
+      <div class="no-print"><div class="row-btns rp-actions"><button class="btn primary" data-act="print-report">🖨️ Imprimir o guardar PDF</button></div>
+        <p class="hint">${id === 'todos' ? `Una hoja por corredor (${rs.length}), cada una en su página.` : 'Hoja individual para enviar o archivar.'}${S.repFrozen && frozen ? ' Con las cifras del cierre.' : ''}</p></div>
+      ${rs.map((r) => runnerSheet(r, S.year, m.minimum)).join('') || '<p class="empty">No hay datos.</p>'}`, { back: '#/informe' });
+  }
+  const t = m.tot;
+  const prev = S.year > 0 ? seasonModel(S.year - 1).tot : null, hasPrev = prev && prev.clubRaces > 0;
+  const dl = (cur, old, f = (n) => n) => (!hasPrev ? '' : `<em class="rp-d ${cur > old ? 'up' : cur < old ? 'down' : ''}">${cur >= old ? '+' : '−'}${f(Math.abs(cur - old))} vs ${S.year - 1}</em>`);
+  const kpi = (v, l, cls = '', d = '') => `<div class="rp-kpi ${cls}"><b>${v}</b><span>${l}</span>${d}</div>`;
+  const rows = m.rows.filter((r) => r.races || r.b?.planned || r.b?.penalty);
+  const changes = frozen && !S.repFrozen ? sinceClosing(live, frozen) : [];
+  const stamp = S.repFrozen && frozen ? `Cierre guardado el ${dateEs(frozen.date)}` : dateEs(todayISO());
   return frame('Informe de temporada', `
     <div class="no-print">${yearPicker(years)}
       <div class="row-btns rp-actions"><button class="btn primary" data-act="print-report">🖨️ Imprimir o guardar PDF</button>
-        <button class="btn" data-act="season-csv">📊 Excel</button></div>
-      <p class="hint">En el cuadro de imprimir elige «Guardar como PDF». Mejor con el móvil en horizontal.</p></div>
+        <button class="btn" data-act="season-csv">📊 Excel</button><a class="btn" href="#/informe/todos">📄 Hoja de cada corredor</a></div>
+      <p class="hint">En el cuadro de imprimir elige «Guardar como PDF». Mejor con el móvil en horizontal.</p>
+      ${frozen ? `<div class="years subtabs"><button class="chip${S.repFrozen ? '' : ' on'}" data-act="rep-frozen" data-v="0">Hoy</button><button class="chip${S.repFrozen ? ' on' : ''}" data-act="rep-frozen" data-v="1">🧊 Cierre del ${esc(dateEs(frozen.date))}</button></div>` : ''}
+      <button class="btn small ghost" data-act="rep-freeze">🧊 ${frozen ? 'Actualizar' : 'Guardar'} el cierre de ${S.year}</button>
+      <p class="hint">El cierre es una <b>foto</b> de las cifras de hoy: aunque luego cambies datos, podrás volver a verla.</p>
+      ${changes.length ? `<div class="pen bad-box">⚠️ Desde el cierre han cambiado ${changes.length} corredor${changes.length === 1 ? '' : 'es'}:<br>${esc(changes.slice(0, 8).join(' · '))}${changes.length > 8 ? '…' : ''}</div>` : ''}</div>
     <article class="report">
-      <header class="rp-head"><img src="icons/logo.png" alt=""><div><h2>CC Monzón · Temporada ${S.year}</h2><p>Informe de participación y bonos · ${today}</p></div></header>
+      <header class="rp-head"><img src="icons/logo.png" alt=""><div><h2>CC Monzón · Temporada ${S.year}</h2><p>Informe de participación y bonos · ${stamp}</p></div></header>
       <div class="rp-kpis">
-        ${kpi(rows.filter((r) => r.races).length + ' / ' + stats.filter((r) => r.id).length, 'corredores con carreras')}
-        ${kpi(yr.length, 'carreras del club')}
-        ${kpi(tot.races, 'participaciones')}
-        ${kpi(`🥇${tot.p[0]} 🥈${tot.p[1]} 🥉${tot.p[2]}`, 'podios')}
-        ${kpi(tot.km ? kmText(Math.round(tot.km)) : '—', 'km recorridos')}
-        ${kpi(tot.timed ? formatTime(tot.time, true) : '—', 'tiempo en carrera')}
-        ${kpi(euros(pay), 'en bonos', 'good')}
-        ${kpi(euros(pen), 'en penalizaciones', 'bad')}
-        ${kpi(sign(bal), bal > 0 ? 'el club debe (neto)' : bal < 0 ? 'a favor del club (neto)' : 'saldo neto', bal > 0 ? 'good' : bal < 0 ? 'bad' : '')}
+        ${kpi(`${t.raced} / ${t.runners}`, 'corredores con carreras')}
+        ${kpi(t.clubRaces, 'carreras del club', '', dl(t.clubRaces, prev?.clubRaces))}
+        ${kpi(t.races, 'participaciones', '', dl(t.races, prev?.races))}
+        ${kpi(`🥇${t.p[0]} 🥈${t.p[1]} 🥉${t.p[2]}`, 'podios', '', dl(t.podiums, prev?.podiums))}
+        ${kpi(t.km ? kmText(Math.round(t.km)) : '—', 'km recorridos', '', dl(Math.round(t.km), Math.round(prev?.km || 0), (n) => kmText(n)))}
+        ${kpi(t.timed ? formatTime(t.time, true) : '—', 'tiempo en carrera')}
+        ${kpi(euros(t.pay), 'en bonos', 'good', dl(t.pay, prev?.pay, euros))}
+        ${kpi(euros(t.pen), 'en penalizaciones', 'bad', dl(t.pen, prev?.pen, euros))}
+        ${kpi(signEuros(t.bal), t.bal > 0 ? 'el club debe (neto)' : t.bal < 0 ? 'a favor del club (neto)' : 'saldo neto', t.bal > 0 ? 'good' : t.bal < 0 ? 'bad' : '', dl(t.bal, prev?.bal, euros))}
       </div>
       <div class="rp-scroll"><table class="rp-table">
-        <thead><tr><th>Corredor</th><th>Contrato</th><th>Carreras</th><th class="rp-bar-h">Camino al bono · mínimo ${cfg.minimum}</th><th>Bono</th><th>Penaliz.</th><th>Saldo</th><th>Podios</th><th>Km</th><th>Tiempo</th><th>Dónde ha ido</th></tr></thead>
-        <tbody>${rows.map((r) => { const b = bOf.get(r.id); const sal = b ? b.amount - b.penalty : 0;
-          return `<tr><td><b>${esc(r.name)}</b>${r.cat ? `<small>${esc(r.cat)}</small>` : ''}</td>
+        <thead><tr><th>Corredor</th><th>Contrato</th><th>Carreras</th><th class="rp-bar-h">Camino al bono · mínimo ${m.minimum}</th><th>Bono</th><th>Penaliz.</th><th>Saldo</th><th>Podios</th><th>Km</th><th>Tiempo</th><th>Dónde ha ido</th></tr></thead>
+        <tbody>${rows.map((r) => { const b = r.b, sal = b ? b.amount - b.penalty : 0;
+          return `<tr><td>${r.id ? `<a class="rp-name" href="#/informe/${esc(r.id)}"><b>${esc(r.name)}</b></a>` : `<b>${esc(r.name)}</b>`}${r.cat ? `<small>${esc(r.cat)}</small>` : ''}</td>
             <td><span class="rp-chip">${esc(r.contract)}</span></td>
             <td class="num">${r.races}${r.days !== r.races ? `<small>${r.days} días</small>` : ''}</td>
-            <td>${b ? `<div class="rp-bar ${b.reachesMinimum ? (b.tier ? 'ok' : 'mid') : 'low'}"><i style="width:${Math.min(100, Math.round((b.bonusCount / nTiers(b)) * 100))}%"></i></div>
-              <small>${b.bonusCount}${b.extra ? ` (+${b.extra} plus)` : ''} · ${b.reachesMinimum ? '✅ mínimo' : `⚠️ faltan ${b.missingToMinimum}`}${b.tier ? ` · tramo ${b.tier.races}` : ''}${b.planned ? ` · ${b.planned} inscrita${b.planned === 1 ? '' : 's'}` : ''}</small>` : ''}</td>
+            <td>${b ? `${barOf(b)}<small>${barText(b)}</small>` : ''}</td>
             <td class="num good">${b && b.amount ? euros(b.amount) : '—'}</td>
             <td class="num bad">${b && b.penalty ? euros(b.penalty) : '—'}</td>
-            <td class="num sal ${sal > 0 ? 'good' : sal < 0 ? 'bad' : ''}">${b ? sign(sal) : '—'}</td>
-            <td class="num">${r.podiums ? `${r.p[0] ? '🥇' + r.p[0] + ' ' : ''}${r.p[1] ? '🥈' + r.p[1] + ' ' : ''}${r.p[2] ? '🥉' + r.p[2] : ''}` : '—'}</td>
+            <td class="num sal ${sal > 0 ? 'good' : sal < 0 ? 'bad' : ''}">${b ? signEuros(sal) : '—'}</td>
+            <td class="num">${podText(r)}</td>
             <td class="num">${r.km ? kmText(r.km) : '—'}</td>
             <td class="num">${r.timed ? formatTime(r.time, true) : '—'}${r.timed && r.timed < r.races ? `<small>${r.timed}/${r.races}</small>` : ''}</td>
             <td><small>${esc(r.provinces.join(', ') || '—')}</small></td></tr>`; }).join('')}</tbody>
-        <tfoot><tr><td colspan="2"><b>Total</b></td><td class="num"><b>${tot.races}</b></td><td></td><td class="num good"><b>${euros(pay)}</b></td><td class="num bad"><b>${euros(pen)}</b></td>
-          <td class="num sal ${bal > 0 ? 'good' : bal < 0 ? 'bad' : ''}"><b>${sign(bal)}</b></td><td class="num">${tot.p[0] + tot.p[1] + tot.p[2]}</td><td class="num">${tot.km ? kmText(Math.round(tot.km)) : '—'}</td><td class="num">${tot.timed ? formatTime(tot.time, true) : '—'}</td><td></td></tr></tfoot>
+        <tfoot><tr><td colspan="2"><b>Total</b></td><td class="num"><b>${t.races}</b></td><td></td><td class="num good"><b>${euros(t.pay)}</b></td><td class="num bad"><b>${euros(t.pen)}</b></td>
+          <td class="num sal ${t.bal > 0 ? 'good' : t.bal < 0 ? 'bad' : ''}"><b>${signEuros(t.bal)}</b></td><td class="num">${t.podiums}</td><td class="num">${t.km ? kmText(Math.round(t.km)) : '—'}</td><td class="num">${t.timed ? formatTime(t.time, true) : '—'}</td><td></td></tr></tfoot>
       </table></div>
-      <p class="rp-note"><b>Cómo leerlo.</b> <b>Bono</b>: según el tramo alcanzado por contrato (${tiersByContractLine(cfg)}). <b>Penalización</b>: solo si no llega al mínimo de ${cfg.minimum} carreras (${penaltiesLine(cfg)}). <b>Saldo</b> = bono − penalización; en verde lo que debe el club al corredor, en rojo lo que se descuenta. Los plus de liga (+${cfg.circuitExtra ?? 4}) suben el tramo pero no cuentan para el mínimo; una carrera suspendida cuenta para el mínimo, no para el bono. Cifras con lo que está registrado a fecha de ${today}. Tiempo y km solo donde se han anotado.</p>
+      <p class="rp-note"><b>Cómo leerlo.</b> <b>Bono</b>: según el tramo alcanzado por contrato (${tiersByContractLine(cfg)}). <b>Penalización</b>: solo si no llega al mínimo de ${m.minimum} carreras (${penaltiesLine(cfg)}). <b>Saldo</b> = bono − penalización; en verde lo que debe el club al corredor, en rojo lo que se descuenta. Los plus de liga (+${cfg.circuitExtra ?? 4}) suben el tramo pero no cuentan para el mínimo; una carrera suspendida cuenta para el mínimo, no para el bono. ${hasPrev ? `Las flechas comparan con ${S.year - 1} (con la plantilla actual). ` : ''}Cifras ${S.repFrozen && frozen ? 'del cierre guardado el ' + dateEs(frozen.date) : 'registradas a fecha de ' + dateEs(todayISO())}. Tiempo y km solo donde se han anotado.</p>
     </article>`, { back: '#/computo' });
 }
 
@@ -2732,6 +2832,12 @@ const actions = {
   'season-csv'() { download(`monzon-computo-${S.year}.csv`, toCsv(seasonByRunner(S.year, S.data.races, S.data.runners, contractLabel, yearBonuses(S.year, S.data.races, S.data.registrations, S.data.runners, bonusCfg(S.year), S.data.circuitPodiums || [])), [...SEASON_COLUMNS, ...SEASON_BONUS_COLUMNS]), 'text/csv;charset=utf-8'); },
   'season-detail-csv'() { download(`monzon-participaciones-${S.year}.csv`, toCsv(seasonDetail(S.year, S.data.races), SEASON_DETAIL_COLUMNS), 'text/csv;charset=utf-8'); },
   'print-report'() { window.print(); },
+  'rep-frozen'(el) { S.repFrozen = el.dataset.v === '1'; render(); },
+  async 'rep-freeze'() {
+    const had = !!S.data.settings?.[`cierre_${S.year}`];
+    if (!await confirmAction('Guardar cierre', `Se guardará una <b>foto de las cifras de hoy</b> de la temporada ${S.year}${had ? ', sustituyendo al cierre anterior' : ''}. Podrás volver a verla aunque luego cambies datos.`, 'Guardar', 'primary')) return;
+    await run(async () => { await api.saveSetting(`cierre_${S.year}`, seasonModel(S.year)); await reload(); }, 'Cierre guardado'); render();
+  },
   'sum-mod'(el) { S.sumMod = el.dataset.m; render(); },
   'race-mod'(el) { S.raceMod = el.dataset.m; render(); },
   'race-todo'() { S.raceTodo = !S.raceTodo; render(); },
