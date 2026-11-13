@@ -296,16 +296,17 @@ export function csvRows(races) {
 
 export const SEASON_COLUMNS = ['Corredor', 'Categoría', 'Contrato', 'Carreras', 'Días de carrera', ...MODALITIES, 'Oros', 'Platas', 'Bronces', 'Podios',
   'Km', 'Tiempo total (h:mm:ss)', 'Carreras con tiempo', 'Provincias', 'Países'];
+export const SEASON_BONUS_COLUMNS = ['Carreras para el bono', 'Llega al mínimo', 'Tramo alcanzado (carreras)', 'Bono (€)', 'Penalización (€)', 'Saldo (€, + el club debe)', 'Inscritas pendientes'];
 export const SEASON_DETAIL_COLUMNS = ['Corredor', 'Fecha', 'Fecha fin', 'Carrera', 'Lugar', 'Provincia', 'País', 'Modalidad', 'Formato', 'Km', 'Circuito',
   'Categoría', 'Puesto', 'Podio', 'Tipo de podio', 'Tiempo', 'Días', 'Etapas en podio'];
 
 /** Una fila por corredor con lo que ha hecho en la temporada (también quien no ha corrido, con ceros). */
-export function seasonByRunner(year, races, runners, contractName = (c) => c || '') {
+export function seasonStats(year, races, runners, contractName = (c) => c || '') {
   const yr = races.filter((r) => yearOf(r.date) === year);
   const parts = yr.flatMap((race) => (race.results || []).map((res) => ({ race, res })));
   const key = (res) => res.runner_id || 'n:' + normalize(res.runner_name);
-  const mk = (name, cat, contract) => ({ name, cat, contract, races: 0, days: 0, mods: {}, p: [0, 0, 0], km: 0, time: 0, timed: 0, prov: new Set(), ctry: new Set() });
-  const rows = new Map(runners.map((r) => [r.id, mk(r.name, r.category || '', contractName(r.contract))]));
+  const mk = (name, cat, contract, id = null) => ({ id, name, cat, contract, races: 0, days: 0, mods: {}, p: [0, 0, 0], km: 0, time: 0, timed: 0, prov: new Set(), ctry: new Set() });
+  const rows = new Map(runners.map((r) => [r.id, mk(r.name, r.category || '', contractName(r.contract), r.id)]));
   for (const { race, res } of parts) {
     const k = key(res);
     if (!rows.has(k)) rows.set(k, mk(res.runner_name + ' (baja)', res.category || '', ''));
@@ -318,9 +319,19 @@ export function seasonByRunner(year, races, runners, contractName = (c) => c || 
     if (cleanName(race.country)) row.ctry.add(cleanName(race.country));
   }
   for (const pd of podiumsOf(parts)) rows.get(key(pd.res)).p[pd.position - 1]++;
-  return [...rows.values()].sort((a, b) => b.races - a.races || byText(a.name, b.name)).map((r) => [
-    r.name, r.cat, r.contract, r.races, r.days, ...MODALITIES.map((m) => r.mods[m] || 0), r.p[0], r.p[1], r.p[2], r.p[0] + r.p[1] + r.p[2],
-    Math.round(r.km * 10) / 10, r.timed ? formatTime(r.time) : '', r.timed, [...r.prov].sort(byText).join(', '), [...r.ctry].sort(byText).join(', ')]);
+  return [...rows.values()].sort((a, b) => b.races - a.races || byText(a.name, b.name)).map((r) => ({
+    ...r, km: Math.round(r.km * 10) / 10, provinces: [...r.prov].sort(byText), countries: [...r.ctry].sort(byText), podiums: r.p[0] + r.p[1] + r.p[2] }));
+}
+
+/** Filas del CSV de resumen (con el bono si se pasan los datos de `yearBonuses`). */
+export function seasonByRunner(year, races, runners, contractName = (c) => c || '', bonuses = null) {
+  const bonusOf = new Map((bonuses || []).map((b) => [b.runner.id, b]));
+  return seasonStats(year, races, runners, contractName).map((r) => {
+    const b = bonusOf.get(r.id);
+    return [r.name, r.cat, r.contract, r.races, r.days, ...MODALITIES.map((m) => r.mods[m] || 0), r.p[0], r.p[1], r.p[2], r.podiums,
+      r.km, r.timed ? formatTime(r.time) : '', r.timed, r.provinces.join(', '), r.countries.join(', '),
+      ...(bonuses ? (b ? [b.bonusCount, b.reachesMinimum ? 'Sí' : 'No', b.tier ? b.tier.races : '', b.amount, b.penalty, b.amount - b.penalty, b.planned] : ['', '', '', '', '', '', '']) : [])];
+  });
 }
 
 /** Una fila por participación (corredor + carrera) de la temporada: dónde ha ido cada uno. */
