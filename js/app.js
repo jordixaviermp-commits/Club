@@ -686,6 +686,8 @@ function updateSearch(scope) {
   if (scope === 'runner') {
     const box = $app.querySelector('#search-results');
     if (box) box.innerHTML = runnerSearchResults(S.q.runner);
+    const pulse = $app.querySelector('#pulse-box');
+    if (pulse && S.runnerData) pulse.innerHTML = normalize(S.q.runner || '').length >= 2 ? '' : teamPulse(S.runnerData);
   } else if (scope === 'admin') {
     const box = $app.querySelector('#reg-list');
     if (box) box.innerHTML = adminRegList();
@@ -990,6 +992,30 @@ function runnerRegCard(g) {
     </article>`;
   }
 
+/** Barra de «participaciones futuras» del equipo: cuántas inscripciones hay ya en las próximas carreras, por mes (para animar a apuntarse y a crear carreras). */
+function teamPulse(d) {
+  const today = d.today || todayISO();
+  const up = d.registrations.filter((g) => !g.suspended && g.date >= today && (g.entries || []).length);
+  if (!up.length) return '';
+  const parts = up.reduce((n, g) => n + g.entries.length, 0);
+  const people = new Set(up.flatMap((g) => g.entries.map((e) => e.runner_id))).size;
+  const mine = up.filter((g) => g.entries.some((e) => e.runner_id === d.me.id)).length;
+  const byMonth = new Map();
+  for (const g of up) {
+    const ym = g.date.slice(0, 7), m = byMonth.get(ym) || { total: 0, races: 0, mods: {} };
+    m.total += g.entries.length; m.races++; m.mods[g.modality] = (m.mods[g.modality] || 0) + g.entries.length; byMonth.set(ym, m);
+  }
+  const cols = [...byMonth].sort(([a], [b]) => a.localeCompare(b)).slice(0, 7);
+  const mx = Math.max(1, ...cols.map(([, m]) => m.total));
+  const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  return `<section class="card pulse"><h3>🚴 El equipo ya está apuntado</h3>
+    <p class="pulse-sum"><b>${parts}</b> inscripci${parts === 1 ? 'ón' : 'ones'} en <b>${up.length}</b> carrera${up.length === 1 ? '' : 's'} próxima${up.length === 1 ? '' : 's'} · <b>${people}</b> corredor${people === 1 ? '' : 'es'}${mine ? ` · tú estás en <b>${mine}</b>` : ''}</p>
+    <div class="months pulse-months" role="group" aria-label="Inscripciones del equipo por mes">${cols.map(([ym, m]) => `<button type="button" class="mcol pulse-col" data-act="pulse-month" data-m="${ym}" aria-label="${MES[Number(ym.slice(5)) - 1]}: ${m.total} inscripciones en ${m.races} carreras">
+      <em>${m.total}</em><div class="mstack" style="height:${(m.total / mx) * 100}%">${MODALITIES.filter((x) => m.mods[x]).map((x) => `<span class="${modClass(x)}" style="flex:${m.mods[x]}" title="${esc(x)}: ${m.mods[x]}"></span>`).join('')}</div>
+      <b>${MES[Number(ym.slice(5)) - 1]}</b></button>`).join('')}</div>
+    <p class="hint pulse-hint">Cada barra suma las inscripciones del equipo ese mes. Toca un mes para verlo. ¿Echas en falta alguna? Búscala o pulsa <b>＋ Nueva</b>.</p></section>`;
+}
+
 function viewRunnerHome() {
   const d = S.runnerData, me = d.me, today = d.today || todayISO();
   const regs = regFilter(d.registrations, me);
@@ -1010,6 +1036,7 @@ function viewRunnerHome() {
       ${searchBox('runner', 'Buscar carrera, pueblo o compañero…')}
       <button class="btn primary add-btn wide" data-act="r-new" aria-label="Añadir una carrera que no está" title="Añadir una carrera que no está">＋ Nueva</button>
     </div>
+    <div id="pulse-box">${normalize(S.q.runner || '').length >= 2 ? '' : teamPulse(d)}</div>
     ${modFilterBar(d.registrations, me)}
     <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
     ${body}`,
@@ -2929,6 +2956,14 @@ const actions = {
   'sub-filter'(el) { S.sub = el.dataset.s; render(); },
   'who-filter'(el) { S.who = el.dataset.w; render(); },
   'filters-clear'() { clearFilters(); render(); },
+  'pulse-month'(el) {
+    const ym = el.dataset.m;
+    S.fold.delete(ym);
+    if (S.regView === 'cal') { S.regView = 'list'; store.set(VIEW_KEY, 'list'); }
+    render();
+    const head = $app.querySelector(`.month-head[data-m="${ym}"]`);
+    if (head) head.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  },
   'month-fold'(el) { const m = el.dataset.m; S.fold.has(m) ? S.fold.delete(m) : S.fold.add(m); render(); },
   'cal-month'(el) { S.calMonth = addMonths(S.calMonth, Number(el.dataset.n)); S.calDay = null; render(); },
   'cal-goto'(el) { S.calMonth = el.dataset.m; S.calDay = null; render(); },
