@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Planificar ruta · CC Monzón</title>
+  <meta name="description" content="Sube el track, di cuándo sales y mira el viento, el tiempo y las subidas a la hora a la que pasas por cada sitio.">
+  <meta name="theme-color" content="#284556">
+  <link rel="icon" href="../icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="../css/app.css">
+  <link rel="stylesheet" href="vendor/leaflet-1.9.4/leaflet.css">
+  <link rel="stylesheet" href="ruta.css">
+  <script>try{var t=localStorage.getItem('monzon-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}</script>
+</head>
+<body>
+  <header class="top">
+    <a class="back" href="../" aria-label="Volver a la app del club">‹</a>
+    <img class="logo" src="../icons/logo.png" alt="">
+    <h1>Planificar ruta</h1>
+    <button type="button" id="change" class="btn small" hidden>Cambiar de ruta</button>
+  </header>
+  <main id="main"><p class="loading">Cargando…</p></main>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <dialog id="dialog"></dialog>
+  <noscript>Esta página necesita JavaScript.</noscript>
+  <script src="vendor/leaflet-1.9.4/leaflet.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
