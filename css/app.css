@@ -686,3 +686,13 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
   .rp-table { min-width: 0; font-size: 9.5pt; }
   .rp-table tr { break-inside: avoid; }
 }
+.rp-d { display: block; font-style: normal; font-size: .68rem; color: var(--muted, #667); }
+.rp-d.up { color: #1b7f3b; } .rp-d.down { color: #b3261e; }
+.rp-name { color: inherit; text-decoration: none; }
+.rp-box { border: 1px solid var(--line); border-radius: 10px; padding: .5rem .6rem; margin-bottom: .7rem; display: flex; flex-direction: column; gap: .3rem; }
+.rp-box small { color: var(--muted, #667); }
+.report.sheet { margin-bottom: 1rem; }
+.chk-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .4rem; font-size: .9rem; }
+.chk-list li.bad a { color: #b3261e; font-weight: 600; text-decoration: none; }
+.chk-list li.info { color: var(--muted, #667); }
+@media print { .report.sheet { break-after: page; margin: 0; } .report.sheet:last-of-type { break-after: auto; } .rp-name { color: #000; } }
