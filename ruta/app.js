@@ -53,13 +53,14 @@ const S = {
   view: 'completa', mode: 'viento', arrowsKm: 4, wps: [], addingWp: false,
   feeding: false, gph: 90, every: 30, feedOnMap: true,
   exp: { wps: true, climbs: false, tomas: false, times: false }, cursorD: null,
+  charts: ['viento', 'temp', 'lluvia', 'humedad', 'uv'], bgProfile: true, tCursor: null,
 };
 let map = null, mapLayer = null, cursorMarker = null, fitted = false;
 
 function saveLast() {
   if (!S.id) return;
   store.set(K_LAST, { id: S.id, start: S.start, flat: S.flat, mass: S.mass, stops: S.stops, reversed: S.reversed, wps: S.wps,
-    gph: S.gph, every: S.every, feeding: S.feeding, view: S.view, mode: S.mode });
+    gph: S.gph, every: S.every, feeding: S.feeding, view: S.view, mode: S.mode, charts: S.charts, bgProfile: S.bgProfile });
 }
 function saveRecent(id, name, pts) {
   let list = store.get(K_REC, []).filter((r) => r.id !== id);
@@ -168,9 +169,9 @@ async function readFile(file) {
 function openRoute(name, points, settings = null) {
   const pts = Array.isArray(points[0]) ? points : R.decimate(points, 4000);
   const id = settings?.id || `r${Date.now().toString(36)}`;
-  Object.assign(S, { id, name, raw: pts, reversed: false, wps: [], feeding: false, wx: null, wxKey: '', wxErr: '', cursorD: null });
+  Object.assign(S, { id, name, raw: pts, reversed: false, wps: [], feeding: false, wx: null, wxKey: '', wxErr: '', cursorD: null, tCursor: null });
   if (settings) {
-    for (const k of ['start', 'flat', 'mass', 'stops', 'reversed', 'wps', 'gph', 'every', 'feeding', 'view', 'mode']) if (settings[k] !== undefined) S[k] = settings[k];
+    for (const k of ['start', 'flat', 'mass', 'stops', 'reversed', 'wps', 'gph', 'every', 'feeding', 'view', 'mode', 'charts', 'bgProfile']) if (settings[k] !== undefined) S[k] = settings[k];
     if (S.start < Date.now() - 3600000) { const d = new Date(S.start); const n = new Date(defaultStart()); n.setHours(d.getHours(), d.getMinutes()); S.start = n.getTime(); }
   }
   saveRecent(id, name, pts);
@@ -420,17 +421,118 @@ function renderClimbs() {
 // ---------- Tiempo, avituallamiento y exportar ----------
 const feeding = () => R.feedingPlan(S.track.points, S.tl.t, { gph: S.gph, everyMin: S.every });
 
+// ---------- Gráficas del tiempo en la ruta ----------
+const CHARTS = {
+  viento: { title: 'Viento', series: [['wind', 'Viento', 'km/h'], ['gust', 'Rachas', 'km/h']] },
+  temp: { title: 'Temperatura', series: [['temp', 'Temperatura', '°C'], ['feels', 'Sensación térmica', '°C']] },
+  lluvia: { title: 'Precipitación y nubes', series: [['rainProb', 'Prob. precipitación', '%'], ['clouds', 'Cobertura de nubes', '%']], range: [0, 100] },
+  humedad: { title: 'Humedad y punto de rocío', series: [['hum', 'Humedad', '%'], ['dew', 'Punto de rocío', '°C']] },
+  uv: { title: 'Índice UV y luz diurna', series: [['uv', 'Índice UV', '']], daylight: true },
+  mm: { title: 'Lluvia acumulada por hora', series: [['rain', 'Precipitación', 'mm']], min0: true },
+};
+const CW = 360, CH = 190, CP = { l: 34, r: 10, t: 24, b: 8 };
+const KIND_BG = { cara: '#f3b4ae', lateral: '#f5e3a0', favor: '#a9dcb8' };
+const SERIES_COLOR = ['var(--accent)', '#e8711a'];
+function niceTicks(lo, hi, n = 4) {
+  const span = hi - lo || 1, raw = span / n, mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((x) => x >= raw);
+  const a = Math.floor(lo / step) * step, out = [];
+  for (let v = a; ; v += step) { out.push(+v.toFixed(6)); if (v >= hi - step * 1e-6) break; }
+  return out;
+}
+function chartSvg(id) {
+  const c = CHARTS[id], A = S.along.filter((w) => w.wind !== undefined), total = S.tl.total;
+  const tx = (ms) => CP.l + (ms / total) * (CW - CP.l - CP.r);
+  const vals = c.series.flatMap(([k]) => A.map((w) => w[k]).filter((v) => v !== null && v !== undefined));
+  if (!vals.length) return '<p class="hint">Sin datos para esta gráfica.</p>';
+  let lo = c.range ? c.range[0] : Math.min(...vals), hi = c.range ? c.range[1] : Math.max(...vals);
+  if (c.min0 || id === 'uv' || id === 'viento') lo = 0;
+  if (hi - lo < 1) hi = lo + 1;
+  const ticks = niceTicks(lo, hi);
+  lo = ticks[0]; hi = ticks[ticks.length - 1];
+  const y = (v) => CP.t + (1 - (v - lo) / (hi - lo)) * (CH - CP.t - CP.b);
+  const base = CH - CP.b;
+  let g = '';
+  // perfil de fondo coloreado por el viento
+  if (S.bgProfile) {
+    const t = S.track, P = t.points, N = 160, eh = (t.maxEle - t.minEle) || 1;
+    const ey = (e) => base - ((e - t.minEle) / eh) * (base - CP.t) * 0.85;
+    for (let k = 0; k < N; k++) {
+      const d1 = (k / N) * t.distance, d2 = ((k + 1) / N) * t.distance, w = wxAt((d1 + d2) / 2);
+      const x1 = tx(R.timeAt(P, S.tl.t, d1)), x2 = tx(R.timeAt(P, S.tl.t, d2));
+      g += `<polygon points="${x1.toFixed(1)},${base} ${x1.toFixed(1)},${ey(R.pointAt(P, d1).es).toFixed(1)} ${x2.toFixed(1)},${ey(R.pointAt(P, d2).es).toFixed(1)} ${x2.toFixed(1)},${base}" fill="${KIND_BG[w?.rel?.kind] || '#dde3e8'}" stroke="none" opacity=".75"/>`;
+    }
+  }
+  if (c.daylight) A.forEach((w, i) => { if (i < A.length - 1 && w.isDay) g += `<rect x="${tx(w.eta - S.start)}" y="${CP.t - 9}" width="${tx(A[i + 1].eta - S.start) - tx(w.eta - S.start) + .5}" height="5" fill="#f5c518"/>`; });
+  const grid = ticks.map((v) => `<line x1="${CP.l}" x2="${CW - CP.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${CP.l - 4}" y="${y(v) + 3.5}" text-anchor="end">${nf1.format(v).replace(/,0$/, '')}</text>`).join('');
+  // horas arriba: salida, cada hora en punto y llegada
+  const hours = [[0, hm(S.start)]];
+  for (let h = Math.ceil(S.start / 3600000) * 3600000; h < S.start + total; h += 3600000) if (tx(h - S.start) - tx(0) > 30 && tx(total) - tx(h - S.start) > 30) hours.push([h - S.start, hm(h)]);
+  hours.push([total, hm(S.start + total)]);
+  const hl = hours.map(([ms, l], i) => `<line x1="${tx(ms)}" x2="${tx(ms)}" y1="${CP.t}" y2="${base}" stroke="var(--line)" stroke-dasharray="2 3"/><text x="${tx(ms)}" y="${CP.t - 12}" text-anchor="${i === hours.length - 1 ? 'end' : i ? 'middle' : 'start'}">${l}</text>`).join('');
+  const lines = c.series.map(([k], si) => {
+    const pts = A.filter((w) => w[k] !== null && w[k] !== undefined).map((w) => `${tx(w.eta - S.start).toFixed(1)},${y(w[k]).toFixed(1)}`).join(' ');
+    return `<polyline points="${pts}" fill="none" stroke="${SERIES_COLOR[si]}" stroke-width="2.2" ${si ? 'stroke-dasharray="5 4"' : ''} stroke-linejoin="round"/>`;
+  }).join('');
+  let cur = '';
+  if (S.tCursor !== null) {
+    const x = tx(S.tCursor);
+    cur = `<line x1="${x}" x2="${x}" y1="${CP.t}" y2="${base}" stroke="var(--muted)"/>` + c.series.map(([k], si) => {
+      const v = valueAt(k, S.tCursor);
+      return v === null ? '' : `<circle cx="${x}" cy="${y(v)}" r="4.5" fill="${SERIES_COLOR[si]}" stroke="#fff" stroke-width="1.5"/>`;
+    }).join('');
+  }
+  return `<svg class="wchart" viewBox="0 0 ${CW} ${CH}" role="img" aria-label="${esc(c.title)}">${g}${grid}${hl}${lines}${cur}</svg>`;
+}
+/** Valor de una serie en el instante ms (desde la salida), interpolando entre puntos de previsión. */
+function valueAt(k, ms) {
+  const A = S.along.filter((w) => w[k] !== null && w[k] !== undefined);
+  if (!A.length) return null;
+  const t = S.start + ms;
+  if (t <= A[0].eta) return A[0][k];
+  for (let i = 1; i < A.length; i++) if (A[i].eta >= t) { const f = (t - A[i - 1].eta) / (A[i].eta - A[i - 1].eta || 1); return A[i - 1][k] + (A[i][k] - A[i - 1][k]) * f; }
+  return A[A.length - 1][k];
+}
+function chartsHtml() {
+  const ms = S.tCursor ?? null;
+  const dAt = (m) => { const P = S.track.points, t = S.tl.t; let i = 1; while (i < t.length - 1 && t[i] < m) i++; const f = (m - t[i - 1]) / (t[i] - t[i - 1] || 1); return P[i - 1].d + (P[i].d - P[i - 1].d) * f; };
+  const fmt = (v, u) => `${u === '°C' || u === 'mm' ? nf1.format(v) : int(v)}${u ? (u === '%' ? ' %' : ' ' + u) : ''}`;
+  const blocks = S.charts.map((id, ci) => {
+    const c = CHARTS[id];
+    const read = ms !== null ? `<p class="readout">${km(dAt(ms))} km, ${hm(S.start + ms)} · ${c.series.map(([k, l, u]) => { const v = valueAt(k, ms); return v === null ? '' : `${l}: <b>${fmt(v, u)}</b>`; }).filter(Boolean).join(' · ')}</p>`
+      : '<p class="readout muted">Toca o arrastra en la gráfica para ver el valor en cada momento.</p>';
+    return `<div class="wblock">
+      <div class="whead"><select data-chart="${ci}" aria-label="Cambiar gráfica">${Object.entries(CHARTS).map(([k, v]) => `<option value="${k}" ${k === id ? 'selected' : ''}>${v.title}</option>`).join('')}</select>
+        <button class="linkbtn small" data-act="chart-del" data-i="${ci}">Quitar</button></div>
+      <div class="legend">${c.series.map(([, l], si) => `<span><i class="${si ? 'dash' : ''}" style="background:${SERIES_COLOR[si]}"></i>${l}</span>`).join('')}${c.daylight ? '<span><i style="background:#f5c518"></i>Luz diurna</span>' : ''}${S.bgProfile ? '<span><i style="background:#f3b4ae"></i>Viento de cara</span><span><i style="background:#f5e3a0"></i>Cruzado o flojo</span><span><i style="background:#a9dcb8"></i>Favorable</span>' : ''}</div>
+      ${read}${chartSvg(id)}</div>`;
+  }).join('');
+  const left = Object.keys(CHARTS).filter((k) => !S.charts.includes(k));
+  return `${blocks}<div class="row" style="margin-top:.6rem">${left.length ? `<select id="chart-add" aria-label="Añadir un gráfico"><option value="">+ Añadir un gráfico</option>${left.map((k) => `<option value="${k}">${CHARTS[k].title}</option>`).join('')}</select>
+    <button class="linkbtn" data-act="chart-all">Ver todos</button>` : ''}</div>`;
+}
+function renderCharts() { const el = document.getElementById('wcharts'); if (el && S.along) el.innerHTML = chartsHtml(); }
+function chartPick(ev) {
+  const svg = ev.target.closest('.wchart');
+  const r = svg.getBoundingClientRect();
+  const fx = ((ev.clientX - r.left) / r.width) * CW;
+  S.tCursor = Math.max(0, Math.min(S.tl.total, ((fx - CP.l) / (CW - CP.l - CP.r)) * S.tl.total));
+  renderCharts();
+}
+
 function renderRest() {
   const el = document.getElementById('rest');
   if (S.view !== 'completa') { el.innerHTML = ''; return; }
   let wxHtml;
   if (S.wxErr) wxHtml = `<p class="warn">${esc(S.wxErr)}</p><button class="btn" data-act="retry">Reintentar</button>`;
   else if (!S.along) wxHtml = '<p class="hint">Cargando la previsión…</p>';
-  else wxHtml = `<div class="wrap-x"><table class="wx"><thead><tr><th>Hora</th><th>Km</th><th></th><th>Temp.</th><th>Lluvia</th><th>Viento (rachas)</th></tr></thead><tbody>
+  else wxHtml = `<label class="check"><input type="checkbox" id="bgprof" ${S.bgProfile ? 'checked' : ''}> Perfil de la ruta de fondo</label>
+    <div id="wcharts">${chartsHtml()}</div>
+    <details class="fact"><summary><b>Ver la tabla</b></summary><div class="wrap-x"><table class="wx"><thead><tr><th>Hora</th><th>Km</th><th></th><th>Temp.</th><th>Lluvia</th><th>Viento (rachas)</th></tr></thead><tbody>
     ${S.along.map((w) => { const [ic, lab] = R.weatherLabel(w.code); return `<tr><td><b>${hm(w.eta)}</b></td><td class="k">${km(w.d)}</td><td title="${lab}">${ic}</td>
       <td>${int(w.temp)}°</td><td>${int(w.rainProb ?? 0)} %${w.rain >= 0.1 ? ` <small class="muted">${nf1.format(w.rain)} mm</small>` : ''}</td>
       <td><span class="pill ${w.rel.kind}">${KIND[w.rel.kind]}</span> ${int(w.wind)} <small class="muted">(${int(w.gust)}) ${compass(w.windFrom)}</small></td></tr>`; }).join('')}
-    </tbody></table></div>`;
+    </tbody></table></div></details>`;
 
   const tomas = S.feeding ? feeding() : [];
   const grams = tomas.reduce((s, f) => s + f.grams, 0);
@@ -558,6 +660,8 @@ document.addEventListener('click', async (e) => {
   else if (act === 'addwp') setAdding(true);
   else if (act === 'cancelwp') setAdding(false);
   else if (act === 'del-wp') { S.wps.splice(+b.dataset.i, 1); map?.closePopup(); update(); }
+  else if (act === 'chart-del') { S.charts.splice(+b.dataset.i, 1); saveLast(); renderCharts(); }
+  else if (act === 'chart-all') { S.charts = Object.keys(CHARTS); saveLast(); renderCharts(); }
   else if (act === 'retry') { S.wxKey = ''; fetchWeather(); }
   else if (act === 'feed-on') { S.feeding = true; S.exp.tomas = true; update(); }
   else if (act === 'feed-off') { S.feeding = false; S.exp.tomas = false; update(); }
@@ -588,12 +692,15 @@ document.addEventListener('change', (e) => {
   } else if (t.id === 'every') { S.every = +t.value; update(); }
   else if (t.id === 'feedmap') { S.feedOnMap = t.checked; drawMap(); }
   else if (t.dataset.exp) S.exp[t.dataset.exp] = t.checked;
+  else if (t.id === 'bgprof') { S.bgProfile = t.checked; saveLast(); renderCharts(); }
+  else if (t.dataset.chart !== undefined) { S.charts[+t.dataset.chart] = t.value; saveLast(); renderCharts(); }
+  else if (t.id === 'chart-add' && t.value) { S.charts.push(t.value); saveLast(); renderCharts(); }
 });
 document.addEventListener('input', (e) => {
   if (e.target.id === 'arrows') { S.arrowsKm = +e.target.value; document.getElementById('arrowsv').textContent = `${S.arrowsKm} km`; drawMap(); }
 });
-document.addEventListener('pointerdown', (e) => { if (e.target.closest('#psvg')) profilePick(e); });
-document.addEventListener('pointermove', (e) => { if (e.buttons && e.target.closest('#psvg')) profilePick(e); });
+document.addEventListener('pointerdown', (e) => { if (e.target.closest('#psvg')) profilePick(e); else if (e.target.closest('.wchart')) chartPick(e); });
+document.addEventListener('pointermove', (e) => { if (!e.buttons) return; if (e.target.closest('#psvg')) profilePick(e); else if (e.target.closest('.wchart')) chartPick(e); });
 
 // Arrastrar un .gpx o .fit sobre la página (ordenador)
 document.addEventListener('dragover', (e) => e.preventDefault());

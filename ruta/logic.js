@@ -322,7 +322,7 @@ export function forecastUrl(samples, fromMs, toMs) {
   const q = new URLSearchParams({
     latitude: samples.map((s) => s.lat.toFixed(3)).join(','),
     longitude: samples.map((s) => s.lon.toFixed(3)).join(','),
-    hourly: 'temperature_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m',
+    hourly: 'temperature_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,cloud_cover,relative_humidity_2m,dew_point_2m,uv_index,is_day',
     wind_speed_unit: 'kmh', timezone: 'GMT', timeformat: 'unixtime',
     start_date: day(fromMs - 3600000), end_date: day(toMs + 3600000),
   });
@@ -335,13 +335,14 @@ export function weatherAlong(samples, etas, response) {
   return samples.map((s, i) => {
     const h = list[i]?.hourly;
     if (!h) return { ...s, eta: etas[i] };
-    const at = (k) => interpHourly(h.time, h[k], etas[i]);
+    const at = (k) => (h[k] ? interpHourly(h.time, h[k], etas[i]) : null);
     const wind = at('wind_speed_10m');
     const dir = interpDirection(h.time, h.wind_direction_10m, h.wind_speed_10m, etas[i]);
     const near = h.time.reduce((b, x, j) => (Math.abs(x * 1000 - etas[i]) < Math.abs(h.time[b] * 1000 - etas[i]) ? j : b), 0);
     return {
       ...s, eta: etas[i], temp: at('temperature_2m'), feels: at('apparent_temperature'), rainProb: at('precipitation_probability'),
       rain: at('precipitation'), code: h.weather_code[near], wind, gust: at('wind_gusts_10m'), windFrom: dir,
+      clouds: at('cloud_cover'), hum: at('relative_humidity_2m'), dew: at('dew_point_2m'), uv: at('uv_index'), isDay: h.is_day ? h.is_day[near] : null,
       rel: windRelative(s.heading, dir, wind),
     };
   });
