@@ -217,32 +217,49 @@ export function timeAt(points, t, d) {
 }
 
 /**
- * Subidas: desde un mínimo hasta la cima, admitiendo descansos que no bajen más de
- * max(15 m, 25 % de lo subido). Se quedan las de ≥ `minGain` m, ≥ `minLen` m y ≥ `minAvg` de media.
+ * Subidas. 1) Se cortan tramos de subida (de un mínimo a una cima) cuando se baja más de
+ * max(15 m, 25 % de lo subido). 2) Se juntan los tramos seguidos de una misma subida: si el
+ * siguiente llega más alto y la bajada entre medias es pequeña (≤ max(25 m, 30 % del total)).
+ * 3) Se recortan la aproximación y el final llanos (< 1,5 % en 1 km). 4) Se quedan las de
+ * ≥ `minGain` m y ≥ `minLen` m con media ≥ `minAvg`, o las largas y tendidas (≥ `longGain` m
+ * con media ≥ `longAvg`), que en carretera también son puerto.
  */
-export function findClimbs(points, { minGain = 40, minLen = 500, minAvg = 0.03 } = {}) {
-  const out = [];
+export function findClimbs(points, { minGain = 40, minLen = 500, minAvg = 0.03, longGain = 150, longAvg = 0.02, flat = 0.015 } = {}) {
+  const es = (i) => points[i].es;
+  // 1) tramos de subida
+  const segs = [];
   let lo = 0, hi = 0;
-  const close = () => {
-    // se recortan la aproximación y el final suaves (menos de la media mínima en 500 m) para que la media sea la de la subida de verdad
-    let s = lo, e = hi;
-    while (s < e && points[e].d - points[s].d > minLen && gradeAt(points, points[s].d + 250, 250) < minAvg) s++;
-    while (e > s && points[e].d - points[s].d > minLen && gradeAt(points, points[e].d - 250, 250) < minAvg) e--;
-    const a = points[s], b = points[e];
-    const gain = b.es - a.es, len = b.d - a.d;
-    if (gain >= minGain && len >= minLen && gain / len >= minAvg) {
-      let maxG = 0;
-      for (let d = a.d; d <= b.d - 100; d += 50) maxG = Math.max(maxG, gradeAt(points, d + 50, 50));
-      out.push({ start: a.d, end: b.d, length: len, gain, avg: gain / len, max: Math.max(maxG, gain / len), top: b.es, startIdx: s, endIdx: e });
-    }
-  };
   for (let i = 1; i < points.length; i++) {
-    const e = points[i].es;
-    if (e > points[hi].es) hi = i;
-    else if (points[hi].es - e > Math.max(15, 0.25 * (points[hi].es - points[lo].es))) { close(); lo = hi = i; }
-    if (e < points[lo].es) lo = hi = i;
+    const e = es(i);
+    if (e > es(hi)) hi = i;
+    else if (es(hi) - e > Math.max(15, 0.25 * (es(hi) - es(lo)))) { if (hi > lo) segs.push([lo, hi]); lo = hi = i; }
+    if (e < es(lo)) lo = hi = i;
   }
-  close();
+  if (hi > lo) segs.push([lo, hi]);
+  // 2) juntar los de una misma subida
+  const merged = [];
+  for (const sg of segs) {
+    const prev = merged[merged.length - 1];
+    if (prev) {
+      const drop = es(prev[1]) - es(sg[0]);
+      if (es(sg[1]) > es(prev[1]) && drop <= Math.max(25, 0.3 * (es(sg[1]) - es(prev[0])))) { prev[1] = sg[1]; continue; }
+    }
+    merged.push([...sg]);
+  }
+  // 3) y 4) recortar lo llano y quedarse con las que cuentan
+  const out = [];
+  for (const [l, h] of merged) {
+    let s = l, e = h;
+    while (s < e && points[e].d - points[s].d > minLen && gradeAt(points, points[s].d + 500, 500) < flat) s++;
+    while (e > s && points[e].d - points[s].d > minLen && gradeAt(points, points[e].d - 500, 500) < flat) e--;
+    const a = points[s], b = points[e];
+    const gain = b.es - a.es, len = b.d - a.d, avg = len > 0 ? gain / len : 0;
+    if (len < minLen || gain < minGain) continue;
+    if (!(avg >= minAvg || (gain >= longGain && avg >= longAvg))) continue;
+    let maxG = 0;
+    for (let d = a.d; d <= b.d - 100; d += 50) maxG = Math.max(maxG, gradeAt(points, d + 50, 50));
+    out.push({ start: a.d, end: b.d, length: len, gain, avg, max: Math.max(maxG, avg), top: b.es, startIdx: s, endIdx: e });
+  }
   return out;
 }
 
