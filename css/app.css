@@ -792,3 +792,12 @@ dialog:has(.gsearch) { width: min(94vw, 560px); max-height: 88vh; padding: .8rem
 .fdlg .modbar { flex-wrap: wrap; overflow: visible; margin: 0 0 .6rem; }
 .toolbar .fbtn svg { fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .fsec { margin: .5rem 0 .25rem; }
+
+/* ---------- Podios por carrera (Resumen / Equipo) ---------- */
+.pod-totals { display: flex; align-items: baseline; flex-wrap: wrap; gap: .3rem 1rem; margin: .2rem 0 .5rem; font-size: 1.15rem; }
+.pod-sub { margin: .6rem 0 .2rem; }
+.podium-races li { display: block; }
+.pr-head { display: flex; flex-wrap: wrap; align-items: center; gap: .1rem .4rem; }
+.pr-who { margin: .2rem 0 0; font-size: .9rem; line-height: 1.5; }
+.pod-more { margin-top: .4rem; }
+.pod-more summary { cursor: pointer; font-weight: 600; color: var(--accent); padding: .3rem 0; }

@@ -2122,13 +2122,20 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
       : `<p class="muted">Todavía no hay carreras${mod ? ` de ${esc(mod)}` : ''} este año.</p>`}
     ${idle.length ? `<p class="muted small">Sin carreras${mod ? ` de ${esc(mod)}` : ''} todavía: ${names(idle, 30)}.</p>` : ''}</section>`;
 
-  // --- podios
+  // --- podios: totales, tipos y los últimos por carrera (no una lista larga de personas)
   const types = s.byPodiumType.filter((t) => t.podiums);
+  const medals = [1, 2, 3].map((k) => [k, s.podiumList.filter((p) => p.position === k).length]);
+  const byRace = new Map();
+  for (const p of s.podiumList) { const k = p.raceId + '|' + p.date; (byRace.get(k) || byRace.set(k, { ...p, items: [] }).get(k)).items.push(p); }
+  const raceRows = [...byRace.values()].sort((x, y) => y.date.localeCompare(x.date));
+  const raceRow = (r) => `<li class="${modClass(r.modality)}"><div class="pr-head">${raceLink(r.raceId, r.race)} <span class="muted">· ${formatDate(r.date, false)}</span> ${mod ? '' : `<span class="tag ${modClass(r.modality)}">${esc(r.modality)}</span>`}</div>
+      <p class="pr-who">${r.items.sort((a, b) => a.position - b.position).map((p) => `${medal(p.position)} ${esc(p.runner)}${p.category ? ` <small class="muted">${esc(p.category)}</small>` : ''}${p.stage ? ` <small class="muted">(${esc(p.stage)})</small>` : ''}`).join(' · ')}</p></li>`;
+  const SHOWN = 4;
   const pods = `<section class="card"><h2>Podios${mod ? ` de ${esc(mod)}` : ' del año'}</h2>
+    ${s.podiumList.length ? `<div class="pod-totals">${medals.map(([k, n]) => `<span><b>${medal(k)} ${n}</b></span>`).join('')}<small class="muted">en ${raceRows.length} carrera${raceRows.length === 1 ? '' : 's'}</small></div>` : ''}
     ${types.length ? `<div class="pills">${types.map((t) => `<span class="pill">${esc(t.label)} <b>${t.podiums}</b>${t.wins ? ` · 🥇 ${t.wins}` : ''}</span>`).join('')}</div>` : ''}
-    ${s.podiumList.length ? `<ul class="podium-list">${s.podiumList.map((p) => `<li class="${modClass(p.modality)}"><span class="medal">${medal(p.position)}</span><div>
-        <b>${esc(p.runner)}</b>${p.category ? ` <small class="muted">${esc(p.category)}</small>` : ''} · ${p.position}º ${mod ? '' : `<span class="tag ${modClass(p.modality)}">${esc(p.modality)}</span>`}
-        <br>${raceLink(p.raceId, p.race)} <span class="muted">· ${formatDate(p.date, false)} · ${esc(podiumLabel(p.type))}${p.stage ? ': ' + esc(p.stage) : ''}</span></div></li>`).join('')}</ul>`
+    ${raceRows.length ? `<p class="hint pod-sub">Últimos podios del equipo</p><ul class="podium-list podium-races">${raceRows.slice(0, SHOWN).map(raceRow).join('')}</ul>
+      ${raceRows.length > SHOWN ? `<details class="pod-more"><summary>Ver las ${raceRows.length - SHOWN} carrera${raceRows.length - SHOWN === 1 ? '' : 's'} anteriores</summary><ul class="podium-list podium-races">${raceRows.slice(SHOWN).map(raceRow).join('')}</ul></details>` : ''}`
       : '<p class="muted">Sin podios este año.</p>'}</section>`;
 
   // --- dónde
