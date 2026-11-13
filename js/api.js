@@ -12,6 +12,8 @@ export function friendlyError(e) {
   if (/enlace_no_valido/.test(msg)) return 'Este enlace ya no es válido. Pide uno nuevo a la dirección del club.';
   if (/resultado_ya_puesto/.test(msg)) return 'Ya pusiste tu resultado en esta carrera. Si hay que corregirlo, pídeselo a la dirección del club.';
   if (/puesto_no_valido/.test(msg)) return 'Pon un puesto válido (1, 2, 3…).';
+  if (/tiempo_no_valido/.test(msg)) return 'Pon un tiempo válido, por ejemplo 2:05:30 (horas:minutos:segundos).';
+  if (/PGRST202|runner_report_result/.test(msg) && /tiempo|schema cache|Could not find/i.test(msg)) return 'Para guardar el tiempo falta activarlo en la base de datos. Avisa a la dirección (o guarda el resultado sin tiempo).';
   if (/carrera_suspendida/.test(msg)) return 'Esta carrera se ha suspendido: no se puede poner resultado ni pasarla a resultados.';
   if (/otros_apuntados/.test(msg)) return 'No puedes borrarla: hay más compañeros apuntados. Pídeselo a la dirección del club.';
   if (/plus_confirmado/.test(msg)) return 'La dirección ya ha confirmado este plus, así que no se puede retirar. Si hay un error, díselo a la dirección.';
@@ -98,6 +100,14 @@ export function supabaseApi(url, key) {
       return ok(await sb.rpc('upload_document', { p_runner: runnerId, p_year: year, p_title: title, p_filename: filename, p_mime: mime, p_b64: b64 }));
     },
     async getDocument(id) { return ok(await sb.rpc('get_document', { p_id: id })); },
+    async listContractTemplates() { return ok(await sb.from('contract_templates').select('contract,title,filename,mime,size,updated_at')); },
+    async uploadContractTemplate(contract, title, filename, mime, b64) {
+      ok(await sb.rpc('upload_contract_template', { p_contract: contract, p_title: title, p_filename: filename, p_mime: mime, p_b64: b64 }));
+    },
+    async getContractTemplate(contract) { return ok(await sb.rpc('get_contract_template', { p_contract: contract })); },
+    async deleteContractTemplate(contract) { ok(await sb.from('contract_templates').delete().eq('contract', contract)); },
+    async runnerContractTemplate(code) { return ok(await sb.rpc('runner_contract_template', { p_code: code })); },
+    async runnerGetContractTemplate(code) { return ok(await sb.rpc('runner_get_contract_template', { p_code: code })); },
     async deleteDocument(id) { ok(await sb.from('runner_documents').delete().eq('id', id)); },
     async regenerateCode(id) { ok(await sb.from('runners').update({ code: newCode() }).eq('id', id)); },
     async deleteRunner(id, anonymize) { ok(await sb.rpc('delete_runner', { p_id: id, p_anonymize: anonymize })); },
@@ -137,8 +147,10 @@ export function supabaseApi(url, key) {
     async runnerNews(code) { return ok(await sb.rpc('runner_news', { p_code: code })); },
     async runnerDocuments(code) { return ok(await sb.rpc('runner_documents_list', { p_code: code })); },
     async runnerGetDocument(code, id) { return ok(await sb.rpc('runner_get_document', { p_code: code, p_id: id })); },
-    async runnerReport(code, kind, id, position, category, podiumType) {
-      ok(await sb.rpc('runner_report_result', { p_code: code, p_kind: kind, p_id: id, p_position: position, p_category: category || null, p_podium_type: podiumType || null }));
+    async runnerReport(code, kind, id, position, category, podiumType, timeSeconds) {
+      const args = { p_code: code, p_kind: kind, p_id: id, p_position: position, p_category: category || null, p_podium_type: podiumType || null };
+      if (timeSeconds) args.p_time = timeSeconds; // solo se envía si hay tiempo: así sigue funcionando antes de activar el cambio en la base
+      ok(await sb.rpc('runner_report_result', args));
     },
     async runnerUpdate(code, id, reg) { ok(await sb.rpc('runner_update_registration', { p_code: code, p_id: id, p_reg: reg })); },
     async runnerDelete(code, id) { ok(await sb.rpc('runner_delete_registration', { p_code: code, p_id: id })); },
@@ -243,7 +255,7 @@ export function demoApi(storage = globalThis.localStorage) {
       for (const e of ents) {
         const rn = d.runners.find((r) => r.id === e.runner_id);
         d.results.push({ id: uuid(), race_id: race.id, runner_id: e.runner_id, runner_name: rn?.name || '?', category: e.category || null, position: e.self_position,
-          podium_type: e.self_position <= 3 ? (e.self_podium_type || 'suelta') : 'suelta', self_reported: true });
+          podium_type: e.self_position <= 3 ? (e.self_podium_type || 'suelta') : 'suelta', time_seconds: e.self_time_seconds || null, self_reported: true });
       }
       d.registrations = d.registrations.filter((x) => x.id !== g.id);
       d.registration_entries = d.registration_entries.filter((e) => e.registration_id !== g.id);
@@ -306,6 +318,22 @@ export function demoApi(storage = globalThis.localStorage) {
     },
     async getDocument(id) { requireAdmin(); const x = (load().documents || []).find((y) => y.id === id); if (!x) throw new Error('no_existe'); return { filename: x.filename, mime: x.mime, b64: x.b64 }; },
     async deleteDocument(id) { requireAdmin(); const d = load(); d.documents = (d.documents || []).filter((x) => x.id !== id); save(); },
+    async listContractTemplates() { requireAdmin(); return clone((load().contract_templates || []).map(({ b64, ...m }) => m)); },
+    async uploadContractTemplate(contract, title, filename, mime, b64) {
+      requireAdmin(); const d = load();
+      d.contract_templates = (d.contract_templates || []).filter((x) => x.contract !== contract).concat([{ contract, title: title || 'Contrato', filename, mime, size: Math.round(b64.length * 0.75), updated_at: new Date().toISOString(), b64 }]);
+      save();
+    },
+    async getContractTemplate(contract) { requireAdmin(); const x = (load().contract_templates || []).find((y) => y.contract === contract); if (!x) throw new Error('no_existe'); return { filename: x.filename, mime: x.mime, b64: x.b64 }; },
+    async deleteContractTemplate(contract) { requireAdmin(); const d = load(); d.contract_templates = (d.contract_templates || []).filter((x) => x.contract !== contract); save(); },
+    async runnerContractTemplate(code) {
+      const me = byCode(code); const x = (load().contract_templates || []).find((y) => y.contract === me.contract);
+      if (!x) return null; const { b64, ...m } = x; return clone(m);
+    },
+    async runnerGetContractTemplate(code) {
+      const me = byCode(code); const x = (load().contract_templates || []).find((y) => y.contract === me.contract);
+      if (!x) throw new Error('no_existe'); return { filename: x.filename, mime: x.mime, b64: x.b64 };
+    },
     async runnerDocuments(code) { const me = byCode(code); return clone((load().documents || []).filter((x) => x.runner_id === me.id).map(({ b64, runner_id, ...m }) => m)); },
     async runnerGetDocument(code, id) {
       const me = byCode(code); const x = (load().documents || []).find((y) => y.id === id && y.runner_id === me.id);
@@ -349,7 +377,7 @@ export function demoApi(storage = globalThis.localStorage) {
         const rn = d.runners.find((r) => r.id === e.runner_id);
         d.results.push({ id: uuid(), race_id: race.id, runner_id: e.runner_id, runner_name: rn.name, category: e.category,
           position: e.self_position || null, podium_type: e.self_position && e.self_position <= 3 ? (e.self_podium_type || 'suelta') : 'suelta',
-          self_reported: !!e.self_position });
+          time_seconds: e.self_time_seconds || null, self_reported: !!e.self_position });
       }
       save(); await this.deleteRegistration(id); return race.id;
     },
@@ -363,7 +391,7 @@ export function demoApi(storage = globalThis.localStorage) {
       Object.assign(r, fields(race));
       d.results = d.results.filter((x) => x.race_id !== r.id).concat(results.map((x) => ({
         id: uuid(), race_id: r.id, runner_id: x.runner_id || null, runner_name: x.runner_name, category: x.category || null,
-        position: x.position ?? null, podium_type: x.podium_type || 'suelta', stage_positions: x.stage_positions || null, self_reported: !!x.self_reported })));
+        position: x.position ?? null, podium_type: x.podium_type || 'suelta', stage_positions: x.stage_positions || null, time_seconds: x.time_seconds || null, self_reported: !!x.self_reported })));
       save(); return r.id;
     },
     async deleteRace(id) {
@@ -491,7 +519,7 @@ export function demoApi(storage = globalThis.localStorage) {
           return r && { race_id: r.id, name: r.name, date: r.date, end_date: r.end_date || null, place: r.place, province: r.province,
             country: r.country, modality: r.modality, stages: r.stages || null, race_type: r.race_type || 'suelta', circuit: r.circuit || null, subtype: r.subtype || null, km: r.km ?? null,
             category: x.category, position: x.position,
-            podium_type: x.podium_type, stage_positions: x.stage_positions || null, self_reported: !!x.self_reported };
+            podium_type: x.podium_type, stage_positions: x.stage_positions || null, time_seconds: x.time_seconds || null, self_reported: !!x.self_reported };
         }).filter(Boolean).sort((a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name)),
         circuits: (d.circuit_podiums || []).filter((c) => c.runner_id === me.id).map(({ runner_id, created_at, ...c }) => c),
         bonus: (() => { // igual que runner_view en la base de datos
@@ -516,7 +544,7 @@ export function demoApi(storage = globalThis.localStorage) {
         registrations: [...d.registrations].sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name)).map((g) => ({
           ...g, mine_created: g.created_by === me.id,
           my_result: (() => { const e = d.registration_entries.find((x) => x.registration_id === g.id && x.runner_id === me.id && x.self_position);
-            return e ? { position: e.self_position, podium_type: e.self_podium_type } : null; })(),
+            return e ? { position: e.self_position, podium_type: e.self_podium_type, time_seconds: e.self_time_seconds || null } : null; })(),
           entries: d.registration_entries.filter((e) => e.registration_id === g.id).map((e) => {
             const rn = d.runners.find((r) => r.id === e.runner_id);
             return { runner_id: e.runner_id, name: rn?.name, category: e.category };
@@ -524,9 +552,10 @@ export function demoApi(storage = globalThis.localStorage) {
         })),
       });
     },
-    async runnerReport(code, kind, id, position, category, podiumType) {
+    async runnerReport(code, kind, id, position, category, podiumType, timeSeconds) {
       const me = byCode(code); const d = load();
       if (!Number.isInteger(position) || position < 1) throw new Error('puesto_no_valido');
+      if (timeSeconds != null && (!Number.isInteger(timeSeconds) || timeSeconds < 1 || timeSeconds > 3600000)) throw new Error('tiempo_no_valido');
       const pod = position <= 3 ? (podiumType || 'suelta') : null;
       if (kind === 'reg') {
         const e = d.registration_entries.find((x) => x.registration_id === id && x.runner_id === me.id);
@@ -534,14 +563,14 @@ export function demoApi(storage = globalThis.localStorage) {
         if (g?.suspended) throw new Error('carrera_suspendida');
         if (!e || !g || g.date > todayISO()) throw new Error('no_es_tuya');
         if (e.self_position) throw new Error('resultado_ya_puesto');
-        Object.assign(e, { self_position: position, self_podium_type: pod, self_reported_at: new Date().toISOString() });
+        Object.assign(e, { self_position: position, self_podium_type: pod, self_time_seconds: timeSeconds || null, self_reported_at: new Date().toISOString() });
         if (category) e.category = category;
         logc(me.name, 'resultado', `puso su resultado: ${position}º en ${g.name}`);
       } else {
         const r = d.results.find((x) => x.race_id === id && x.runner_id === me.id);
         if (!r) throw new Error('no_es_tuya');
         if (r.position) throw new Error('resultado_ya_puesto');
-        Object.assign(r, { position, podium_type: pod || 'suelta', self_reported: true });
+        Object.assign(r, { position, podium_type: pod || 'suelta', time_seconds: timeSeconds || null, self_reported: true });
         if (category) r.category = category;
         logc(me.name, 'resultado', `puso su resultado: ${position}º en ${d.races.find((x) => x.id === id)?.name}`);
       }
@@ -571,7 +600,7 @@ export function demoApi(storage = globalThis.localStorage) {
         races: d.races.map((r) => ({ id: r.id, name: r.name, date: r.date, end_date: r.end_date || null, place: r.place, province: r.province,
           country: r.country, modality: r.modality, stages: r.stages || null, race_type: r.race_type || 'suelta', circuit: r.circuit || null, subtype: r.subtype || null, km: r.km ?? null,
           results: d.results.filter((x) => x.race_id === r.id).map((x) => ({ runner_id: x.runner_id, runner_name: x.runner_name,
-            category: x.category, position: x.position, podium_type: x.podium_type, stage_positions: x.stage_positions || null })) })),
+            category: x.category, position: x.position, podium_type: x.podium_type, stage_positions: x.stage_positions || null, time_seconds: x.time_seconds || null })) })),
       });
     },
     async runnerCreate(code, reg, category) {

@@ -2,7 +2,7 @@
 import { CONFIG } from './config.js';
 import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
-  CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, parseKm, kmText, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
+  CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, parseKm, kmText, parseTime, formatTime, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
   extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
@@ -153,6 +153,7 @@ async function reload() {
   try { await api.autoPromote(); } catch { /* aún falta su SQL */ } // pasa solas a resultados las carreras ya disputadas con puestos
   S.data = await api.loadAll();
   try { S.docs = await api.listDocuments(); } catch { S.docs = null; } // null = falta el SQL de contratos
+  try { S.tpls = await api.listContractTemplates(); } catch { S.tpls = null; } // null = falta el SQL de contratos por tipo
 }
 
 // ---------- rutas ----------
@@ -255,7 +256,7 @@ function frame(title, body, { back, actions = '', rtab = null } = {}) {
     ? `<nav class="tabs">${RUNNER_TABS.map(([v, label, d]) =>
       `<a href="${runnerHref(v)}" class="${v === rtab ? 'on' : ''}">${icon(d)}<span>${label}</span></a>`).join('')}</nav>`
     : admin ? `<nav class="tabs">${ADMIN_TABS.map(([v, label, d]) =>
-      `<a href="#/${v}" class="${view === v || (!view && v === 'inscripciones') ? 'on' : ''}">${icon(d)}<span>${label}</span></a>`).join('')}</nav>` : '';
+      `<a href="#/${v}" class="${view === v || (!view && v === 'inscripciones') || (v === 'corredores' && view === 'contratos') ? 'on' : ''}">${icon(d)}<span>${label}</span></a>`).join('')}</nav>` : '';
   return `
     ${api.mode === 'demo' ? `<div class="demo-bar">Modo demostración: datos de prueba guardados solo en este móvil.</div>` : ''}
     <header class="top">
@@ -290,7 +291,7 @@ function render() {
     html = ({
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
       carreras: S.draft ? viewRaceEdit : viewRaces,
-      resumen: viewSummary, corredores: viewRunners, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
+      resumen: viewSummary, corredores: viewRunners, contratos: viewContracts, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
       vista: () => (S.preview && S.runnerData ? runnerScreen(parseRoute().id || '') : viewRunners()),
       equipo: () => (S.preview ? viewTeam() : viewSummary()),
     }[view] || viewRegistrations)();
@@ -616,7 +617,7 @@ function openMate(id) {
       const x = r.results.find((y) => y.runner_id === id);
       return `<li class="mini ${modClass(r.modality)} tappable"><a class="mini-main" href="#/carrera/race_${r.id}"><b>${esc(r.name)}</b>
         <small class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</small></a>
-        ${x.position ? `<span class="pos">${medal(x.position)} ${x.position}º</span>` : ''}</li>`; }).join('')}</ul>${doneAll.length > done.length ? `<p class="hint">…y ${doneAll.length - done.length} más.</p>` : ''}` : (S.team ? `<h3 class="mate-h">Carreras de ${year}</h3><p class="hint">Todavía ninguna con resultado.</p>` : '')}
+        ${x.position ? `<span class="pos">${medal(x.position)} ${x.position}º</span>` : ''}${x.time_seconds ? `<small class="muted">⏱️ ${formatTime(x.time_seconds)}</small>` : ''}</li>`; }).join('')}</ul>${doneAll.length > done.length ? `<p class="hint">…y ${doneAll.length - done.length} más.</p>` : ''}` : (S.team ? `<h3 class="mate-h">Carreras de ${year}</h3><p class="hint">Todavía ninguna con resultado.</p>` : '')}
     <div class="dlg-actions"><button value="" class="btn ghost">Cerrar</button></div></form>`;
   dlg.onclose = null;
   dlg.showModal();
@@ -708,6 +709,8 @@ function viewRunnerReport(key) {
         <label>Tu puesto<input type="number" name="position" inputmode="numeric" min="1" max="999" required autofocus></label>
         <label>Categoría${catSelect('name="category"', cat || d.me.category || '', 'Categoría')}</label>
       </div>
+      <label>⏱️ Tu tiempo <small class="muted">(opcional)</small><input type="text" name="time" inputmode="numeric" autocomplete="off" placeholder="2:05:30" maxlength="10"></label>
+      <p class="hint">Horas:minutos:segundos, tal como sale en la clasificación (por ejemplo <b>2:05:30</b>, o <b>45:10</b> si fue menos de una hora). Sirve para ver cuántas horas acumula cada uno en Equipo.</p>
       <input type="hidden" name="podium" value="${podiumKind(race)}">
       ${race.race_type === 'circuito' ? `<p class="hint">🏆 Esta carrera es puntuable de <b>${esc(race.circuit || 'un circuito')}</b>. Aquí pones solo tu puesto en <b>esta prueba</b>. Si acabas en el podio de la <b>general final</b>, se pide aparte, al terminar la liga, en <b>Contrato → Plus de bonificación</b>.</p>` : ''}
       <p class="pen bad-box">⚠️ Revísalo bien: <b>una vez enviado no podrás cambiarlo</b>. Si te equivocas, tendrá que corregirlo la dirección.</p>
@@ -797,7 +800,7 @@ function myRacesCard(d) {
   const days = list.reduce((n, r) => n + numDays(r.date, r.end_date), 0);
   const row = (r) => {
     const stagePods = (r.stage_positions || []).slice(0, (r.stages || []).length).map((p, i) => ({ p, n: stageName(r, i) })).filter((x) => isPodium(x.p));
-    const pos = r.position ? `${isPodium(r.position) ? medal(r.position) + ' ' : ''}${r.position}º${r.category ? ` ${esc(r.category)}` : ''}${r.self_reported ? '<br><small class="self-res">📝 puesto por ti</small>' : ''}`
+    const pos = r.position ? `${isPodium(r.position) ? medal(r.position) + ' ' : ''}${r.position}º${r.category ? ` ${esc(r.category)}` : ''}${r.time_seconds ? `<br><small class="muted">⏱️ ${formatTime(r.time_seconds)}</small>` : ''}${r.self_reported ? '<br><small class="self-res">📝 puesto por ti</small>' : ''}`
       : (S.preview ? '<span class="muted">sin puesto</span>' : `<a class="btn primary small" href="#/resultado/race_${r.race_id}">Poner mi puesto</a>`);
     return `<li class="mini tappable ${modClass(r.modality)}"><a class="mini-main" href="${runnerHref('carrera')}/race_${r.race_id}"><b>${esc(r.name)}</b>
       <small class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''} · ${esc(r.modality)}${r.km ? ` · ${kmText(r.km)}` : ''}</small>
@@ -834,7 +837,7 @@ function myRacesCard(d) {
     <h2>🏁 Ya corridas, pendientes de resultado <small>(${pending.length})</small></h2>
     <p class="hint">Estabas apuntado y ya se han disputado. Pon tu resultado (una sola vez): <b>en cuanto lo pongas ya te cuenta para el bono</b>, y a los 3 días de acabar la carrera pasa sola a resultados. Si no fuiste, toca la carrera y pulsa «No fui: borrarme».</p>
     <ul class="mini-list">${pending.map((g) => miniRow(g, g.my_result
-      ? `<span class="badge-sent">📝 ${g.my_result.position}º · ya cuenta</span>`
+      ? `<span class="badge-sent">📝 ${g.my_result.position}º${g.my_result.time_seconds ? " · ⏱️ " + formatTime(g.my_result.time_seconds) : ""} · ya cuenta</span>`
       : (S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>`), `${runnerHref('carrera')}/${g.id}`)).join('')}</ul>
   </section>` : ''}
 
@@ -1710,7 +1713,7 @@ function draftRace(id) {
   if (!r) return null;
   const stages = (r.stages || []).map((_, i) => stageName(r, i));
   return { kind: 'race', ...r, stages, multi: !!r.end_date, people: r.results.map((x) => ({ runner_id: x.runner_id, runner_name: x.runner_name, category: x.category || '',
-    position: x.position ?? '', podium_type: x.podium_type || 'suelta', self_reported: !!x.self_reported, origPosition: x.position ?? '',
+    position: x.position ?? '', podium_type: x.podium_type || 'suelta', self_reported: !!x.self_reported, origPosition: x.position ?? '', time: x.time_seconds ? formatTime(x.time_seconds) : '',
     stage_positions: stages.map((_, i) => x.stage_positions?.[i] ?? '') }))
     .sort((a, b) => (a.position || 9999) - (b.position || 9999) || a.runner_name.localeCompare(b.runner_name, 'es')) };
 }
@@ -1758,6 +1761,7 @@ function viewRaceEdit() {
           <select data-p="${i}" data-pf="podium_type" aria-label="Tipo de podio" ${pod ? '' : 'disabled'}>
             ${PODIUM_TYPES.map((t) => opt(t.id, { suelta: 'Suelta', general: 'General', campeonato: 'Campeonato' }[t.id] || t.label, p.podium_type)).join('')}</select>
         </div>
+        <label class="res-time">⏱️ Tiempo <input type="text" inputmode="numeric" autocomplete="off" maxlength="10" placeholder="2:05:30" aria-label="Tiempo (h:mm:ss)" data-p="${i}" data-pf="time" value="${esc(p.time || '')}"></label>
         ${d.stages.length ? `<div class="stage-pos">${d.stages.map((n, j) => `<label><span data-stage-label="${j}">${esc(n)}</span>
           <input type="number" inputmode="numeric" min="1" data-p="${i}" data-sp="${j}" value="${esc(p.stage_positions?.[j] ?? '')}"></label>`).join('')}</div>` : ''}
         </li>`;
@@ -1800,7 +1804,7 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
   const hero = `<section class="sum-hero ${cls}">
     <p class="sum-hero-t">${mod ? `🏁 ${esc(mod)}` : '🏁 Todo el equipo'} · temporada ${S.year}</p>
     <div class="sum-big">${big(s.totals.races, 'carreras')}${big(s.totals.runners, 'corredores')}${big(s.totals.podiums, 'podios')}${big(s.totals.wins, 'victorias')}</div>
-    <p class="sum-hero-s">${s.totals.km ? `📏 ${kmText(s.totals.km)} recorridos entre todos · ` : ''}${s.totals.participations} participaciones${s.totals.podiums ? ` · ${Math.round((s.totals.podiums / Math.max(1, s.totals.participations)) * 100)} % acaban en podio` : ''}</p>
+    <p class="sum-hero-s">${s.totals.km ? `📏 ${kmText(s.totals.km)} recorridos entre todos · ` : ''}${s.totals.timed ? `⏱️ ${formatTime(s.totals.time, true)} en carrera (${s.totals.timed} de ${s.totals.participations} con tiempo) · ` : ''}${s.totals.participations} participaciones${s.totals.podiums ? ` · ${Math.round((s.totals.podiums / Math.max(1, s.totals.participations)) * 100)} % acaban en podio` : ''}</p>
   </section>`;
 
   // --- líderes
@@ -1842,7 +1846,7 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
   const rank = `<section class="card"><h2>Corredores${mod ? ` de ${esc(mod)}` : ''}</h2>
     ${active.length ? `${!admin && active.some((r) => r.current) ? '<p class="hint">Toca un corredor para ver dónde ha participado.</p>' : ''}<ol class="rank">${active.map((r, i) => `<li class="${me && r.key === me ? 'me-row' : ''}${r.current ? ' tappable' : ''}"${r.current && !admin ? ` data-act="mate-open" data-id="${esc(r.key)}"` : ''}>
       <span class="pos">${i + 1}</span>
-      <div class="rk"><div class="rk-h">${!r.current ? `<b>${esc(r.name)}</b>` : admin ? `<a class="rk-name" href="#/corredor/${esc(r.key)}"><b>${esc(r.name)}</b></a>` : `<button type="button" class="rk-name" data-act="mate-open" data-id="${esc(r.key)}"><b>${esc(r.name)}</b></button>`}${r.km ? ` <small class="muted">${kmText(r.km)}</small>` : ''}${r.current ? '' : ' <small class="muted">(baja)</small>'}
+      <div class="rk"><div class="rk-h">${!r.current ? `<b>${esc(r.name)}</b>` : admin ? `<a class="rk-name" href="#/corredor/${esc(r.key)}"><b>${esc(r.name)}</b></a>` : `<button type="button" class="rk-name" data-act="mate-open" data-id="${esc(r.key)}"><b>${esc(r.name)}</b></button>`}${r.km ? ` <small class="muted">${kmText(r.km)}</small>` : ''}${r.timed ? ` <small class="muted" title="Suma de los tiempos puestos${r.timed < r.races ? ` (${r.timed} de ${r.races} carreras)` : ''}">⏱️ ${formatTime(r.time, true)}${r.timed < r.races ? ` · ${r.timed}/${r.races}` : ''}</small>` : ''}${r.current ? '' : ' <small class="muted">(baja)</small>'}
           <span class="rk-m">${r.p1 ? `🥇${r.p1} ` : ''}${r.p2 ? `🥈${r.p2} ` : ''}${r.p3 ? `🥉${r.p3}` : ''}</span></div>
         <div class="bar seg" style="width:${(r.races / maxR) * 100}%">${MODALITIES.filter((x) => r.mods[x]).map((x) => `<span class="${modClass(x)}" style="flex:${r.mods[x]}" title="${esc(x)}: ${r.mods[x]}"></span>`).join('')}</div></div>
       <span class="rk-n">${r.races}</span></li>`).join('')}</ol>`
@@ -2163,18 +2167,22 @@ function viewDocs(runnerId) {
 
 async function loadMyDocs() {
   try { S.myDocs = await api.runnerDocuments(S.code || S.previewCode); } catch { S.myDocs = null; }
+  try { S.myTpl = await api.runnerContractTemplate(S.code || S.previewCode); } catch { S.myTpl = null; }
   if (S.runnerData) render();
 }
 
 function myDocsCard() {
-  const docs = S.myDocs;
+  const docs = S.myDocs, tpl = S.myTpl;
   if (!docs) return '';
   return `<section class="card season-block docs-block">
     <h2>📄 Mi contrato y documentos</h2>
+    ${tpl ? `<ul class="mini-list"><li><div><b>${docIcon(tpl.mime)} ${esc(tpl.title)}</b>
+      <small class="muted">${esc(contractLabel(tpl.contract))} · ${fmtSize(tpl.size)}</small></div>
+      <button class="btn primary small" data-act="my-tpl-open">Ver</button></li></ul>` : ''}
     ${docs.length ? `<ul class="mini-list">${docs.map((x) => `<li><div><b>${docIcon(x.mime)} ${esc(x.title)}</b>
       <small class="muted">Temporada ${x.year} · ${fmtSize(x.size)}</small></div>
       <button class="btn primary small" data-act="my-doc-open" data-id="${x.id}">Ver</button></li>`).join('')}</ul>`
-      : '<p class="empty small">La dirección aún no ha subido tu contrato.</p>'}
+      : (tpl ? '' : '<p class="empty small">La dirección aún no ha subido tu contrato.</p>')}
   </section>`;
 }
 
@@ -2208,6 +2216,7 @@ function viewRunnerCard(id) {
     ${sum ? `<section class="card"><h2>${S.year} en cifras</h2>
       <div class="sum-big sum-mini"><div><b>${sum.races}</b><span>carreras</span></div><div><b>${sum.p1}</b><span>🥇</span></div><div><b>${sum.p2}</b><span>🥈</span></div><div><b>${sum.p3}</b><span>🥉</span></div></div>
       ${sum.km ? `<p class="muted small">📏 ${kmText(sum.km)} recorridos en ${S.year}</p>` : ''}
+      ${sum.timed ? `<p class="muted small">⏱️ ${formatTime(sum.time, true)} en carrera${sum.timed < sum.races ? ` (con tiempo: ${sum.timed} de ${sum.races} carreras)` : ''}</p>` : ''}
       ${sum.races ? `<div class="bar seg">${MODALITIES.filter((x) => sum.mods[x]).map((x) => `<span class="${modClass(x)}" style="flex:${sum.mods[x]}" title="${esc(x)}: ${sum.mods[x]}"></span>`).join('')}</div>
         <div class="mod-legend">${MODALITIES.filter((x) => sum.mods[x]).map((x) => `<span class="${modClass(x)}"><i class="dot"></i>${esc(x)} ${sum.mods[x]}</span>`).join('')}</div>` : '<p class="muted small">Sin carreras este año.</p>'}</section>` : ''}
     <h2 class="section">Carreras ${S.year}</h2>
@@ -2242,6 +2251,33 @@ function askLink(title, text, current) {
   });
 }
 
+/** Pestañas de arriba de Corredores: plantilla y contratos por tipo. */
+const runnersTabs = (cur) => `<div class="years subtabs">${[['corredores', '👥 Plantilla'], ['contratos', '📄 Contratos']].map(([v, l]) =>
+  `<a class="chip${cur === v ? ' on' : ''}" href="#/${v}" aria-current="${cur === v}">${l}</a>`).join('')}</div>`;
+
+/** Contratos por tipo: se sube uno de cada y cada corredor ve el de su tipo (el que se le asignó en su ficha). */
+function viewContracts() {
+  const runners = S.data.runners;
+  const body = S.tpls === null
+    ? `<p class="card warn">Falta activar los contratos por tipo: ejecuta en Supabase el SQL <code>supabase/cambios/2026-11-13-contratos-tipo.sql</code>.</p>`
+    : `<p class="hint">Sube <b>un contrato por tipo</b>. Cada corredor verá en su pestaña «Contrato» el de su tipo, el que le hayas asignado en su ficha. Si vuelves a subir uno, <b>sustituye</b> al anterior.</p>
+      ${CONTRACTS.map((c) => {
+        const t = (S.tpls || []).find((x) => x.contract === c.id), n = runners.filter((r) => r.contract === c.id).length;
+        return `<section class="card stack tpl-card"><h2>${esc(c.label)} <small class="muted">· ${n} corredor${n === 1 ? '' : 'es'}</small></h2>
+          ${t ? `<div class="tpl-cur"><b>${docIcon(t.mime)} ${esc(t.title)}</b><small class="muted">${esc(t.filename)} · ${fmtSize(t.size)} · subido ${formatDate(String(t.updated_at).slice(0, 10), false)}</small>
+            <span class="row-btns"><button class="btn small" data-act="tpl-open" data-c="${c.id}">Ver</button><button class="btn small danger ghost" data-act="tpl-del" data-c="${c.id}" aria-label="Borrar">🗑️</button></span></div>`
+            : '<p class="empty small">Todavía no hay contrato de este tipo: estos corredores no ven ninguno.</p>'}
+          <form class="stack" data-form="tpl-upload" data-contract="${c.id}">
+            <label class="btn file">📎 ${t ? 'Sustituir por otro' : 'Elegir archivo'} (PDF o foto)<input type="file" name="file" accept="application/pdf,image/*" hidden required></label>
+            <p class="hint doc-chosen">Ningún archivo elegido. Máximo 5 MB.</p>
+            <label>Título<input name="title" value="${esc(t?.title || 'Contrato ' + c.label.toLowerCase())}" maxlength="120"></label>
+            <button class="btn primary">${t ? 'Sustituir' : 'Subir'}</button>
+          </form></section>`; }).join('')}
+      ${(() => { const sin = runners.filter((r) => !CONTRACTS.some((c) => c.id === r.contract)); return sin.length
+        ? `<p class="card warn">⚠️ <b>${sin.length}</b> corredor${sin.length === 1 ? '' : 'es'} sin tipo de contrato asignado, y no verán ninguno: ${esc(sin.slice(0, 12).map((r) => r.name).join(', '))}${sin.length > 12 ? '…' : ''}. Asígnalo en la ficha de cada uno (campo «Contrato»).</p>` : ''; })()}`;
+  return frame('Corredores', `${runnersTabs('contratos')}${body}`);
+}
+
 function viewRunners() {
   const counts = new Map();
   for (const r of S.data.races) for (const x of r.results) if (x.runner_id) counts.set(x.runner_id, (counts.get(x.runner_id) || 0) + 1);
@@ -2250,6 +2286,7 @@ function viewRunners() {
   const bonusBy = new Map(yearBonuses(year, S.data.races, S.data.registrations, S.data.runners, bonusCfg(year), S.data.circuitPodiums || []).map((b) => [b.runner.id, b]));
   const badge = (b) => !b ? '' : `<small class="bbadge ${b.reachesMinimum ? (b.tier ? 'ok' : '') : 'bad'}">Bono ${year}: ${b.count}/${b.next ? b.next.races : b.count}${b.tier ? ` · ${euros(b.amount)}` : ''}${b.reachesMinimum ? '' : ' · bajo mínimo'}</small>`;
   return frame(`Corredores (${runners.length})`, `
+    ${runnersTabs('corredores')}
     <a class="btn block" href="#/bonos">Bonos por carreras ${year}</a>
     ${clothingLine()}
     <details class="card" ${runners.length ? '' : 'open'}>
@@ -2368,6 +2405,13 @@ const actions = {
   // corredor
   async 'doc-open'(el) { const doc = await run(() => api.getDocument(el.dataset.id)); if (doc) openDoc(doc); },
   async 'my-doc-open'(el) { const doc = await run(() => api.runnerGetDocument(S.code || S.previewCode, el.dataset.id)); if (doc) openDoc(doc); },
+  async 'my-tpl-open'() { const doc = await run(() => api.runnerGetContractTemplate(S.code || S.previewCode)); if (doc) openDoc(doc); },
+  async 'tpl-open'(el) { const doc = await run(() => api.getContractTemplate(el.dataset.c)); if (doc) openDoc(doc); },
+  async 'tpl-del'(el) {
+    const c = el.dataset.c;
+    if (!await confirmAction('Borrar contrato', `Se borrará el contrato «${esc(contractLabel(c))}». Los corredores de ese tipo dejarán de verlo.`, 'Borrar')) return;
+    await run(async () => { await api.deleteContractTemplate(c); await reload(); }, 'Contrato borrado'); render();
+  },
   async 'doc-del'(el) {
     const x = (S.docs || []).find((y) => y.id === el.dataset.id);
     if (!await confirmAction('Borrar documento', `Se borrará «${esc(x?.title || '')}». El corredor dejará de verlo.`, 'Borrar')) return;
@@ -2796,11 +2840,24 @@ const forms = {
     const position = Number(f.position.value);
     if (!Number.isInteger(position) || position < 1) return toast('Pon un puesto válido (1, 2, 3…).', true);
     const cat = f.category.value || null, pod = f.podium.value;
-    const txt = `${position}º${cat ? ' en ' + cat : ''}${position <= 3 && pod === 'campeonato' ? ` · ${podiumLabel(pod)}` : ''}`;
+    const rawTime = f.time.value.trim(), time = rawTime ? parseTime(rawTime) : null;
+    if (rawTime && !time) return toast('Pon el tiempo así: 2:05:30 (horas:minutos:segundos), o déjalo vacío.', true);
+    const txt = `${position}º${cat ? ' en ' + cat : ''}${time ? ' · ⏱️ ' + formatTime(time) : ''}${position <= 3 && pod === 'campeonato' ? ` · ${podiumLabel(pod)}` : ''}`;
     if (!await confirmAction('Enviar resultado', `Vas a enviar: <b>${esc(txt)}</b>.<br>Después no podrás cambiarlo.`, 'Enviar', 'primary')) return;
-    const ok = await run(async () => { await api.runnerReport(S.code, f.dataset.kind, f.dataset.id, position, cat, pod); await loadRunner(); return true; },
+    const ok = await run(async () => { await api.runnerReport(S.code, f.dataset.kind, f.dataset.id, position, cat, pod, time); await loadRunner(); return true; },
       position <= 3 ? `${medal(position)} ¡Enhorabuena! Resultado enviado` : 'Resultado enviado');
     if (ok) go(runnerHref('mi'));
+  },
+  async 'tpl-upload'(f) {
+    const file = f.file.files?.[0];
+    if (!file) return toast('Elige un archivo.', true);
+    if (!/^(application\/pdf|image\/)/.test(file.type)) return toast('Solo PDF o fotos (JPG, PNG, WEBP).', true);
+    const ok = await run(async () => {
+      const { b64, mime } = await fileToB64(file);
+      await api.uploadContractTemplate(f.dataset.contract, f.title.value.trim(), file.name, mime, b64);
+      await reload(); return true;
+    }, 'Contrato subido: ya lo ven los corredores de ese tipo');
+    if (ok) render();
   },
   async 'doc-upload'(f) {
     const file = f.file.files?.[0];
@@ -2871,7 +2928,9 @@ const forms = {
           if (!Number.isInteger(k) || k < 1) throw new Error(`Puesto no válido para ${p.runner_name} en ${n}.`);
           return k;
         });
-        return { runner_id: p.runner_id, runner_name: p.runner_name, category: p.category || null, position,
+        const rawTime = String(p.time || '').trim(), time_seconds = rawTime ? parseTime(rawTime) : null;
+        if (rawTime && !time_seconds) throw new Error(`Tiempo no válido para ${p.runner_name}: usa horas:minutos:segundos (2:05:30).`);
+        return { runner_id: p.runner_id, runner_name: p.runner_name, category: p.category || null, position, time_seconds,
           podium_type: isPodium(position) ? p.podium_type || 'suelta' : 'suelta',
           stage_positions: stage_positions.some((x) => x !== null) ? stage_positions : null,
           self_reported: !!p.self_reported && String(p.position) === String(p.origPosition) };
@@ -3072,8 +3131,8 @@ $app.addEventListener('change', async (ev) => {
   } else if (t.dataset.runnerCat) {
     const id = t.dataset.runnerCat;
     await run(async () => { await api.updateRunner(id, { category: t.value || null }); runnerById(id).category = t.value || null; }, 'Categoría guardada');
-  } else if (t.name === 'file' && t.closest('[data-form="doc-upload"]')) {
-    const f = t.files?.[0]; const p = $app.querySelector('#doc-chosen');
+  } else if (t.name === 'file' && t.closest('[data-form="doc-upload"], [data-form="tpl-upload"]')) {
+    const f = t.files?.[0]; const p = t.closest('form').querySelector('#doc-chosen, .doc-chosen');
     if (p && f) p.textContent = `Elegido: ${f.name} (${fmtSize(f.size)})`;
   } else if (t.dataset.file && t.files?.[0]) {
     const file = t.files[0]; t.value = '';

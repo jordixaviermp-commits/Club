@@ -38,7 +38,7 @@ const races = [
 
 test('resumen anual', () => {
   const s = yearSummary(2026, races, runners);
-  assert.deepEqual(s.totals, { races: 3, runners: 3, participations: 4, podiums: 3, wins: 1, km: 0 });
+  assert.deepEqual(s.totals, { races: 3, runners: 3, participations: 4, podiums: 3, wins: 1, km: 0, time: 0, timed: 0 });
   assert.deepEqual(s.byModality.map((m) => m.modality), ['Carretera', 'BTT', 'Gravel']); // Pista no aparece en 2026
   assert.deepEqual(s.byModality[1], { modality: 'BTT', races: 1, participations: 2, podiums: 2, wins: 0, runners: 2 });
   assert.deepEqual(s.countries, [{ name: 'España', races: 2 }, { name: 'Francia', races: 1 }]);
@@ -126,7 +126,7 @@ test('podios de etapa: cuentan como tipo «Etapa»', () => {
       { runner_id: 'b', runner_name: 'Biel', position: 7, podium_type: 'general', stage_positions: [null, 1, null, 1] }, // la 4.ª no existe
     ] }];
   const s = yearSummary(2027, races2, runners2);
-  assert.deepEqual(s.totals, { races: 1, runners: 2, participations: 2, podiums: 4, wins: 2, km: 0 });
+  assert.deepEqual(s.totals, { races: 1, runners: 2, participations: 2, podiums: 4, wins: 2, km: 0, time: 0, timed: 0 });
   assert.deepEqual(s.byPodiumType.map((t) => [t.type, t.podiums, t.wins]),
     [['suelta', 0, 0], ['general', 1, 0], ['campeonato', 0, 0], ['etapa', 3, 2]]);
   assert.deepEqual(s.perRunner.map((r) => [r.name, r.races, r.p1, r.p2, r.p3]), [['Anna', 1, 1, 1, 1], ['Biel', 1, 1, 0, 0]]);
@@ -355,4 +355,32 @@ test('enlaces de Google: solo https y de Google, y sin los parámetros de compar
   assert.equal(cleanGoogleLink('https://user:pass@docs.google.com/spreadsheets/d/ABC'), null);
   assert.equal(cleanGoogleLink('no es un enlace'), null);
   assert.equal(cleanGoogleLink(''), null);
+});
+
+test('parseTime y formatTime', async () => {
+  const { parseTime, formatTime } = await import('../js/logic.js');
+  assert.equal(parseTime('2:05:30'), 7530);
+  assert.equal(parseTime('45:10'), 2710);
+  assert.equal(parseTime('1h 5m'), 3900);
+  assert.equal(parseTime('20:00:00'), 72000);
+  assert.equal(parseTime(''), null);
+  assert.equal(parseTime('abc'), null);
+  assert.equal(parseTime('1:75:00'), null);
+  assert.equal(parseTime('0:00:00'), null);
+  assert.equal(formatTime(7530), '2:05:30');
+  assert.equal(formatTime(43500, true), '12 h 05 min');
+  assert.equal(formatTime(null), '');
+});
+
+test('yearSummary suma tiempos solo de quien los tiene', async () => {
+  const { yearSummary } = await import('../js/logic.js');
+  const runners = [{ id: 'a', name: 'Ana' }];
+  const races = [
+    { id: 'r1', name: 'Uno', date: '2026-03-01', modality: 'BTT', results: [{ runner_id: 'a', runner_name: 'Ana', position: 5, time_seconds: 3600 }] },
+    { id: 'r2', name: 'Dos', date: '2026-04-01', modality: 'BTT', results: [{ runner_id: 'a', runner_name: 'Ana', position: 6 }] },
+  ];
+  const s = yearSummary(2026, races, runners);
+  const row = s.perRunner.find((x) => x.key === 'a');
+  assert.equal(row.time, 3600); assert.equal(row.timed, 1); assert.equal(row.races, 2);
+  assert.equal(s.totals.time, 3600); assert.equal(s.totals.timed, 1);
 });
