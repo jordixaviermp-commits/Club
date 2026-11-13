@@ -453,3 +453,25 @@ test('socialAudit: hechas, pendientes y anomalías', async () => {
   assert.equal(a.pending, 3); assert.equal(a.anomalies, 4);
   assert.equal(a.done, 3);
 });
+
+test('historia previa automática: registro, estado y anomalía', async () => {
+  const { parseStoryLog, storyState, storyDateOf, socialAudit, postKeyOf } = await import('../js/logic.js');
+  assert.equal(storyDateOf({ date: '2026-11-15' }), '2026-11-13'); assert.equal(storyDateOf({ date: '2026-03-01' }), '2026-02-27');
+  const log = parseStoryLog({ desde: '2026-11-14', historias: [
+    { carrera: 'Open BTT', fecha: '2026-11-20', pagina: 1, publicada: '2026-11-18', media_id: '1' }, { carrera: 'Open BTT', fecha: '2026-11-20', pagina: 2, publicada: '2026-11-18', media_id: '2' }] });
+  const today = '2026-11-20';
+  const ok = storyState({ name: 'Open BTT', date: '2026-11-20' }, log, false, today);
+  assert.equal(ok.state, 'ok'); assert.equal(ok.n, 2); assert.equal(ok.date, '2026-11-18');
+  assert.equal(storyState({ name: 'Sin', date: '2026-11-25' }, log, false, today).state, 'programada');
+  assert.equal(storyState({ name: 'Hoy', date: '2026-11-22' }, log, false, today).state, 'hoy');
+  assert.equal(storyState({ name: 'Falta', date: '2026-11-19' }, log, false, today).state, 'falta');
+  assert.equal(storyState({ name: 'Antes', date: '2026-11-10' }, log, false, today), null);            // anterior al registro
+  assert.equal(storyState({ name: 'Falta', date: '2026-11-19' }, log, true, today).state, 'manual');   // marcada a mano
+  assert.equal(storyState({ name: 'Falta', date: '2026-11-19', suspended: true }, log, false, today), null);
+  assert.equal(storyState({ name: 'Tarde', date: '2026-11-19', created_at: '2026-11-18T10:00:00Z' }, log, false, today), null); // creada tras el día de la historia
+  assert.equal(storyState({ name: 'Falta', date: '2026-11-19' }, null, false, today), null);           // aún no hay registro
+  const regs = [{ id: 'f', name: 'Falta', date: '2026-11-19', entries: [{ runner_id: 'a' }] }, { id: 'o', name: 'Open BTT', date: '2026-11-20', entries: [{ runner_id: 'a' }] }];
+  const a = socialAudit(2026, [], regs, [], today, log);
+  assert.equal(a.storyMissing.length, 1); assert.equal(a.storyMissing[0].id, 'f'); assert.ok(a.anomalies >= 1);
+  assert.equal(a.done, 1);                                                                              // la historia de Open BTT cuenta como hecha
+});
