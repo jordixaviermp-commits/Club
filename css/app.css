@@ -643,3 +643,5 @@ ol.bullets { list-style: decimal; }
 a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 .subtabs { margin-bottom: .6rem; }
 .tpl-cur { display: flex; flex-direction: column; gap: .3rem; }
+.subtabs { flex-wrap: wrap; }
+.subtabs .chip { padding: .4rem .7rem; font-size: .92rem; }

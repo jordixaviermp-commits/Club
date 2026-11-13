@@ -2,7 +2,7 @@
 import { CONFIG } from './config.js';
 import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
-  CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, parseKm, kmText, parseTime, formatTime, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
+  CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, parseKm, kmText, parseTime, formatTime, seasonByRunner, seasonDetail, SEASON_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
   extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
@@ -256,7 +256,7 @@ function frame(title, body, { back, actions = '', rtab = null } = {}) {
     ? `<nav class="tabs">${RUNNER_TABS.map(([v, label, d]) =>
       `<a href="${runnerHref(v)}" class="${v === rtab ? 'on' : ''}">${icon(d)}<span>${label}</span></a>`).join('')}</nav>`
     : admin ? `<nav class="tabs">${ADMIN_TABS.map(([v, label, d]) =>
-      `<a href="#/${v}" class="${view === v || (!view && v === 'inscripciones') || (v === 'corredores' && view === 'contratos') ? 'on' : ''}">${icon(d)}<span>${label}</span></a>`).join('')}</nav>` : '';
+      `<a href="#/${v}" class="${view === v || (!view && v === 'inscripciones') || (v === 'corredores' && (view === 'contratos' || view === 'computo')) ? 'on' : ''}">${icon(d)}<span>${label}</span></a>`).join('')}</nav>` : '';
   return `
     ${api.mode === 'demo' ? `<div class="demo-bar">Modo demostración: datos de prueba guardados solo en este móvil.</div>` : ''}
     <header class="top">
@@ -291,7 +291,7 @@ function render() {
     html = ({
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
       carreras: S.draft ? viewRaceEdit : viewRaces,
-      resumen: viewSummary, corredores: viewRunners, contratos: viewContracts, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
+      resumen: viewSummary, corredores: viewRunners, contratos: viewContracts, computo: viewSeasonCount, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
       vista: () => (S.preview && S.runnerData ? runnerScreen(parseRoute().id || '') : viewRunners()),
       equipo: () => (S.preview ? viewTeam() : viewSummary()),
     }[view] || viewRegistrations)();
@@ -2252,8 +2252,37 @@ function askLink(title, text, current) {
 }
 
 /** Pestañas de arriba de Corredores: plantilla y contratos por tipo. */
-const runnersTabs = (cur) => `<div class="years subtabs">${[['corredores', '👥 Plantilla'], ['contratos', '📄 Contratos']].map(([v, l]) =>
+const runnersTabs = (cur) => `<div class="years subtabs">${[['corredores', '👥 Plantilla'], ['contratos', '📄 Contratos'], ['computo', '📊 Cómputo']].map(([v, l]) =>
   `<a class="chip${cur === v ? ' on' : ''}" href="#/${v}" aria-current="${cur === v}">${l}</a>`).join('')}</div>`;
+
+/** Cómputo de fin de temporada: lo que ha hecho cada corredor y descarga para Excel. */
+function viewSeasonCount() {
+  const years = availableYears(S.data.races);
+  if (!years.includes(S.year)) S.year = years[0];
+  const rows = seasonByRunner(S.year, S.data.races, S.data.runners, contractLabel);
+  const detail = seasonDetail(S.year, S.data.races);
+  const ix = (name) => SEASON_COLUMNS.indexOf(name);
+  const list = rows.filter((r) => r[ix('Carreras')] > 0);
+  const idle = rows.filter((r) => r[ix('Carreras')] === 0 && !String(r[0]).endsWith('(baja)'));
+  return frame('Corredores', `${runnersTabs('computo')}
+    ${yearPicker(years)}
+    <section class="card stack"><h2>📥 Cómputo de la temporada ${S.year}</h2>
+      <p class="hint">Descarga los datos de participación para hacer el cómputo final. Se abren en Excel o Hojas de cálculo.</p>
+      <button class="btn primary block" data-act="season-csv">📊 Resumen por corredor (${rows.length})</button>
+      <p class="hint">Una fila por corredor: carreras, días, modalidades, podios, km, tiempo total, provincias y países.</p>
+      <button class="btn block" data-act="season-detail-csv" ${detail.length ? '' : 'disabled'}>🗺️ Dónde ha ido cada uno (${detail.length})</button>
+      <p class="hint">Una fila por carrera de cada corredor: fecha, lugar, provincia, modalidad, km, puesto y tiempo.</p>
+      <p class="hint">Solo cuenta lo que ya está en <b>Carreras</b> (con resultados). Las inscripciones aún no pasadas a resultados no salen. El tiempo y los km salen solo donde se han puesto.</p>
+    </section>
+    <section class="card"><h2>Vista rápida · ${S.year}</h2>
+      ${list.length ? `<ul class="mini-list">${list.map((r) => {
+        const id = S.data.runners.find((x) => x.name === r[0])?.id;
+        return `<li class="mini"><${id ? `a class="mini-main" href="#/corredor/${id}"` : 'div class="mini-main"'}><b>${esc(r[0])}</b>
+          <small class="muted">${r[ix('Carreras')]} carrera${r[ix('Carreras')] === 1 ? '' : 's'} · ${r[ix('Días de carrera')]} día${r[ix('Días de carrera')] === 1 ? '' : 's'}${r[ix('Km')] ? ` · ${kmText(r[ix('Km')])}` : ''}${r[ix('Tiempo total (h:mm:ss)')] ? ` · ⏱️ ${r[ix('Tiempo total (h:mm:ss)')]}` : ''}${r[ix('Podios')] ? ` · 🏅 ${r[ix('Podios')]}` : ''}${r[ix('Provincias')] ? `<br>📍 ${esc(r[ix('Provincias')])}` : ''}</small></${id ? 'a' : 'div'}></li>`; }).join('')}</ul>`
+        : '<p class="empty">Todavía no hay carreras con resultados este año.</p>'}
+      ${idle.length ? `<p class="muted small">Sin carreras: ${esc(idle.map((r) => r[0]).join(', '))}.</p>` : ''}
+    </section>`);
+}
 
 /** Contratos por tipo: se sube uno de cada y cada corredor ve el de su tipo (el que se le asignó en su ficha). */
 function viewContracts() {
@@ -2641,6 +2670,8 @@ const actions = {
     download(`monzon-bonos-${S.year}.csv`, toCsv(rows, ['Corredor', 'Contrato', 'Carreras', 'Extra por circuitos', 'Suspendidas (solo mínimo)', 'Total para el bono', 'Bono actual (€)', 'Llega al mínimo',
       'Penalización (€)', 'Saldo (€, + el club debe)', 'Siguiente tramo', 'Faltan', 'Inscritas pendientes', 'Previsión']), 'text/csv;charset=utf-8');
   },
+  'season-csv'() { download(`monzon-computo-${S.year}.csv`, toCsv(seasonByRunner(S.year, S.data.races, S.data.runners, contractLabel), SEASON_COLUMNS), 'text/csv;charset=utf-8'); },
+  'season-detail-csv'() { download(`monzon-participaciones-${S.year}.csv`, toCsv(seasonDetail(S.year, S.data.races), SEASON_DETAIL_COLUMNS), 'text/csv;charset=utf-8'); },
   'sum-mod'(el) { S.sumMod = el.dataset.m; render(); },
   'race-mod'(el) { S.raceMod = el.dataset.m; render(); },
   'race-todo'() { S.raceTodo = !S.raceTodo; render(); },

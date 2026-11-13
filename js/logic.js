@@ -292,6 +292,52 @@ export function csvRows(races) {
   return out;
 }
 
+// ---------- Cómputo de temporada (dirección) ----------
+
+export const SEASON_COLUMNS = ['Corredor', 'Categoría', 'Contrato', 'Carreras', 'Días de carrera', ...MODALITIES, 'Oros', 'Platas', 'Bronces', 'Podios',
+  'Km', 'Tiempo total (h:mm:ss)', 'Carreras con tiempo', 'Provincias', 'Países'];
+export const SEASON_DETAIL_COLUMNS = ['Corredor', 'Fecha', 'Fecha fin', 'Carrera', 'Lugar', 'Provincia', 'País', 'Modalidad', 'Formato', 'Km', 'Circuito',
+  'Categoría', 'Puesto', 'Podio', 'Tipo de podio', 'Tiempo', 'Días', 'Etapas en podio'];
+
+/** Una fila por corredor con lo que ha hecho en la temporada (también quien no ha corrido, con ceros). */
+export function seasonByRunner(year, races, runners, contractName = (c) => c || '') {
+  const yr = races.filter((r) => yearOf(r.date) === year);
+  const parts = yr.flatMap((race) => (race.results || []).map((res) => ({ race, res })));
+  const key = (res) => res.runner_id || 'n:' + normalize(res.runner_name);
+  const mk = (name, cat, contract) => ({ name, cat, contract, races: 0, days: 0, mods: {}, p: [0, 0, 0], km: 0, time: 0, timed: 0, prov: new Set(), ctry: new Set() });
+  const rows = new Map(runners.map((r) => [r.id, mk(r.name, r.category || '', contractName(r.contract))]));
+  for (const { race, res } of parts) {
+    const k = key(res);
+    if (!rows.has(k)) rows.set(k, mk(res.runner_name + ' (baja)', res.category || '', ''));
+    const row = rows.get(k);
+    row.races++; row.days += numDays(race.date, race.end_date);
+    row.mods[race.modality] = (row.mods[race.modality] || 0) + 1;
+    row.km += Number(race.km) || 0;
+    if (Number(res.time_seconds) > 0) { row.time += Number(res.time_seconds); row.timed++; }
+    if (cleanName(race.province)) row.prov.add(cleanName(race.province));
+    if (cleanName(race.country)) row.ctry.add(cleanName(race.country));
+  }
+  for (const pd of podiumsOf(parts)) rows.get(key(pd.res)).p[pd.position - 1]++;
+  return [...rows.values()].sort((a, b) => b.races - a.races || byText(a.name, b.name)).map((r) => [
+    r.name, r.cat, r.contract, r.races, r.days, ...MODALITIES.map((m) => r.mods[m] || 0), r.p[0], r.p[1], r.p[2], r.p[0] + r.p[1] + r.p[2],
+    Math.round(r.km * 10) / 10, r.timed ? formatTime(r.time) : '', r.timed, [...r.prov].sort(byText).join(', '), [...r.ctry].sort(byText).join(', ')]);
+}
+
+/** Una fila por participación (corredor + carrera) de la temporada: dónde ha ido cada uno. */
+export function seasonDetail(year, races) {
+  const out = [];
+  for (const r of races.filter((x) => yearOf(x.date) === year)) {
+    for (const res of r.results || []) {
+      const pod = isPodium(res.position);
+      const stagePods = (res.stage_positions || []).filter((pos, i) => i < (r.stages || []).length && isPodium(pos)).length;
+      out.push([res.runner_name, r.date, r.end_date || '', r.name, r.place || '', r.province || '', r.country || '', r.modality, r.subtype || '', r.km ?? '',
+        r.race_type === 'circuito' ? (r.circuit || 'Circuito') : r.race_type === 'campeonato' ? 'Campeonato' : '', res.category || '', res.position ?? '',
+        pod ? 'Sí' : 'No', pod ? podiumLabel(res.podium_type) : '', res.time_seconds ? formatTime(res.time_seconds) : '', numDays(r.date, r.end_date), stagePods || '']);
+    }
+  }
+  return out.sort((a, b) => byText(a[0], b[0]) || a[1].localeCompare(b[1]));
+}
+
 /** CSV con «;» (lo que espera Excel en español) y BOM para que respete tildes. */
 export function toCsv(rows, header = CSV_COLUMNS) {
   const cell = (v) => {
