@@ -729,3 +729,21 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 .theme-line { display: flex; flex-direction: column; align-items: center; gap: .35rem; margin: 1rem 0 .4rem; text-align: center; }
 .theme-line .years { justify-content: center; flex-wrap: wrap; }
 .theme-line .chip { min-height: 36px; padding: .25rem .8rem; font-size: .9rem; }
+
+/* ---------- Carreras del corredor: filtros plegados, cuenta atrás y apuntarse ---------- */
+.modbar.wrap { flex-wrap: wrap; overflow: visible; }
+.fmore { margin: .3rem 0 .5rem; padding: .5rem .7rem; }
+.fmore summary { cursor: pointer; font-weight: 600; }
+.fmore .modbar { margin-top: .5rem; }
+.fcount { background: var(--accent); color: var(--on-accent); border-radius: 999px; padding: 0 .45rem; font-size: .8rem; margin-left: .3rem; }
+.add-btn.wide { width: auto; padding: 0 .9rem; font-size: 1rem; font-weight: 700; white-space: nowrap; }
+.small-add { margin-top: .5rem; }
+.soon { display: inline-block; margin-top: .25rem; font-size: .8rem; font-weight: 700; color: var(--tag-text); background: var(--accent-2); border-radius: 999px; padding: .05rem .55rem; }
+.soon.now { color: #8a4b00; background: #ffe9c2; }
+:root[data-theme="dark"] .soon.now { color: #ffd596; background: #4a3512; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .soon.now { color: #ffd596; background: #4a3512; } }
+.join-row { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.join-row .grow { flex: 1 1 60%; }
+.join-row .cat-pick { flex: 1 1 100%; }
+.join-row .cat-pick select { width: 100%; }
+.row.joined .btn { white-space: nowrap; } .row.joined span { flex: 1 1 100%; }

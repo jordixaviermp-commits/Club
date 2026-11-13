@@ -2,7 +2,7 @@
 import { CONFIG } from './config.js';
 import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
-  CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, parseKm, kmText, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
+  CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, parseKm, kmText, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
   extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
@@ -473,7 +473,10 @@ function modFilterBar(regs, me = null) {
     me && S.who === 'mates' ? '<b>con compañeros</b>' : '', me && S.who === 'free' ? '<b>sin apuntarme</b>' : '']
     .filter(Boolean).join(' · ') || 'Filtro activo'}: ${n} carrera${n === 1 ? '' : 's'} próxima${n === 1 ? '' : 's'} · 👥 ${people} compañero${people === 1 ? '' : 's'} apuntado${people === 1 ? '' : 's'}
     <button class="link small" data-act="filters-clear">Quitar filtros</button></p>` : '';
-  return modRow + subRow + whoRow + sum;
+  if (!me) return modRow + subRow + whoRow + sum;
+  const active = (S.sub !== 'all' ? 1 : 0) + (S.who !== 'all' ? 1 : 0);
+  const more = (subRow || whoRow) ? `<details class="card fmore" data-open-key="fmore"${active || S.open?.fmore ? ' open' : ''}><summary>🔎 Más filtros${active ? ` <b class="fcount">${active}</b>` : ''}</summary>${subRow}${whoRow}</details>` : '';
+  return modRow.replace('class="modbar"', 'class="modbar wrap"') + more + sum;
 }
 
 /** Lista de carreras agrupada por mes, con cabecera plegable («Diciembre 2026 · 4 carreras · 👥 6»). */
@@ -656,7 +659,9 @@ function runnerSearchResults(q) {
         : `<button class="btn primary small" data-act="r-join" data-id="${g.id}">Apuntarme</button>`)).join('')}</ul>` : ''}
     ${fed.length ? `<p class="hint"><b>En los calendarios de las federaciones y ligas</b>:</p>
       <ul class="mini-list">${fed.map((r) => miniRow(r, `<button class="btn small" data-act="r-new-fed" data-i="${S.fed.races.indexOf(r)}">Añadir y apuntarme</button>`)).join('')}</ul>` : ''}
-    ${!club.length && !fed.length && !mates.length ? `<p class="hint">No hay ninguna carrera parecida a «${esc(q)}». Puedes añadirla:</p>` : ''}`;
+    ${!club.length && !fed.length && !mates.length ? `<p class="hint">No hay ninguna carrera parecida a «${esc(q)}».</p>
+      <button class="btn primary block" data-act="r-new">＋ ¿No la encuentras? Añádela: «${esc(q.trim())}»</button>`
+      : `<button class="btn ghost block small-add" data-act="r-new">＋ ¿No es ninguna de estas? Añadir una carrera nueva</button>`}`;
 }
 
 function updateSearch(scope) {
@@ -944,7 +949,7 @@ function runnerRegCard(g) {
     const open = g.date >= today;
     return `<article class="card race ${open ? '' : 'past-reg '}${modClass(g.modality)}">
       <div class="race-head"><div><h3>${esc(g.name)}</h3>
-        <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>
+        <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p>${open && !g.suspended && daysTo(g.date) <= 14 ? `<span class="soon${daysTo(g.date) <= 7 ? ' now' : ''}">${daysTo(g.date) === 0 ? '🔥 ' : '⏳ '}${daysToText(daysTo(g.date))}</span>` : ''}</div>
         ${modTag(g.modality)}</div>${typeTag(g)}
       ${g.suspended ? '<p class="state-tag">⛔ Suspendida: cuenta para el mínimo de carreras, no para el bono</p>' : ''}
       ${open || g.suspended ? '' : `<p class="state-tag">🏁 Ya disputada · pendiente de resultados</p>
@@ -960,8 +965,13 @@ function runnerRegCard(g) {
         `<li class="${e.runner_id === me.id ? 'me' : ''}">${esc(e.name)}${e.category ? ` <small>${esc(e.category)}</small>` : ''}</li>`).join('')}</ul>` : ''}
       ${!open || g.suspended ? '' : mine
         ? `<div class="row joined"><span>✓ Estás inscrito${mine.category ? ' en ' + esc(mine.category) : ''}</span>
+           <button class="btn ghost small" data-act="r-ics" data-id="${g.id}" aria-label="Añadir al calendario del móvil">📅 Calendario</button>
            <button class="btn ghost small" data-act="r-leave" data-id="${g.id}">Borrarme</button></div>`
-        : `<div class="row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, me.category, 'Categoría')}
+        : me.category
+          ? `<div class="row join-row"><button class="btn primary grow" data-act="r-join" data-id="${g.id}">Apuntarme · <b>${esc(me.category)}</b></button>
+             <button class="link small" data-act="cat-show" data-id="${g.id}">cambiar categoría</button>
+             <span class="cat-pick" hidden>${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, me.category, 'Categoría')}</span></div>`
+          : `<div class="row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, me.category, 'Categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">Apuntarme</button></div>`}
     </article>`;
   }
@@ -976,14 +986,15 @@ function viewRunnerHome() {
   const done = byMod((S.team?.races || []).filter((r) => (r.results || []).length));
   const body = S.regView === 'cal'
     ? calendarView(regs, card, isMine, { done, doneCard: (r) => doneRaceCard(r, { meId: me.id }) })
-    : `<h2 class="section">Próximas carreras (${upcoming.length})</h2>
-    ${upcoming.length ? monthList(upcoming, card) : `<p class="empty">${filtersOn(me) ? 'Ninguna carrera próxima con estos filtros. <button class="link" data-act="filters-clear">Quitar filtros</button>' : 'Todavía no hay carreras abiertas.'}</p>`}
+    : `${(() => { const wk = upcoming.filter((g) => daysTo(g.date) <= 7); return wk.length ? `<h2 class="section">📅 Esta semana (${wk.length})</h2>${wk.map(card).join('')}` : ''; })()}
+    <h2 class="section">${upcoming.some((g) => daysTo(g.date) <= 7) ? 'Más adelante' : 'Próximas carreras'} (${upcoming.filter((g) => daysTo(g.date) > 7).length || (upcoming.some((g) => daysTo(g.date) <= 7) ? 0 : upcoming.length)})</h2>
+    ${upcoming.length ? monthList(upcoming.filter((g) => daysTo(g.date) > 7), card) : `<p class="empty">${filtersOn(me) ? 'Ninguna carrera próxima con estos filtros. <button class="link" data-act="filters-clear">Quitar filtros</button>' : 'Todavía no hay carreras abiertas.'}</p>`}
     ${past.length ? `<details class="past"><summary>🏁 Ya disputadas, pendientes de resultados (${past.length})</summary>${past.map(card).join('')}</details>` : ''}`;
   return frame(runnerTitle(), `
     ${previewBanner()}
     <div class="toolbar">
       ${searchBox('runner', 'Buscar carrera, pueblo o compañero…')}
-      <button class="btn primary add-btn" data-act="r-new" aria-label="Añadir una carrera que no está" title="Añadir carrera">＋</button>
+      <button class="btn primary add-btn wide" data-act="r-new" aria-label="Añadir una carrera que no está" title="Añadir una carrera que no está">＋ Nueva</button>
     </div>
     ${modFilterBar(d.registrations, me)}
     <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
@@ -2894,6 +2905,11 @@ const actions = {
   'r-sort'(el) { S.rsort = el.dataset.s; render(); },
   'r-manage'() { (S.open ||= {}).rmanage = true; render(); document.getElementById('manage')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
   'theme'(el) { store.set(THEME_KEY, el.dataset.t); applyTheme(el.dataset.t); render(); },
+  'cat-show'(el) { const row = el.closest('.join-row'); row.querySelector('.cat-pick').hidden = false; row.querySelector('[data-act="r-join"]').textContent = 'Apuntarme'; el.remove(); },
+  'r-ics'(el) {
+    const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id);
+    if (g) download(`${normalize(g.name).replace(/\W+/g, '-')}.ics`, icsEvent(g), 'text/calendar;charset=utf-8');
+  },
   'print-report'() { window.print(); },
   'rep-frozen'(el) { S.repFrozen = el.dataset.v === '1'; render(); },
   async 'rep-freeze'() {
