@@ -1868,6 +1868,14 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
   const fmt = s.bySubtype.length ? `<section class="card"><h2>Por formato</h2><div class="pills">${s.bySubtype.map((x) =>
     `<span class="pill ${modClass(x.modality)}"><i class="dot"></i>${mod ? '' : `${esc(x.modality)} · `}${esc(x.subtype)} <b>${x.races}</b></span>`).join('')}</div></section>` : '';
 
+  // --- por categoría
+  const maxCat = maxOf(s.byCategory.map((c) => c.participations));
+  const cats = s.byCategory.length ? `<section class="card"><h2>Por categoría${mod ? ` de ${esc(mod)}` : ''}</h2>
+    <ul class="cat-stats">${s.byCategory.map((c) => `<li><div class="cs-head"><b>${c.category ? esc(c.category) : 'Sin categoría'}</b>
+        <small class="muted">${c.runners} corredor${c.runners === 1 ? '' : 'es'} · ${c.participations} ${c.participations === 1 ? 'participación' : 'participaciones'}${c.km ? ` · ${kmText(c.km)}` : ''}</small>
+        <span class="cs-pod">${c.podiums ? `${c.p1 ? '🥇' + c.p1 + ' ' : ''}${c.p2 ? '🥈' + c.p2 + ' ' : ''}${c.p3 ? '🥉' + c.p3 : ''}` : ''}</span></div>
+      <div class="bar"><span style="width:${(c.participations / maxCat) * 100}%"></span></div></li>`).join('')}</ul></section>` : '';
+
   // --- clasificación de corredores
   const active = people.filter((r) => r.races > 0);
   const idle = people.filter((r) => !r.races && r.current);
@@ -1909,6 +1917,7 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
     ${mod ? '' : byMod}
     ${months}
     ${fmt}
+    ${cats}
     ${rank}
     ${pods}
     ${mod ? byMod : ''}

@@ -253,6 +253,19 @@ export function yearSummary(year, races, runners) {
   }
   const perRunner = [...rows.values()].sort((a, b) => b.races - a.races || b.p1 - a.p1 || byText(a.name, b.name));
 
+  // Estadística por categoría: corredores distintos, participaciones, podios y km (los resultados sin categoría, al final).
+  const catMap = new Map();
+  for (const { race, res } of parts) {
+    const c = cleanName(res.category) || '';
+    const e = catMap.get(c) || { category: c, runners: new Set(), participations: 0, p1: 0, p2: 0, p3: 0, km: 0 };
+    e.runners.add(personKey(res)); e.participations++; e.km += Number(race.km) || 0;
+    catMap.set(c, e);
+  }
+  for (const pd of podiums) { const e = catMap.get(cleanName(pd.res.category) || ''); e['p' + pd.position]++; }
+  const rankCat = (c) => { const i = CATEGORIES.indexOf(c); return c === '' ? 999 : i === -1 ? 500 : i; };
+  const byCategory = [...catMap.values()].map((e) => ({ ...e, runners: e.runners.size, podiums: e.p1 + e.p2 + e.p3, km: Math.round(e.km * 10) / 10 }))
+    .sort((a, b) => rankCat(a.category) - rankCat(b.category) || byText(a.category, b.category));
+
   const byPodiumType = [...PODIUM_TYPES, STAGE_TYPE].map((t) => ({
     type: t.id, label: t.label,
     podiums: podiums.filter((p) => p.type === t.id).length,
@@ -264,7 +277,7 @@ export function yearSummary(year, races, runners) {
     type, stage, position,
   }));
 
-  return { year, totals, byModality, byMonth, bySubtype, countries, provinces, missingPlace, perRunner, byPodiumType, podiumList };
+  return { year, totals, byModality, byMonth, bySubtype, byCategory, countries, provinces, missingPlace, perRunner, byPodiumType, podiumList };
 }
 
 // ---------- CSV ----------
