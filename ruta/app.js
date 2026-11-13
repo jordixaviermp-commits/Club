@@ -56,7 +56,7 @@ const S = {
   exp: { wps: true, climbs: false, tomas: false, times: false }, cursorD: null,
   charts: ['viento', 'temp', 'lluvia', 'humedad', 'uv'], bgProfile: true, tCursor: null,
 };
-let map = null, mapLayer = null, cursorMarker = null, fitted = false;
+let map = null, mapLayer = null, arrowLayer = null, cursorMarker = null, fitted = false;
 
 function saveLast() {
   if (!S.id) return;
@@ -286,6 +286,8 @@ function initMap() {
   map = L.map('map', { zoomControl: true, attributionControl: true });
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(map);
   mapLayer = L.layerGroup().addTo(map);
+  arrowLayer = L.layerGroup().addTo(map);
+  map.on('zoomend', drawArrows);
   map.on('click', (e) => {
     if (!S.addingWp) return;
     const d = R.nearestD(S.track.points, e.latlng.lat, e.latlng.lng);
@@ -324,15 +326,7 @@ function drawMap() {
     const w = S.along?.[k];
     L.polyline(line, { color: segColor(w), weight: 6, opacity: .9 }).addTo(mapLayer);
   }
-  if (S.along) {
-    for (let d = S.arrowsKm * 500; d < S.track.distance; d += S.arrowsKm * 1000) {
-      const p = R.pointAt(P, d), w = wxAt(d);
-      if (!w || w.wind === undefined) continue;
-      const size = Math.round(14 + Math.min(20, w.wind * 0.6));
-      L.marker([p.lat, p.lon], { interactive: false, icon: L.divIcon({ className: '', iconSize: [size, size],
-        html: `<div class="warrow" style="font-size:${size}px;line-height:${size}px;color:${segColor(w)};transform:rotate(${(w.windFrom + 180) % 360}deg)">↑</div>` }) }).addTo(mapLayer);
-    }
-  }
+  drawArrows();
   S.climbs.forEach((c, i) => {
     const p = R.pointAt(P, c.start);
     L.marker([p.lat, p.lon], { icon: L.divIcon({ className: '', iconSize: [24, 24], html: `<div class="cnum" style="background:${R.gradeColor(c.avg)}">${i + 1}</div>` }) })
@@ -394,8 +388,48 @@ function profilePick(ev) {
   if (!svg) return;
   const r = svg.getBoundingClientRect();
   const fx = ((ev.clientX - r.left) / r.width) * PW;
-  const d = Math.max(0, Math.min(S.track.distance, ((fx - PAD.l) / (PW - PAD.l - PAD.r)) * S.track.distance));
+  focusAt(Math.max(0, Math.min(S.track.distance, ((fx - PAD.l) / (PW - PAD.l - PAD.r)) * S.track.distance)));
+}
+/**
+ * Flechas del viento: una cada «Flechas cada» km como mucho, y nunca más juntas que su tamaño en
+ * pantalla (al alejar el mapa se omiten; al acercarlo salen más). Tocar una abre su viento y marca
+ * ese punto en el perfil y en las gráficas.
+ */
+function drawArrows() {
+  if (!arrowLayer) return;
+  arrowLayer.clearLayers();
+  if (!S.along || !S.track) return;
+  const P = S.track.points, placed = [];
+  for (let d = S.arrowsKm * 500; d < S.track.distance; d += S.arrowsKm * 1000) {
+    const p = R.pointAt(P, d), w = wxAt(d);
+    if (!w || w.wind === undefined) continue;
+    const size = Math.round(26 + Math.min(28, w.wind * 0.95)); // de 26 px (calma) a 54 px (30 km/h o más)
+    const px = map.latLngToLayerPoint([p.lat, p.lon]);
+    if (placed.some((q) => q.distanceTo(px) < size + 16)) continue;
+    placed.push(px);
+    const html = `<div class="warrow" style="width:${size}px;height:${size}px">
+      <svg viewBox="0 0 24 24" style="transform:rotate(${(w.windFrom + 180) % 360}deg)"><path d="M12 1.5 21.5 12.5h-5.8V22.5H8.3V12.5H2.5Z" fill="${segColor(w)}" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      <span class="wspeed">${int(w.wind)}</span></div>`;
+    L.marker([p.lat, p.lon], { icon: L.divIcon({ className: 'warrow-wrap', iconSize: [size, size], iconAnchor: [size / 2, size / 2], html }), zIndexOffset: -500, riseOnHover: true, keyboard: false })
+      .on('click', () => focusAt(d))
+      .bindPopup(() => windPopup(d, w), { offset: [0, -size / 2 + 4], autoPanPadding: [20, 20] })
+      .addTo(arrowLayer);
+  }
+}
+/** Viento en una flecha del mapa: de dónde viene, cuánto y cómo te pilla. */
+function windPopup(d, w) {
+  const r = w.rel;
+  const how = r.kind === 'cara' ? `<b class="k-cara">De cara</b>: te frena como ${int(Math.max(0, r.head))} km/h de frente`
+    : r.kind === 'favor' ? `<b class="k-favor">A favor</b>: te empuja como ${int(Math.max(0, -r.head))} km/h`
+    : `<b class="k-lateral">Cruzado</b> desde la ${r.side}${Math.abs(r.head) >= 3 ? `, algo ${r.head > 0 ? 'de cara' : 'a favor'}` : ''}`;
+  return `<div class="wpop"><b>km ${km(d)} · ${hm(at(d))}</b><br>
+    💨 ${int(w.wind)} km/h del ${compass(w.windFrom)} · rachas ${int(w.gust)} km/h<br>${how}<br>
+    <small class="muted">${int(w.temp)} °C · lluvia ${int(w.rainProb ?? 0)} %</small></div>`;
+}
+/** Marca un punto de la ruta en el perfil, en el mapa y en las gráficas del tiempo. */
+function focusAt(d) {
   S.cursorD = d;
+  S.tCursor = at(d) - S.start;
   const p = R.pointAt(S.track.points, d), w = wxAt(d);
   const g = R.gradeAt(S.track.points, d, 100);
   let txt = `<b>km ${km(d)}, ${hm(at(d))}</b> · Elevación ${int(p.es)} m · Pendiente ${pct(g)}`;
@@ -406,6 +440,7 @@ function profilePick(ev) {
     if (!cursorMarker) cursorMarker = L.circleMarker([p.lat, p.lon], { radius: 8, color: '#fff', weight: 3, fillColor: '#284556', fillOpacity: 1 }).addTo(mapLayer);
     else cursorMarker.setLatLng([p.lat, p.lon]);
   }
+  renderCharts();
 }
 
 function renderClimbs() {

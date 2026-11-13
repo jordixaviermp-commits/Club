@@ -43,7 +43,14 @@ details.fact p { margin: .4rem 0 0; font-size: .9rem; color: var(--muted); }
 .legend { display: flex; flex-wrap: wrap; gap: .3rem .9rem; font-size: .82rem; color: var(--muted); margin: .3rem 0; }
 .legend i { display: inline-block; width: 18px; height: 5px; border-radius: 3px; vertical-align: middle; margin-right: .3rem; }
 .scale { height: 8px; border-radius: 4px; flex: 1; }
-.warrow { font-size: 20px; line-height: 20px; text-align: center; font-weight: 700; text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
+.warrow-wrap { background: none; border: 0; }
+.warrow { position: relative; cursor: pointer; filter: drop-shadow(0 1px 2px rgb(0 0 0 / .45)); transition: transform .15s; }
+.warrow:hover, .leaflet-marker-icon:focus .warrow { transform: scale(1.15); }
+.warrow svg { width: 100%; height: 100%; display: block; }
+.warrow .wspeed { position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); background: #fff; color: #111; font: 700 10px/1 system-ui, sans-serif;
+  padding: 2px 4px; border-radius: 6px; box-shadow: 0 0 0 1px rgb(0 0 0 / .15); white-space: nowrap; }
+.wpop { font-size: .9rem; line-height: 1.5; }
+.k-cara { color: var(--head); } .k-favor { color: var(--tail); } .k-lateral { color: #b38600; }
 .cnum { width: 24px; height: 24px; border-radius: 50%; color: #fff; font-weight: 700; font-size: 13px; display: grid; place-items: center; border: 2px solid #fff; box-shadow: 0 1px 3px rgb(0 0 0 / .4); }
 .cnum.wp { background: #284556; }
 .cnum.toma { background: #e6c229; color: #111; }
