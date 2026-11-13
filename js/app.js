@@ -264,6 +264,98 @@ const RUNNER_TABS = [
 const runnerBase = () => (S.session?.isAdmin && S.preview ? '#/vista' : '#');
 const runnerHref = (sub) => (sub ? `${runnerBase()}/${sub}` : `${runnerBase()}/`);
 
+// ---------- Búsqueda rápida (lupa de la cabecera) ----------
+const adminScreens = () => [
+  ['📋', 'Inscripciones', '#/inscripciones', 'inscripciones apuntarse calendario proximas carreras abiertas'],
+  ['🏆', 'Carreras (resultados)', '#/carreras', 'carreras resultados podios historico hechas'],
+  ['📊', 'Resumen de la temporada', '#/resumen', 'resumen estadistica categorias podios km modalidad temporada'],
+  ['👥', 'Corredores (plantilla)', '#/corredores', 'corredores plantilla categoria enlaces renovar anadir ropa pedido filtros'],
+  ['📄', 'Contratos por tipo', '#/contratos', 'contratos contrato nuevo renovacion licencia pdf subir antiguos'],
+  ['📊', 'Cómputo de la temporada', '#/computo', 'computo fin temporada descargar csv excel control cerrar'],
+  ['🖨️', 'Informe de temporada', '#/informe', 'informe imprimir pdf bono saldo penalizacion cierre hojas corredor'],
+  ['💶', 'Bonos', '#/bonos', 'bonos bonificacion minimo penalizacion tramos plus circuito condiciones'],
+  ['📸', 'Publicaciones en redes', '#/publicaciones', 'redes instagram historia post resultados publicar anomalias encargado'],
+  ['📅', 'Próximas carreras (para redes)', '#/semana', 'semana redes avisar encargado proximas'],
+  ['🔔', 'Avisos', '#/avisos', 'avisos pendientes campanita correcciones puestos'],
+  ['📣', 'Noticias para los corredores', '#/noticias', 'noticias anuncios quedada comunicado'],
+  ['🗂️', 'Datos: copias, versión y aspecto', '#/datos', 'datos copia seguridad backup restaurar importar csv version aspecto oscuro claro sesion cerrar'],
+  ['🕘', 'Historial de cambios', '#/historial', 'historial cambios quien modifico'],
+  ['🏁', 'Federaciones y ligas', '#/federaciones', 'federaciones ligas calendario fcc fac catalana aragonesa'],
+  ['⚕️', 'En caso de accidente', '#/accidente', 'accidente seguro poliza telefono gerosalud divina rc responsabilidad civil'],
+];
+const runnerScreens = () => [
+  ['🏠', 'Carreras', runnerHref(''), 'carreras proximas apuntarme buscar crear nueva calendario'],
+  ['🏁', 'Federaciones y ligas', runnerHref('federaciones'), 'federaciones ligas calendario fcc fac catalana aragonesa'],
+  ['🧍', 'Mi temporada', runnerHref('mi'), 'mi temporada resultados carreras hechas puesto tiempo bono'],
+  ['📄', 'Contrato y bonificación', runnerHref('contrato'), 'contrato bonificacion bono licencia ropa pedido documentos plus'],
+  ['📊', 'Equipo', runnerHref('equipo'), 'equipo ranking estadistica categorias km tiempo podios'],
+  ['📣', 'Noticias del club', runnerHref('noticias'), 'noticias avisos comunicados quedada'],
+  ['⚕️', 'En caso de accidente', '#/accidente', 'accidente seguro poliza telefono federacion'],
+];
+/** Todas las palabras escritas tienen que aparecer (sin importar mayúsculas ni tildes). */
+const gsHit = (q, ...fields) => { const t = normalize(q).split(' ').filter(Boolean); const h = normalize(fields.filter(Boolean).join(' ')); return t.length > 0 && t.every((w) => h.includes(w)); };
+function globalSearchGroups(q) {
+  const admin = S.session?.isAdmin && parseRoute().view !== 'vista';
+  const groups = [];
+  const screens = (admin ? adminScreens() : runnerScreens()).filter(([, label, , kw]) => gsHit(q, label, kw)).map(([ic, label, href]) => ({ icon: ic, label, href }));
+  groups.push(['Ir a…', screens.slice(0, 6)]);
+  const cap = (arr, n) => arr.slice(0, n);
+  if (admin && S.data) {
+    const d = S.data;
+    groups.push(['Corredores', cap(d.runners.filter((r) => gsHit(q, r.name, r.category, contractLabel(r.contract))).sort(byName), 6)
+      .map((r) => ({ icon: '👤', label: r.name, sub: [r.category, contractLabel(r.contract)].filter(Boolean).join(' · '), href: `#/corredor/${r.id}` }))]);
+    groups.push(['Inscripciones', cap(d.registrations.filter((g) => gsHit(q, g.name, g.place, g.province, g.modality, g.subtype, ...(g.entries || []).map((e) => runnerById(e.runner_id)?.name))).sort((a, b) => a.date.localeCompare(b.date)), 6)
+      .map((g) => { const who = (g.entries || []).map((e) => runnerById(e.runner_id)?.name).find((n) => n && gsHit(q, n) && !gsHit(q, g.name));
+        return { icon: '📋', label: g.name, sub: `${when(g)}${place(g) ? ' · ' + place(g) : ''}${who ? ' · 👤 ' + who : ''}`, href: `#/inscripciones/${g.id}` }; })]);
+    groups.push(['Carreras', cap(d.races.filter((r) => gsHit(q, r.name, r.place, r.province, r.modality, r.subtype, r.circuit, ...(r.results || []).map((x) => x.runner_name))).sort((a, b) => b.date.localeCompare(a.date)), 8)
+      .map((r) => { const x = (r.results || []).find((y) => gsHit(q, y.runner_name) && !gsHit(q, r.name));
+        return { icon: '🏆', label: r.name, sub: `${when(r)}${place(r) ? ' · ' + place(r) : ''}${x ? ` · 👤 ${x.runner_name}${x.position ? ' ' + x.position + 'º' : ''}` : ''}`, href: `#/carreras/${r.id}` }; })]);
+    groups.push(['Noticias', cap((d.announcements || []).filter((a) => gsHit(q, a.title, a.body)), 4).map((a) => ({ icon: '📣', label: a.title, sub: 'Noticia', href: '#/noticias' }))]);
+  } else if (S.runnerData) {
+    const rd = S.runnerData;
+    groups.push(['Compañeros', cap(teamRoster().filter((m) => gsHit(q, m.name)), 5).map((m) => ({ icon: '👤', label: m.name, sub: 'Ver dónde se ha apuntado', mate: m.id }))]);
+    groups.push(['Carreras próximas', cap(rd.registrations.filter((g) => g.date >= (rd.today || todayISO()) && gsHit(q, g.name, g.place, g.province, g.modality, g.subtype)).sort((a, b) => a.date.localeCompare(b.date)), 8)
+      .map((g) => ({ icon: '📅', label: g.name, sub: `${when(g)}${place(g) ? ' · ' + place(g) : ''}`, href: `${runnerHref('carrera')}/${g.id}` }))]);
+    groups.push(['Carreras ya hechas', cap((S.team?.races || []).filter((r) => (r.results || []).length && gsHit(q, r.name, r.place, r.province)).sort((a, b) => b.date.localeCompare(a.date)), 5)
+      .map((r) => ({ icon: '🏁', label: r.name, sub: `${when(r)}${place(r) ? ' · ' + place(r) : ''}`, href: `${runnerHref('carrera')}/race_${r.id}` }))]);
+  }
+  return groups.filter(([, items]) => items.length);
+}
+function globalSearchHtml(q) {
+  if (normalize(q).length < 2) return '<p class="hint">Escribe una palabra: un nombre de corredor, una carrera, un pueblo, «contrato», «bono», «ropa», «copia»… y te llevo directo.</p>';
+  const groups = globalSearchGroups(q);
+  if (!groups.length) return `<p class="empty">No encuentro nada con «${esc(q)}». Prueba con otra palabra o con menos letras.</p>`;
+  return groups.map(([title, items]) => `<h3 class="gs-h">${esc(title)}</h3><ul class="mini-list">${items.map((it) => (it.mate
+    ? `<li class="mini tappable"><button type="button" class="mini-main" data-gs-mate="${esc(it.mate)}"><b>${it.icon} ${esc(it.label)}</b><small class="muted">${esc(it.sub || '')}</small></button></li>`
+    : `<li class="mini tappable"><a class="mini-main" href="${esc(it.href)}"><b>${it.icon} ${esc(it.label)}</b>${it.sub ? `<small class="muted">${esc(it.sub)}</small>` : ''}</a></li>`)).join('')}</ul>`).join('');
+}
+function openGlobalSearch() {
+  const dlg = document.getElementById('dialog');
+  dlg.innerHTML = `<form class="dlg gsearch" onsubmit="return false">
+    <div class="gs-top"><input type="search" data-gs name="q" placeholder="Buscar en toda la app…" autocomplete="off" enterkeyhint="search" aria-label="Buscar"><button type="button" class="btn ghost" data-gs-close>Cerrar</button></div>
+    <div id="gs-results" class="gs-results">${globalSearchHtml('')}</div></form>`;
+  dlg.onclose = null;
+  dlg.showModal();
+  dlg.querySelector('input[data-gs]')?.focus();
+}
+{
+  const dlg = document.getElementById('dialog');
+  dlg.addEventListener('input', (ev) => { if (ev.target.dataset?.gs !== undefined) dlg.querySelector('#gs-results').innerHTML = globalSearchHtml(ev.target.value); });
+  dlg.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ev.target.dataset?.gs !== undefined) { ev.preventDefault(); const a = dlg.querySelector('#gs-results a.mini-main, #gs-results button.mini-main'); if (a) a.click(); } });
+  dlg.addEventListener('click', (ev) => {
+    if (ev.target.closest('[data-gs-close]')) return dlg.close();
+    const m = ev.target.closest('[data-gs-mate]');
+    if (m) { dlg.close(); openMate(m.dataset.gsMate); }
+  });
+}
+// «/» abre la búsqueda (en ordenador), si no se está escribiendo en otro sitio
+document.addEventListener('keydown', (ev) => {
+  if (ev.key !== '/' || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) || document.getElementById('dialog')?.open) return;
+  if (!(S.session?.isAdmin || S.runnerData)) return;
+  ev.preventDefault(); openGlobalSearch();
+});
+
 /** Campanita de la dirección: número de cosas pendientes. */
 function bellButton() {
   const n = alertCount();
@@ -272,6 +364,9 @@ function bellButton() {
 
 const ICON_AID = 'M9 3h6v6h6v6h-6v6H9v-6H3V9h6z';
 /** Botón «Accidente» (a la izquierda de la campanita): da los datos del seguro con un toque. */
+const ICON_SEARCH = 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3';
+/** Lupa de la cabecera: búsqueda rápida por palabra en toda la app. */
+const searchButton = () => `<button type="button" class="icon-btn" data-act="gsearch" aria-label="Buscar en toda la app" title="Buscar">${icon(ICON_SEARCH)}</button>`;
 const accidentButton = () => `<a class="icon-btn sos" href="#/accidente" aria-label="En caso de accidente: teléfono y datos del seguro" title="Accidente">${icon(ICON_AID)}</a>`;
 
 function frame(title, body, { back, actions = '', rtab = null } = {}) {
@@ -286,7 +381,7 @@ function frame(title, body, { back, actions = '', rtab = null } = {}) {
     ${api.mode === 'demo' ? `<div class="demo-bar">Modo demostración: datos de prueba guardados solo en este móvil.</div>` : ''}
     <header class="top">
       ${back ? `<a class="back" href="${back}" aria-label="Volver">‹</a>` : '<img class="logo" src="icons/logo.png" alt="">'}
-      <h1>${esc(title)}</h1>${actions}${(admin && rtab === null && !back && S.data) || rtab !== null ? accidentButton() : ''}${admin && rtab === null && !back && S.data ? bellButton() : ''}${rtab !== null ? newsBell() : ''}
+      <h1>${esc(title)}</h1>${actions}${(admin && rtab === null && !back && S.data) || rtab !== null ? searchButton() + accidentButton() : ''}${admin && rtab === null && !back && S.data ? bellButton() : ''}${rtab !== null ? newsBell() : ''}
     </header>
     <main>${body}</main>
     ${tabs}`;
@@ -2956,6 +3051,7 @@ const actions = {
   'sub-filter'(el) { S.sub = el.dataset.s; render(); },
   'who-filter'(el) { S.who = el.dataset.w; render(); },
   'filters-clear'() { clearFilters(); render(); },
+  'gsearch'() { openGlobalSearch(); },
   'pulse-month'(el) {
     const ym = el.dataset.m;
     S.fold.delete(ym);

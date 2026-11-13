@@ -773,3 +773,12 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 .pulse-col { background: none; border: 0; padding: 0; margin: 0; font: inherit; cursor: pointer; color: inherit; }
 .pulse-col:active .mstack { opacity: .7; }
 .pulse-hint { margin: .3rem 0 0; font-size: .8rem; }
+
+/* ---------- Búsqueda rápida (lupa) ---------- */
+dialog:has(.gsearch) { width: min(94vw, 560px); max-height: 88vh; padding: .8rem; }
+.gsearch { display: flex; flex-direction: column; gap: .5rem; min-height: 0; }
+.gs-top { display: flex; gap: .5rem; align-items: center; }
+.gs-top input { flex: 1; min-width: 0; min-height: 46px; font-size: 1rem; }
+.gs-results { overflow-y: auto; max-height: 68vh; -webkit-overflow-scrolling: touch; }
+.gs-h { margin: .6rem 0 .25rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted, #667); }
+.gsearch .mini-main { text-align: left; background: none; border: 0; font: inherit; color: inherit; width: 100%; }
