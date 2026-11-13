@@ -38,7 +38,7 @@ const S = {
   data: null, runnerData: null,
   year: new Date().getFullYear(), draft: null, busy: false, showPast: false, installEvt: null,
   fedSeguro: FEDERACIONES[store.get(FED_KEY)] ? store.get(FED_KEY) : null, mod: store.get(MOD_KEY) || 'all', sub: 'all', who: 'all', fold: new Set(), regView: store.get(VIEW_KEY) === 'cal' ? 'cal' : 'list', calMonth: null, calDay: null,
-  q: { runner: '', admin: '' }, rdraft: null,
+  q: { runner: '', admin: '', rlist: '' }, rdraft: null,
 };
 
 const $app = document.getElementById('app');
@@ -653,6 +653,9 @@ function updateSearch(scope) {
   } else if (scope === 'admin') {
     const box = $app.querySelector('#reg-list');
     if (box) box.innerHTML = adminRegList();
+  } else if (scope === 'rlist') {
+    const box = $app.querySelector('#runner-list');
+    if (box) box.innerHTML = runnersListHtml();
   } else if (scope === 'races') {
     const box = $app.querySelector('#race-list');
     if (box) box.innerHTML = raceListHtml();
@@ -2466,46 +2469,89 @@ function viewContracts() {
   return frame('Corredores', `${runnersTabs('contratos')}${body}`);
 }
 
-function viewRunners() {
+/** Datos de cada corredor para la lista de la plantilla (bono de este año, carreras, estado). */
+function rosterRows() {
+  const year = new Date().getFullYear();
   const counts = new Map();
   for (const r of S.data.races) for (const x of r.results) if (x.runner_id) counts.set(x.runner_id, (counts.get(x.runner_id) || 0) + 1);
-  const runners = [...S.data.runners].sort(byName);
-  const year = new Date().getFullYear();
   const bonusBy = new Map(yearBonuses(year, S.data.races, S.data.registrations, S.data.runners, bonusCfg(year), S.data.circuitPodiums || []).map((b) => [b.runner.id, b]));
-  const badge = (b) => !b ? '' : `<small class="bbadge ${b.reachesMinimum ? (b.tier ? 'ok' : '') : 'bad'}">Bono ${year}: ${b.count}/${b.next ? b.next.races : b.count}${b.tier ? ` · ${euros(b.amount)}` : ''}${b.reachesMinimum ? '' : ' · bajo mínimo'}</small>`;
-  return frame(`Corredores (${runners.length})`, `
-    ${runnersTabs('corredores')}
-    <a class="btn block" href="#/bonos">Bonos por carreras ${year}</a>
-    ${clothingLine()}
-    <details class="card" ${runners.length ? '' : 'open'}>
-      <summary><b>+ Añadir corredores</b></summary>
-      <form class="stack" data-form="bulk">
-        <p class="hint">Uno por línea. Categoría y contrato son opcionales: «Pere Soler, M40, renovación». Contratos: nuevo, renovación o renovación sin licencia. Los nombres repetidos se ignoran (sin importar mayúsculas ni tildes).</p>
-        <textarea name="bulk" rows="5" placeholder="Pere Soler, M40&#10;Anna Puig, Élite&#10;Jordi Vila"></textarea>
-        <button class="btn primary">Añadir</button>
-      </form>
-    </details>
-    <details class="card">
-      <summary><b>↻ Renovar plantilla del año</b></summary>
-      <form class="stack" data-form="renew">
-        <p class="hint">Pega la lista completa de la nueva temporada, uno por línea («Pere Soler, M40»). Antes de cambiar nada verás un resumen:</p>
-        <ul class="hint"><li>Quien sigue <b>conserva su enlace</b> (no hay que reenviárselo). Si pones categoría, se actualiza.</li>
-          <li>Quien es nuevo se da de alta y recibe enlace.</li>
-          <li>Quien no está en la lista se da de baja: su enlace deja de funcionar, pero <b>sus resultados se conservan</b> en el historial.</li></ul>
-        <textarea name="renew" rows="6" placeholder="Pere Soler, M40&#10;Anna Puig, Élite&#10;…"></textarea>
-        <button class="btn primary">Revisar cambios</button>
-      </form>
-    </details>
-    ${runners.length ? '<button class="btn block" data-act="all-links">Copiar todos los enlaces</button>' : ''}
-    <ul class="roster">${runners.map((r) => `<li>
-      <div><span class="name"><a class="name-link" href="#/corredor/${r.id}">${esc(r.name)} ›</a>${(S.docs || []).some((x) => x.runner_id === r.id && x.year === year) ? ' <a class="doc-badge" href="#/docs/' + r.id + '" title="Contrato ' + year + ' subido">📄</a>' : ''}</span><small class="muted">${counts.get(r.id) || 0} carreras en total</small>${badge(bonusBy.get(r.id))}</div>
+  return S.data.runners.map((r) => { const b = bonusBy.get(r.id);
+    return { r, b, total: counts.get(r.id) || 0, noContract: !CONTRACTS.some((c) => c.id === r.contract), low: !!b && !b.reachesMinimum, withBonus: !!b?.tier }; });
+}
+const RFILTERS = [['todos', 'Corredores', ''], ['sincontrato', 'Sin contrato', 'warn'], ['bajo', 'Bajo el mínimo', 'bad'], ['bono', 'Con bono', 'good']];
+
+/** Lista filtrable de la plantilla: se repinta sola al escribir en el buscador. */
+function runnersListHtml() {
+  const year = new Date().getFullYear();
+  const q = S.q.rlist || '';
+  let rows = rosterRows();
+  const f = S.rfilter || 'todos';
+  if (f === 'sincontrato') rows = rows.filter((x) => x.noContract);
+  else if (f === 'bajo') rows = rows.filter((x) => x.low);
+  else if (f === 'bono') rows = rows.filter((x) => x.withBonus);
+  if (normalize(q).length >= 1) { const ids = new Set(matchPeople(q, rows.map((x) => x.r)).map((m) => m.id)); rows = rows.filter((x) => ids.has(x.r.id)); }
+  const sort = S.rsort || 'nombre';
+  if (sort === 'carreras') rows.sort((a, b) => (b.b?.count || 0) - (a.b?.count || 0) || byName(a.r, b.r));
+  else if (sort === 'bono') rows.sort((a, b) => (b.b?.amount || 0) - (a.b?.amount || 0) || (b.b?.count || 0) - (a.b?.count || 0) || byName(a.r, b.r));
+  else rows.sort((a, b) => byName(a.r, b.r));
+  if (!rows.length) return `<p class="empty">${q ? `Ningún corredor se parece a «${esc(q)}».` : f === 'todos' ? 'Todavía no hay corredores.' : 'Nadie en esta lista. 🎉'}</p>`;
+  const row = ({ r, b, total, noContract, low }) => {
+    const top = b?.tiers.at(-1)?.races || 1, pct = b ? Math.min(100, Math.round((b.bonusCount / top) * 100)) : 0;
+    return `<li class="rr ${low ? 'low' : b?.tier ? 'ok' : ''}${noContract ? ' nocon' : ''}">
+      <div class="rr-main"><span class="name"><a class="name-link" href="#/corredor/${r.id}">${esc(r.name)} ›</a>${(S.docs || []).some((x) => x.runner_id === r.id && x.year === year) ? ' <a class="doc-badge" href="#/docs/' + r.id + '" title="Contrato ' + year + ' subido">📄</a>' : ''}</span>
+        <small class="muted">${total} carrera${total === 1 ? '' : 's'} en total${noContract ? ' · <b class="warn-txt">⚠️ sin tipo de contrato</b>' : ''}</small></div>
+      ${b ? `<div class="rr-bono"><div class="rp-bar ${b.reachesMinimum ? (b.tier ? 'ok' : 'mid') : 'low'}"><i style="width:${pct}%"></i></div>
+        <small><b>${b.bonusCount}</b> en ${year} · ${b.reachesMinimum ? (b.tier ? `✅ bono ${euros(b.amount)}` : '✅ mínimo') : `<span class="bad-txt">⚠️ faltan ${b.missingToMinimum}</span>`}</small></div>` : ''}
+      <button class="icon-btn" data-act="runner-menu" data-id="${r.id}" aria-label="Opciones de ${esc(r.name)}">⋯</button>
       <div class="roster-sel">
         ${catSelect(`data-runner-cat="${r.id}" aria-label="Categoría habitual de ${esc(r.name)}"`, r.category || '')}
-        ${contractSelect(`data-runner-contract="${r.id}" aria-label="Tipo de contrato de ${esc(r.name)}"`, r.contract || '')}
+        <span class="sel-wrap${noContract ? ' needs' : ''}">${contractSelect(`data-runner-contract="${r.id}" aria-label="Tipo de contrato de ${esc(r.name)}"`, r.contract || '')}</span>
       </div>
-      <button class="icon-btn" data-act="runner-menu" data-id="${r.id}" aria-label="Opciones de ${esc(r.name)}">⋯</button>
-      ${adminRunnerRaces(r, year)}</li>`).join('')}</ul>
-    ${runners.length ? '' : '<p class="empty">Todavía no hay corredores.</p>'}`);
+      ${adminRunnerRaces(r, year)}</li>`;
+  };
+  return `<p class="hint rr-count">${rows.length} corredor${rows.length === 1 ? '' : 'es'}${q || f !== 'todos' ? ' (filtrado)' : ''}</p><ul class="roster">${rows.map(row).join('')}</ul>`;
+}
+
+function viewRunners() {
+  const year = new Date().getFullYear();
+  const all = rosterRows();
+  const n = { todos: all.length, sincontrato: all.filter((x) => x.noContract).length, bajo: all.filter((x) => x.low).length, bono: all.filter((x) => x.withBonus).length };
+  const f = S.rfilter || 'todos';
+  return frame(`Corredores (${all.length})`, `
+    ${runnersTabs('corredores')}
+    <div class="rr-kpis">${RFILTERS.map(([id, label, cls]) => `<button class="rr-kpi ${cls}${f === id ? ' on' : ''}${id !== 'todos' && !n[id] ? ' zero' : ''}" data-act="r-filter" data-f="${id}" aria-pressed="${f === id}"><b>${n[id]}</b><span>${label}</span></button>`).join('')}</div>
+    <div class="toolbar">
+      ${searchBox('rlist', 'Buscar corredor…')}
+      <button class="btn primary add-btn" data-act="r-manage" aria-label="Añadir corredores" title="Añadir corredores">＋</button>
+    </div>
+    <div class="rr-sort"><span class="muted">Ordenar:</span>${[['nombre', 'A–Z'], ['carreras', 'Más carreras'], ['bono', 'Más bono']].map(([id, l]) => `<button class="chip${(S.rsort || 'nombre') === id ? ' on' : ''}" data-act="r-sort" data-s="${id}">${l}</button>`).join('')}</div>
+    <div id="runner-list">${runnersListHtml()}</div>
+    <details class="card manage" id="manage" data-open-key="rmanage"${all.length && !S.open?.rmanage ? '' : ' open'}>
+      <summary><b>⚙️ Gestionar plantilla</b> <span class="muted">· añadir, renovar, enlaces, bonos</span></summary>
+      <div class="stack">
+        <div class="quick"><a class="btn" href="#/bonos">💶 Bonos ${year}</a>${all.length ? '<button class="btn" data-act="all-links">🔗 Copiar todos los enlaces</button>' : ''}</div>
+        ${clothingLine()}
+        <details class="card">
+          <summary><b>+ Añadir corredores</b></summary>
+          <form class="stack" data-form="bulk">
+            <p class="hint">Uno por línea. Categoría y contrato son opcionales: «Pere Soler, M40, renovación». Contratos: nuevo, renovación o renovación sin licencia. Los nombres repetidos se ignoran (sin importar mayúsculas ni tildes).</p>
+            <textarea name="bulk" rows="5" placeholder="Pere Soler, M40&#10;Anna Puig, Élite&#10;Jordi Vila"></textarea>
+            <button class="btn primary">Añadir</button>
+          </form>
+        </details>
+        <details class="card">
+          <summary><b>↻ Renovar plantilla del año</b></summary>
+          <form class="stack" data-form="renew">
+            <p class="hint">Pega la lista completa de la nueva temporada, uno por línea («Pere Soler, M40»). Antes de cambiar nada verás un resumen:</p>
+            <ul class="hint"><li>Quien sigue <b>conserva su enlace</b> (no hay que reenviárselo). Si pones categoría, se actualiza.</li>
+              <li>Quien es nuevo se da de alta y recibe enlace.</li>
+              <li>Quien no está en la lista se da de baja: su enlace deja de funcionar, pero <b>sus resultados se conservan</b> en el historial.</li></ul>
+            <textarea name="renew" rows="6" placeholder="Pere Soler, M40&#10;Anna Puig, Élite&#10;…"></textarea>
+            <button class="btn primary">Revisar cambios</button>
+          </form>
+        </details>
+      </div>
+    </details>`);
 }
 
 // ======================================================================
@@ -2831,6 +2877,9 @@ const actions = {
   },
   'season-csv'() { download(`monzon-computo-${S.year}.csv`, toCsv(seasonByRunner(S.year, S.data.races, S.data.runners, contractLabel, yearBonuses(S.year, S.data.races, S.data.registrations, S.data.runners, bonusCfg(S.year), S.data.circuitPodiums || [])), [...SEASON_COLUMNS, ...SEASON_BONUS_COLUMNS]), 'text/csv;charset=utf-8'); },
   'season-detail-csv'() { download(`monzon-participaciones-${S.year}.csv`, toCsv(seasonDetail(S.year, S.data.races), SEASON_DETAIL_COLUMNS), 'text/csv;charset=utf-8'); },
+  'r-filter'(el) { S.rfilter = S.rfilter === el.dataset.f ? 'todos' : el.dataset.f; render(); },
+  'r-sort'(el) { S.rsort = el.dataset.s; render(); },
+  'r-manage'() { (S.open ||= {}).rmanage = true; render(); document.getElementById('manage')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
   'print-report'() { window.print(); },
   'rep-frozen'(el) { S.repFrozen = el.dataset.v === '1'; render(); },
   async 'rep-freeze'() {
