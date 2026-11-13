@@ -292,6 +292,29 @@ export function csvRows(races) {
   return out;
 }
 
+/** Días que faltan para una fecha (ISO) desde hoy: 0 = hoy, 1 = mañana… (negativo si ya pasó). */
+export function daysTo(iso, today = new Date()) {
+  const t = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+  const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+  return Math.round((Date.UTC(y, m - 1, d) - t) / 86400000);
+}
+/** «hoy», «mañana», «en 6 días»… */
+export const daysToText = (n) => (n === 0 ? 'hoy' : n === 1 ? 'mañana' : n > 1 ? `en ${n} días` : '');
+
+/** Archivo de calendario (.ics) con una carrera como evento de día completo (o de varios días). */
+export function icsEvent(g, now = new Date()) {
+  const esc = (v) => String(v ?? '').replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/([,;])/g, '\\$1');
+  const ymd = (iso) => String(iso).slice(0, 10).replace(/-/g, '');
+  const last = new Date(String(g.end_date || g.date).slice(0, 10) + 'T12:00:00Z'); last.setUTCDate(last.getUTCDate() + 1);
+  const where = [g.place, g.province].filter(Boolean).join(', ');
+  const stamp = now.toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//CC Monzon//Carreras//ES', 'CALSCALE:GREGORIAN', 'BEGIN:VEVENT',
+    `UID:${g.id || ymd(g.date) + '-' + esc(g.name).slice(0, 20)}@ccmonzon`, `DTSTAMP:${stamp}`,
+    `DTSTART;VALUE=DATE:${ymd(g.date)}`, `DTEND;VALUE=DATE:${last.toISOString().slice(0, 10).replace(/-/g, '')}`,
+    `SUMMARY:${esc('🚴 ' + g.name)}`, ...(where ? [`LOCATION:${esc(where)}`] : []),
+    `DESCRIPTION:${esc([g.modality, g.km ? `${g.km} km` : '', 'Carrera del CC Monzón'].filter(Boolean).join(' · '))}`, 'END:VEVENT', 'END:VCALENDAR'].join('\r\n') + '\r\n';
+}
+
 // ---------- Cómputo de temporada (dirección) ----------
 
 export const SEASON_COLUMNS = ['Corredor', 'Categoría', 'Contrato', 'Carreras', 'Días de carrera', ...MODALITIES, 'Oros', 'Platas', 'Bronces', 'Podios',

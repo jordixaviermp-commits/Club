@@ -403,3 +403,14 @@ test('cómputo de temporada: resumen por corredor y detalle', async () => {
   const det = seasonDetail(2026, races);
   assert.equal(det.length, 2); assert.equal(det[0][3], 'Uno'); assert.equal(det[0][15], '2:00:00');
 });
+
+test('daysTo, daysToText e icsEvent', async () => {
+  const { daysTo, daysToText, icsEvent } = await import('../js/logic.js');
+  const now = new Date(2026, 10, 13, 15, 0);
+  assert.equal(daysTo('2026-11-13', now), 0); assert.equal(daysTo('2026-11-14', now), 1); assert.equal(daysTo('2026-11-20', now), 7); assert.equal(daysTo('2026-11-12', now), -1);
+  assert.equal(daysToText(0), 'hoy'); assert.equal(daysToText(1), 'mañana'); assert.equal(daysToText(6), 'en 6 días'); assert.equal(daysToText(-2), '');
+  const ics = icsEvent({ id: 'x1', name: 'Open, BTT; Graus', date: '2026-11-19', end_date: '2026-11-21', place: 'Graus', province: 'Huesca', modality: 'BTT', km: 45 }, new Date('2026-11-13T10:00:00Z'));
+  assert.match(ics, /BEGIN:VCALENDAR/); assert.match(ics, /DTSTART;VALUE=DATE:20261119/); assert.match(ics, /DTEND;VALUE=DATE:20261122/);
+  assert.ok(ics.includes('SUMMARY:🚴 Open\\, BTT\\; Graus')); assert.ok(ics.includes('LOCATION:Graus\\, Huesca')); assert.ok(ics.endsWith('END:VCALENDAR\r\n'));
+  assert.match(icsEvent({ id: 'x2', name: 'Uno', date: '2026-11-19' }), /DTEND;VALUE=DATE:20261120/);
+});
