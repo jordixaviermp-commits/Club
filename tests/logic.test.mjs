@@ -414,3 +414,18 @@ test('daysTo, daysToText e icsEvent', async () => {
   assert.ok(ics.includes('SUMMARY:🚴 Open\\, BTT\\; Graus')); assert.ok(ics.includes('LOCATION:Graus\\, Huesca')); assert.ok(ics.endsWith('END:VCALENDAR\r\n'));
   assert.match(icsEvent({ id: 'x2', name: 'Uno', date: '2026-11-19' }), /DTEND;VALUE=DATE:20261120/);
 });
+
+test('yearSummary: estadística por categoría', async () => {
+  const { yearSummary } = await import('../js/logic.js');
+  const runners = [{ id: 'a', name: 'Ana' }, { id: 'b', name: 'Beto' }];
+  const races = [
+    { id: 'r1', name: 'Uno', date: '2026-03-01', modality: 'BTT', km: 40, results: [
+      { runner_id: 'a', runner_name: 'Ana', category: 'M40', position: 1, podium_type: 'suelta' }, { runner_id: 'b', runner_name: 'Beto', category: 'Élite', position: 5 }] },
+    { id: 'r2', name: 'Dos', date: '2026-04-01', modality: 'BTT', results: [{ runner_id: 'a', runner_name: 'Ana', category: 'M40', position: 3, podium_type: 'suelta' }, { runner_id: 'b', runner_name: 'Beto', position: 9 }] },
+  ];
+  const c = yearSummary(2026, races, runners).byCategory;
+  assert.deepEqual(c.map((x) => x.category), ['Élite', 'M40', '']);
+  const m40 = c.find((x) => x.category === 'M40');
+  assert.equal(m40.participations, 2); assert.equal(m40.runners, 1); assert.equal(m40.p1, 1); assert.equal(m40.p3, 1); assert.equal(m40.podiums, 2); assert.equal(m40.km, 40);
+  assert.equal(c.find((x) => x.category === '').participations, 1);
+});

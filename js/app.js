@@ -474,9 +474,15 @@ function modFilterBar(regs, me = null) {
     .filter(Boolean).join(' · ') || 'Filtro activo'}: ${n} carrera${n === 1 ? '' : 's'} próxima${n === 1 ? '' : 's'} · 👥 ${people} compañero${people === 1 ? '' : 's'} apuntado${people === 1 ? '' : 's'}
     <button class="link small" data-act="filters-clear">Quitar filtros</button></p>` : '';
   if (!me) return modRow + subRow + whoRow + sum;
-  const active = (S.sub !== 'all' ? 1 : 0) + (S.who !== 'all' ? 1 : 0);
-  const more = (subRow || whoRow) ? `<details class="card fmore" data-open-key="fmore"${active || S.open?.fmore ? ' open' : ''}><summary>🔎 Más filtros${active ? ` <b class="fcount">${active}</b>` : ''}</summary>${subRow}${whoRow}</details>` : '';
-  return modRow.replace('class="modbar"', 'class="modbar wrap"') + more + sum;
+  // una sola línea de desplegables: modalidad, (formato) y situación
+  const o = (v, cur, label) => `<option value="${esc(v)}"${cur === v ? ' selected' : ''}>${label}</option>`;
+  const dd = (f, cur, label, opts) => `<select data-filter="${f}" class="${cur !== 'all' ? 'on' : ''}" aria-label="${label}">${opts}</select>`;
+  const bar = `<div class="fbar">
+    ${mods.length >= 2 ? dd('mod', S.mod, 'Modalidad', o('all', S.mod, 'Todas las modalidades') + mods.map((m) => o(m, S.mod, `${MOD_ICON[m] || '🏁'} ${esc(m)} (${upOf(regs).filter((g) => g.modality === m).length})`)).join('')) : ''}
+    ${showSubs ? dd('sub', S.sub, 'Formato', o('all', S.sub, 'Todos los formatos') + subs.map(([k, n]) => o(k, S.sub, `${k === '_none' ? 'Sin formato' : esc(k)} (${n})`)).join('')) : ''}
+    ${dd('who', S.who, 'Situación', o('all', S.who, 'Todas') + o('mates', S.who, `👥 Con compañeros (${base.filter(mates).length})`) + o('free', S.who, `➕ Sin apuntarme (${base.filter(free).length})`))}
+  </div>`;
+  return bar + sum;
 }
 
 /** Lista de carreras agrupada por mes, con cabecera plegable («Diciembre 2026 · 4 carreras · 👥 6»). */
@@ -711,7 +717,7 @@ const isPastReg = (id) => { const g = S.runnerData?.registrations.find((x) => x.
 /** Pantalla para poner el resultado: de una inscripción (reg_) o de una carrera ya en resultados (race_). */
 const resultHref = (id) => (S.runnerData?.registrations.some((g) => g.id === id) ? `#/resultado/reg_${id}` : `#/resultado/race_${id}`);
 const emptyRunnerDraft = (pre = {}) => ({ name: '', date: '', multi: false, end_date: '', place: '', province: '', country: DEFAULT_COUNTRY,
-  modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', category: S.runnerData?.me?.category || '', ...pre });
+  modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', category: '', ...pre });
 
 /** Formulario para que el corredor ponga SU resultado (una sola vez). id = «reg_<uuid>» o «race_<uuid>». */
 function viewRunnerReport(key) {
@@ -795,7 +801,7 @@ function viewRunnerNew() {
       <label>Lugar<input data-rf="place" value="${esc(d.place)}" maxlength="120"></label>
       <div class="grid2">
         <label>Provincia<input data-rf="province" list="dl-prov" value="${esc(d.province)}" autocomplete="off"></label>
-        ${editing ? '<span></span>' : `<label>Tu categoría${catSelect('data-rf="category"', d.category, 'Categoría')}</label>`}
+        ${editing ? '<span></span>' : `<label>Tu categoría${catSelect('data-rf="category" required', d.category, 'Elige tu categoría')}</label>`}
       </div>
       ${editing ? `<label>Notas<textarea data-rf="notes" rows="2" maxlength="500">${esc(d.notes || '')}</textarea></label>` : ''}
       <button class="btn primary">${editing ? 'Guardar cambios' : 'Añadir y apuntarme'}</button>
@@ -956,7 +962,7 @@ function runnerRegCard(g) {
         ${mine && !S.preview ? (g.my_result ? `<p class="mine-created">📝 Tu resultado: ${g.my_result.position}º (enviado) · <a href="#/resultado/reg_${g.id}">✏️ Pedir corrección</a></p>`
           : `<p class="row"><a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>
              <button class="btn ghost small" data-act="r-leave" data-id="${g.id}">No fui: borrarme</button></p>`) : ''}
-        ${!mine && g.date >= pastLimit() ? `<div class="row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, me.category, 'Categoría')}
+        ${!mine && g.date >= pastLimit() ? `<div class="row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">La hice: apuntarme</button></div>` : ''}`}
       ${g.mine_created && !S.preview ? `<p class="mine-created">Añadida por ti · <a href="#/editar/${g.id}">✏️ Editar o borrar</a></p>` : ''}
       ${g.notes ? `<p class="notes">${esc(g.notes)}</p>` : ''}
@@ -967,9 +973,7 @@ function runnerRegCard(g) {
         ? `<div class="row joined"><span>✓ Estás inscrito${mine.category ? ' en ' + esc(mine.category) : ''}</span>
            <button class="btn ghost small" data-act="r-ics" data-id="${g.id}" aria-label="Añadir al calendario del móvil">📅 Calendario</button>
            <button class="btn ghost small" data-act="r-leave" data-id="${g.id}">Borrarme</button></div>`
-        : me.category
-          ? `<div class="row join-row"><button class="btn primary grow" data-act="r-join" data-id="${g.id}">Apuntarme</button></div>`
-          : `<div class="row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, me.category, 'Categoría')}
+        : `<div class="row join-row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">Apuntarme</button></div>`}
     </article>`;
   }
@@ -1370,7 +1374,7 @@ function socialUpcoming() {
   return d.upcoming.filter((g) => g.date <= lim);
 }
 function socialText(list, days) {
-  return `🚴 CC Monzón · carreras de los próximos ${days} días\n\n${list.map((g) => `📅 ${when(g)} · ${g.name}\n${place(g) || g.modality ? `📍 ${[place(g), [g.modality, g.subtype].filter(Boolean).join(' '), g.km ? kmText(g.km) : ''].filter(Boolean).join(' · ')}\n` : ''}👥 ${g.people.join(', ')}`).join('\n\n')}\n\n📸 Crónica y foto con la equipación, en las 48 h siguientes a la prueba.`;
+  return `🚴 CC Monzón · carreras de los próximos ${days} días\n\n${list.map((g) => `📅 ${when(g)} · ${g.name}\n${place(g) || g.modality ? `📍 ${[place(g), [g.modality, g.subtype].filter(Boolean).join(' '), g.km ? kmText(g.km) : ''].filter(Boolean).join(' · ')}\n` : ''}👥 ${(g.people_cat || g.people).join(', ')}`).join('\n\n')}\n\n📸 Crónica y foto con la equipación, en las 48 h siguientes a la prueba.`;
 }
 function resultText(x) {
   return `🏁 ${x.name} · ${when(x)}${place(x) ? ' · ' + place(x) : ''}\n${x.podium.map((p) => `${medal(p.position)} ${p.name}${p.category ? ` (${p.category})` : ''}`).join('\n')}\n${x.participants} del club ${x.participants === 1 ? 'participó' : 'participaron'} 💪`;
@@ -1388,7 +1392,7 @@ function viewSocial() {
     <h2 class="section">📅 Próximas (${up.length}) · ${todo.length} sin publicar</h2>
     ${todo.length ? `<div class="row"><button class="btn primary" data-act="soc-copy">📋 Copiar texto</button><button class="btn" data-act="soc-wa">WhatsApp</button></div>` : ''}
     ${up.length ? up.map((g) => `<article class="card race ${modClass(g.modality)}${posted.has(postKey(g)) ? ' gone' : ''}">${head(g)}
-      <p class="count">👥 ${esc(g.people.join(', '))}</p><div class="row">${chk(g)}</div></article>`).join('') : `<p class="empty">No hay carreras con inscritos en los próximos ${days} días.</p>`}
+      <p class="count">👥 ${esc((g.people_cat || g.people).join(', '))}</p><div class="row">${chk(g)}</div></article>`).join('') : `<p class="empty">No hay carreras con inscritos en los próximos ${days} días.</p>`}
     <h2 class="section">🏁 Resultados recientes (${d.recent.length})</h2>
     ${d.recent.length ? d.recent.map((x) => `<article class="card race done-race ${modClass(x.modality)}${posted.has(postKey(x)) ? ' gone' : ''}">${head(x)}
       ${x.podium.length ? `<p class="pods">${x.podium.map((p) => `${medal(p.position)} ${esc(p.name)}${p.category ? ` <small>${esc(p.category)}</small>` : ''}`).join(' · ')}</p>` : '<p class="muted small">Sin podio.</p>'}
@@ -1418,7 +1422,7 @@ function weekRaces(days) {
 }
 function weekText(days, list = weekRaces(days)) {
   if (!list.length) return '';
-  const who = (g) => g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ');
+  const who = (g) => g.entries.map((e) => { const n = runnerById(e.runner_id)?.name; return n && (e.category ? `${n} (${e.category})` : n); }).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ');
   return `🚴 CC Monzón · carreras de los próximos ${days} días\n\n${list.map((g) => `📅 ${when(g)} · ${g.name}\n${place(g) || g.modality ? `📍 ${[place(g), [g.modality, g.subtype].filter(Boolean).join(' '), g.km ? kmText(g.km) : ''].filter(Boolean).join(' · ')}\n` : ''}👥 ${who(g)}`).join('\n\n')}\n\n📸 Crónica y foto con la equipación, en las 48 h siguientes a la prueba.`;
 }
 /** Casilla «publicada en redes» (se guarda en este móvil). */
@@ -1864,6 +1868,14 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
   const fmt = s.bySubtype.length ? `<section class="card"><h2>Por formato</h2><div class="pills">${s.bySubtype.map((x) =>
     `<span class="pill ${modClass(x.modality)}"><i class="dot"></i>${mod ? '' : `${esc(x.modality)} · `}${esc(x.subtype)} <b>${x.races}</b></span>`).join('')}</div></section>` : '';
 
+  // --- por categoría
+  const maxCat = maxOf(s.byCategory.map((c) => c.participations));
+  const cats = s.byCategory.length ? `<section class="card"><h2>Por categoría${mod ? ` de ${esc(mod)}` : ''}</h2>
+    <ul class="cat-stats">${s.byCategory.map((c) => `<li><div class="cs-head"><b>${c.category ? esc(c.category) : 'Sin categoría'}</b>
+        <small class="muted">${c.runners} corredor${c.runners === 1 ? '' : 'es'} · ${c.participations} ${c.participations === 1 ? 'participación' : 'participaciones'}${c.km ? ` · ${kmText(c.km)}` : ''}</small>
+        <span class="cs-pod">${c.podiums ? `${c.p1 ? '🥇' + c.p1 + ' ' : ''}${c.p2 ? '🥈' + c.p2 + ' ' : ''}${c.p3 ? '🥉' + c.p3 : ''}` : ''}</span></div>
+      <div class="bar"><span style="width:${(c.participations / maxCat) * 100}%"></span></div></li>`).join('')}</ul></section>` : '';
+
   // --- clasificación de corredores
   const active = people.filter((r) => r.races > 0);
   const idle = people.filter((r) => !r.races && r.current);
@@ -1905,6 +1917,7 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
     ${mod ? '' : byMod}
     ${months}
     ${fmt}
+    ${cats}
     ${rank}
     ${pods}
     ${mod ? byMod : ''}
@@ -2271,6 +2284,19 @@ function askLink(title, text, current) {
       <p class="hint">🔒 Solo lo verá la dirección. La hoja lleva datos personales: en Google, déjala con acceso restringido.</p>
       <div class="dlg-actions"><button value="save" class="btn primary">Guardar</button>${current ? '<button value="clear" class="btn danger ghost">Quitar el enlace</button>' : ''}<button value="" class="btn ghost">Cancelar</button></div></form>`;
     dlg.onclose = () => { const v = dlg.returnValue; resolve(v === 'save' ? dlg.querySelector('input[name="url"]').value.trim() : v === 'clear' ? '' : null); };
+    dlg.returnValue = '';
+    dlg.showModal();
+  });
+}
+
+/** Ventana para elegir la categoría con la que se apunta alguien (obligatoria). Devuelve la categoría o null si cancela. */
+function askCategory(name) {
+  return new Promise((resolve) => {
+    const dlg = document.getElementById('dialog');
+    dlg.innerHTML = `<form method="dialog" class="dlg"><h2>¿En qué categoría?</h2><p>${esc(name || '')}</p>
+      <label>Tu categoría${catSelect('name="cat" required', '', 'Elige tu categoría')}</label>
+      <div class="dlg-actions"><button value="ok" class="btn primary">Apuntarme</button><button value="" class="btn ghost" formnovalidate>Cancelar</button></div></form>`;
+    dlg.onclose = () => resolve(dlg.returnValue === 'ok' ? dlg.querySelector('select[name="cat"]').value || null : null);
     dlg.returnValue = '';
     dlg.showModal();
   });
@@ -2693,11 +2719,20 @@ const actions = {
     render();
   },
   async 'r-join-go'(el) {
-    const ok = await run(async () => { await api.runnerJoin(S.code, el.dataset.id, S.rdraft?.category || S.runnerData.me.category || null); await loadRunner(); return true; }, '¡Apuntado!');
+    const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id);
+    const cat = S.rdraft?.category || await askCategory(g?.name);
+    if (!cat) return;
+    const ok = await run(async () => { await api.runnerJoin(S.code, el.dataset.id, cat); await loadRunner(); return true; }, '¡Apuntado!');
     S.rdraft = null; go(ok && isPastReg(el.dataset.id) ? resultHref(el.dataset.id) : '#/');
   },
   async 'r-join'(el) {
-    const cat = $app.querySelector(`[data-cat="${el.dataset.id}"]`)?.value || S.runnerData?.me?.category || null;
+    const sel = el.closest('#search-results') ? null : $app.querySelector(`select[data-cat="${el.dataset.id}"]`);
+    let cat = sel ? sel.value : null;
+    if (!cat) { // la categoría es obligatoria: se elige aquí o en una ventana (si se apunta desde el buscador)
+      if (sel) { sel.classList.add('needs'); sel.focus(); return toast('Elige tu categoría para apuntarte.', true); }
+      const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id);
+      cat = await askCategory(g?.name); if (!cat) return;
+    }
     const ok = await run(async () => { await api.runnerJoin(S.code, el.dataset.id, cat); await loadRunner(); return true; }, '¡Apuntado!');
     if (ok && isPastReg(el.dataset.id)) return go(resultHref(el.dataset.id));
     render();
@@ -3080,6 +3115,7 @@ const forms = {
     const d = S.rdraft;
     const name = cleanName(d.name);
     if (d.multi && !d.end_date) return toast('Falta el último día.', true);
+    if (!d.id && !d.category) return toast('Elige tu categoría para apuntarte.', true);
     if (d.race_type === 'circuito' && !cleanName(d.circuit)) return toast('Falta el nombre del circuito.', true);
     if (d.id) { // editar una carrera propia
       const ok = await run(async () => {
@@ -3362,6 +3398,7 @@ $app.addEventListener('input', (ev) => {
 
 $app.addEventListener('change', async (ev) => {
   const t = ev.target;
+  if (t.dataset.filter) { actions[{ mod: 'mod-filter', sub: 'sub-filter', who: 'who-filter' }[t.dataset.filter]]({ dataset: { m: t.value, s: t.value, w: t.value } }); return; }
   if (t.dataset.f === 'modality' && S.draft) { // cambia la modalidad: el formato depende de ella
     S.draft.modality = t.value; if (!SUBTYPES[t.value]?.includes(S.draft.subtype)) S.draft.subtype = ''; render(); return;
   }

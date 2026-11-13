@@ -428,7 +428,8 @@ export function demoApi(storage = globalThis.localStorage) {
       return clone({ today: t,
         upcoming: d.registrations.filter((g) => !g.suspended && (g.end_date || g.date) >= lim1 && g.date <= lim2 && d.registration_entries.some((e) => e.registration_id === g.id))
           .sort((x, y) => x.date.localeCompare(y.date) || x.name.localeCompare(y.name))
-          .map((g) => ({ ...base(g), people: d.registration_entries.filter((e) => e.registration_id === g.id).map((e) => nm(e.runner_id)).filter(Boolean).sort((p, q) => p.localeCompare(q)) })),
+          .map((g) => ({ ...base(g), people: d.registration_entries.filter((e) => e.registration_id === g.id).map((e) => nm(e.runner_id)).filter(Boolean).sort((p, q) => p.localeCompare(q)),
+            people_cat: d.registration_entries.filter((e) => e.registration_id === g.id).map((e) => nm(e.runner_id) && `${nm(e.runner_id)}${e.category ? ` (${e.category})` : ''}`).filter(Boolean).sort((p, q) => p.localeCompare(q)) })),
         recent: d.races.filter((r) => r.date >= lim3 && r.date <= t && d.results.some((x) => x.race_id === r.id)).sort((x, y) => y.date.localeCompare(x.date))
           .map((r) => ({ ...base(r), participants: d.results.filter((x) => x.race_id === r.id).length,
             podium: d.results.filter((x) => x.race_id === r.id && x.position >= 1 && x.position <= 3).sort((p, q) => p.position - q.position).map((x) => ({ position: x.position, name: x.runner_name, category: x.category || null })) })),

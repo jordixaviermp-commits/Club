@@ -1097,6 +1097,8 @@ begin
                'name', g.name, 'date', g.date, 'end_date', g.end_date, 'place', g.place, 'province', g.province, 'country', g.country,
                'modality', g.modality, 'subtype', g.subtype, 'km', g.km, 'race_type', g.race_type, 'circuit', g.circuit,
                'people', (select coalesce(jsonb_agg(rn.name order by rn.name), '[]'::jsonb)
+                            from registration_entries e join runners rn on rn.id = e.runner_id where e.registration_id = g.id),
+               'people_cat', (select coalesce(jsonb_agg(rn.name || coalesce(' (' || nullif(e.category, '') || ')', '') order by rn.name), '[]'::jsonb)
                             from registration_entries e join runners rn on rn.id = e.runner_id where e.registration_id = g.id))
              order by g.date, g.name)
         from registrations g

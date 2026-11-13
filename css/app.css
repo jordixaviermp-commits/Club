@@ -747,3 +747,13 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 .join-row .cat-pick { flex: 1 1 100%; }
 .join-row .cat-pick select { width: 100%; }
 .row.joined .btn { white-space: nowrap; } .row.joined span { flex: 1 1 100%; }
+.join-row select.needs { border-color: #d9534f; box-shadow: 0 0 0 2px color-mix(in srgb, #d9534f 30%, transparent); } .join-row select { flex: 1 1 55%; min-width: 0; }
+.fbar { display: flex; gap: .4rem; margin: .4rem 0; }
+.fbar select { flex: 1 1 0; min-width: 0; min-height: 44px; font-size: .88rem; padding: .3rem .4rem; text-overflow: ellipsis; }
+.fbar select.on { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); font-weight: 700; }
+.cat-stats { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .7rem; }
+.cs-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem .6rem; margin-bottom: .25rem; }
+.cs-head b { font-size: 1.02rem; }
+.cs-pod { margin-left: auto; white-space: nowrap; }
+.cat-stats .bar { height: 9px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.cat-stats .bar span { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
