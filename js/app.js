@@ -282,6 +282,7 @@ const adminScreens = () => [
   ['🕘', 'Historial de cambios', '#/historial', 'historial cambios quien modifico'],
   ['🏁', 'Federaciones y ligas', '#/federaciones', 'federaciones ligas calendario fcc fac catalana aragonesa'],
   ['⚕️', 'En caso de accidente', '#/accidente', 'accidente seguro poliza telefono gerosalud divina rc responsabilidad civil'],
+  ['🗺️', 'Planificar ruta (viento y tiempo)', 'ruta/', 'ruta planificar track gpx fit viento tiempo lluvia subidas avituallamiento garmin salida'],
 ];
 const runnerScreens = () => [
   ['🏠', 'Carreras', runnerHref(''), 'carreras proximas apuntarme buscar crear nueva calendario'],
@@ -291,6 +292,7 @@ const runnerScreens = () => [
   ['📊', 'Equipo', runnerHref('equipo'), 'equipo ranking estadistica categorias km tiempo podios'],
   ['📣', 'Noticias del club', runnerHref('noticias'), 'noticias avisos comunicados quedada'],
   ['⚕️', 'En caso de accidente', '#/accidente', 'accidente seguro poliza telefono federacion'],
+  ['🗺️', 'Planificar ruta (viento y tiempo)', 'ruta/', 'ruta planificar track gpx fit viento tiempo lluvia subidas avituallamiento garmin salida'],
 ];
 /** Todas las palabras escritas tienen que aparecer (sin importar mayúsculas ni tildes). */
 const gsHit = (q, ...fields) => { const t = normalize(q).split(' ').filter(Boolean); const h = normalize(fields.filter(Boolean).join(' ')); return t.length > 0 && t.every((w) => h.includes(w)); };
