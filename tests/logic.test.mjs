@@ -429,3 +429,27 @@ test('yearSummary: estadística por categoría', async () => {
   assert.equal(m40.participations, 2); assert.equal(m40.runners, 1); assert.equal(m40.p1, 1); assert.equal(m40.p3, 1); assert.equal(m40.podiums, 2); assert.equal(m40.km, 40);
   assert.equal(c.find((x) => x.category === '').participations, 1);
 });
+
+test('socialAudit: hechas, pendientes y anomalías', async () => {
+  const { socialAudit, postKeyOf, resKeyOf } = await import('../js/logic.js');
+  const today = '2026-11-20';
+  const race = (id, name, date, n = 1) => ({ id, name, date, results: Array.from({ length: n }, (_, i) => ({ runner_id: 'r' + i, runner_name: 'R' + i, position: i + 1 })) });
+  const races = [race('a', 'Reciente', '2026-11-18'), race('b', 'Atrasada', '2026-11-05'), race('c', 'Publicada', '2026-11-01'), race('o', 'Antigua', '2026-03-01')];
+  const regs = [
+    { id: 'u1', name: 'Proxima', date: '2026-11-25', entries: [{ runner_id: 'r0' }] },
+    { id: 'u2', name: 'Lejana', date: '2026-12-30', entries: [{ runner_id: 'r0' }] },
+    { id: 'p1', name: 'Esperando', date: '2026-11-19', entries: [{ runner_id: 'r0' }] },
+    { id: 'p2', name: 'Sin puestos', date: '2026-11-10', entries: [{ runner_id: 'r0' }] },
+    { id: 's1', name: 'Suspendida', date: '2026-11-22', suspended: true, entries: [{ runner_id: 'r0' }] },
+  ];
+  const posts = [{ key: postKeyOf(races[2]) }, { key: resKeyOf(races[2]) }, { key: postKeyOf(regs[4]) }, { key: '2026-10-01|ya no existe' }];
+  const a = socialAudit(2026, races, regs, posts, today);
+  assert.equal(a.resPending.length, 1); assert.equal(a.resPending[0].race.id, 'a');
+  assert.equal(a.resLate.length, 1); assert.equal(a.resLate[0].race.id, 'b');
+  assert.equal(a.resDone.length, 1); assert.equal(a.resOld.length, 1);
+  assert.equal(a.waiting.length, 1); assert.equal(a.noResults.length, 1);
+  assert.equal(a.avisoPending.length, 1); assert.equal(a.avisoPending[0].reg.id, 'u1');
+  assert.equal(a.suspendedPosted.length, 1); assert.equal(a.orphans.length, 1);
+  assert.equal(a.pending, 3); assert.equal(a.anomalies, 4);
+  assert.equal(a.done, 3);
+});

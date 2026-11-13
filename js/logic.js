@@ -328,6 +328,56 @@ export function icsEvent(g, now = new Date()) {
     `DESCRIPTION:${esc([g.modality, g.km ? `${g.km} km` : '', 'Carrera del CC Monzón'].filter(Boolean).join(' · '))}`, 'END:VEVENT', 'END:VCALENDAR'].join('\r\n') + '\r\n';
 }
 
+// ---------- Publicaciones en redes (control de la dirección) ----------
+
+/** Clave del aviso previo de una carrera y de la publicación de sus resultados (no cambian al pasar a resultados). */
+export const postKeyOf = (g) => `${g.date}|${normalize(g.name)}`;
+export const resKeyOf = (g) => 'res|' + postKeyOf(g);
+
+/**
+ * Qué publicaciones hay hechas, pendientes y con anomalía. Cada carrera tiene dos: el aviso (antes) y los resultados (unos días después).
+ * `posts`: filas {key, posted_at?} marcadas. `today`: 'AAAA-MM-DD'.
+ */
+export function socialAudit(year, races, registrations, posts, today) {
+  const dayDiff = (a, b) => Math.round((Date.parse(a + 'T12:00:00Z') - Date.parse(b + 'T12:00:00Z')) / 86400000);
+  const posted = new Set(posts.map((x) => x.key));
+  const last = (g) => g.end_date || g.date;
+  const inYear = (g) => yearOf(g.date) === year;
+  const people = (g) => (g.entries || []).length;
+
+  // resultados: carreras ya en resultados con corredores del club
+  const finished = races.filter((r) => inYear(r) && (r.results || []).length && last(r) <= today)
+    .map((r) => ({ race: r, key: resKeyOf(r), days: dayDiff(today, last(r)) })).sort((a, b) => b.days - a.days);
+  const resDone = finished.filter((x) => posted.has(x.key));
+  const resTodo = finished.filter((x) => !posted.has(x.key));
+  const HORIZON = 45; // lo más antiguo no se vigila: quedó de antes de existir este control
+  const resPending = resTodo.filter((x) => x.days <= 7), resLate = resTodo.filter((x) => x.days > 7 && x.days <= HORIZON), resOld = resTodo.filter((x) => x.days > HORIZON);
+
+  // inscripciones ya disputadas que aún no han pasado a resultados
+  const past = registrations.filter((g) => inYear(g) && !g.suspended && people(g) && last(g) < today).map((g) => ({ reg: g, days: dayDiff(today, last(g)), people: people(g) }));
+  const waiting = past.filter((x) => x.days < 3);
+  const noResults = past.filter((x) => x.days >= 3 && x.days <= HORIZON && !(x.reg.entries || []).some((e) => e.self_position));
+
+  // avisos previos
+  const avisoPending = registrations.filter((g) => !g.suspended && people(g) && g.date >= today && dayDiff(g.date, today) <= 14 && !posted.has(postKeyOf(g)))
+    .map((g) => ({ reg: g, inDays: dayDiff(g.date, today) })).sort((a, b) => a.inDays - b.inDays);
+  const suspendedPosted = registrations.filter((g) => g.suspended && people(g) && posted.has(postKeyOf(g)));
+
+  // marcas que ya no corresponden a ninguna carrera (se cambió el nombre o la fecha, o se borró)
+  const valid = new Set([...races.flatMap((r) => [postKeyOf(r), resKeyOf(r)]), ...registrations.map(postKeyOf)]);
+  const cutoff = Date.parse(today + 'T12:00:00Z') - 120 * 86400000;
+  const orphans = posts.filter((x) => !valid.has(x.key) && (!x.posted_at || Date.parse(x.posted_at) >= cutoff));
+
+  // publicadas en esta temporada
+  const marks = new Set();
+  for (const g of [...races, ...registrations]) if (inYear(g) && posted.has(postKeyOf(g))) marks.add(postKeyOf(g));
+  for (const r of races) if (inYear(r) && posted.has(resKeyOf(r))) marks.add(resKeyOf(r));
+
+  const pending = resPending.length + waiting.length + avisoPending.length;
+  const anomalies = resLate.length + noResults.length + suspendedPosted.length + orphans.length;
+  return { done: marks.size, pending, anomalies, resDone, resPending, resLate, resOld, waiting, noResults, avisoPending, suspendedPosted, orphans };
+}
+
 // ---------- Cómputo de temporada (dirección) ----------
 
 export const SEASON_COLUMNS = ['Corredor', 'Categoría', 'Contrato', 'Carreras', 'Días de carrera', ...MODALITIES, 'Oros', 'Platas', 'Bronces', 'Podios',
