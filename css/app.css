@@ -748,3 +748,6 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 .join-row .cat-pick select { width: 100%; }
 .row.joined .btn { white-space: nowrap; } .row.joined span { flex: 1 1 100%; }
 .join-row select.needs { border-color: #d9534f; box-shadow: 0 0 0 2px color-mix(in srgb, #d9534f 30%, transparent); } .join-row select { flex: 1 1 55%; min-width: 0; }
+.fbar { display: flex; gap: .4rem; margin: .4rem 0; }
+.fbar select { flex: 1 1 0; min-width: 0; min-height: 44px; font-size: .88rem; padding: .3rem .4rem; text-overflow: ellipsis; }
+.fbar select.on { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); font-weight: 700; }

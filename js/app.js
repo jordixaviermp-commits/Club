@@ -474,9 +474,15 @@ function modFilterBar(regs, me = null) {
     .filter(Boolean).join(' · ') || 'Filtro activo'}: ${n} carrera${n === 1 ? '' : 's'} próxima${n === 1 ? '' : 's'} · 👥 ${people} compañero${people === 1 ? '' : 's'} apuntado${people === 1 ? '' : 's'}
     <button class="link small" data-act="filters-clear">Quitar filtros</button></p>` : '';
   if (!me) return modRow + subRow + whoRow + sum;
-  const active = (S.sub !== 'all' ? 1 : 0) + (S.who !== 'all' ? 1 : 0);
-  const more = (subRow || whoRow) ? `<details class="card fmore" data-open-key="fmore"${active || S.open?.fmore ? ' open' : ''}><summary>🔎 Más filtros${active ? ` <b class="fcount">${active}</b>` : ''}</summary>${subRow}${whoRow}</details>` : '';
-  return modRow.replace('class="modbar"', 'class="modbar wrap"') + more + sum;
+  // una sola línea de desplegables: modalidad, (formato) y situación
+  const o = (v, cur, label) => `<option value="${esc(v)}"${cur === v ? ' selected' : ''}>${label}</option>`;
+  const dd = (f, cur, label, opts) => `<select data-filter="${f}" class="${cur !== 'all' ? 'on' : ''}" aria-label="${label}">${opts}</select>`;
+  const bar = `<div class="fbar">
+    ${mods.length >= 2 ? dd('mod', S.mod, 'Modalidad', o('all', S.mod, 'Todas las modalidades') + mods.map((m) => o(m, S.mod, `${MOD_ICON[m] || '🏁'} ${esc(m)} (${upOf(regs).filter((g) => g.modality === m).length})`)).join('')) : ''}
+    ${showSubs ? dd('sub', S.sub, 'Formato', o('all', S.sub, 'Todos los formatos') + subs.map(([k, n]) => o(k, S.sub, `${k === '_none' ? 'Sin formato' : esc(k)} (${n})`)).join('')) : ''}
+    ${dd('who', S.who, 'Situación', o('all', S.who, 'Todas') + o('mates', S.who, `👥 Con compañeros (${base.filter(mates).length})`) + o('free', S.who, `➕ Sin apuntarme (${base.filter(free).length})`))}
+  </div>`;
+  return bar + sum;
 }
 
 /** Lista de carreras agrupada por mes, con cabecera plegable («Diciembre 2026 · 4 carreras · 👥 6»). */
@@ -3383,6 +3389,7 @@ $app.addEventListener('input', (ev) => {
 
 $app.addEventListener('change', async (ev) => {
   const t = ev.target;
+  if (t.dataset.filter) { actions[{ mod: 'mod-filter', sub: 'sub-filter', who: 'who-filter' }[t.dataset.filter]]({ dataset: { m: t.value, s: t.value, w: t.value } }); return; }
   if (t.dataset.f === 'modality' && S.draft) { // cambia la modalidad: el formato depende de ella
     S.draft.modality = t.value; if (!SUBTYPES[t.value]?.includes(S.draft.subtype)) S.draft.subtype = ''; render(); return;
   }
