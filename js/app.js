@@ -50,7 +50,7 @@ const S = {
   session: null, code: store.get(CODE_KEY), news: null, newsFresh: new Set(),
   data: null, runnerData: null,
   year: new Date().getFullYear(), draft: null, busy: false, showPast: false, installEvt: null,
-  fedSeguro: FEDERACIONES[store.get(FED_KEY)] ? store.get(FED_KEY) : null, mod: store.get(MOD_KEY) || 'all', sub: 'all', who: 'all', fold: new Set(), regView: store.get(VIEW_KEY) === 'cal' ? 'cal' : 'list', calMonth: null, calDay: null,
+  fedSeguro: FEDERACIONES[store.get(FED_KEY)] ? store.get(FED_KEY) : null, mod: store.get(MOD_KEY) || 'all', sub: 'all', who: 'all', fsub: 'all', kind: 'all', fold: new Set(), regView: store.get(VIEW_KEY) === 'cal' ? 'cal' : 'list', calMonth: null, calDay: null,
   q: { runner: '', admin: '', rlist: '' }, rdraft: null,
 };
 
@@ -346,6 +346,8 @@ function openGlobalSearch() {
   dlg.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ev.target.dataset?.gs !== undefined) { ev.preventDefault(); const a = dlg.querySelector('#gs-results a.mini-main, #gs-results button.mini-main'); if (a) a.click(); } });
   dlg.addEventListener('click', (ev) => {
     if (ev.target.closest('[data-gs-close]')) return dlg.close();
+    const fa = ev.target.closest('.fdlg [data-act]');
+    if (fa && actions[fa.dataset.act]) { ev.preventDefault(); dlg.close(); actions[fa.dataset.act](fa); return; }
     const m = ev.target.closest('[data-gs-mate]');
     if (m) { dlg.close(); openMate(m.dataset.gsMate); }
   });
@@ -366,6 +368,7 @@ function bellButton() {
 
 const ICON_AID = 'M9 3h6v6h6v6h-6v6H9v-6H3V9h6z';
 /** Botón «Accidente» (a la izquierda de la campanita): da los datos del seguro con un toque. */
+const ICON_FILTER = 'M4 6h8M16 6h4M4 12h2M10 12h10M4 18h10M18 18h2M14 4a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM8 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM16 16a2 2 0 1 0 0 4 2 2 0 0 0 0-4z';
 const ICON_SEARCH = 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3';
 /** Lupa de la cabecera: búsqueda rápida por palabra en toda la app. */
 const searchButton = () => `<button type="button" class="icon-btn" data-act="gsearch" aria-label="Buscar en toda la app" title="Buscar">${icon(ICON_SEARCH)}</button>`;
@@ -533,20 +536,48 @@ const MOD_ICON = { Carretera: '🚴', BTT: '⛰️', Gravel: '🪨', Ciclocross:
 /** Deja solo las carreras de la modalidad elegida (todas si no hay filtro). */
 const byMod = (list) => (S.mod === 'all' ? list : list.filter((x) => x.modality === S.mod));
 /** Modalidad + formato (+ «con compañeros» / «aún no estoy apuntado» si se indica `me`). */
+/** Tipos de prueba para filtrar (corredores): por etapas, liga o copa (puntuable de un circuito) y campeonato. */
+const KIND_TEST = { stages: (g) => !!g.end_date && g.end_date > g.date, circuit: (g) => g.race_type === 'circuito', champ: (g) => g.race_type === 'campeonato' };
+const KIND_LABEL = { stages: '🗓️ Por etapas', circuit: '🏆 Liga o copa', champ: '🥇 Campeonato' };
 function regFilter(list, me = null) {
   let out = byMod(list);
   if (S.mod !== 'all' && S.sub !== 'all') out = out.filter((g) => (S.sub === '_none' ? !g.subtype : g.subtype === S.sub));
+  if (me && S.fsub !== 'all') out = out.filter((g) => g.subtype === S.fsub);
+  if (me && S.kind !== 'all') out = out.filter(KIND_TEST[S.kind] || (() => true));
   if (me && S.who === 'mates') out = out.filter((g) => (g.entries || []).some((e) => e.runner_id !== me.id));
   if (me && S.who === 'free') out = out.filter((g) => !(g.entries || []).some((e) => e.runner_id === me.id) && !(g.results || []).some((x) => x.runner_id === me.id));
   return out;
 }
-const filtersOn = (me) => S.mod !== 'all' || S.sub !== 'all' || (!!me && S.who !== 'all');
-const clearFilters = () => { S.mod = 'all'; S.sub = 'all'; S.who = 'all'; store.set(MOD_KEY, 'all'); };
+const filtersOn = (me) => S.mod !== 'all' || S.sub !== 'all' || (!!me && (S.who !== 'all' || S.fsub !== 'all' || S.kind !== 'all'));
+const clearFilters = () => { S.mod = 'all'; S.sub = 'all'; S.who = 'all'; S.fsub = 'all'; S.kind = 'all'; store.set(MOD_KEY, 'all'); };
 /**
  * Botones de filtro: modalidad → formato (al elegir modalidad) → situación (solo corredores).
  * Los números son carreras próximas. `regs`: todas las inscripciones; `me`: el corredor (null en dirección).
  */
+/** Filtros de los corredores: modalidad, formato (XCO, Critérium…) y tipo de prueba (etapas, liga o copa, campeonato). Rellena S.fd. */
+function runnerFilterModel(regs) {
+  const today = todayISO();
+  const up = regs.filter((g) => g.date >= today && !g.suspended);
+  const mods = MODALITIES.filter((m) => regs.some((g) => g.modality === m));
+  if (S.mod !== 'all' && !mods.includes(S.mod)) S.mod = 'all';
+  S.who = 'all'; S.sub = 'all';
+  const inMod = up.filter((g) => S.mod === 'all' || g.modality === S.mod);
+  const fmts = [...new Set(inMod.map((g) => g.subtype).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+  if (S.fsub !== 'all' && !fmts.includes(S.fsub)) S.fsub = 'all';
+  const okKind = (g) => S.kind === 'all' || KIND_TEST[S.kind](g), okFmt = (g) => S.fsub === 'all' || g.subtype === S.fsub;
+  const ch = (act, attr, val, cur, label, n, cls = '') => `<button type="button" class="chip modchip ${cls}${cur === val ? ' on' : ''}" data-act="${act}" data-${attr}="${esc(val)}" aria-pressed="${cur === val}">${label}${n == null ? '' : `<b>${n}</b>`}</button>`;
+  const kinds = Object.keys(KIND_TEST).map((k) => [k, inMod.filter((g) => okFmt(g) && KIND_TEST[k](g)).length]).filter(([k, n]) => n > 0 || S.kind === k);
+  const sec = (title, body) => `<p class="hint fsec">${title}</p><div class="modbar" role="group" aria-label="${title}">${body}</div>`;
+  const html = [
+    mods.length >= 2 ? sec('Modalidad', ch('mod-filter', 'm', 'all', S.mod, 'Todas', up.length) + mods.map((m) => ch('mod-filter', 'm', m, S.mod, `${MOD_ICON[m] || '🏁'} ${esc(m)}`, up.filter((g) => g.modality === m).length, modClass(m))).join('')) : '',
+    fmts.length ? sec('Formato', ch('fsub-filter', 's', 'all', S.fsub, 'Todos', null) + fmts.map((f) => ch('fsub-filter', 's', f, S.fsub, esc(f), inMod.filter((g) => g.subtype === f && okKind(g)).length)).join('')) : '',
+    kinds.length ? sec('Tipo de prueba', ch('kind-filter', 'k', 'all', S.kind, 'Todas', null) + kinds.map(([k, n]) => ch('kind-filter', 'k', k, S.kind, KIND_LABEL[k], n)).join('')) : '',
+  ].join('');
+  S.fd = { html, has: !!html, active: filtersOn(true) };
+}
+
 function modFilterBar(regs, me = null) {
+  if (me) { runnerFilterModel(regs); return ''; }
   const today = todayISO();
   const upOf = (list) => list.filter((g) => g.date >= today && !g.suspended);
   const mods = MODALITIES.filter((m) => regs.some((g) => g.modality === m));
@@ -567,31 +598,12 @@ function modFilterBar(regs, me = null) {
     ${chip('sub-filter', 's', 'all', S.sub, 'Todos', inMod.length)}
     ${subs.map(([k, n]) => chip('sub-filter', 's', k, S.sub, k === '_none' ? 'Sin formato' : esc(k), n)).join('')}
   </div>` : '';
-  const base = upOf(regFilter(regs));
-  const mates = (g) => (g.entries || []).some((e) => e.runner_id !== me.id);
-  const free = (g) => !(g.entries || []).some((e) => e.runner_id === me.id) && !(g.results || []).some((x) => x.runner_id === me.id);
-  const whoRow = me ? `<div class="modbar whobar" role="group" aria-label="Filtrar por situación">
-    ${chip('who-filter', 'w', 'all', S.who, 'Todas', base.length)}
-    ${chip('who-filter', 'w', 'mates', S.who, '👥 Con compañeros', base.filter(mates).length)}
-    ${chip('who-filter', 'w', 'free', S.who, '➕ Aún no estoy apuntado', base.filter(free).length)}
-  </div>` : '';
-  const shown = upOf(regFilter(regs, me));
+  const shown = upOf(regFilter(regs, null));
   const people = new Set(shown.flatMap((g) => (g.entries || []).map((e) => e.runner_id))).size;
   const n = shown.length;
-  const sum = filtersOn(me) ? `<p class="hint modsum">${[S.mod !== 'all' ? `${MOD_ICON[S.mod] || ''} <b>${esc(S.mod)}</b>` : '', S.sub !== 'all' ? `<b>${S.sub === '_none' ? 'sin formato' : esc(S.sub)}</b>` : '',
-    me && S.who === 'mates' ? '<b>con compañeros</b>' : '', me && S.who === 'free' ? '<b>sin apuntarme</b>' : '']
-    .filter(Boolean).join(' · ') || 'Filtro activo'}: ${n} carrera${n === 1 ? '' : 's'} próxima${n === 1 ? '' : 's'} · 👥 ${people} compañero${people === 1 ? '' : 's'} apuntado${people === 1 ? '' : 's'}
+  const sum = filtersOn(null) ? `<p class="hint modsum">${[S.mod !== 'all' ? `${MOD_ICON[S.mod] || ''} <b>${esc(S.mod)}</b>` : '', S.sub !== 'all' ? `<b>${S.sub === '_none' ? 'sin formato' : esc(S.sub)}</b>` : ''].filter(Boolean).join(' · ') || 'Filtro activo'}: ${n} carrera${n === 1 ? '' : 's'} próxima${n === 1 ? '' : 's'} · 👥 ${people} compañero${people === 1 ? '' : 's'} apuntado${people === 1 ? '' : 's'}
     <button class="link small" data-act="filters-clear">Quitar filtros</button></p>` : '';
-  if (!me) return modRow + subRow + whoRow + sum;
-  // una sola línea de desplegables: modalidad, (formato) y situación
-  const o = (v, cur, label) => `<option value="${esc(v)}"${cur === v ? ' selected' : ''}>${label}</option>`;
-  const dd = (f, cur, label, opts) => `<select data-filter="${f}" class="${cur !== 'all' ? 'on' : ''}" aria-label="${label}">${opts}</select>`;
-  const bar = `<div class="fbar">
-    ${mods.length >= 2 ? dd('mod', S.mod, 'Modalidad', o('all', S.mod, 'Todas las modalidades') + mods.map((m) => o(m, S.mod, `${MOD_ICON[m] || '🏁'} ${esc(m)} (${upOf(regs).filter((g) => g.modality === m).length})`)).join('')) : ''}
-    ${showSubs ? dd('sub', S.sub, 'Formato', o('all', S.sub, 'Todos los formatos') + subs.map(([k, n]) => o(k, S.sub, `${k === '_none' ? 'Sin formato' : esc(k)} (${n})`)).join('')) : ''}
-    ${dd('who', S.who, 'Situación', o('all', S.who, 'Todas') + o('mates', S.who, `👥 Con compañeros (${base.filter(mates).length})`) + o('free', S.who, `➕ Sin apuntarme (${base.filter(free).length})`))}
-  </div>`;
-  return bar + sum;
+  return modRow + subRow + sum;
 }
 
 /** Lista de carreras agrupada por mes, con cabecera plegable («Diciembre 2026 · 4 carreras · 👥 6»). */
@@ -1118,6 +1130,7 @@ function viewRunnerHome() {
   const upcoming = regs.filter((g) => g.date >= today);
   const past = regs.filter((g) => g.date < today);
   const card = runnerRegCard;
+  modFilterBar(d.registrations, me); // calcula S.fd (botón y ventana de filtros)
   const isMine = (g) => (g.entries || []).some((e) => e.runner_id === me.id) || (g.results || []).some((x) => x.runner_id === me.id);
   const done = byMod((S.team?.races || []).filter((r) => (r.results || []).length));
   const body = S.regView === 'cal'
@@ -1129,10 +1142,10 @@ function viewRunnerHome() {
   return frame(runnerTitle(), `
     ${previewBanner()}
     <div class="toolbar">
-      ${searchBox('runner', 'Buscar carrera, pueblo o compañero…')}
-      <button class="btn primary add-btn wide" data-act="r-new" aria-label="Añadir una carrera que no está" title="Añadir una carrera que no está">＋ Nueva</button>
+      ${searchBox('runner', 'Buscar carrera…')}
+      ${S.fd?.has ? `<button type="button" class="icon-btn fbtn${S.fd.active ? ' on' : ''}" data-act="r-filters" aria-label="Filtros${S.fd.active ? ' (activos)' : ''}" title="Filtros">${icon(ICON_FILTER)}${S.fd.active ? '<i class="fdot"></i>' : ''}</button>` : ''}
+      <button class="btn primary add-btn mini" data-act="r-new" aria-label="Añadir una carrera que no está" title="Añadir una carrera que no está">＋ Nueva</button>
     </div>
-    ${modFilterBar(d.registrations, me)}
     <div id="pulse-box">${normalize(S.q.runner || '').length >= 2 ? '' : teamPulse(d)}</div>
     <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
     ${body}`,
@@ -3050,9 +3063,18 @@ const actions = {
     S.mod = el.dataset.m; S.sub = 'all'; S.calDay = null; store.set(MOD_KEY, S.mod); render();
   },
   'sub-filter'(el) { S.sub = el.dataset.s; render(); },
+  'fsub-filter'(el) { S.fsub = el.dataset.s; render(); },
+  'kind-filter'(el) { S.kind = el.dataset.k; render(); },
   'who-filter'(el) { S.who = el.dataset.w; render(); },
   'filters-clear'() { clearFilters(); render(); },
   'gsearch'() { openGlobalSearch(); },
+  'r-filters'() {
+    const dlg = document.getElementById('dialog');
+    dlg.innerHTML = `<form method="dialog" class="dlg fdlg"><h2>Filtros</h2>
+      ${S.fd?.html || ''}
+      <div class="dlg-actions">${S.fd?.active ? '<button type="button" class="btn" data-act="filters-clear">Quitar filtros</button>' : ''}<button value="" class="btn ghost">Cerrar</button></div></form>`;
+    dlg.onclose = null; dlg.showModal();
+  },
   'pulse-month'(el) {
     const ym = el.dataset.m;
     S.fold.delete(ym);
