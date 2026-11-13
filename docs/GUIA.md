@@ -176,3 +176,26 @@ Si algún día te paso una versión nueva de este archivo, se repite este mismo 
   2. GitHub apaga las tareas automáticas si el repositorio pasa 60 días sin cambios, y te avisa por email. Para reactivarla: **Actions** → *Mantener Supabase despierto* → **Enable workflow**.
 - **Derechos de los corredores (RGPD)**: en **⋯** junto a cada corredor puedes **descargar sus datos** o **borrarle**. Al borrar, eliges si su nombre se queda en el historial de resultados o se sustituye por «Corredor eliminado».
 - **Qué se guarda**: nombre, categoría, inscripciones y resultados. Nada más: ni email, ni teléfono, ni fecha de nacimiento.
+
+## Planificar ruta: conectar Strava
+
+Con esto, en **Planificar ruta** (`/ruta/`) aparece el botón **Strava**. Cada persona conecta su cuenta y elige sus rutas, actividades o segmentos favoritos (con buscador por nombre) sin exportar nada. Los permisos se guardan solo en su móvil; el club no guarda nada.
+
+1. **Crear la app en Strava** (con tu cuenta): entra en <https://www.strava.com/settings/api>.
+   - *Application Name*: «CC Monzón Rutas» (o el que quieras). *Category*: «Visualizer». *Website*: `https://jordixaviermp-commits.github.io/Club/`.
+   - *Authorization Callback Domain*: `jordixaviermp-commits.github.io` (sin https ni barras).
+   - Sube un icono (puede ser `icons/icon-512.png`). Guarda.
+   - Apunta el **Client ID** (un número) y el **Client Secret** (texto largo). **El secreto no se pega en ningún chat ni en el código.**
+2. **Guardar los dos valores en Supabase**: Supabase → tu proyecto → **Edge Functions** → **Secrets** → añade:
+   - `STRAVA_CLIENT_ID` = el número
+   - `STRAVA_CLIENT_SECRET` = el texto largo
+3. **Crear la función**: Supabase → **Edge Functions** → **Deploy a new function** → **Via Editor**.
+   - Nombre: `strava` (exactamente así).
+   - Borra el ejemplo y pega el contenido de `supabase/functions/strava/index.ts` (en GitHub: abre el archivo → «Copy raw file»).
+   - **Deploy**. Después, en los ajustes de la función (*Details* / *Settings*), **desactiva «Verify JWT» / «Enforce JWT verification»** y guarda. Si no se desactiva, la web recibe «401» al conectar.
+4. **Poner el Client ID en la web**: en `ruta/strava.js`, línea `export const STRAVA_CLIENT_ID = '';`, pon el número entre las comillas. (O pásamelo y lo hago yo; el Client ID es público.)
+5. **Probar**: abre Planificar ruta → **Strava** → **Conectar con Strava** → autoriza → elige una ruta.
+
+**Importante: al principio solo funciona con tu cuenta.** Strava deja las apps nuevas con capacidad para **1 atleta** (quien la creó). Para que entre el resto del club, en <https://www.strava.com/settings/api> pide ampliar el límite (*Developer Program* / formulario de revisión). Strava lo revisa a mano: puede tardar semanas y pedir capturas. Hasta entonces, los demás verán un error al conectar y pueden seguir subiendo su archivo .gpx.
+
+Qué lee: solo las rutas, actividades y segmentos favoritos del propio usuario (permisos `read`, `read_all`, `activity:read_all`), para dibujarlos en su móvil. **Desconectar** (en la ventana de Strava) retira el permiso.

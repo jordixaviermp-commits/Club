@@ -1,5 +1,6 @@
 // Planificar ruta: interfaz. Las reglas están en logic.js; el tiempo viene de Open-Meteo y el mapa de OpenStreetMap.
 import * as R from './logic.js';
+import * as SV from './strava.js';
 
 const main = document.getElementById('main');
 const dialog = document.getElementById('dialog');
@@ -47,7 +48,7 @@ const wpType = (id) => WP_TYPES.find((t) => t[0] === id) || WP_TYPES[WP_TYPES.le
 
 // ---------- Estado ----------
 const S = {
-  id: null, name: '', raw: null, reversed: false, track: null, climbs: [], samples: [], tl: null, etas: [], along: null,
+  id: null, name: '', source: null, raw: null, reversed: false, track: null, climbs: [], samples: [], tl: null, etas: [], along: null,
   start: defaultStart(), flat: 27, mass: 80, stops: 0,
   wx: null, wxKey: '', wxErr: '', wxLoading: false,
   view: 'completa', mode: 'viento', arrowsKm: 4, wps: [], addingWp: false,
@@ -61,9 +62,9 @@ function saveLast() {
   store.set(K_LAST, { id: S.id, start: S.start, flat: S.flat, mass: S.mass, stops: S.stops, reversed: S.reversed, wps: S.wps,
     gph: S.gph, every: S.every, feeding: S.feeding, view: S.view, mode: S.mode });
 }
-function saveRecent(id, name, pts) {
+function saveRecent(id, name, pts, source = null) {
   let list = store.get(K_REC, []).filter((r) => r.id !== id);
-  list.unshift({ id, name, pts, at: Date.now() });
+  list.unshift({ id, name, pts, source, at: Date.now() });
   list = list.slice(0, 8);
   while (list.length && !store.set(K_REC, list)) list.pop(); // si no cabe, se van quitando las más antiguas
 }
@@ -150,6 +151,7 @@ function renderHome() {
       <div class="row"><button class="btn" data-act="resume">Seguir</button><button class="linkbtn" data-act="forget">No</button></div></div>` : ''}
     <button class="pick" data-act="file"><span class="ic">⬆️</span><span><b>Archivo</b><span>Sube el archivo .gpx o .fit de la ruta que quieres planificar.</span></span></button>
     <input type="file" id="file" accept=".gpx,.fit,application/gpx+xml,application/octet-stream" hidden>
+    ${SV.stravaReady() ? `<button class="pick" data-act="strava"><span class="ic strava-ic">${STRAVA_SVG}</span><span><b>Strava</b><span>Elige una de tus rutas, actividades o segmentos favoritos, sin exportar nada.</span></span></button>` : ''}
     <button class="pick" data-act="recent"><span class="ic">🕘</span><span><b>Recientes</b><span>Las rutas que ya has planificado en este móvil u ordenador, para repetirlas.</span></span></button>
     <p>¿Sin track a mano? <button class="linkbtn" data-act="example">Probar con una ruta de ejemplo</button></p>
     ${foot()}`;
@@ -167,13 +169,14 @@ async function readFile(file) {
 }
 function openRoute(name, points, settings = null) {
   const pts = Array.isArray(points[0]) ? points : R.decimate(points, 4000);
-  const id = settings?.id || `r${Date.now().toString(36)}`;
-  Object.assign(S, { id, name, raw: pts, reversed: false, wps: [], feeding: false, wx: null, wxKey: '', wxErr: '', cursorD: null });
+  const source = settings?.source || null;
+  const id = settings?.id || (source ? `s-${source.kind}-${source.id}` : `r${Date.now().toString(36)}`);
+  Object.assign(S, { id, name, source, raw: pts, reversed: false, wps: [], feeding: false, wx: null, wxKey: '', wxErr: '', cursorD: null });
   if (settings) {
     for (const k of ['start', 'flat', 'mass', 'stops', 'reversed', 'wps', 'gph', 'every', 'feeding', 'view', 'mode']) if (settings[k] !== undefined) S[k] = settings[k];
     if (S.start < Date.now() - 3600000) { const d = new Date(S.start); const n = new Date(defaultStart()); n.setHours(d.getHours(), d.getMinutes()); S.start = n.getTime(); }
   }
-  saveRecent(id, name, pts);
+  saveRecent(id, name, pts, source);
   fitted = false;
   build(); renderPlan(); fetchWeather();
 }
@@ -218,7 +221,8 @@ function update() {
 function renderTop() {
   const t = S.track;
   document.getElementById('top').innerHTML = `
-    <div class="title-row"><h2>${esc(S.name)}</h2><p class="muted">${dayShort(S.start)} · ${km(t.distance)} km · ${int(t.gain)} m+</p></div>
+    <div class="title-row"><h2>${esc(S.name)}</h2><p class="muted">${dayShort(S.start)} · ${km(t.distance)} km · ${int(t.gain)} m+</p>
+      ${S.source?.url ? `<p class="powered">Powered by <b>Strava</b> · <a href="${esc(S.source.url)}" target="_blank" rel="noopener">Ver en Strava</a></p>` : ''}</div>
     <div class="panel">
       <label>Hora de salida <input type="datetime-local" id="start" value="${localInput(S.start)}"></label>
       <button class="btn block" data-act="best">Mejor hora</button>
@@ -540,6 +544,12 @@ document.addEventListener('click', async (e) => {
   const act = b.dataset.act;
   if (act === 'file') document.getElementById('file').click();
   else if (act === 'recent') showRecent();
+  else if (act === 'strava') openStrava();
+  else if (act === 'sv-connect') SV.connect();
+  else if (act === 'sv-tab') { SV_UI.kind = b.dataset.kind; renderStrava(); ensureLoaded(); }
+  else if (act === 'sv-more') loadMore();
+  else if (act === 'sv-pick') pickStrava(b.dataset.kind, b.dataset.id);
+  else if (act === 'sv-logout') { await SV.disconnect(); dialog.close(); toast('Strava desconectado de este dispositivo'); }
   else if (act === 'close') dialog.close();
   else if (act === 'example') {
     try { const res = await fetch('ejemplo.gpx'); const g = R.parseGPX(await res.text()); openRoute(g.name, g.points); }
@@ -549,7 +559,7 @@ document.addEventListener('click', async (e) => {
     const id = act === 'resume' ? last?.id : b.dataset.id;
     const r = store.get(K_REC, []).find((x) => x.id === id);
     if (dialog.open) dialog.close();
-    if (r) openRoute(r.name, r.pts, act === 'resume' ? last : { id: r.id });
+    if (r) openRoute(r.name, r.pts, act === 'resume' ? { ...last, source: r.source } : { id: r.id, source: r.source });
   } else if (act === 'forget') { store.del(K_LAST); renderHome(); }
   else if (act === 'del-rec') { store.set(K_REC, store.get(K_REC, []).filter((x) => x.id !== b.dataset.id)); showRecent(); }
   else if (act === 'best') bestDeparture();
@@ -590,6 +600,7 @@ document.addEventListener('change', (e) => {
   else if (t.dataset.exp) S.exp[t.dataset.exp] = t.checked;
 });
 document.addEventListener('input', (e) => {
+  if (e.target.id === 'svq') { SV_UI.q = e.target.value; renderStravaList(); return; }
   if (e.target.id === 'arrows') { S.arrowsKm = +e.target.value; document.getElementById('arrowsv').textContent = `${S.arrowsKm} km`; drawMap(); }
 });
 document.addEventListener('pointerdown', (e) => { if (e.target.closest('#psvg')) profilePick(e); });
@@ -599,4 +610,81 @@ document.addEventListener('pointermove', (e) => { if (e.buttons && e.target.clos
 document.addEventListener('dragover', (e) => e.preventDefault());
 document.addEventListener('drop', (e) => { e.preventDefault(); const f = e.dataTransfer?.files?.[0]; if (f) readFile(f); });
 
+// ---------- Strava ----------
+const STRAVA_SVG = '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="#FC4C02" d="M15.4 17.9l-2.1-4.1h-3.1l5.2 10.2 5.2-10.2h-3.1z"/><path fill="#FC4C02" d="M10.2 0L3.3 13.8h4.1l2.8-5.5 2.8 5.5h4.1z" opacity=".6"/></svg>';
+const SV_UI = { kind: 'routes', items: { routes: [], activities: [], segments: [] }, page: {}, done: {}, q: '', loading: false, err: '' };
+const SV_TABS = [['routes', 'Rutas'], ['activities', 'Actividades'], ['segments', 'Segmentos']];
+
+function openStrava() {
+  if (!SV.session()) {
+    dialog.innerHTML = `<div class="dlg"><h3>Strava <button class="linkbtn" data-act="close">Cerrar</button></h3>
+      <p>Conecta tu cuenta para elegir tus rutas, actividades o segmentos favoritos sin exportar nada.</p>
+      <p class="hint">Solo se leen tus rutas, actividades y segmentos para dibujarlos aquí. El permiso se guarda solo en este dispositivo y lo puedes quitar cuando quieras.</p>
+      <button class="btn strava block" data-act="sv-connect">Conectar con Strava</button></div>`;
+    return dialog.showModal();
+  }
+  renderStrava(); if (!dialog.open) dialog.showModal(); ensureLoaded();
+}
+function renderStrava() {
+  const who = SV.session()?.athlete;
+  dialog.innerHTML = `<div class="dlg sv"><h3>Strava <button class="linkbtn" data-act="close">Cerrar</button></h3>
+    <div class="seg">${SV_TABS.map(([k, l]) => `<button data-act="sv-tab" data-kind="${k}" class="${SV_UI.kind === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+    <input id="svq" type="search" placeholder="Buscar por nombre" value="${esc(SV_UI.q)}" autocomplete="off">
+    <div id="svlist"></div>
+    <p class="powered">Powered by <b>Strava</b>${who ? ` · ${esc(who.firstname || '')}` : ''} · <button class="linkbtn" data-act="sv-logout">Desconectar</button></p></div>`;
+  renderStravaList();
+}
+function renderStravaList() {
+  const el = document.getElementById('svlist');
+  if (!el) return;
+  const k = SV_UI.kind, all = SV_UI.items[k];
+  const list = SV_UI.q ? all.filter((x) => SV.matches(SV_UI.q, x.name)) : all;
+  const empty = { routes: 'No tienes rutas creadas en Strava.', activities: 'No hay actividades con recorrido GPS.', segments: 'No tienes segmentos favoritos.' }[k];
+  el.innerHTML = `${SV_UI.err ? `<p class="warn">${esc(SV_UI.err)}</p>` : ''}
+    <ul class="mini-list">${list.map((x) => `<li class="tappable"><button class="sv-item" data-act="sv-pick" data-kind="${k}" data-id="${esc(x.id)}">
+      <b>${esc(x.name)}</b><small class="muted">${km(x.distance || 0)} km${x.gain ? ` · ${int(x.gain)} m+` : ''}${x.extra ? ` · ${esc(x.extra)}` : ''}${x.date ? ` · ${new Date(x.date).toLocaleDateString('es-ES')}` : ''}</small></button></li>`).join('')}</ul>
+    ${SV_UI.loading ? '<p class="hint">Cargando…</p>' : ''}
+    ${!SV_UI.loading && !list.length && SV_UI.done[k] ? `<p class="muted">${SV_UI.q ? 'Nada con ese nombre.' : empty}</p>` : ''}
+    ${!SV_UI.loading && !SV_UI.done[k] && SV_UI.page[k] ? `<button class="btn small" data-act="sv-more">${SV_UI.q ? 'Buscar también en las más antiguas' : 'Cargar más'}</button>` : ''}`;
+}
+async function loadMore() {
+  const k = SV_UI.kind;
+  if (SV_UI.loading || SV_UI.done[k]) return;
+  SV_UI.loading = true; SV_UI.err = ''; renderStravaList();
+  try {
+    const page = (SV_UI.page[k] || 0) + 1;
+    // si hay búsqueda, se siguen pidiendo páginas (hasta 5) mientras no aparezca nada
+    let got = 0, p = page;
+    do {
+      const { items, last } = await SV.listPage(k, p);
+      SV_UI.items[k].push(...items); SV_UI.page[k] = p;
+      if (last) { SV_UI.done[k] = true; break; }
+      got += SV_UI.q ? items.filter((x) => SV.matches(SV_UI.q, x.name)).length : items.length;
+      p++;
+    } while (SV_UI.q && got === 0 && p < page + 5);
+  } catch (e) {
+    SV_UI.err = e.status === 401 ? 'Strava ha retirado el permiso: vuelve a conectar.' : e.status === 429 ? 'Strava limita las consultas: prueba en 15 minutos.' : `No se ha podido leer de Strava (${e.message}).`;
+    if (e.status === 401) { SV_UI.loading = false; return openStrava(); }
+  }
+  SV_UI.loading = false; renderStravaList();
+}
+function ensureLoaded() { if (!SV_UI.page[SV_UI.kind] && !SV_UI.done[SV_UI.kind]) loadMore(); }
+async function pickStrava(kind, id) {
+  const item = SV_UI.items[kind].find((x) => x.id === id);
+  if (!item) return;
+  toast('Cargando el recorrido de Strava…');
+  try {
+    const pts = await SV.loadTrack(item);
+    if (pts.length < 2) throw new Error('no tiene recorrido GPS');
+    dialog.close();
+    openRoute(item.name, pts, { source: { kind, id, url: item.url } });
+  } catch (e) { toast(`No se ha podido cargar: ${e.message}`, true); }
+}
+
 renderHome();
+SV.handleRedirect().then((r) => {
+  if (!r) return;
+  if (r === 'connected') { toast('Strava conectado'); openStrava(); }
+  else if (r === 'denied') toast('No has dado permiso en Strava', true);
+  else toast(`No se ha podido conectar con Strava: ${r.slice(6)}`, true);
+});
