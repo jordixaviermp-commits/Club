@@ -2,7 +2,7 @@
 import { CONFIG } from './config.js';
 import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
-  CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, parseKm, kmText, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
+  CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, parseKm, kmText, socialAudit, resKeyOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
   extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
@@ -304,7 +304,7 @@ function render() {
     html = ({
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
       carreras: S.draft ? viewRaceEdit : viewRaces,
-      resumen: viewSummary, corredores: viewRunners, contratos: viewContracts, computo: viewSeasonCount, informe: viewSeasonReport, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
+      resumen: viewSummary, corredores: viewRunners, contratos: viewContracts, computo: viewSeasonCount, informe: viewSeasonReport, publicaciones: viewPublications, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
       vista: () => (S.preview && S.runnerData ? runnerScreen(parseRoute().id || '') : viewRunners()),
       equipo: () => (S.preview ? viewTeam() : viewSummary()),
     }[view] || viewRegistrations)();
@@ -1384,7 +1384,7 @@ function viewSocial() {
   if (!d) return frame('Redes · CC Monzón', '<p class="empty">Cargando…</p>', { actions: '' });
   const posted = new Set(d.posted);
   const up = socialUpcoming(), todo = up.filter((g) => !posted.has(postKey(g)));
-  const chk = (g) => `<label class="check post-check"><input type="checkbox" data-act-change="socpost" data-key="${esc(postKey(g))}" ${posted.has(postKey(g)) ? 'checked' : ''}> ✓ Publicada</label>`;
+  const chk = (g, k = postKey(g)) => `<label class="check post-check"><input type="checkbox" data-act-change="socpost" data-key="${esc(k)}" ${posted.has(k) ? 'checked' : ''}> ✓ ${k.startsWith('res|') ? 'Resultados publicados' : 'Aviso publicado'}</label>`;
   const head = (g) => `<div class="race-head"><div><h3>${esc(g.name)}</h3><p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality)}</div>${typeTag(g)}`;
   return frame('Redes · CC Monzón', `
     <p class="hint">Hola 👋 Estas son las carreras del club para publicar. Marca ✓ las que ya has publicado: la dirección lo verá.</p>
@@ -1394,10 +1394,10 @@ function viewSocial() {
     ${up.length ? up.map((g) => `<article class="card race ${modClass(g.modality)}${posted.has(postKey(g)) ? ' gone' : ''}">${head(g)}
       <p class="count">👥 ${esc((g.people_cat || g.people).join(', '))}</p><div class="row">${chk(g)}</div></article>`).join('') : `<p class="empty">No hay carreras con inscritos en los próximos ${days} días.</p>`}
     <h2 class="section">🏁 Resultados recientes (${d.recent.length})</h2>
-    ${d.recent.length ? d.recent.map((x) => `<article class="card race done-race ${modClass(x.modality)}${posted.has(postKey(x)) ? ' gone' : ''}">${head(x)}
+    ${d.recent.length ? d.recent.map((x) => `<article class="card race done-race ${modClass(x.modality)}${posted.has(resKey(x)) ? ' gone' : ''}">${head(x)}
       ${x.podium.length ? `<p class="pods">${x.podium.map((p) => `${medal(p.position)} ${esc(p.name)}${p.category ? ` <small>${esc(p.category)}</small>` : ''}`).join(' · ')}</p>` : '<p class="muted small">Sin podio.</p>'}
       <p class="count">${x.participants} del club</p>
-      <div class="row">${chk(x)}<button class="btn small" data-act="soc-copy-res" data-key="${esc(postKey(x))}">📋 Copiar</button></div></article>`).join('') : '<p class="empty">No hay resultados de las últimas semanas.</p>'}`,
+      <div class="row">${chk(x, resKey(x))}<button class="btn small" data-act="soc-copy-res" data-key="${esc(resKey(x))}">📋 Copiar</button></div></article>`).join('') : '<p class="empty">No hay resultados de las últimas semanas.</p>'}`,
   { actions: '<button class="icon-btn" data-act="soc-refresh" aria-label="Actualizar">↻</button>' });
 }
 async function copyText(t, okMsg) { try { await navigator.clipboard.writeText(t); toast(okMsg); } catch { prompt('Copia el texto:', t); } }
@@ -1426,17 +1426,18 @@ function weekText(days, list = weekRaces(days)) {
   return `🚴 CC Monzón · carreras de los próximos ${days} días\n\n${list.map((g) => `📅 ${when(g)} · ${g.name}\n${place(g) || g.modality ? `📍 ${[place(g), [g.modality, g.subtype].filter(Boolean).join(' '), g.km ? kmText(g.km) : ''].filter(Boolean).join(' · ')}\n` : ''}👥 ${who(g)}`).join('\n\n')}\n\n📸 Crónica y foto con la equipación, en las 48 h siguientes a la prueba.`;
 }
 /** Casilla «publicada en redes» (se guarda en este móvil). */
-const postCheck = (g) => `<label class="check post-check"><input type="checkbox" data-act-change="post" data-key="${esc(postKey(g))}" ${postedSet().has(postKey(g)) ? 'checked' : ''}> ✓ Publicada en redes</label>`;
+const postCheck = (g, k = postKey(g), label = 'Publicada en redes') => `<label class="check post-check"><input type="checkbox" data-act-change="post" data-key="${esc(k)}" ${postedSet().has(k) ? 'checked' : ''}> ✓ ${label}</label>`;
 /** Tarjeta de una carrera con inscritos (inscripción o carrera ya con resultados) y su casilla de publicada. */
 function postCard(g, done = false) {
   const names = (done ? (g.results || []).map((x) => x.runner_name) : (g.entries || []).map((e) => runnerById(e.runner_id)?.name)).filter(Boolean)
     .sort((a, b) => a.localeCompare(b, 'es'));
   const isDone = done || g.date < todayISO();
-  return `<article class="card race ${modClass(g.modality)}${postedSet().has(postKey(g)) ? ' gone' : ''}"><div class="race-head"><div><h3>${esc(g.name)}</h3>
+  const k = done ? resKey(g) : postKey(g);
+  return `<article class="card race ${modClass(g.modality)}${postedSet().has(k) ? ' gone' : ''}"><div class="race-head"><div><h3>${esc(g.name)}</h3>
     <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality)}</div>${typeTag(g)}
     <p class="count">${isDone ? '🏁 Disputada · ' : ''}👥 ${esc(names.join(', '))}</p>
     ${g.suspended ? '<p class="state-tag">⛔ Suspendida</p>' : ''}
-    <div class="row">${postCheck(g)}<a class="btn small ghost" href="#/${done ? 'carreras' : 'inscripciones'}/${g.id}">Abrir</a></div></article>`;
+    <div class="row">${done ? postCheck(g, k, 'Resultados publicados') : postCheck(g, k, 'Aviso publicado')}<a class="btn small ghost" href="#/${done ? 'carreras' : 'inscripciones'}/${g.id}">Abrir</a></div></article>`;
 }
 function viewWeek() {
   const days = S.weekDays || 14, cal = S.weekView === 'cal';
@@ -1446,7 +1447,7 @@ function viewWeek() {
     const done = S.data.races.filter((r) => (r.results || []).length);
     return frame('Próximas carreras', `${views}
       <p class="hint">Todas las carreras del club, próximas y ya hechas. En cada día sale ✓ si está publicada en redes (½ si hay alguna sin publicar). Toca un día y marca las casillas.</p>
-      ${calendarView(regs, (g) => postCard(g), () => false, { done, doneCard: (r) => postCard(r, true), isPosted: (g) => postedSet().has(postKey(g)) })}`, { back: '#/inscripciones' });
+      ${calendarView(regs, (g) => postCard(g), () => false, { done, doneCard: (r) => postCard(r, true), isPosted: (g) => postedSet().has(g.results ? resKey(g) : postKey(g)) })}`, { back: '#/inscripciones' });
   }
   const list = weekRaces(days), posted = postedSet(), todo = list.filter((g) => !posted.has(postKey(g)));
   return frame('Próximas carreras', `${views}
@@ -1458,7 +1459,59 @@ function viewWeek() {
       ${list.map((g) => postCard(g)).join('')}
       <details class="card"><summary><b>Ver el texto que se copia</b></summary><pre class="week-pre">${esc(weekText(days, todo.length ? todo : list))}</pre></details>`
       : `<p class="empty">No hay carreras con inscritos en los próximos ${days} días.</p>`}
+    <a class="btn block" href="#/publicaciones">📸 Control de publicaciones (resultados pendientes)</a>
     ${socialAdminCard()}`, { back: '#/inscripciones' });
+}
+
+/** Texto de la publicación de resultados de una carrera ya en resultados. */
+const raceResultText = (r) => resultText({ name: r.name, date: r.date, end_date: r.end_date, place: r.place, province: r.province,
+  podium: (r.results || []).filter((x) => x.position >= 1 && x.position <= 3).sort((a, b) => a.position - b.position).map((x) => ({ position: x.position, name: x.runner_name, category: x.category })),
+  participants: (r.results || []).length });
+
+/** Dirección: carpeta de publicaciones en redes: qué falta, qué está hecho y qué tiene alguna anomalía. */
+function viewPublications() {
+  const years = availableYears(S.data.races);
+  if (!years.includes(S.year)) S.year = years[0];
+  const a = pubAudit(S.year);
+  const warn = S.data.socialPosts === null ? '<p class="warn card">Falta ejecutar en Supabase <code>supabase/cambios/2026-11-12-redes.sql</code>: sin él las marcas solo se guardan en este móvil.</p>' : '';
+  const ago = (n) => (n <= 0 ? 'hoy' : n === 1 ? 'ayer' : `hace ${n} días`);
+  const open = (r) => `<a class="btn small ghost" href="#/carreras/${r.id}">Abrir</a>`;
+  const resCard = (x, late = false) => { const r = x.race; return `<article class="card race ${modClass(r.modality)}${late ? ' late' : ''}"><div class="race-head"><div><h3>${esc(r.name)}</h3>
+      <p class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</p><span class="soon${late ? ' now' : ''}">${late ? '⚠️ ' : '⏳ '}terminó ${ago(x.days)}</span></div>${modTag(r.modality)}</div>
+      <p class="pods">${(r.results || []).filter((y) => y.position >= 1 && y.position <= 3).sort((p, q) => p.position - q.position).map((y) => `${medal(y.position)} ${esc(y.runner_name)}${y.category ? ` <small>${esc(y.category)}</small>` : ''}`).join(' · ') || '<span class="muted small">Sin podio</span>'}</p>
+      <p class="count">${(r.results || []).length} del club</p>
+      <div class="row">${postCheck(r, x.key, 'Resultados publicados')}<button class="btn small" data-act="pub-copy" data-id="${r.id}">📋 Copiar texto</button>${open(r)}</div></article>`; };
+  const anomalies = [
+    ...a.resLate.map((x) => ({ icon: '⚠️', text: `Resultados sin publicar desde hace ${x.days} días: <b>${esc(x.race.name)}</b>`, card: resCard(x, true) })),
+    ...a.noResults.map((x) => ({ icon: '❓', text: `<b>${esc(x.reg.name)}</b> terminó ${ago(x.days)} y nadie ha puesto su puesto (${x.people} inscrito${x.people === 1 ? '' : 's'}): no hay resultados que publicar`, link: `#/inscripciones/${x.reg.id}` })),
+    ...a.suspendedPosted.map((x) => ({ icon: '⛔', text: `Se publicó el aviso de <b>${esc(x.name)}</b>, pero la carrera está suspendida: conviene publicar la anulación`, link: `#/inscripciones/${x.id}` })),
+    ...(a.orphans.length ? [{ icon: '🔗', text: `<b>${a.orphans.length}</b> marca${a.orphans.length === 1 ? '' : 's'} de «publicada» sin carrera (se cambió el nombre o la fecha después de marcarla, o se borró): ${esc(a.orphans.slice(0, 3).map((o) => o.key.replace('res|', '').split('|')[1] || o.key).join(', '))}${a.orphans.length > 3 ? '…' : ''}`, orphan: true }] : []),
+  ];
+  return frame('Publicaciones en redes', `
+    ${yearPicker(years)}
+    <div class="rr-kpis pub-kpis">
+      <div class="rr-kpi good"><b>${a.done}</b><span>✅ hechas</span></div>
+      <div class="rr-kpi warn${a.pending ? '' : ' zero'}"><b>${a.pending}</b><span>⏳ pendientes</span></div>
+      <div class="rr-kpi bad${a.anomalies ? '' : ' zero'}"><b>${a.anomalies}</b><span>⚠️ anomalías</span></div>
+    </div>
+    <p class="hint">Cada carrera tiene <b>dos publicaciones</b>: el <b>aviso</b> antes y los <b>resultados</b> unos días después. Marca ✓ cada una cuando esté hecha (el encargado de redes también las marca desde su enlace).</p>
+    ${warn}
+    ${anomalies.length ? `<h2 class="section">⚠️ Anomalías (${a.anomalies})</h2>${anomalies.map((x) => x.card || `<article class="card pen bad-box"><p>${x.icon} ${x.text}</p>
+      ${x.link ? `<a class="btn small" href="${x.link}">Abrir</a>` : ''}${x.orphan ? '<button class="btn small danger ghost" data-act="pub-orphans-del">Quitar esas marcas</button>' : ''}</article>`).join('')}` : '<p class="card pen ok">✅ Sin anomalías.</p>'}
+    ${a.resOld.length ? `<article class="card"><p>📦 <b>${a.resOld.length}</b> carrera${a.resOld.length === 1 ? '' : 's'} de hace más de 45 días sin marca de «resultados publicados». No se vigilan (son de antes de este control), así que no cuentan como pendientes ni anomalías.</p>
+      <button class="btn small" data-act="pub-old-done">✓ Darlas por publicadas</button></article>` : ''}
+    <h2 class="section">🏁 Resultados por publicar (${a.resPending.length})</h2>
+    ${a.resPending.length ? `<p class="hint">Carreras ya disputadas con los resultados que han puesto los corredores. Copia el texto, publícalo y marca ✓. Pasados 7 días sin publicar, salen como anomalía.</p>
+      ${a.resPending.length > 1 ? `<button class="btn ghost" data-act="pub-all-res">✓ Marcar todas como publicadas</button>` : ''}
+      ${a.resPending.map((x) => resCard(x)).join('')}` : '<p class="empty small">No hay resultados pendientes de publicar. 🎉</p>'}
+    ${a.waiting.length ? `<h2 class="section">🕓 A la espera de los resultados (${a.waiting.length})</h2>
+      <p class="hint">Ya se han corrido, pero los corredores aún no han puesto su puesto (tienen 3 días; luego pasan solas a resultados).</p>
+      ${a.waiting.map((x) => `<article class="card"><p><b>${esc(x.reg.name)}</b> · ${esc(when(x.reg))}<br><small class="muted">terminó ${ago(x.days)} · ${x.people} inscrito${x.people === 1 ? '' : 's'}</small></p><a class="btn small ghost" href="#/inscripciones/${x.reg.id}">Abrir</a></article>`).join('')}` : ''}
+    <h2 class="section">📅 Avisos por publicar (${a.avisoPending.length})</h2>
+    ${a.avisoPending.length ? `<p class="hint">Carreras de los próximos 14 días con inscritos y sin aviso publicado.</p>${a.avisoPending.map((x) => postCard(x.reg)).join('')}` : '<p class="empty small">No hay avisos pendientes en los próximos 14 días.</p>'}
+    ${a.resDone.length ? `<details class="card"><summary><b>✅ Resultados ya publicados (${a.resDone.length})</b></summary><ul class="mini-list">${a.resDone.map((x) => `<li><div><b>${esc(x.race.name)}</b><small class="muted">${esc(when(x.race))}</small></div>
+      <label class="check"><input type="checkbox" data-act-change="post" data-key="${esc(x.key)}" checked> ✓</label></li>`).join('')}</ul><p class="hint">Quita la marca si te equivocaste.</p></details>` : ''}
+    ${socialAdminCard()}`, { back: '#/avisos' });
 }
 
 /** Dirección: historial de cambios (quién cambió qué y cuándo). */
@@ -1587,6 +1640,8 @@ function backupDue() {
 }
 /** Clave estable de una carrera para la marca de «publicada» (no cambia al pasar de inscripción a resultados). */
 const postKey = (g) => `${g.date}|${normalize(g.name)}`;
+/** Clave de la publicación de resultados (el aviso previo y los resultados son dos publicaciones distintas). */
+const resKey = resKeyOf;
 /** Marcas de «publicada en redes»: compartidas en la base de datos (o, si falta el SQL, solo en este móvil). */
 const postedSet = () => {
   if (Array.isArray(S.data?.socialPosts)) return new Set(S.data.socialPosts.map((x) => x.key));
@@ -1627,7 +1682,10 @@ function adminAlerts() {
     corrections: (S.data.corrections || []).filter((c) => c.status === 'pendiente'),
   };
 }
-const alertCount = () => { const a = adminAlerts(); return a.circuits.length + a.weekTodo.length + a.backup.length + a.corrections.length; };
+const pubAudit = (year = new Date().getFullYear()) => socialAudit(year, S.data.races, S.data.registrations, Array.isArray(S.data.socialPosts) ? S.data.socialPosts : [...postedSet()].map((key) => ({ key })), todayISO());
+/** Publicaciones que la dirección tiene por hacer: resultados con 3 o más días sin publicar y anomalías. */
+const pubDue = () => { const a = pubAudit(); return a.resPending.filter((x) => x.days >= 3).length + a.anomalies; };
+const alertCount = () => { const a = adminAlerts(); return a.circuits.length + a.weekTodo.length + a.backup.length + a.corrections.length + pubDue(); };
 
 function viewAlerts() {
   const a = adminAlerts();
@@ -1637,6 +1695,7 @@ function viewAlerts() {
   return frame('Avisos', `
     <a class="btn primary block" href="#/noticias">📣 Noticias para los corredores${S.data.announcements ? ` (${S.data.announcements.length})` : ''}</a>
     <a class="btn block" href="#/semana">📅 Próximas carreras (para redes)</a>
+    ${(() => { const p = pubAudit(), due = pubDue(); return `<a class="btn block${due ? ' primary' : ''}" href="#/publicaciones">📸 Publicaciones en redes${due ? ` · ${due} por hacer` : ''}<small class="muted"> · ✅ ${p.done} · ⏳ ${p.pending} · ⚠️ ${p.anomalies}</small></a>`; })()}
     ${none ? '<p class="card pen ok">✅ No tienes nada pendiente.</p>' : ''}
     ${a.week.length ? `<h2 class="section">📅 Para publicar en redes: próximos 7 días (${a.weekTodo.length} sin publicar)</h2>
       <p class="hint">Carreras con inscritos que empiezan esta semana. Copia el texto para el encargado de redes y marca cada una cuando esté publicada.</p>
@@ -2960,6 +3019,18 @@ const actions = {
     const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id);
     if (g) download(`${normalize(g.name).replace(/\W+/g, '-')}.ics`, icsEvent(g), 'text/calendar;charset=utf-8');
   },
+  async 'pub-copy'(el) { const r = S.data.races.find((x) => x.id === el.dataset.id); if (r) await copyText(raceResultText(r), 'Texto copiado'); },
+  async 'pub-all-res'() {
+    const a = pubAudit(S.year);
+    if (!await confirmAction('Marcar como publicadas', `Se marcarán <b>${a.resPending.length}</b> publicaciones de resultados como hechas. Úsalo si ya las habías publicado antes de tener esta pantalla.`, 'Marcar todas', 'primary')) return;
+    await setPostedKeys(a.resPending.map((x) => x.key), true);
+  },
+  async 'pub-old-done'() {
+    const a = pubAudit(S.year);
+    if (!await confirmAction('Marcar como publicadas', `Se marcarán <b>${a.resOld.length}</b> carreras antiguas como «resultados publicados». Así dejan de aparecer.`, 'Marcar', 'primary')) return;
+    await setPostedKeys(a.resOld.map((x) => x.key), true);
+  },
+  async 'pub-orphans-del'() { await setPostedKeys(pubAudit(S.year).orphans.map((o) => o.key), false); toast('Marcas quitadas'); },
   'print-report'() { window.print(); },
   'rep-frozen'(el) { S.repFrozen = el.dataset.v === '1'; render(); },
   async 'rep-freeze'() {
@@ -3020,7 +3091,7 @@ const actions = {
   'soc-refresh'() { loadSocial(); },
   async 'soc-copy'() { const up = socialUpcoming().filter((g) => !new Set(S.socialData.posted).has(postKey(g))); await copyText(socialText(up, S.socDays || 14), 'Texto copiado: pégalo donde publiques'); },
   'soc-wa'() { const up = socialUpcoming().filter((g) => !new Set(S.socialData.posted).has(postKey(g))); window.open('https://wa.me/?text=' + encodeURIComponent(socialText(up, S.socDays || 14)), '_blank'); },
-  async 'soc-copy-res'(el) { const x = S.socialData.recent.find((r) => postKey(r) === el.dataset.key); if (x) await copyText(resultText(x), 'Texto copiado'); },
+  async 'soc-copy-res'(el) { const x = S.socialData.recent.find((r) => resKey(r) === el.dataset.key); if (x) await copyText(resultText(x), 'Texto copiado'); },
   async 'soc-link-new'() {
     await run(async () => { await api.saveSetting('social', { code: newCode() }); await reload(); }, 'Enlace creado: envíaselo al encargado de redes'); render();
   },
