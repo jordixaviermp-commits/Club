@@ -632,3 +632,9 @@ ol.bullets { list-style: decimal; }
 .circ-chips:empty { display: none; }
 .circ-one { grid-column: 1 / -1; }
 .circ-card[open] > .circ-sum { margin-bottom: .6rem; padding-bottom: .5rem; border-bottom: 1px solid var(--line); }
+
+/* Ranking de Equipo: filas tocables */
+.rank li.tappable { cursor: pointer; }
+.rank li.tappable:active { background: var(--accent-2); }
+.rk-name { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-align: left; text-decoration: none; cursor: pointer; }
+.rk-name b::after { content: " ›"; color: var(--muted); font-weight: 400; }

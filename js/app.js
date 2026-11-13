@@ -595,26 +595,28 @@ const upcomingOf = (id) => (S.runnerData?.registrations || []).filter((g) => g.d
 /** Ventana con dónde se ha apuntado un compañero (próximas carreras) y cómo le fue en las últimas. */
 function openMate(id) {
   const d = S.runnerData, today = d.today || todayISO(), meId = d.me.id;
-  const person = teamRoster().find((x) => x.id === id);
+  const person = [...teamRoster(), { id: meId, name: d.me.name }].find((x) => x.id === id);
   if (!person) return;
+  const year = S.year || new Date().getFullYear(), isMe = id === meId;
   const regs = d.registrations.filter((g) => (g.entries || []).some((e) => e.runner_id === id)).sort((a, b) => a.date.localeCompare(b.date));
   const upcoming = regs.filter((g) => g.date >= today), waiting = regs.filter((g) => g.date < today);
-  const done = (S.team?.races || []).filter((r) => (r.results || []).some((x) => x.runner_id === id))
-    .sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+  const doneAll = (S.team?.races || []).filter((r) => r.date.slice(0, 4) === String(year) && (r.results || []).some((x) => x.runner_id === id))
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const done = doneAll.slice(0, 15);
   const row = (g, right = '') => `<li class="mini ${modClass(g.modality)} tappable"><a class="mini-main" href="#/carrera/${g.id}"><b>${esc(g.name)}</b>
     <small class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''} · ${esc(g.modality)}${g.suspended ? ' · ⛔ anulada' : ''}</small></a>${right}</li>`;
-  const withMe = (g) => ((g.entries || []).some((e) => e.runner_id === meId) ? '<span class="done">✓ Tú también</span>' : '');
+  const withMe = (g) => (!isMe && (g.entries || []).some((e) => e.runner_id === meId) ? '<span class="done">✓ Tú también</span>' : '');
   const dlg = document.getElementById('dialog');
   dlg.innerHTML = `<form method="dialog" class="dlg mate">
-    <h2>👤 ${esc(person.name)}</h2>
-    <p class="hint">${upcoming.length ? `Apuntado a <b>${upcoming.length}</b> carrera${upcoming.length === 1 ? '' : 's'} próxima${upcoming.length === 1 ? '' : 's'}. Toca una para verla${S.preview ? '' : ' o apuntarte'}.` : 'No está apuntado a ninguna carrera próxima.'}</p>
+    <h2>👤 ${esc(person.name)}${isMe ? ' <small class="muted">(tú)</small>' : ''}</h2>
+    <p class="hint">${upcoming.length ? `Apuntado a <b>${upcoming.length}</b> carrera${upcoming.length === 1 ? '' : 's'} próxima${upcoming.length === 1 ? '' : 's'}. Toca una para verla${S.preview || isMe ? '' : ' o apuntarte'}.` : `${isMe ? 'No estás apuntado' : 'No está apuntado'} a ninguna carrera próxima.`}</p>
     ${upcoming.length ? `<ul class="mini-list">${upcoming.map((g) => row(g, withMe(g))).join('')}</ul>` : ''}
     ${waiting.length ? `<h3 class="mate-h">🏁 Ya disputadas, sin resultado</h3><ul class="mini-list">${waiting.map((g) => row(g)).join('')}</ul>` : ''}
-    ${done.length ? `<h3 class="mate-h">Últimas carreras</h3><ul class="mini-list">${done.map((r) => {
+    ${done.length ? `<h3 class="mate-h">Carreras de ${year} (${doneAll.length})</h3><ul class="mini-list">${done.map((r) => {
       const x = r.results.find((y) => y.runner_id === id);
       return `<li class="mini ${modClass(r.modality)} tappable"><a class="mini-main" href="#/carrera/race_${r.id}"><b>${esc(r.name)}</b>
         <small class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</small></a>
-        ${x.position ? `<span class="pos">${medal(x.position)} ${x.position}º</span>` : ''}</li>`; }).join('')}</ul>` : ''}
+        ${x.position ? `<span class="pos">${medal(x.position)} ${x.position}º</span>` : ''}</li>`; }).join('')}</ul>${doneAll.length > done.length ? `<p class="hint">…y ${doneAll.length - done.length} más.</p>` : ''}` : (S.team ? `<h3 class="mate-h">Carreras de ${year}</h3><p class="hint">Todavía ninguna con resultado.</p>` : '')}
     <div class="dlg-actions"><button value="" class="btn ghost">Cerrar</button></div></form>`;
   dlg.onclose = null;
   dlg.showModal();
@@ -1838,9 +1840,9 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
   const idle = people.filter((r) => !r.races && r.current);
   const maxR = maxOf(active.map((r) => r.races));
   const rank = `<section class="card"><h2>Corredores${mod ? ` de ${esc(mod)}` : ''}</h2>
-    ${active.length ? `<ol class="rank">${active.map((r, i) => `<li class="${me && r.key === me ? 'me-row' : ''}">
+    ${active.length ? `${!admin && active.some((r) => r.current) ? '<p class="hint">Toca un corredor para ver dónde ha participado.</p>' : ''}<ol class="rank">${active.map((r, i) => `<li class="${me && r.key === me ? 'me-row' : ''}${r.current ? ' tappable' : ''}"${r.current && !admin ? ` data-act="mate-open" data-id="${esc(r.key)}"` : ''}>
       <span class="pos">${i + 1}</span>
-      <div class="rk"><div class="rk-h"><b>${esc(r.name)}</b>${r.km ? ` <small class="muted">${kmText(r.km)}</small>` : ''}${r.current ? '' : ' <small class="muted">(baja)</small>'}
+      <div class="rk"><div class="rk-h">${!r.current ? `<b>${esc(r.name)}</b>` : admin ? `<a class="rk-name" href="#/corredor/${esc(r.key)}"><b>${esc(r.name)}</b></a>` : `<button type="button" class="rk-name" data-act="mate-open" data-id="${esc(r.key)}"><b>${esc(r.name)}</b></button>`}${r.km ? ` <small class="muted">${kmText(r.km)}</small>` : ''}${r.current ? '' : ' <small class="muted">(baja)</small>'}
           <span class="rk-m">${r.p1 ? `🥇${r.p1} ` : ''}${r.p2 ? `🥈${r.p2} ` : ''}${r.p3 ? `🥉${r.p3}` : ''}</span></div>
         <div class="bar seg" style="width:${(r.races / maxR) * 100}%">${MODALITIES.filter((x) => r.mods[x]).map((x) => `<span class="${modClass(x)}" style="flex:${r.mods[x]}" title="${esc(x)}: ${r.mods[x]}"></span>`).join('')}</div></div>
       <span class="rk-n">${r.races}</span></li>`).join('')}</ol>`
