@@ -26,6 +26,19 @@ const store = {
   del(k) { try { localStorage.removeItem(k); } catch { /* modo privado */ } },
 };
 
+/** Aspecto: automático (el del sistema), claro u oscuro. Lo elige cada persona en su móvil. */
+const THEME_KEY = 'monzon-theme';
+const getTheme = () => (['light', 'dark'].includes(store.get(THEME_KEY)) ? store.get(THEME_KEY) : 'auto');
+function applyTheme(t) {
+  if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = t === 'dark' || (t === 'auto' && window.matchMedia?.('(prefers-color-scheme: dark)').matches) ? '#0e151a' : '#284556';
+}
+applyTheme(getTheme());
+const themeLine = () => `<div class="theme-line"><span class="muted">Aspecto de la app:</span><div class="years">${[['auto', '🌓 Automático'], ['light', '☀️ Claro'], ['dark', '🌙 Oscuro']].map(([v, l]) =>
+  `<button class="chip${getTheme() === v ? ' on' : ''}" data-act="theme" data-t="${v}" aria-pressed="${getTheme() === v}">${l}</button>`).join('')}</div>
+  ${getTheme() === 'auto' ? '<small class="muted">Automático sigue el modo claro u oscuro de tu móvil.</small>' : ''}</div>`;
+
 const api = CONFIG.SUPABASE_URL && CONFIG.SUPABASE_KEY && window.supabase
   ? supabaseApi(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY) : demoApi();
 
@@ -1053,7 +1066,7 @@ function viewRunnerMine() {
     <a class="btn block" href="${runnerHref('contrato')}">📄 Mi contrato y mi bonificación</a>
     ${installHint()}
     ${S.preview ? '' : `<p class="center"><button class="link muted" data-act="r-forget">No soy ${esc(me.name)}</button></p>`}
-    ${versionLine()}`,
+    ${themeLine()}${versionLine()}`,
   { rtab: 'mi' });
 }
 
@@ -2582,7 +2595,7 @@ function viewData() {
       <p>Solo se guarda el nombre, la categoría y las carreras de cada corredor. Los datos están en un servidor de la UE (Frankfurt).
       Para dar a un corredor sus datos o borrarlos: «Corredores» → ⋯ junto a su nombre.</p></section>
     ${api.mode === 'demo' ? `<button class="btn ghost block" data-act="demo-reset">Reiniciar datos de demostración</button>` : ''}
-    ${versionLine()}
+    ${themeLine()}${versionLine()}
     <p class="muted center">Sesión: ${esc(S.session?.email)}</p>
     <button class="btn ghost block" data-act="logout">Cerrar sesión</button>`);
 }
@@ -2880,6 +2893,7 @@ const actions = {
   'r-filter'(el) { S.rfilter = S.rfilter === el.dataset.f ? 'todos' : el.dataset.f; render(); },
   'r-sort'(el) { S.rsort = el.dataset.s; render(); },
   'r-manage'() { (S.open ||= {}).rmanage = true; render(); document.getElementById('manage')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
+  'theme'(el) { store.set(THEME_KEY, el.dataset.t); applyTheme(el.dataset.t); render(); },
   'print-report'() { window.print(); },
   'rep-frozen'(el) { S.repFrozen = el.dataset.v === '1'; render(); },
   async 'rep-freeze'() {
