@@ -1,7 +1,46 @@
 {
  "_nota": "Ligas y circuitos que se corren cada año y a los que suele ir gente del club. Se escribe a mano (no lo toca el lector de las federaciones). El campo «subtype» (opcional) rellena el formato. «url» es opcional. Para añadir otra liga, copia un bloque de carrera y cambia source/league/fechas. Comprobar siempre las fechas en la web de la liga. El campo «circuit» (opcional) marca la carrera como puntuable de un circuito con ese nombre: se usa para el podio en la general final (cláusula 9). Escríbelo igual en todas las pruebas de la liga.",
- "updated_at": "2026-11-12",
+ "updated_at": "2026-11-13",
  "races": [
+  {
+   "source": "LIGA",
+   "league": "6a Hivernal de Resistència BTT 2026-27",
+   "date": "2026-12-27",
+   "name": "6a Hivernal de Resistència BTT – Tot Vici en Bici",
+   "place": "La Granada",
+   "province": "Barcelona",
+   "country": "España",
+   "modality": "BTT",
+   "discipline": "BTT",
+   "kind": "Competición",
+   "info": "6a Hivernal de Resistència BTT · Tot Vici en Bici, KPT y Metalbikers"
+  },
+  {
+   "source": "LIGA",
+   "league": "6a Hivernal de Resistència BTT 2026-27",
+   "date": "2027-01-10",
+   "name": "6a Hivernal de Resistència BTT – KPT",
+   "place": "Els Monjos",
+   "province": "Barcelona",
+   "country": "España",
+   "modality": "BTT",
+   "discipline": "BTT",
+   "kind": "Competición",
+   "info": "6a Hivernal de Resistència BTT · Tot Vici en Bici, KPT y Metalbikers"
+  },
+  {
+   "source": "LIGA",
+   "league": "6a Hivernal de Resistència BTT 2026-27",
+   "date": "2027-01-17",
+   "name": "6a Hivernal de Resistència BTT – Metalbikers",
+   "place": "Vilafranca del Penedès",
+   "province": "Barcelona",
+   "country": "España",
+   "modality": "BTT",
+   "discipline": "BTT",
+   "kind": "Competición",
+   "info": "6a Hivernal de Resistència BTT · Tot Vici en Bici, KPT y Metalbikers"
+  },
   {
    "source": "LIGA",
    "league": "Open Maxxis Marathon by Bryton 2027",
