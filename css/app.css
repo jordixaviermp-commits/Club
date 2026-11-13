@@ -772,7 +772,6 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 .pulse-months { height: 96px; padding-top: .8rem; }
 .pulse-col { background: none; border: 0; padding: 0; margin: 0; font: inherit; cursor: pointer; color: inherit; }
 .pulse-col:active .mstack { opacity: .7; }
-.pulse-hint { margin: .3rem 0 0; font-size: .8rem; }
 
 /* ---------- Búsqueda rápida (lupa) ---------- */
 dialog:has(.gsearch) { width: min(94vw, 560px); max-height: 88vh; padding: .8rem; }

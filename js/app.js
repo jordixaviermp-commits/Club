@@ -1107,8 +1107,7 @@ function teamPulse(d) {
     <p class="pulse-sum"><b>${parts}</b> inscripci${parts === 1 ? 'ón' : 'ones'} en <b>${up.length}</b> carrera${up.length === 1 ? '' : 's'} próxima${up.length === 1 ? '' : 's'} · <b>${people}</b> corredor${people === 1 ? '' : 'es'}${mine ? ` · tú estás en <b>${mine}</b>` : ''}</p>
     <div class="months pulse-months" role="group" aria-label="Inscripciones del equipo por mes">${cols.map(([ym, m]) => `<button type="button" class="mcol pulse-col" data-act="pulse-month" data-m="${ym}" aria-label="${MES[Number(ym.slice(5)) - 1]}: ${m.total} inscripciones en ${m.races} carreras">
       <em>${m.total}</em><div class="mstack" style="height:${(m.total / mx) * 100}%">${MODALITIES.filter((x) => m.mods[x]).map((x) => `<span class="${modClass(x)}" style="flex:${m.mods[x]}" title="${esc(x)}: ${m.mods[x]}"></span>`).join('')}</div>
-      <b>${MES[Number(ym.slice(5)) - 1]}</b></button>`).join('')}</div>
-    <p class="hint pulse-hint">Cada barra suma las inscripciones del equipo ese mes. Toca un mes para verlo. ¿Echas en falta alguna? Búscala o pulsa <b>＋ Nueva</b>.</p></section>`;
+      <b>${MES[Number(ym.slice(5)) - 1]}</b></button>`).join('')}</div></section>`;
 }
 
 function viewRunnerHome() {
@@ -1131,8 +1130,8 @@ function viewRunnerHome() {
       ${searchBox('runner', 'Buscar carrera, pueblo o compañero…')}
       <button class="btn primary add-btn wide" data-act="r-new" aria-label="Añadir una carrera que no está" title="Añadir una carrera que no está">＋ Nueva</button>
     </div>
-    <div id="pulse-box">${normalize(S.q.runner || '').length >= 2 ? '' : teamPulse(d)}</div>
     ${modFilterBar(d.registrations, me)}
+    <div id="pulse-box">${normalize(S.q.runner || '').length >= 2 ? '' : teamPulse(d)}</div>
     <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
     ${body}`,
   { rtab: '', actions: `${viewToggle()}${S.preview ? '' : '<button class="icon-btn" data-act="r-refresh" aria-label="Actualizar">↻</button>'}` });
