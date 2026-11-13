@@ -54,7 +54,7 @@ test('distancia, desnivel y subida del ejemplo', async () => {
   const climbs = R.findClimbs(t.points);
   assert.equal(climbs.length, 1);
   assert.ok(climbs[0].avg >= 0.03 && climbs[0].gain > 250);
-  assert.equal(R.climbCategory(climbs[0]), '3');
+  assert.equal(R.climbCategory(climbs[0]), '2'); // 10,4 km al 3,1 %
 });
 
 test('modelo de velocidad: en llano da la media indicada, subiendo va más lento y bajando tiene tope', () => {
@@ -104,4 +104,40 @@ test('tomas de avituallamiento y GPX exportado con waypoints y horas', async () 
   assert.match(gpx, /<wpt lat="1.000000" lon="2.000000"><name>Agua &amp; más<\/name>/);
   assert.match(gpx, /<time>1970-01-01T00:00:00.000Z<\/time>/);
   assert.equal(R.parseGPX(gpx).points.length, 3);
+});
+
+/** Perfil sintético: puntos cada 50 m con altitud dada por f(d en km). */
+const perfil = (km, f) => R.buildTrack(Array.from({ length: Math.round(km * 20) + 1 }, (_, i) => ({ lat: 41.9, lon: 0.19 + (i * 50) / 82900, ele: f((i * 50) / 1000) })));
+
+test('subidas: una larga y tendida con rellanos y bajaditas cuenta como una sola', () => {
+  // 0-20 km llano a 100 m; 20-50 km sube a ~720 m (≈2,1 %) con rellanos y dos bajadas de ~20 m; luego baja
+  const f = (k) => {
+    if (k < 20) return 100 + 3 * Math.sin(k * 3);
+    if (k < 50) { const x = (k - 20) / 30; return 100 + 620 * x + 8 * Math.sin(k * 4) - (Math.abs(k - 31) < 0.6 ? 20 : 0) - (Math.abs(k - 42) < 0.6 ? 20 : 0); }
+    return Math.max(100, 720 - (k - 50) * 40);
+  };
+  const t = perfil(70, f);
+  const c = R.findClimbs(t.points);
+  assert.equal(c.length, 1, JSON.stringify(c.map((x) => [x.start, x.gain])));
+  assert.ok(c[0].gain > 500, `sube ${c[0].gain}`);
+  assert.ok(c[0].start / 1000 > 18 && c[0].start / 1000 < 24, `empieza en ${c[0].start}`);
+});
+
+test('subidas: los repechos cortos siguen saliendo y un falso llano no es subida', () => {
+  const corto = perfil(10, (k) => (k < 4 ? 200 : k < 5.2 ? 200 + (k - 4) * 60 : 272 - Math.min(72, (k - 5.2) * 50)));
+  assert.equal(R.findClimbs(corto.points).length, 1);
+  const falso = perfil(20, (k) => 200 + k * 10); // 1 % durante 20 km
+  assert.equal(R.findClimbs(falso.points).length, 0);
+});
+
+test('avituallamiento inteligente: reparte el total y no pone tomas en las bajadas', () => {
+  // 0-20 km llano, 20-35 km bajada al 5 %, 35-70 km llano
+  const tr = perfil(70, (k) => (k < 20 ? 800 : k < 35 ? 800 - (k - 20) * 50 : 50));
+  const tl = R.timeline(tr.points, { flatKmh: 27 });
+  const plan = R.feedingPlan(tr.points, tl.t, { gph: 90, everyMin: 30, smart: true });
+  const total = Math.round((90 * tl.total) / 3600000 / 10) * 10;
+  assert.ok(Math.abs(plan.reduce((a, f) => a + f.grams, 0) - total) <= plan.length * 5, 'suma ≈ total');
+  for (const f of plan) assert.ok(!(f.d > 20200 && f.d < 34800), `toma en la bajada, km ${f.d / 1000}`);
+  assert.ok(plan.every((f, i) => i === 0 || f.ms - plan[i - 1].ms >= 15 * 60000));
+  assert.ok(plan[plan.length - 1].ms <= tl.total - 5 * 60000);
 });

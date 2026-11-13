@@ -217,32 +217,49 @@ export function timeAt(points, t, d) {
 }
 
 /**
- * Subidas: desde un mínimo hasta la cima, admitiendo descansos que no bajen más de
- * max(15 m, 25 % de lo subido). Se quedan las de ≥ `minGain` m, ≥ `minLen` m y ≥ `minAvg` de media.
+ * Subidas. 1) Se cortan tramos de subida (de un mínimo a una cima) cuando se baja más de
+ * max(15 m, 25 % de lo subido). 2) Se juntan los tramos seguidos de una misma subida: si el
+ * siguiente llega más alto y la bajada entre medias es pequeña (≤ max(25 m, 30 % del total)).
+ * 3) Se recortan la aproximación y el final llanos (< 1,5 % en 1 km). 4) Se quedan las de
+ * ≥ `minGain` m y ≥ `minLen` m con media ≥ `minAvg`, o las largas y tendidas (≥ `longGain` m
+ * con media ≥ `longAvg`), que en carretera también son puerto.
  */
-export function findClimbs(points, { minGain = 40, minLen = 500, minAvg = 0.03 } = {}) {
-  const out = [];
+export function findClimbs(points, { minGain = 40, minLen = 500, minAvg = 0.03, longGain = 150, longAvg = 0.02, flat = 0.015 } = {}) {
+  const es = (i) => points[i].es;
+  // 1) tramos de subida
+  const segs = [];
   let lo = 0, hi = 0;
-  const close = () => {
-    // se recortan la aproximación y el final suaves (menos de la media mínima en 500 m) para que la media sea la de la subida de verdad
-    let s = lo, e = hi;
-    while (s < e && points[e].d - points[s].d > minLen && gradeAt(points, points[s].d + 250, 250) < minAvg) s++;
-    while (e > s && points[e].d - points[s].d > minLen && gradeAt(points, points[e].d - 250, 250) < minAvg) e--;
-    const a = points[s], b = points[e];
-    const gain = b.es - a.es, len = b.d - a.d;
-    if (gain >= minGain && len >= minLen && gain / len >= minAvg) {
-      let maxG = 0;
-      for (let d = a.d; d <= b.d - 100; d += 50) maxG = Math.max(maxG, gradeAt(points, d + 50, 50));
-      out.push({ start: a.d, end: b.d, length: len, gain, avg: gain / len, max: Math.max(maxG, gain / len), top: b.es, startIdx: s, endIdx: e });
-    }
-  };
   for (let i = 1; i < points.length; i++) {
-    const e = points[i].es;
-    if (e > points[hi].es) hi = i;
-    else if (points[hi].es - e > Math.max(15, 0.25 * (points[hi].es - points[lo].es))) { close(); lo = hi = i; }
-    if (e < points[lo].es) lo = hi = i;
+    const e = es(i);
+    if (e > es(hi)) hi = i;
+    else if (es(hi) - e > Math.max(15, 0.25 * (es(hi) - es(lo)))) { if (hi > lo) segs.push([lo, hi]); lo = hi = i; }
+    if (e < es(lo)) lo = hi = i;
   }
-  close();
+  if (hi > lo) segs.push([lo, hi]);
+  // 2) juntar los de una misma subida
+  const merged = [];
+  for (const sg of segs) {
+    const prev = merged[merged.length - 1];
+    if (prev) {
+      const drop = es(prev[1]) - es(sg[0]);
+      if (es(sg[1]) > es(prev[1]) && drop <= Math.max(25, 0.3 * (es(sg[1]) - es(prev[0])))) { prev[1] = sg[1]; continue; }
+    }
+    merged.push([...sg]);
+  }
+  // 3) y 4) recortar lo llano y quedarse con las que cuentan
+  const out = [];
+  for (const [l, h] of merged) {
+    let s = l, e = h;
+    while (s < e && points[e].d - points[s].d > minLen && gradeAt(points, points[s].d + 500, 500) < flat) s++;
+    while (e > s && points[e].d - points[s].d > minLen && gradeAt(points, points[e].d - 500, 500) < flat) e--;
+    const a = points[s], b = points[e];
+    const gain = b.es - a.es, len = b.d - a.d, avg = len > 0 ? gain / len : 0;
+    if (len < minLen || gain < minGain) continue;
+    if (!(avg >= minAvg || (gain >= longGain && avg >= longAvg))) continue;
+    let maxG = 0;
+    for (let d = a.d; d <= b.d - 100; d += 50) maxG = Math.max(maxG, gradeAt(points, d + 50, 50));
+    out.push({ start: a.d, end: b.d, length: len, gain, avg, max: Math.max(maxG, avg), top: b.es, startIdx: s, endIdx: e });
+  }
   return out;
 }
 
@@ -322,7 +339,7 @@ export function forecastUrl(samples, fromMs, toMs) {
   const q = new URLSearchParams({
     latitude: samples.map((s) => s.lat.toFixed(3)).join(','),
     longitude: samples.map((s) => s.lon.toFixed(3)).join(','),
-    hourly: 'temperature_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m',
+    hourly: 'temperature_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,cloud_cover,relative_humidity_2m,dew_point_2m,uv_index,is_day',
     wind_speed_unit: 'kmh', timezone: 'GMT', timeformat: 'unixtime',
     start_date: day(fromMs - 3600000), end_date: day(toMs + 3600000),
   });
@@ -335,13 +352,14 @@ export function weatherAlong(samples, etas, response) {
   return samples.map((s, i) => {
     const h = list[i]?.hourly;
     if (!h) return { ...s, eta: etas[i] };
-    const at = (k) => interpHourly(h.time, h[k], etas[i]);
+    const at = (k) => (h[k] ? interpHourly(h.time, h[k], etas[i]) : null);
     const wind = at('wind_speed_10m');
     const dir = interpDirection(h.time, h.wind_direction_10m, h.wind_speed_10m, etas[i]);
     const near = h.time.reduce((b, x, j) => (Math.abs(x * 1000 - etas[i]) < Math.abs(h.time[b] * 1000 - etas[i]) ? j : b), 0);
     return {
       ...s, eta: etas[i], temp: at('temperature_2m'), feels: at('apparent_temperature'), rainProb: at('precipitation_probability'),
       rain: at('precipitation'), code: h.weather_code[near], wind, gust: at('wind_gusts_10m'), windFrom: dir,
+      clouds: at('cloud_cover'), hum: at('relative_humidity_2m'), dew: at('dew_point_2m'), uv: at('uv_index'), isDay: h.is_day ? h.is_day[near] : null,
       rel: windRelative(s.heading, dir, wind),
     };
   });
@@ -381,19 +399,53 @@ export function departureScore(wx, darkMin = 0) {
   return s / wx.length + darkMin * 0.3;
 }
 
+/** Distancia (m) a la que vas a los `ms` desde la salida. */
+export function distAtTime(points, t, ms) {
+  let a = 0, b = t.length - 1;
+  if (ms <= 0) return 0;
+  if (ms >= t[b]) return points[b].d;
+  while (a < b) { const m = (a + b) >> 1; if (t[m] < ms) a = m + 1; else b = m; }
+  const f = t[a] === t[a - 1] ? 0 : (ms - t[a - 1]) / (t[a] - t[a - 1]);
+  return points[a - 1].d + (points[a].d - points[a - 1].d) * f;
+}
+
 /**
- * Tomas de comida: cada `everyMin` minutos (la primera a los 25), con los gramos de hidratos
- * para cubrir `gph` g/h. Devuelve [{ ms, d, grams }]. `t`: línea de tiempos de timeline().
+ * Tomas de comida. Devuelve [{ ms, d, grams, moved }].
+ * Manual: una cada `everyMin` (la primera a los `firstMin`), con lo que toca a `gph` g/h en ese intervalo.
+ * Inteligente (`smart`): las mismas horas hasta `endGapMin` antes de llegar, los hidratos de toda la
+ * salida (redondeados a 10 g) a partes iguales, y cada toma se mueve hasta `shiftMin` minutos para no
+ * caer en una bajada (< −3 %) ni en una rampa dura (> 7 %): se come mejor en llano o subiendo suave.
  */
-export function feedingPlan(points, t, { gph = 90, everyMin = 30, firstMin = 25 } = {}) {
+export function feedingPlan(points, t, { gph = 90, everyMin = 30, firstMin = 25, smart = false, endGapMin = 20, shiftMin = 8 } = {}) {
   const total = t[t.length - 1];
+  const at = (ms) => distAtTime(points, t, ms);
+  if (!smart) {
+    const out = [];
+    const each = Math.round((gph * everyMin) / 60);
+    for (let ms = firstMin * 60000; ms < total - 10 * 60000; ms += everyMin * 60000) out.push({ ms, d: at(ms), grams: each, moved: '' });
+    return out;
+  }
+  const times = [];
+  for (let ms = firstMin * 60000; ms <= total - endGapMin * 60000; ms += everyMin * 60000) times.push(ms);
+  if (!times.length && total > 45 * 60000) times.push(Math.round(total / 2 / 60000) * 60000);
+  if (!times.length) return [];
+  const totalGrams = Math.round((gph * total) / 3600000 / 10) * 10;
+  const grams = Math.max(5, Math.round(totalGrams / times.length / 5) * 5);
+  const terrain = (ms) => gradeAt(points, at(ms), 150);
+  const cost = (g) => (g < -0.03 ? 100 : 0) + (g > 0.07 ? 50 : 0) + Math.abs(g) * 100;
   const out = [];
-  const each = Math.round((gph * everyMin) / 60);
-  for (let ms = firstMin * 60000; ms < total - 10 * 60000; ms += everyMin * 60000) {
-    let i = 1;
-    while (i < t.length - 1 && t[i] < ms) i++;
-    const f = t[i] === t[i - 1] ? 0 : (ms - t[i - 1]) / (t[i] - t[i - 1]);
-    out.push({ ms, d: points[i - 1].d + (points[i].d - points[i - 1].d) * f, grams: each });
+  for (const base of times) {
+    const prev = out[out.length - 1]?.ms ?? -Infinity;
+    let best = base, bestC = Infinity;
+    for (let dm = -shiftMin; dm <= shiftMin; dm++) {
+      const ms = base + dm * 60000;
+      if (ms < 10 * 60000 || ms > total - 5 * 60000 || ms - prev < 15 * 60000) continue;
+      const c = cost(terrain(ms)) + Math.abs(dm) * 0.6;
+      if (c < bestC) { bestC = c; best = ms; }
+    }
+    const g0 = terrain(base);
+    const moved = best === base ? '' : g0 < -0.03 ? 'bajada' : g0 > 0.07 ? 'rampa' : '';
+    out.push({ ms: best, d: at(best), grams, moved });
   }
   return out;
 }

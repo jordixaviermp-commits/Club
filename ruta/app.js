@@ -51,15 +51,17 @@ const S = {
   start: defaultStart(), flat: 27, mass: 80, stops: 0,
   wx: null, wxKey: '', wxErr: '', wxLoading: false,
   view: 'completa', mode: 'viento', arrowsKm: 4, wps: [], addingWp: false,
-  feeding: false, gph: 90, every: 30, feedOnMap: true,
+  feeding: false, gph: 90, every: 30, feedOnMap: true, feedMode: 'smart', custom: null,
+  carry: { bid: { n: 2, g: 0 }, gel: { n: 0, g: 25 }, bar: { n: 0, g: 30 } },
   exp: { wps: true, climbs: false, tomas: false, times: false }, cursorD: null,
+  charts: ['viento', 'temp', 'lluvia', 'humedad', 'uv'], bgProfile: true, tCursor: null,
 };
-let map = null, mapLayer = null, cursorMarker = null, fitted = false;
+let map = null, mapLayer = null, arrowLayer = null, cursorMarker = null, fitted = false;
 
 function saveLast() {
   if (!S.id) return;
   store.set(K_LAST, { id: S.id, start: S.start, flat: S.flat, mass: S.mass, stops: S.stops, reversed: S.reversed, wps: S.wps,
-    gph: S.gph, every: S.every, feeding: S.feeding, view: S.view, mode: S.mode });
+    gph: S.gph, every: S.every, feeding: S.feeding, view: S.view, mode: S.mode, charts: S.charts, bgProfile: S.bgProfile, feedMode: S.feedMode, custom: S.custom, carry: S.carry });
 }
 function saveRecent(id, name, pts) {
   let list = store.get(K_REC, []).filter((r) => r.id !== id);
@@ -168,9 +170,9 @@ async function readFile(file) {
 function openRoute(name, points, settings = null) {
   const pts = Array.isArray(points[0]) ? points : R.decimate(points, 4000);
   const id = settings?.id || `r${Date.now().toString(36)}`;
-  Object.assign(S, { id, name, raw: pts, reversed: false, wps: [], feeding: false, wx: null, wxKey: '', wxErr: '', cursorD: null });
+  Object.assign(S, { id, name, raw: pts, reversed: false, wps: [], feeding: false, custom: null, wx: null, wxKey: '', wxErr: '', cursorD: null, tCursor: null });
   if (settings) {
-    for (const k of ['start', 'flat', 'mass', 'stops', 'reversed', 'wps', 'gph', 'every', 'feeding', 'view', 'mode']) if (settings[k] !== undefined) S[k] = settings[k];
+    for (const k of ['start', 'flat', 'mass', 'stops', 'reversed', 'wps', 'gph', 'every', 'feeding', 'view', 'mode', 'charts', 'bgProfile', 'feedMode', 'custom', 'carry']) if (settings[k] !== undefined) S[k] = settings[k];
     if (S.start < Date.now() - 3600000) { const d = new Date(S.start); const n = new Date(defaultStart()); n.setHours(d.getHours(), d.getMinutes()); S.start = n.getTime(); }
   }
   saveRecent(id, name, pts);
@@ -284,6 +286,8 @@ function initMap() {
   map = L.map('map', { zoomControl: true, attributionControl: true });
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(map);
   mapLayer = L.layerGroup().addTo(map);
+  arrowLayer = L.layerGroup().addTo(map);
+  map.on('zoomend', drawArrows);
   map.on('click', (e) => {
     if (!S.addingWp) return;
     const d = R.nearestD(S.track.points, e.latlng.lat, e.latlng.lng);
@@ -322,15 +326,7 @@ function drawMap() {
     const w = S.along?.[k];
     L.polyline(line, { color: segColor(w), weight: 6, opacity: .9 }).addTo(mapLayer);
   }
-  if (S.along) {
-    for (let d = S.arrowsKm * 500; d < S.track.distance; d += S.arrowsKm * 1000) {
-      const p = R.pointAt(P, d), w = wxAt(d);
-      if (!w || w.wind === undefined) continue;
-      const size = Math.round(14 + Math.min(20, w.wind * 0.6));
-      L.marker([p.lat, p.lon], { interactive: false, icon: L.divIcon({ className: '', iconSize: [size, size],
-        html: `<div class="warrow" style="font-size:${size}px;line-height:${size}px;color:${segColor(w)};transform:rotate(${(w.windFrom + 180) % 360}deg)">↑</div>` }) }).addTo(mapLayer);
-    }
-  }
+  drawArrows();
   S.climbs.forEach((c, i) => {
     const p = R.pointAt(P, c.start);
     L.marker([p.lat, p.lon], { icon: L.divIcon({ className: '', iconSize: [24, 24], html: `<div class="cnum" style="background:${R.gradeColor(c.avg)}">${i + 1}</div>` }) })
@@ -344,7 +340,7 @@ function drawMap() {
   if (S.feeding && S.feedOnMap) feeding().forEach((f, i) => {
     const p = R.pointAt(P, f.d);
     L.marker([p.lat, p.lon], { icon: L.divIcon({ className: '', iconSize: [22, 22], html: `<div class="cnum toma">${i + 1}</div>` }) })
-      .bindPopup(`<b>Toma ${i + 1}</b><br>${hm(S.start + f.ms)} · km ${km(f.d)} · ${f.grams} g`).addTo(mapLayer);
+      .bindPopup(`<b>${esc(tomaLabel(f, i))}</b><br>${hm(S.start + f.ms)} · km ${km(f.d)} · ${f.grams} g`).addTo(mapLayer);
   });
   const s = P[0], e = P[P.length - 1];
   L.circleMarker([s.lat, s.lon], { radius: 7, color: '#fff', weight: 2, fillColor: '#16a34a', fillOpacity: 1 }).bindTooltip('Salida').addTo(mapLayer);
@@ -381,9 +377,10 @@ function renderProfile() {
     for (let k = 0; k < cuts.length - 1; k++) strip += `<rect x="${x(cuts[k])}" y="${base + 20}" width="${x(cuts[k + 1]) - x(cuts[k]) + .5}" height="10" fill="${segColor(S.along[k])}"/>`;
     strip += `<text x="${PAD.l - 4}" y="${base + 29}" text-anchor="end">${S.mode === 'temp' ? 'Temp.' : S.mode === 'rachas' ? 'Rachas' : 'Viento'}</text>`;
   }
+  const feeds = S.feeding && S.feedOnMap ? feeding().map((f, i) => `<circle cx="${x(f.d)}" cy="${base - 7}" r="7" fill="#e6c229" stroke="#fff"/><text x="${x(f.d)}" y="${base - 3.5}" text-anchor="middle" style="fill:#111;font-size:9px;font-weight:700">${i + 1}</text>`).join('') : '';
   const cur = S.cursorD !== null ? `<line x1="${x(S.cursorD)}" x2="${x(S.cursorD)}" y1="${PAD.t}" y2="${base}" stroke="var(--text)" stroke-dasharray="3 3"/>` : '';
   document.getElementById('profile').innerHTML = `<svg class="profile" id="psvg" viewBox="0 0 ${PW} ${PH}" role="img" aria-label="Perfil de elevación">
-    ${yTicks.join('')}${polys}${climbs}${xTicks.join('')}<text x="${PW - PAD.r}" y="${base + 13}" text-anchor="end">km</text>${strip}${cur}</svg>
+    ${yTicks.join('')}${polys}${climbs}${xTicks.join('')}<text x="${PW - PAD.r}" y="${base + 13}" text-anchor="end">km</text>${strip}${feeds}${cur}</svg>
     <div class="legend"><span><i style="background:var(--g1)"></i>&lt; 3 % y bajadas</span><span><i style="background:var(--g2)"></i>3-6 %</span><span><i style="background:var(--g3)"></i>6-9 %</span><span><i style="background:var(--g4)"></i>9-12 %</span><span><i style="background:var(--g5)"></i>&gt; 12 %</span></div>`;
 }
 function profilePick(ev) {
@@ -391,8 +388,48 @@ function profilePick(ev) {
   if (!svg) return;
   const r = svg.getBoundingClientRect();
   const fx = ((ev.clientX - r.left) / r.width) * PW;
-  const d = Math.max(0, Math.min(S.track.distance, ((fx - PAD.l) / (PW - PAD.l - PAD.r)) * S.track.distance));
+  focusAt(Math.max(0, Math.min(S.track.distance, ((fx - PAD.l) / (PW - PAD.l - PAD.r)) * S.track.distance)));
+}
+/**
+ * Flechas del viento: una cada «Flechas cada» km como mucho, y nunca más juntas que su tamaño en
+ * pantalla (al alejar el mapa se omiten; al acercarlo salen más). Tocar una abre su viento y marca
+ * ese punto en el perfil y en las gráficas.
+ */
+function drawArrows() {
+  if (!arrowLayer) return;
+  arrowLayer.clearLayers();
+  if (!S.along || !S.track) return;
+  const P = S.track.points, placed = [];
+  for (let d = S.arrowsKm * 500; d < S.track.distance; d += S.arrowsKm * 1000) {
+    const p = R.pointAt(P, d), w = wxAt(d);
+    if (!w || w.wind === undefined) continue;
+    const size = Math.round(26 + Math.min(28, w.wind * 0.95)); // de 26 px (calma) a 54 px (30 km/h o más)
+    const px = map.latLngToLayerPoint([p.lat, p.lon]);
+    if (placed.some((q) => q.distanceTo(px) < size + 16)) continue;
+    placed.push(px);
+    const html = `<div class="warrow" style="width:${size}px;height:${size}px">
+      <svg viewBox="0 0 24 24" style="transform:rotate(${(w.windFrom + 180) % 360}deg)"><path d="M12 1.5 21.5 12.5h-5.8V22.5H8.3V12.5H2.5Z" fill="${segColor(w)}" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      <span class="wspeed">${int(w.wind)}</span></div>`;
+    L.marker([p.lat, p.lon], { icon: L.divIcon({ className: 'warrow-wrap', iconSize: [size, size], iconAnchor: [size / 2, size / 2], html }), zIndexOffset: -500, riseOnHover: true, keyboard: false })
+      .on('click', () => focusAt(d))
+      .bindPopup(() => windPopup(d, w), { offset: [0, -size / 2 + 4], autoPanPadding: [20, 20] })
+      .addTo(arrowLayer);
+  }
+}
+/** Viento en una flecha del mapa: de dónde viene, cuánto y cómo te pilla. */
+function windPopup(d, w) {
+  const r = w.rel;
+  const how = r.kind === 'cara' ? `<b class="k-cara">De cara</b>: te frena como ${int(Math.max(0, r.head))} km/h de frente`
+    : r.kind === 'favor' ? `<b class="k-favor">A favor</b>: te empuja como ${int(Math.max(0, -r.head))} km/h`
+    : `<b class="k-lateral">Cruzado</b> desde la ${r.side}${Math.abs(r.head) >= 3 ? `, algo ${r.head > 0 ? 'de cara' : 'a favor'}` : ''}`;
+  return `<div class="wpop"><b>km ${km(d)} · ${hm(at(d))}</b><br>
+    💨 ${int(w.wind)} km/h del ${compass(w.windFrom)} · rachas ${int(w.gust)} km/h<br>${how}<br>
+    <small class="muted">${int(w.temp)} °C · lluvia ${int(w.rainProb ?? 0)} %</small></div>`;
+}
+/** Marca un punto de la ruta en el perfil, en el mapa y en las gráficas del tiempo. */
+function focusAt(d) {
   S.cursorD = d;
+  S.tCursor = at(d) - S.start;
   const p = R.pointAt(S.track.points, d), w = wxAt(d);
   const g = R.gradeAt(S.track.points, d, 100);
   let txt = `<b>km ${km(d)}, ${hm(at(d))}</b> · Elevación ${int(p.es)} m · Pendiente ${pct(g)}`;
@@ -403,6 +440,7 @@ function profilePick(ev) {
     if (!cursorMarker) cursorMarker = L.circleMarker([p.lat, p.lon], { radius: 8, color: '#fff', weight: 3, fillColor: '#284556', fillOpacity: 1 }).addTo(mapLayer);
     else cursorMarker.setLatLng([p.lat, p.lon]);
   }
+  renderCharts();
 }
 
 function renderClimbs() {
@@ -418,7 +456,114 @@ function renderClimbs() {
 }
 
 // ---------- Tiempo, avituallamiento y exportar ----------
-const feeding = () => R.feedingPlan(S.track.points, S.tl.t, { gph: S.gph, everyMin: S.every });
+const WHAT = { g: ['Solo gramos', null], gel: ['Gel', 'gel'], bar: ['Barrita', 'bar'], bid: ['Bidón', 'bid'], fruta: ['Fruta', null], otro: ['Otro', null] };
+/** Tomas: la lista editada por el usuario o la calculada (inteligente o cada X minutos). */
+function feeding() {
+  if (S.custom) return S.custom.map((c) => ({ ...c, ms: Math.min(c.ms, S.tl.total), d: R.distAtTime(S.track.points, S.tl.t, Math.min(c.ms, S.tl.total)) }));
+  return R.feedingPlan(S.track.points, S.tl.t, { gph: S.gph, everyMin: S.every, smart: S.feedMode === 'smart' });
+}
+const tomaLabel = (f, i) => (f.label || (f.what && f.what !== 'g' ? `Toma ${i + 1}: ${WHAT[f.what][0].toLowerCase()}` : `Toma ${i + 1}: ${f.grams} g`)).slice(0, 15);
+/** Pasa a lista propia (la primera vez que se toca una toma). */
+function own() { if (!S.custom) S.custom = feeding().map((f) => ({ ms: f.ms, grams: f.grams, what: 'g', label: '' })); return S.custom; }
+
+// ---------- Gráficas del tiempo en la ruta ----------
+const CHARTS = {
+  viento: { title: 'Viento', series: [['wind', 'Viento', 'km/h'], ['gust', 'Rachas', 'km/h']] },
+  temp: { title: 'Temperatura', series: [['temp', 'Temperatura', '°C'], ['feels', 'Sensación térmica', '°C']] },
+  lluvia: { title: 'Precipitación y nubes', series: [['rainProb', 'Prob. precipitación', '%'], ['clouds', 'Cobertura de nubes', '%']], range: [0, 100] },
+  humedad: { title: 'Humedad y punto de rocío', series: [['hum', 'Humedad', '%'], ['dew', 'Punto de rocío', '°C']] },
+  uv: { title: 'Índice UV y luz diurna', series: [['uv', 'Índice UV', '']], daylight: true },
+  mm: { title: 'Lluvia acumulada por hora', series: [['rain', 'Precipitación', 'mm']], min0: true },
+};
+const CW = 360, CH = 190, CP = { l: 34, r: 10, t: 24, b: 8 };
+const KIND_BG = { cara: '#f3b4ae', lateral: '#f5e3a0', favor: '#a9dcb8' };
+const SERIES_COLOR = ['var(--accent)', '#e8711a'];
+function niceTicks(lo, hi, n = 4) {
+  const span = hi - lo || 1, raw = span / n, mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((x) => x >= raw);
+  const a = Math.floor(lo / step) * step, out = [];
+  for (let v = a; ; v += step) { out.push(+v.toFixed(6)); if (v >= hi - step * 1e-6) break; }
+  return out;
+}
+function chartSvg(id) {
+  const c = CHARTS[id], A = S.along.filter((w) => w.wind !== undefined), total = S.tl.total;
+  const tx = (ms) => CP.l + (ms / total) * (CW - CP.l - CP.r);
+  const vals = c.series.flatMap(([k]) => A.map((w) => w[k]).filter((v) => v !== null && v !== undefined));
+  if (!vals.length) return '<p class="hint">Sin datos para esta gráfica.</p>';
+  let lo = c.range ? c.range[0] : Math.min(...vals), hi = c.range ? c.range[1] : Math.max(...vals);
+  if (c.min0 || id === 'uv' || id === 'viento') lo = 0;
+  if (hi - lo < 1) hi = lo + 1;
+  const ticks = niceTicks(lo, hi);
+  lo = ticks[0]; hi = ticks[ticks.length - 1];
+  const y = (v) => CP.t + (1 - (v - lo) / (hi - lo)) * (CH - CP.t - CP.b);
+  const base = CH - CP.b;
+  let g = '';
+  // perfil de fondo coloreado por el viento
+  if (S.bgProfile) {
+    const t = S.track, P = t.points, N = 160, eh = (t.maxEle - t.minEle) || 1;
+    const ey = (e) => base - ((e - t.minEle) / eh) * (base - CP.t) * 0.85;
+    for (let k = 0; k < N; k++) {
+      const d1 = (k / N) * t.distance, d2 = ((k + 1) / N) * t.distance, w = wxAt((d1 + d2) / 2);
+      const x1 = tx(R.timeAt(P, S.tl.t, d1)), x2 = tx(R.timeAt(P, S.tl.t, d2));
+      g += `<polygon points="${x1.toFixed(1)},${base} ${x1.toFixed(1)},${ey(R.pointAt(P, d1).es).toFixed(1)} ${x2.toFixed(1)},${ey(R.pointAt(P, d2).es).toFixed(1)} ${x2.toFixed(1)},${base}" fill="${KIND_BG[w?.rel?.kind] || '#dde3e8'}" stroke="none" opacity=".75"/>`;
+    }
+  }
+  if (c.daylight) A.forEach((w, i) => { if (i < A.length - 1 && w.isDay) g += `<rect x="${tx(w.eta - S.start)}" y="${CP.t - 9}" width="${tx(A[i + 1].eta - S.start) - tx(w.eta - S.start) + .5}" height="5" fill="#f5c518"/>`; });
+  const grid = ticks.map((v) => `<line x1="${CP.l}" x2="${CW - CP.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${CP.l - 4}" y="${y(v) + 3.5}" text-anchor="end">${nf1.format(v).replace(/,0$/, '')}</text>`).join('');
+  // horas arriba: salida, cada hora en punto y llegada
+  const hours = [[0, hm(S.start)]];
+  for (let h = Math.ceil(S.start / 3600000) * 3600000; h < S.start + total; h += 3600000) if (tx(h - S.start) - tx(0) > 30 && tx(total) - tx(h - S.start) > 30) hours.push([h - S.start, hm(h)]);
+  hours.push([total, hm(S.start + total)]);
+  const hl = hours.map(([ms, l], i) => `<line x1="${tx(ms)}" x2="${tx(ms)}" y1="${CP.t}" y2="${base}" stroke="var(--line)" stroke-dasharray="2 3"/><text x="${tx(ms)}" y="${CP.t - 12}" text-anchor="${i === hours.length - 1 ? 'end' : i ? 'middle' : 'start'}">${l}</text>`).join('');
+  const lines = c.series.map(([k], si) => {
+    const pts = A.filter((w) => w[k] !== null && w[k] !== undefined).map((w) => `${tx(w.eta - S.start).toFixed(1)},${y(w[k]).toFixed(1)}`).join(' ');
+    return `<polyline points="${pts}" fill="none" stroke="${SERIES_COLOR[si]}" stroke-width="2.2" ${si ? 'stroke-dasharray="5 4"' : ''} stroke-linejoin="round"/>`;
+  }).join('');
+  let cur = '';
+  if (S.tCursor !== null) {
+    const x = tx(S.tCursor);
+    cur = `<line x1="${x}" x2="${x}" y1="${CP.t}" y2="${base}" stroke="var(--muted)"/>` + c.series.map(([k], si) => {
+      const v = valueAt(k, S.tCursor);
+      return v === null ? '' : `<circle cx="${x}" cy="${y(v)}" r="4.5" fill="${SERIES_COLOR[si]}" stroke="#fff" stroke-width="1.5"/>`;
+    }).join('');
+  }
+  return `<svg class="wchart" viewBox="0 0 ${CW} ${CH}" role="img" aria-label="${esc(c.title)}">${g}${grid}${hl}${lines}${cur}</svg>`;
+}
+/** Valor de una serie en el instante ms (desde la salida), interpolando entre puntos de previsión. */
+function valueAt(k, ms) {
+  const A = S.along.filter((w) => w[k] !== null && w[k] !== undefined);
+  if (!A.length) return null;
+  const t = S.start + ms;
+  if (t <= A[0].eta) return A[0][k];
+  for (let i = 1; i < A.length; i++) if (A[i].eta >= t) { const f = (t - A[i - 1].eta) / (A[i].eta - A[i - 1].eta || 1); return A[i - 1][k] + (A[i][k] - A[i - 1][k]) * f; }
+  return A[A.length - 1][k];
+}
+function chartsHtml() {
+  const ms = S.tCursor ?? null;
+  const dAt = (m) => { const P = S.track.points, t = S.tl.t; let i = 1; while (i < t.length - 1 && t[i] < m) i++; const f = (m - t[i - 1]) / (t[i] - t[i - 1] || 1); return P[i - 1].d + (P[i].d - P[i - 1].d) * f; };
+  const fmt = (v, u) => `${u === '°C' || u === 'mm' ? nf1.format(v) : int(v)}${u ? (u === '%' ? ' %' : ' ' + u) : ''}`;
+  const blocks = S.charts.map((id, ci) => {
+    const c = CHARTS[id];
+    const read = ms !== null ? `<p class="readout">${km(dAt(ms))} km, ${hm(S.start + ms)} · ${c.series.map(([k, l, u]) => { const v = valueAt(k, ms); return v === null ? '' : `${l}: <b>${fmt(v, u)}</b>`; }).filter(Boolean).join(' · ')}</p>`
+      : '<p class="readout muted">Toca o arrastra en la gráfica para ver el valor en cada momento.</p>';
+    return `<div class="wblock">
+      <div class="whead"><select data-chart="${ci}" aria-label="Cambiar gráfica">${Object.entries(CHARTS).map(([k, v]) => `<option value="${k}" ${k === id ? 'selected' : ''}>${v.title}</option>`).join('')}</select>
+        <button class="linkbtn small" data-act="chart-del" data-i="${ci}">Quitar</button></div>
+      <div class="legend">${c.series.map(([, l], si) => `<span><i class="${si ? 'dash' : ''}" style="background:${SERIES_COLOR[si]}"></i>${l}</span>`).join('')}${c.daylight ? '<span><i style="background:#f5c518"></i>Luz diurna</span>' : ''}${S.bgProfile ? '<span><i style="background:#f3b4ae"></i>Viento de cara</span><span><i style="background:#f5e3a0"></i>Cruzado o flojo</span><span><i style="background:#a9dcb8"></i>Favorable</span>' : ''}</div>
+      ${read}${chartSvg(id)}</div>`;
+  }).join('');
+  const left = Object.keys(CHARTS).filter((k) => !S.charts.includes(k));
+  return `${blocks}<div class="row" style="margin-top:.6rem">${left.length ? `<select id="chart-add" aria-label="Añadir un gráfico"><option value="">+ Añadir un gráfico</option>${left.map((k) => `<option value="${k}">${CHARTS[k].title}</option>`).join('')}</select>
+    <button class="linkbtn" data-act="chart-all">Ver todos</button>` : ''}</div>`;
+}
+function renderCharts() { const el = document.getElementById('wcharts'); if (el && S.along) el.innerHTML = chartsHtml(); }
+function chartPick(ev) {
+  const svg = ev.target.closest('.wchart');
+  const r = svg.getBoundingClientRect();
+  const fx = ((ev.clientX - r.left) / r.width) * CW;
+  S.tCursor = Math.max(0, Math.min(S.tl.total, ((fx - CP.l) / (CW - CP.l - CP.r)) * S.tl.total));
+  renderCharts();
+}
 
 function renderRest() {
   const el = document.getElementById('rest');
@@ -426,24 +571,56 @@ function renderRest() {
   let wxHtml;
   if (S.wxErr) wxHtml = `<p class="warn">${esc(S.wxErr)}</p><button class="btn" data-act="retry">Reintentar</button>`;
   else if (!S.along) wxHtml = '<p class="hint">Cargando la previsión…</p>';
-  else wxHtml = `<div class="wrap-x"><table class="wx"><thead><tr><th>Hora</th><th>Km</th><th></th><th>Temp.</th><th>Lluvia</th><th>Viento (rachas)</th></tr></thead><tbody>
+  else wxHtml = `<label class="check"><input type="checkbox" id="bgprof" ${S.bgProfile ? 'checked' : ''}> Perfil de la ruta de fondo</label>
+    <div id="wcharts">${chartsHtml()}</div>
+    <details class="fact"><summary><b>Ver la tabla</b></summary><div class="wrap-x"><table class="wx"><thead><tr><th>Hora</th><th>Km</th><th></th><th>Temp.</th><th>Lluvia</th><th>Viento (rachas)</th></tr></thead><tbody>
     ${S.along.map((w) => { const [ic, lab] = R.weatherLabel(w.code); return `<tr><td><b>${hm(w.eta)}</b></td><td class="k">${km(w.d)}</td><td title="${lab}">${ic}</td>
       <td>${int(w.temp)}°</td><td>${int(w.rainProb ?? 0)} %${w.rain >= 0.1 ? ` <small class="muted">${nf1.format(w.rain)} mm</small>` : ''}</td>
       <td><span class="pill ${w.rel.kind}">${KIND[w.rel.kind]}</span> ${int(w.wind)} <small class="muted">(${int(w.gust)}) ${compass(w.windFrom)}</small></td></tr>`; }).join('')}
-    </tbody></table></div>`;
+    </tbody></table></div></details>`;
 
   const tomas = S.feeding ? feeding() : [];
   const grams = tomas.reduce((s, f) => s + f.grams, 0);
+  const need = Math.round((S.gph * S.tl.total) / 3600000 / 10) * 10;
+  const carried = Object.values(S.carry).reduce((a, c) => a + c.n * c.g, 0);
+  const timeOpts = (sel) => { let o = ''; for (let m = 5; m * 60000 < S.tl.total; m += 5) { const ms = m * 60000; o += `<option value="${ms}" ${Math.abs(ms - sel) < 150000 ? 'selected' : ''}>${hm(S.start + ms)}</option>`; } return o; };
   const avit = S.feeding ? `
     <h3>Hidratos por hora</h3>
     <div class="opts">${[[60, '60 g/h', 'Hasta 2,5 h o ritmo suave'], [90, '90 g/h', 'Marchas y tiradas largas'], [120, '120 g/h', 'Solo si lo tienes entrenado']].map(([v, a, b]) =>
       `<button data-gph="${v}" class="${S.gph === v ? 'on' : ''}"><b>${a}</b><small>${b}</small></button>`).join('')}
       <button data-act="gph-manual" class="${![60, 90, 120].includes(S.gph) ? 'on' : ''}"><b>Manual</b><small>${![60, 90, 120].includes(S.gph) ? `${S.gph} g/h` : 'Tu cantidad'}</small></button></div>
+    <details class="more"><summary>¿Por qué no te pedimos el peso?</summary><p class="hint">Los hidratos que aprovechas por hora no dependen de lo que pesas, sino de lo que absorbe el intestino, y eso se entrena. Elige según la intensidad de la salida y lo que estés acostumbrado a tomar.</p></details>
+    <h3>Reparto de las tomas</h3>
+    <div class="seg narrow"><button data-feedmode="smart" class="${S.feedMode === 'smart' ? 'on' : ''}">Inteligente</button><button data-feedmode="manual" class="${S.feedMode === 'manual' ? 'on' : ''}">Manual</button></div>
     <label style="flex-direction:row;align-items:center;gap:.6rem">Una toma cada <select id="every">${[20, 30, 40, 45, 60].map((m) => `<option value="${m}" ${S.every === m ? 'selected' : ''}>${m} min</option>`).join('')}</select></label>
-    <label class="check"><input type="checkbox" id="feedmap" ${S.feedOnMap ? 'checked' : ''}> Marcar las tomas en el mapa</label>
-    <div class="facts"><div><small>Duración</small><b>${dur(S.tl.total)}</b></div><div><small>Hidratos</small><b>${int(grams)} g</b></div><div><small>Tomas</small><b>${tomas.length} × ${tomas[0]?.grams ?? 0} g</b></div></div>
-    <ul class="mini-list tomas">${tomas.map((f, i) => `<li><span class="dot">${i + 1}</span><div><b>${hm(S.start + f.ms)}</b><small class="muted">${dur(f.ms)} de ruta</small></div><span>km ${km(f.d)}</span><b>${f.grams} g</b></li>`).join('')}</ul>
-    <p class="hint">Una guía: ajústala a lo que toleras en los entrenamientos. Un gel suele llevar 20-30 g y una barrita 25-40 g.</p>
+    <details class="more"><summary>Cómo reparte las tomas</summary><p class="hint">${S.feedMode === 'smart'
+      ? `La primera a los 25 minutos y después cada ${S.every} minutos, hasta 20 minutos antes de llegar. Calcula los hidratos de toda la salida (${S.gph} g/h × ${dur(S.tl.total)} ≈ ${need} g) y los reparte a partes iguales. Luego mueve cada toma hasta 8 minutos para que no caiga en una bajada ni en una rampa dura: se come mejor en llano o subiendo suave.`
+      : `La primera a los 25 minutos y después cada ${S.every} minutos, con lo que toca a ${S.gph} g/h en cada intervalo, sin mirar el terreno.`}</p></details>
+    ${S.custom ? '<p class="hint">Estás usando tu propia lista de tomas. <button class="linkbtn" data-act="feed-reset">Volver al reparto automático</button></p>' : ''}
+    <label class="check"><input type="checkbox" id="feedmap" ${S.feedOnMap ? 'checked' : ''}> Marcar las tomas en el mapa y en el perfil</label>
+    <div class="facts"><div><small>Duración</small><b>${dur(S.tl.total)}</b></div><div><small>Hidratos · ${S.gph} g/h</small><b><mark>${int(grams)} g</mark></b></div>
+      <div><small>Tomas${S.custom ? '' : ` · cada ${S.every} min`}</small><b>${S.custom || new Set(tomas.map((f) => f.grams)).size > 1 ? `${tomas.length}` : `${tomas.length} × ${tomas[0]?.grams ?? 0} g`}</b></div></div>
+    <details class="more" ${S.custom ? 'open' : ''}><summary>Cambia el aviso de cada toma</summary>
+      <p>En cada toma puedes elegir qué te vas a tomar, añadir otra o quitarla. En cuanto cambies una, la lista pasa a ser tuya.</p>
+      ${tomas.map((f, i) => `<div class="toma-ed">
+        <div class="row"><span class="dot">${i + 1}</span><b>${hm(S.start + f.ms)}</b><small class="muted">${dur(f.ms)}</small><span class="muted">km ${km(f.d)}</span><b style="margin-left:auto">${f.grams} g</b></div>
+        ${f.moved ? `<p class="hint">Movida unos minutos para no caer en ${f.moved === 'bajada' ? 'la bajada' : 'la rampa'}.</p>` : ''}
+        <div class="row"><label class="inline">A las <select data-toma="${i}" data-f="ms">${timeOpts(f.ms)}</select></label></div>
+        <div class="row"><select data-toma="${i}" data-f="what">${Object.entries(WHAT).map(([k, [l]]) => `<option value="${k}" ${(f.what || 'g') === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+          <input type="number" data-toma="${i}" data-f="grams" value="${f.grams}" min="0" max="300" step="5" inputmode="numeric" style="width:5.5rem"> g</div>
+        <div class="row"><button class="linkbtn small" data-act="toma-dup" data-i="${i}">Otra 15 min después</button><button class="linkbtn small" data-act="toma-del" data-i="${i}">Quitar esta toma</button></div>
+        <label class="inline">Aviso <input data-toma="${i}" data-f="label" maxlength="15" value="${esc(tomaLabel(f, i))}"> <small class="muted">${tomaLabel(f, i).length}/15</small></label>
+      </div>`).join('')}
+      <button class="btn" data-act="toma-add">Añadir una toma</button>
+    </details>
+    <h3>Lo que llevas</h3>
+    ${[['bid', 'Bidones'], ['gel', 'Geles'], ['bar', 'Barritas']].map(([k, l]) => `<div class="carry">
+      <b>${l}</b><label class="inline"><input type="number" data-carry="${k}" value="${S.carry[k].g}" min="0" max="200" step="5" inputmode="numeric"> g/ud</label>
+      <span class="stepper"><button class="icon-btn" data-act="carry" data-k="${k}" data-n="-1" ${S.carry[k].n ? '' : 'disabled'}>−</button><b>${S.carry[k].n}</b><button class="icon-btn" data-act="carry" data-k="${k}" data-n="1">+</button></span>
+      <b class="tot">${S.carry[k].n * S.carry[k].g} g</b></div>`).join('')}
+    <p class="${carried < grams ? 'bad' : ''}">Llevas ${int(carried)} g de los ${int(grams)} g de las tomas${carried < grams ? `: te faltan ${int(grams - carried)} g (rellena en ruta o lleva más)` : carried > grams + 30 ? `: te sobran ${int(carried - grams)} g` : ''}.</p>
+    <details class="more"><summary>Cómo rellenar los bidones</summary><p class="hint">Si solo llevas agua, deja 0 g/ud. Si llevas bebida con hidratos, pon los gramos de cada bidón: los indica el bote (lo habitual es entre 30 y 60 g por bidón de 500-750 ml). Más concentrada cuesta más de digerir. Lo que lleven los bidones también cuenta para las tomas.</p></details>
+    <p class="hint">Una guía: ajústala a lo que toleras en los entrenamientos.</p>
     <button class="linkbtn" data-act="feed-off">Quitar el avituallamiento</button>`
     : `<p>Hidratos y tomas para tus ${dur(S.tl.total)} de salida.</p><button class="btn" data-act="feed-on">Calcular</button>`;
 
@@ -459,7 +636,7 @@ function renderRest() {
       <label>Nombre de la ruta en el ciclocomputador<input id="expname" maxlength="40" value="${esc(name15)}"></label>
       <label class="check"><input type="checkbox" data-exp="wps" ${S.exp.wps ? 'checked' : ''}> Tus waypoints (${S.wps.length})</label>
       <label class="check"><input type="checkbox" data-exp="climbs" ${S.exp.climbs ? 'checked' : ''}> Inicio de cada subida (${S.climbs.length})</label>
-      <label class="check"><input type="checkbox" data-exp="tomas" ${S.exp.tomas ? 'checked' : ''} ${S.feeding ? '' : 'disabled'}> Tus tomas de avituallamiento (${tomas.length})</label>
+      <label class="check"><input type="checkbox" data-exp="tomas" ${S.exp.tomas ? 'checked' : ''} ${S.feeding ? '' : 'disabled'}> Tus avisos de avituallamiento (${tomas.length})</label>
       <label class="check"><input type="checkbox" data-exp="times" ${S.exp.times ? 'checked' : ''}> Horas de paso previstas (para el «compañero virtual»)</label>
       <button class="btn primary" data-act="gpx">Descargar .gpx</button>
       <h3 style="margin-top:1rem">Pásasela a tu grupeta</h3>
@@ -475,7 +652,7 @@ function exportGPX() {
   const pt = (d) => R.pointAt(P, d);
   if (S.exp.wps) S.wps.forEach((w) => { const p = pt(w.d); wps.push({ lat: p.lat, lon: p.lon, name: w.name, desc: `${wpType(w.type)[2]} · km ${km(w.d)}`, sym: wpType(w.type)[3] }); });
   if (S.exp.climbs) S.climbs.forEach((c, i) => { const p = pt(c.start); wps.push({ lat: p.lat, lon: p.lon, name: `Subida ${i + 1}`.slice(0, 15), desc: `${km(c.length)} km al ${pct(c.avg)}`, sym: 'Summit' }); });
-  if (S.exp.tomas && S.feeding) feeding().forEach((f, i) => { const p = pt(f.d); wps.push({ lat: p.lat, lon: p.lon, name: `Toma ${i + 1}: ${f.grams} g`.slice(0, 15), desc: hm(S.start + f.ms), sym: 'Food' }); });
+  if (S.exp.tomas && S.feeding) feeding().forEach((f, i) => { const p = pt(f.d); wps.push({ lat: p.lat, lon: p.lon, name: tomaLabel(f, i), desc: `${hm(S.start + f.ms)} · ${f.grams} g`, sym: 'Food' }); });
   const text = R.toGPX(name, P, wps, S.exp.times ? { startMs: S.start, t: S.tl.t } : {});
   const file = `${name.replace(/[^\p{L}\p{N} _-]+/gu, '').trim().replace(/\s+/g, '-') || 'ruta'}.gpx`;
   return { text, file };
@@ -533,8 +710,10 @@ document.addEventListener('click', async (e) => {
   if (mode) { S.mode = mode.dataset.mode; return update(); }
   const view = e.target.closest('[data-view]');
   if (view) { S.view = view.dataset.view; return update(); }
+  const fm = e.target.closest('[data-feedmode]');
+  if (fm) { S.feedMode = fm.dataset.feedmode; S.custom = null; return update(); }
   const gph = e.target.closest('[data-gph]');
-  if (gph) { S.gph = +gph.dataset.gph; return update(); }
+  if (gph) { S.gph = +gph.dataset.gph; S.custom = null; return update(); }
   const b = e.target.closest('[data-act]');
   if (!b) return;
   const act = b.dataset.act;
@@ -558,8 +737,15 @@ document.addEventListener('click', async (e) => {
   else if (act === 'addwp') setAdding(true);
   else if (act === 'cancelwp') setAdding(false);
   else if (act === 'del-wp') { S.wps.splice(+b.dataset.i, 1); map?.closePopup(); update(); }
+  else if (act === 'chart-del') { S.charts.splice(+b.dataset.i, 1); saveLast(); renderCharts(); }
+  else if (act === 'chart-all') { S.charts = Object.keys(CHARTS); saveLast(); renderCharts(); }
   else if (act === 'retry') { S.wxKey = ''; fetchWeather(); }
   else if (act === 'feed-on') { S.feeding = true; S.exp.tomas = true; update(); }
+  else if (act === 'feed-reset') { S.custom = null; update(); }
+  else if (act === 'toma-dup') { const c = own(), i = +b.dataset.i; c.splice(i + 1, 0, { ...c[i], ms: Math.min(S.tl.total - 60000, c[i].ms + 15 * 60000), label: '' }); c.sort((x, y) => x.ms - y.ms); update(); }
+  else if (act === 'toma-del') { own().splice(+b.dataset.i, 1); update(); }
+  else if (act === 'toma-add') { const c = own(); const last = c[c.length - 1]?.ms ?? 0; c.push({ ms: Math.min(S.tl.total - 5 * 60000, last + S.every * 60000), grams: c[c.length - 1]?.grams ?? 30, what: 'g', label: '' }); c.sort((x, y) => x.ms - y.ms); update(); }
+  else if (act === 'carry') { const k = S.carry[b.dataset.k]; k.n = Math.max(0, k.n + +b.dataset.n); update(); }
   else if (act === 'feed-off') { S.feeding = false; S.exp.tomas = false; update(); }
   else if (act === 'gph-manual') {
     const v = parseInt(prompt('Gramos de hidratos por hora', String(S.gph)) || '', 10);
@@ -585,15 +771,26 @@ document.addEventListener('change', (e) => {
     const v = parseFloat(String(t.value).replace(',', '.'));
     const lim = { flat: [10, 50], mass: [40, 150], stops: [0, 300] }[t.id];
     if (Number.isFinite(v)) { S[t.id] = Math.max(lim[0], Math.min(lim[1], v)); retime(); update(); }
-  } else if (t.id === 'every') { S.every = +t.value; update(); }
+  } else if (t.id === 'every') { S.every = +t.value; S.custom = null; update(); }
+  else if (t.dataset.toma !== undefined) {
+    const c = own(), f = c[+t.dataset.toma], k = t.dataset.f;
+    if (k === 'ms') { f.ms = +t.value; c.sort((x, y) => x.ms - y.ms); }
+    else if (k === 'grams') f.grams = Math.max(0, Math.min(300, parseInt(t.value, 10) || 0));
+    else if (k === 'label') f.label = t.value.trim().slice(0, 15);
+    else if (k === 'what') { f.what = t.value; const src = WHAT[t.value][1]; if (src && S.carry[src].g) f.grams = S.carry[src].g; f.label = ''; }
+    update();
+  } else if (t.dataset.carry) { S.carry[t.dataset.carry].g = Math.max(0, Math.min(200, parseInt(t.value, 10) || 0)); update(); }
   else if (t.id === 'feedmap') { S.feedOnMap = t.checked; drawMap(); }
   else if (t.dataset.exp) S.exp[t.dataset.exp] = t.checked;
+  else if (t.id === 'bgprof') { S.bgProfile = t.checked; saveLast(); renderCharts(); }
+  else if (t.dataset.chart !== undefined) { S.charts[+t.dataset.chart] = t.value; saveLast(); renderCharts(); }
+  else if (t.id === 'chart-add' && t.value) { S.charts.push(t.value); saveLast(); renderCharts(); }
 });
 document.addEventListener('input', (e) => {
   if (e.target.id === 'arrows') { S.arrowsKm = +e.target.value; document.getElementById('arrowsv').textContent = `${S.arrowsKm} km`; drawMap(); }
 });
-document.addEventListener('pointerdown', (e) => { if (e.target.closest('#psvg')) profilePick(e); });
-document.addEventListener('pointermove', (e) => { if (e.buttons && e.target.closest('#psvg')) profilePick(e); });
+document.addEventListener('pointerdown', (e) => { if (e.target.closest('#psvg')) profilePick(e); else if (e.target.closest('.wchart')) chartPick(e); });
+document.addEventListener('pointermove', (e) => { if (!e.buttons) return; if (e.target.closest('#psvg')) profilePick(e); else if (e.target.closest('.wchart')) chartPick(e); });
 
 // Arrastrar un .gpx o .fit sobre la página (ordenador)
 document.addEventListener('dragover', (e) => e.preventDefault());
