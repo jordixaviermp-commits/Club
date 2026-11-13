@@ -696,3 +696,33 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 .chk-list li.bad a { color: #b3261e; font-weight: 600; text-decoration: none; }
 .chk-list li.info { color: var(--muted, #667); }
 @media print { .report.sheet { break-after: page; margin: 0; } .report.sheet:last-of-type { break-after: auto; } .rp-name { color: #000; } }
+
+/* ---------- Plantilla (dirección): filtros, buscador y lista ---------- */
+.rr-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: .4rem; margin: .5rem 0; }
+.rr-kpi { border: 2px solid var(--line); background: var(--card); color: var(--text); border-radius: 12px; padding: .45rem .2rem; font: inherit; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: .05rem; min-height: 58px; }
+.rr-kpi b { font-size: 1.3rem; line-height: 1.1; }
+.rr-kpi span { font-size: .68rem; color: var(--muted, #667); text-align: center; line-height: 1.15; }
+.rr-kpi.warn b { color: #b86e00; } .rr-kpi.bad b { color: #b3261e; } .rr-kpi.good b { color: #1b7f3b; }
+.rr-kpi.warn:not(.zero) { border-color: #e0a030; background: color-mix(in srgb, #e0a030 12%, var(--card)); }
+.rr-kpi.bad:not(.zero) { border-color: #d9534f; background: color-mix(in srgb, #d9534f 10%, var(--card)); }
+.rr-kpi.zero { opacity: .6; }
+.rr-kpi.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+.rr-sort { display: flex; align-items: center; gap: .4rem; margin: .4rem 0; flex-wrap: wrap; font-size: .85rem; }
+.rr-sort .chip { min-height: 32px; padding: .2rem .65rem; font-size: .85rem; }
+.rr-count { margin: .2rem 0 .3rem; }
+.roster li.rr { border-left: 5px solid transparent; padding-left: .75rem; }
+.roster li.rr.ok { border-left-color: #1b7f3b; }
+.roster li.rr.low { border-left-color: #d9534f; }
+.roster li.rr.nocon { background: color-mix(in srgb, #e0a030 8%, var(--card)); }
+.rr-main { flex: 1 1 55%; min-width: 0; display: flex; flex-direction: column; }
+.roster li.rr > .rr-bono { order: 2; flex: 1 1 100%; display: flex; flex-direction: column; gap: .2rem; }
+.roster li.rr > .icon-btn { order: 1; }
+.rr-bono .rp-bar { min-width: 0; }
+.rr-bono small { color: var(--muted, #667); }
+.warn-txt { color: #b86e00; } .bad-txt { color: #b3261e; font-weight: 700; }
+.sel-wrap.needs select { border-color: #e0a030; box-shadow: 0 0 0 2px color-mix(in srgb, #e0a030 35%, transparent); }
+.roster li.rr > .roster-sel { order: 3; }
+.roster li.rr > .runner-races { order: 4; }
+.manage { margin-top: 1rem; }
+.manage .quick { display: flex; flex-wrap: wrap; gap: .5rem; }
+.rr-main .name-link { font-weight: 700; font-size: 1.02rem; }
