@@ -46,6 +46,24 @@ export function missingFields(x) {
   if (SUBTYPES[x?.modality] && !String(x?.subtype ?? '').trim()) out.push('subtype');
   return out;
 }
+/** «2:05:30», «45:10» o «1h 5m» → segundos (entero), o null si no es un tiempo válido (máx. 1.000 h). */
+export function parseTime(text) {
+  const t = String(text ?? '').trim().toLowerCase();
+  if (!t) return null;
+  let sec = null;
+  let m = t.match(/^(\d{1,4}):([0-5]?\d)(?::([0-5]?\d))?$/);
+  if (m) sec = m[3] === undefined ? Number(m[1]) * 60 + Number(m[2]) : Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+  else if ((m = t.match(/^(\d{1,4})\s*h(?:\s*(\d{1,2})\s*(?:m|min)?)?$/))) sec = Number(m[1]) * 3600 + Number(m[2] || 0) * 60;
+  return sec >= 1 && sec <= 3600000 ? sec : null;
+}
+/** Segundos → «2:05:30». Con `short`, un total: «12 h 05 min». */
+export function formatTime(sec, short = false) {
+  const s = Math.round(Number(sec));
+  if (!(s > 0)) return '';
+  const h = Math.floor(s / 3600), mi = Math.floor((s % 3600) / 60), se = s % 60;
+  if (short) return h ? `${h} h ${String(mi).padStart(2, '0')} min` : `${mi} min`;
+  return `${h}:${String(mi).padStart(2, '0')}:${String(se).padStart(2, '0')}`;
+}
 export const kmText = (km) => `${Number(km).toLocaleString('es-ES', { maximumFractionDigits: 1 })} km`;
 export const CIRCUIT_SCOPES = [{ id: 'categoria', label: 'De su categoría' }, { id: 'absoluta', label: 'Absoluta (scratch)' }];
 export const DEFAULT_COUNTRY = 'España';
@@ -178,6 +196,8 @@ export function yearSummary(year, races, runners) {
     podiums: podiums.length,
     wins: podiums.filter((p) => p.position === 1).length,
     km: Math.round(parts.reduce((n, p) => n + (Number(p.race.km) || 0), 0) * 10) / 10, // km recorridos entre todos
+    time: parts.reduce((n, p) => n + (Number(p.res.time_seconds) || 0), 0), // segundos de los que tienen tiempo
+    timed: parts.filter((p) => Number(p.res.time_seconds) > 0).length,
   };
   // Carreras por formato (Critérium, XCM…), para el resumen.
   const bySubtype = [];
@@ -215,13 +235,14 @@ export function yearSummary(year, races, runners) {
 
   // Participaciones por corredor: toda la plantilla (también con 0) y quien ya no está pero corrió ese año.
   const rows = new Map();
-  for (const rn of runners) rows.set(rn.id, { key: rn.id, name: rn.name, current: true, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {}, km: 0 });
+  for (const rn of runners) rows.set(rn.id, { key: rn.id, name: rn.name, current: true, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {}, km: 0, time: 0, timed: 0 });
   for (const { race, res } of parts) {
     const k = personKey(res);
-    if (!rows.has(k)) rows.set(k, { key: k, name: res.runner_name, current: false, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {}, km: 0 });
+    if (!rows.has(k)) rows.set(k, { key: k, name: res.runner_name, current: false, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {}, km: 0, time: 0, timed: 0 });
     const row = rows.get(k);
     row.races++;
     row.km = Math.round((row.km + (Number(race.km) || 0)) * 10) / 10;
+    if (Number(res.time_seconds) > 0) { row.time += Number(res.time_seconds); row.timed++; }
     row.mods[race.modality] = (row.mods[race.modality] || 0) + 1;
     if (race.modality === 'Carretera') row.road++;
     if (race.modality === 'BTT') row.btt++;

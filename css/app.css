@@ -638,3 +638,5 @@ ol.bullets { list-style: decimal; }
 .rank li.tappable:active { background: var(--accent-2); }
 .rk-name { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-align: left; text-decoration: none; cursor: pointer; }
 .rk-name b::after { content: " ›"; color: var(--muted); font-weight: 400; }
+.edit-list.results .res-time { flex: 1 1 100%; display: flex; align-items: center; gap: .5rem; font-size: .9rem; color: var(--muted, #667); }
+.edit-list.results .res-time input { max-width: 8.5rem; }

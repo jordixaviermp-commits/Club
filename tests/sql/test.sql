@@ -340,6 +340,7 @@ insert into registration_entries (registration_id, runner_id, self_position, sel
 insert into registration_entries (registration_id, runner_id) values
   ('20000000-0000-0000-0000-000000000080', '10000000-0000-0000-0000-000000000003'),
   ('20000000-0000-0000-0000-000000000082', '10000000-0000-0000-0000-000000000003');
+update registration_entries set self_time_seconds = 3725 where registration_id = '20000000-0000-0000-0000-000000000080' and runner_id = '10000000-0000-0000-0000-000000000004';
 truncate change_log;
 set role anon;
 select runner_view('DDDDDDDDDD') is not null as vio \gset
@@ -347,6 +348,7 @@ reset role;
 select pg_temp.check((select count(*) from races where name = 'Auto Uno') = 1 and not exists (select 1 from registrations where name = 'Auto Uno'), 'auto: con puesto puesto y 3 días pasados, pasa sola a resultados');
 select pg_temp.check((select count(*) from results x join races r on r.id = x.race_id where r.name = 'Auto Uno') = 1, 'auto: solo entra quien puso su puesto');
 select pg_temp.check((select x.position from results x join races r on r.id = x.race_id where r.name = 'Auto Uno') = 2 and (select x.podium_type from results x join races r on r.id = x.race_id where r.name = 'Auto Uno') = 'campeonato', 'auto: con su puesto y tipo de podio');
+select pg_temp.check((select x.time_seconds from results x join races r on r.id = x.race_id where r.name = 'Auto Uno') = 3725, 'tiempo: el paso automático copia el tiempo del corredor');
 select pg_temp.check(exists (select 1 from registrations where name = 'Auto Reciente'), 'auto: no antes de 3 días');
 select pg_temp.check(exists (select 1 from registrations where name = 'Auto Sin Puesto'), 'auto: no si nadie puso su puesto');
 select pg_temp.check((select count(*) from change_log where actor = 'Sistema' and action = 'auto_resultados') = 1 and (select count(*) from change_log where summary like '%Auto Uno%' and action in ('insert','delete')) = 0, 'auto: queda una sola línea en el historial');
@@ -476,5 +478,28 @@ select pg_temp.check(jsonb_array_length(runner_documents_list('CCCCCCCCCC')) = 0
 select pg_temp.expect_fail($q$select runner_get_document('CCCCCCCCCC', '$q$ || :'doc' || $q$')$q$, 'otro corredor no lo descarga');
 select pg_temp.expect_fail('select * from runner_documents', 'anon no lee la tabla');
 select pg_temp.expect_fail($q$select upload_document('10000000-0000-0000-0000-000000000002', 2026, 'x', 'x.pdf', 'application/pdf', 'aGk=')$q$, 'anon no sube');
+reset role;
+-- tiempo de carrera
+reset role;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+insert into registrations (id, name, date) values ('20000000-0000-0000-0000-000000000090', 'Con Tiempo', current_date - 1);
+insert into registration_entries (registration_id, runner_id) values
+  ('20000000-0000-0000-0000-000000000090', '10000000-0000-0000-0000-000000000004'),
+  ('20000000-0000-0000-0000-000000000090', '10000000-0000-0000-0000-000000000003');
+set role anon;
+select set_config('request.jwt.claim.sub', '', false);
+select pg_temp.expect_fail($q$select runner_report_result('DDDDDDDDDD', 'reg', '20000000-0000-0000-0000-000000000090', 4, null, null, 0)$q$, 'tiempo: cero rechazado');
+select pg_temp.expect_fail($q$select runner_report_result('DDDDDDDDDD', 'reg', '20000000-0000-0000-0000-000000000090', 4, null, null, 4000000)$q$, 'tiempo: absurdo rechazado');
+select runner_report_result('DDDDDDDDDD', 'reg', '20000000-0000-0000-0000-000000000090', 4, null, null, 7200);
+select pg_temp.check((select (g->'my_result'->>'time_seconds')::int from jsonb_array_elements(runner_view('DDDDDDDDDD')->'registrations') g where g->>'id' = '20000000-0000-0000-0000-000000000090') = 7200, 'tiempo: el corredor ve el suyo');
+select pg_temp.check(runner_view('CCCCCCCCCC') is not null, 'tiempo: el tiempo es opcional (otros siguen sin él)');
+reset role;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+select promote_registration('20000000-0000-0000-0000-000000000090') as rt \gset
+reset role;
+select pg_temp.check((select time_seconds from results where race_id = :'rt' and position = 4) = 7200, 'tiempo: al pasar a resultados se copia');
+set role anon;
+select pg_temp.check((select (x->>'time_seconds')::int from jsonb_array_elements(runner_team('DDDDDDDDDD')->'races') r, jsonb_array_elements(r->'results') x where r->>'id' = :'rt' and x->>'position' = '4') = 7200, 'tiempo: el equipo ve el tiempo de las carreras');
 reset role;
 \echo TODAS LAS PRUEBAS SQL OK
