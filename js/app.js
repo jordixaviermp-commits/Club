@@ -344,6 +344,8 @@ function openGlobalSearch() {
   dlg.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ev.target.dataset?.gs !== undefined) { ev.preventDefault(); const a = dlg.querySelector('#gs-results a.mini-main, #gs-results button.mini-main'); if (a) a.click(); } });
   dlg.addEventListener('click', (ev) => {
     if (ev.target.closest('[data-gs-close]')) return dlg.close();
+    const fa = ev.target.closest('.fdlg [data-act]');
+    if (fa && actions[fa.dataset.act]) { ev.preventDefault(); dlg.close(); actions[fa.dataset.act](fa); return; }
     const m = ev.target.closest('[data-gs-mate]');
     if (m) { dlg.close(); openMate(m.dataset.gsMate); }
   });
@@ -364,6 +366,7 @@ function bellButton() {
 
 const ICON_AID = 'M9 3h6v6h6v6h-6v6H9v-6H3V9h6z';
 /** Botón «Accidente» (a la izquierda de la campanita): da los datos del seguro con un toque. */
+const ICON_FILTER = 'M4 6h8M16 6h4M4 12h2M10 12h10M4 18h10M18 18h2M14 4a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM8 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM16 16a2 2 0 1 0 0 4 2 2 0 0 0 0-4z';
 const ICON_SEARCH = 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3';
 /** Lupa de la cabecera: búsqueda rápida por palabra en toda la app. */
 const searchButton = () => `<button type="button" class="icon-btn" data-act="gsearch" aria-label="Buscar en toda la app" title="Buscar">${icon(ICON_SEARCH)}</button>`;
@@ -581,16 +584,10 @@ function modFilterBar(regs, me = null) {
     .filter(Boolean).join(' · ') || 'Filtro activo'}: ${n} carrera${n === 1 ? '' : 's'} próxima${n === 1 ? '' : 's'} · 👥 ${people} compañero${people === 1 ? '' : 's'} apuntado${people === 1 ? '' : 's'}
     <button class="link small" data-act="filters-clear">Quitar filtros</button></p>` : '';
   if (!me) return modRow + subRow + whoRow + sum;
-  // una sola línea, delgada: modalidad y (si procede) formato. Sin más filtros: el equipo se ve en la barra de abajo.
+  // Corredores: los filtros (modalidad y, si procede, formato) van en una ventanita que abre el botón de filtros junto al buscador.
   S.who = 'all';
-  const o = (v, cur, label) => `<option value="${esc(v)}"${cur === v ? ' selected' : ''}>${label}</option>`;
-  const dd = (f, cur, label, opts) => `<select data-filter="${f}" class="${cur !== 'all' ? 'on' : ''}" aria-label="${label}">${opts}</select>`;
-  const selects = [
-    mods.length >= 2 ? dd('mod', S.mod, 'Modalidad', o('all', S.mod, 'Todas las modalidades') + mods.map((m) => o(m, S.mod, `${MOD_ICON[m] || '🏁'} ${esc(m)} (${upOf(regs).filter((g) => g.modality === m).length})`)).join('')) : '',
-    showSubs ? dd('sub', S.sub, 'Formato', o('all', S.sub, 'Todos los formatos') + subs.map(([k, n]) => o(k, S.sub, `${k === '_none' ? 'Sin formato' : esc(k)} (${n})`)).join('')) : '',
-  ].filter(Boolean);
-  if (!selects.length) return '';
-  return `<div class="fbar">${selects.join('')}${filtersOn(me) ? '<button type="button" class="fclear" data-act="filters-clear" aria-label="Quitar filtros" title="Quitar filtros">✕</button>' : ''}</div>`;
+  S.fd = { html: modRow + subRow, has: mods.length >= 2, active: filtersOn(me) };
+  return '';
 }
 
 /** Lista de carreras agrupada por mes, con cabecera plegable («Diciembre 2026 · 4 carreras · 👥 6»). */
@@ -1117,6 +1114,7 @@ function viewRunnerHome() {
   const upcoming = regs.filter((g) => g.date >= today);
   const past = regs.filter((g) => g.date < today);
   const card = runnerRegCard;
+  modFilterBar(d.registrations, me); // calcula S.fd (botón y ventana de filtros)
   const isMine = (g) => (g.entries || []).some((e) => e.runner_id === me.id) || (g.results || []).some((x) => x.runner_id === me.id);
   const done = byMod((S.team?.races || []).filter((r) => (r.results || []).length));
   const body = S.regView === 'cal'
@@ -1128,10 +1126,10 @@ function viewRunnerHome() {
   return frame(runnerTitle(), `
     ${previewBanner()}
     <div class="toolbar">
-      ${searchBox('runner', 'Buscar carrera, pueblo o compañero…')}
-      <button class="btn primary add-btn wide" data-act="r-new" aria-label="Añadir una carrera que no está" title="Añadir una carrera que no está">＋ Nueva</button>
+      ${searchBox('runner', 'Buscar carrera…')}
+      ${S.fd?.has ? `<button type="button" class="icon-btn fbtn${S.fd.active ? ' on' : ''}" data-act="r-filters" aria-label="Filtros${S.fd.active ? ' (activos)' : ''}" title="Filtros">${icon(ICON_FILTER)}${S.fd.active ? '<i class="fdot"></i>' : ''}</button>` : ''}
+      <button class="btn primary add-btn mini" data-act="r-new" aria-label="Añadir una carrera que no está" title="Añadir una carrera que no está">＋ Nueva</button>
     </div>
-    ${modFilterBar(d.registrations, me)}
     <div id="pulse-box">${normalize(S.q.runner || '').length >= 2 ? '' : teamPulse(d)}</div>
     <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
     ${body}`,
@@ -3052,6 +3050,13 @@ const actions = {
   'who-filter'(el) { S.who = el.dataset.w; render(); },
   'filters-clear'() { clearFilters(); render(); },
   'gsearch'() { openGlobalSearch(); },
+  'r-filters'() {
+    const dlg = document.getElementById('dialog');
+    dlg.innerHTML = `<form method="dialog" class="dlg fdlg"><h2>Filtros</h2>
+      <p class="hint">Modalidad</p>${S.fd?.html || ''}
+      <div class="dlg-actions">${S.fd?.active ? '<button type="button" class="btn" data-act="filters-clear">Quitar filtros</button>' : ''}<button value="" class="btn ghost">Cerrar</button></div></form>`;
+    dlg.onclose = null; dlg.showModal();
+  },
   'pulse-month'(el) {
     const ym = el.dataset.m;
     S.fold.delete(ym);
