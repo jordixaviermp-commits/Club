@@ -100,6 +100,18 @@ create table if not exists public.runner_documents (
   created_at timestamptz default now()
 );
 create index if not exists runner_documents_runner_idx on public.runner_documents(runner_id);
+
+-- Contrato de cada tipo (nuevo, renovación, renovación sin licencia): la dirección sube uno y cada corredor ve el suyo.
+create table if not exists public.contract_templates (
+  contract   text primary key check (contract in ('nuevo','renovacion','renovacion_sin_licencia')),
+  title      text not null default 'Contrato',
+  filename   text not null,
+  mime       text not null check (mime in ('application/pdf','image/jpeg','image/png','image/webp')),
+  size       integer not null check (size > 0 and size <= 5000000),
+  data       bytea not null,
+  updated_at timestamptz default now()
+);
+alter table public.contract_templates enable row level security;
 alter table public.runner_documents enable row level security;  -- permisos: ver «Seguridad» más abajo
 
 -- Tipo de contrato del corredor en la temporada actual.
@@ -264,16 +276,16 @@ $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['runners','registrations','registration_entries','races','results','settings','runner_documents','circuit_podiums','announcements','change_log','announcement_replies','correction_requests','social_posts'] loop
+  foreach t in array array['runners','registrations','registration_entries','races','results','settings','runner_documents','contract_templates','circuit_podiums','announcements','change_log','announcement_replies','correction_requests','social_posts'] loop
     execute format('drop policy if exists admin_all on public.%I', t);
     execute format('create policy admin_all on public.%I for all to authenticated using (public.is_admin()) with check (public.is_admin())', t);
   end loop;
 end $$;
 
 revoke all on public.runners, public.registrations, public.registration_entries,
-              public.races, public.results, public.admins, public.settings, public.runner_documents, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts from anon, public;
+              public.races, public.results, public.admins, public.settings, public.runner_documents, public.contract_templates, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts from anon, public;
 grant select, insert, update, delete on public.runners, public.registrations,
-              public.registration_entries, public.races, public.results, public.settings, public.runner_documents, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts to authenticated;
+              public.registration_entries, public.races, public.results, public.settings, public.runner_documents, public.contract_templates, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts to authenticated;
 revoke all on public.admins from authenticated;
 
 -- ---------- Funciones de dirección (respetan la seguridad de arriba) ---
@@ -819,6 +831,50 @@ begin
   return jsonb_build_object('filename', d.filename, 'mime', d.mime, 'b64', encode(d.data, 'base64'));
 end $$;
 
+create or replace function public.upload_contract_template(p_contract text, p_title text, p_filename text, p_mime text, p_b64 text)
+returns void language plpgsql set search_path = public as $$
+declare v_data bytea := decode(p_b64, 'base64');
+begin
+  perform public.require_admin();
+  insert into contract_templates (contract, title, filename, mime, size, data)
+  values (p_contract, left(coalesce(nullif(btrim(p_title), ''), 'Contrato'), 120), left(p_filename, 200), p_mime, length(v_data), v_data)
+  on conflict (contract) do update set title = excluded.title, filename = excluded.filename, mime = excluded.mime,
+    size = excluded.size, data = excluded.data, updated_at = now();
+end $$;
+
+create or replace function public.get_contract_template(p_contract text)
+returns jsonb language plpgsql stable set search_path = public as $$
+declare d contract_templates;
+begin
+  perform public.require_admin();
+  select * into d from contract_templates where contract = p_contract;
+  if not found then raise exception 'no_existe'; end if;
+  return jsonb_build_object('filename', d.filename, 'mime', d.mime, 'b64', encode(d.data, 'base64'));
+end $$;
+
+-- El corredor ve (datos) y descarga solo el contrato de SU tipo.
+create or replace function public.runner_contract_template(p_code text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare v_contract text; d contract_templates;
+begin
+  select contract into v_contract from runners where code = p_code;
+  if not found then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  select * into d from contract_templates where contract = v_contract;
+  if not found then return null; end if;
+  return jsonb_build_object('contract', d.contract, 'title', d.title, 'filename', d.filename, 'mime', d.mime, 'size', d.size, 'updated_at', d.updated_at);
+end $$;
+
+create or replace function public.runner_get_contract_template(p_code text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare v_contract text; d contract_templates;
+begin
+  select contract into v_contract from runners where code = p_code;
+  if not found then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  select * into d from contract_templates where contract = v_contract;
+  if not found then raise exception 'no_existe'; end if;
+  return jsonb_build_object('filename', d.filename, 'mime', d.mime, 'b64', encode(d.data, 'base64'));
+end $$;
+
 -- «La hice y no salgo»: el corredor se añade a una carrera que ya está en resultados (sin puesto;
 -- después lo pone él con runner_report_result). Solo carreras ya disputadas desde el 1 de enero del año anterior.
 create or replace function public.runner_join_race(p_code text, p_race uuid, p_category text)
@@ -1099,7 +1155,7 @@ grant execute on function public.runner_view(text), public.runner_join(text, uui
                           public.runner_create_registration(text, jsonb, text),
                           public.runner_update_registration(text, uuid, jsonb), public.runner_delete_registration(text, uuid),
                           public.runner_report_result(text, text, uuid, int, text, text, int),
-                          public.runner_documents_list(text), public.runner_get_document(text, uuid),
+                          public.runner_documents_list(text), public.runner_get_document(text, uuid), public.runner_contract_template(text), public.runner_get_contract_template(text),
                           public.runner_team(text),
                           public.runner_leave(text, uuid), public.runner_join_race(text, uuid, text),
                           public.runner_set_race_type(text, uuid, text, text), public.runner_propose_circuit(text, text, int, int, text),
@@ -1111,4 +1167,4 @@ grant execute on function public.is_admin(), public.require_admin(),
                           public.save_registration(jsonb, jsonb), public.save_race(jsonb, jsonb),
                           public.promote_registration(uuid), public.delete_runner(uuid, boolean),
                           public.import_backup(jsonb), public.resolve_correction(uuid, boolean, text), public.upload_document(uuid, int, text, text, text, text),
-                          public.get_document(uuid) to authenticated;
+                          public.get_document(uuid), public.upload_contract_template(text, text, text, text, text), public.get_contract_template(text) to authenticated;

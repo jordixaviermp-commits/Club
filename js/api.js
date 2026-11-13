@@ -100,6 +100,14 @@ export function supabaseApi(url, key) {
       return ok(await sb.rpc('upload_document', { p_runner: runnerId, p_year: year, p_title: title, p_filename: filename, p_mime: mime, p_b64: b64 }));
     },
     async getDocument(id) { return ok(await sb.rpc('get_document', { p_id: id })); },
+    async listContractTemplates() { return ok(await sb.from('contract_templates').select('contract,title,filename,mime,size,updated_at')); },
+    async uploadContractTemplate(contract, title, filename, mime, b64) {
+      ok(await sb.rpc('upload_contract_template', { p_contract: contract, p_title: title, p_filename: filename, p_mime: mime, p_b64: b64 }));
+    },
+    async getContractTemplate(contract) { return ok(await sb.rpc('get_contract_template', { p_contract: contract })); },
+    async deleteContractTemplate(contract) { ok(await sb.from('contract_templates').delete().eq('contract', contract)); },
+    async runnerContractTemplate(code) { return ok(await sb.rpc('runner_contract_template', { p_code: code })); },
+    async runnerGetContractTemplate(code) { return ok(await sb.rpc('runner_get_contract_template', { p_code: code })); },
     async deleteDocument(id) { ok(await sb.from('runner_documents').delete().eq('id', id)); },
     async regenerateCode(id) { ok(await sb.from('runners').update({ code: newCode() }).eq('id', id)); },
     async deleteRunner(id, anonymize) { ok(await sb.rpc('delete_runner', { p_id: id, p_anonymize: anonymize })); },
@@ -310,6 +318,22 @@ export function demoApi(storage = globalThis.localStorage) {
     },
     async getDocument(id) { requireAdmin(); const x = (load().documents || []).find((y) => y.id === id); if (!x) throw new Error('no_existe'); return { filename: x.filename, mime: x.mime, b64: x.b64 }; },
     async deleteDocument(id) { requireAdmin(); const d = load(); d.documents = (d.documents || []).filter((x) => x.id !== id); save(); },
+    async listContractTemplates() { requireAdmin(); return clone((load().contract_templates || []).map(({ b64, ...m }) => m)); },
+    async uploadContractTemplate(contract, title, filename, mime, b64) {
+      requireAdmin(); const d = load();
+      d.contract_templates = (d.contract_templates || []).filter((x) => x.contract !== contract).concat([{ contract, title: title || 'Contrato', filename, mime, size: Math.round(b64.length * 0.75), updated_at: new Date().toISOString(), b64 }]);
+      save();
+    },
+    async getContractTemplate(contract) { requireAdmin(); const x = (load().contract_templates || []).find((y) => y.contract === contract); if (!x) throw new Error('no_existe'); return { filename: x.filename, mime: x.mime, b64: x.b64 }; },
+    async deleteContractTemplate(contract) { requireAdmin(); const d = load(); d.contract_templates = (d.contract_templates || []).filter((x) => x.contract !== contract); save(); },
+    async runnerContractTemplate(code) {
+      const me = byCode(code); const x = (load().contract_templates || []).find((y) => y.contract === me.contract);
+      if (!x) return null; const { b64, ...m } = x; return clone(m);
+    },
+    async runnerGetContractTemplate(code) {
+      const me = byCode(code); const x = (load().contract_templates || []).find((y) => y.contract === me.contract);
+      if (!x) throw new Error('no_existe'); return { filename: x.filename, mime: x.mime, b64: x.b64 };
+    },
     async runnerDocuments(code) { const me = byCode(code); return clone((load().documents || []).filter((x) => x.runner_id === me.id).map(({ b64, runner_id, ...m }) => m)); },
     async runnerGetDocument(code, id) {
       const me = byCode(code); const x = (load().documents || []).find((y) => y.id === id && y.runner_id === me.id);

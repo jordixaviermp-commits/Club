@@ -640,3 +640,6 @@ ol.bullets { list-style: decimal; }
 .rk-name b::after { content: " ›"; color: var(--muted); font-weight: 400; }
 .edit-list.results .res-time { flex: 1 1 100%; display: flex; align-items: center; gap: .5rem; font-size: .9rem; color: var(--muted, #667); }
 .edit-list.results .res-time input { max-width: 8.5rem; }
+a.chip { text-decoration: none; display: inline-flex; align-items: center; }
+.subtabs { margin-bottom: .6rem; }
+.tpl-cur { display: flex; flex-direction: column; gap: .3rem; }

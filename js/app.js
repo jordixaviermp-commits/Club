@@ -153,6 +153,7 @@ async function reload() {
   try { await api.autoPromote(); } catch { /* aún falta su SQL */ } // pasa solas a resultados las carreras ya disputadas con puestos
   S.data = await api.loadAll();
   try { S.docs = await api.listDocuments(); } catch { S.docs = null; } // null = falta el SQL de contratos
+  try { S.tpls = await api.listContractTemplates(); } catch { S.tpls = null; } // null = falta el SQL de contratos por tipo
 }
 
 // ---------- rutas ----------
@@ -255,7 +256,7 @@ function frame(title, body, { back, actions = '', rtab = null } = {}) {
     ? `<nav class="tabs">${RUNNER_TABS.map(([v, label, d]) =>
       `<a href="${runnerHref(v)}" class="${v === rtab ? 'on' : ''}">${icon(d)}<span>${label}</span></a>`).join('')}</nav>`
     : admin ? `<nav class="tabs">${ADMIN_TABS.map(([v, label, d]) =>
-      `<a href="#/${v}" class="${view === v || (!view && v === 'inscripciones') ? 'on' : ''}">${icon(d)}<span>${label}</span></a>`).join('')}</nav>` : '';
+      `<a href="#/${v}" class="${view === v || (!view && v === 'inscripciones') || (v === 'corredores' && view === 'contratos') ? 'on' : ''}">${icon(d)}<span>${label}</span></a>`).join('')}</nav>` : '';
   return `
     ${api.mode === 'demo' ? `<div class="demo-bar">Modo demostración: datos de prueba guardados solo en este móvil.</div>` : ''}
     <header class="top">
@@ -290,7 +291,7 @@ function render() {
     html = ({
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
       carreras: S.draft ? viewRaceEdit : viewRaces,
-      resumen: viewSummary, corredores: viewRunners, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
+      resumen: viewSummary, corredores: viewRunners, contratos: viewContracts, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
       vista: () => (S.preview && S.runnerData ? runnerScreen(parseRoute().id || '') : viewRunners()),
       equipo: () => (S.preview ? viewTeam() : viewSummary()),
     }[view] || viewRegistrations)();
@@ -2166,18 +2167,22 @@ function viewDocs(runnerId) {
 
 async function loadMyDocs() {
   try { S.myDocs = await api.runnerDocuments(S.code || S.previewCode); } catch { S.myDocs = null; }
+  try { S.myTpl = await api.runnerContractTemplate(S.code || S.previewCode); } catch { S.myTpl = null; }
   if (S.runnerData) render();
 }
 
 function myDocsCard() {
-  const docs = S.myDocs;
+  const docs = S.myDocs, tpl = S.myTpl;
   if (!docs) return '';
   return `<section class="card season-block docs-block">
     <h2>📄 Mi contrato y documentos</h2>
+    ${tpl ? `<ul class="mini-list"><li><div><b>${docIcon(tpl.mime)} ${esc(tpl.title)}</b>
+      <small class="muted">${esc(contractLabel(tpl.contract))} · ${fmtSize(tpl.size)}</small></div>
+      <button class="btn primary small" data-act="my-tpl-open">Ver</button></li></ul>` : ''}
     ${docs.length ? `<ul class="mini-list">${docs.map((x) => `<li><div><b>${docIcon(x.mime)} ${esc(x.title)}</b>
       <small class="muted">Temporada ${x.year} · ${fmtSize(x.size)}</small></div>
       <button class="btn primary small" data-act="my-doc-open" data-id="${x.id}">Ver</button></li>`).join('')}</ul>`
-      : '<p class="empty small">La dirección aún no ha subido tu contrato.</p>'}
+      : (tpl ? '' : '<p class="empty small">La dirección aún no ha subido tu contrato.</p>')}
   </section>`;
 }
 
@@ -2246,6 +2251,33 @@ function askLink(title, text, current) {
   });
 }
 
+/** Pestañas de arriba de Corredores: plantilla y contratos por tipo. */
+const runnersTabs = (cur) => `<div class="years subtabs">${[['corredores', '👥 Plantilla'], ['contratos', '📄 Contratos']].map(([v, l]) =>
+  `<a class="chip${cur === v ? ' on' : ''}" href="#/${v}" aria-current="${cur === v}">${l}</a>`).join('')}</div>`;
+
+/** Contratos por tipo: se sube uno de cada y cada corredor ve el de su tipo (el que se le asignó en su ficha). */
+function viewContracts() {
+  const runners = S.data.runners;
+  const body = S.tpls === null
+    ? `<p class="card warn">Falta activar los contratos por tipo: ejecuta en Supabase el SQL <code>supabase/cambios/2026-11-13-contratos-tipo.sql</code>.</p>`
+    : `<p class="hint">Sube <b>un contrato por tipo</b>. Cada corredor verá en su pestaña «Contrato» el de su tipo, el que le hayas asignado en su ficha. Si vuelves a subir uno, <b>sustituye</b> al anterior.</p>
+      ${CONTRACTS.map((c) => {
+        const t = (S.tpls || []).find((x) => x.contract === c.id), n = runners.filter((r) => r.contract === c.id).length;
+        return `<section class="card stack tpl-card"><h2>${esc(c.label)} <small class="muted">· ${n} corredor${n === 1 ? '' : 'es'}</small></h2>
+          ${t ? `<div class="tpl-cur"><b>${docIcon(t.mime)} ${esc(t.title)}</b><small class="muted">${esc(t.filename)} · ${fmtSize(t.size)} · subido ${formatDate(String(t.updated_at).slice(0, 10), false)}</small>
+            <span class="row-btns"><button class="btn small" data-act="tpl-open" data-c="${c.id}">Ver</button><button class="btn small danger ghost" data-act="tpl-del" data-c="${c.id}" aria-label="Borrar">🗑️</button></span></div>`
+            : '<p class="empty small">Todavía no hay contrato de este tipo: estos corredores no ven ninguno.</p>'}
+          <form class="stack" data-form="tpl-upload" data-contract="${c.id}">
+            <label class="btn file">📎 ${t ? 'Sustituir por otro' : 'Elegir archivo'} (PDF o foto)<input type="file" name="file" accept="application/pdf,image/*" hidden required></label>
+            <p class="hint doc-chosen">Ningún archivo elegido. Máximo 5 MB.</p>
+            <label>Título<input name="title" value="${esc(t?.title || 'Contrato ' + c.label.toLowerCase())}" maxlength="120"></label>
+            <button class="btn primary">${t ? 'Sustituir' : 'Subir'}</button>
+          </form></section>`; }).join('')}
+      ${(() => { const sin = runners.filter((r) => !CONTRACTS.some((c) => c.id === r.contract)); return sin.length
+        ? `<p class="card warn">⚠️ <b>${sin.length}</b> corredor${sin.length === 1 ? '' : 'es'} sin tipo de contrato asignado, y no verán ninguno: ${esc(sin.slice(0, 12).map((r) => r.name).join(', '))}${sin.length > 12 ? '…' : ''}. Asígnalo en la ficha de cada uno (campo «Contrato»).</p>` : ''; })()}`;
+  return frame('Corredores', `${runnersTabs('contratos')}${body}`);
+}
+
 function viewRunners() {
   const counts = new Map();
   for (const r of S.data.races) for (const x of r.results) if (x.runner_id) counts.set(x.runner_id, (counts.get(x.runner_id) || 0) + 1);
@@ -2254,6 +2286,7 @@ function viewRunners() {
   const bonusBy = new Map(yearBonuses(year, S.data.races, S.data.registrations, S.data.runners, bonusCfg(year), S.data.circuitPodiums || []).map((b) => [b.runner.id, b]));
   const badge = (b) => !b ? '' : `<small class="bbadge ${b.reachesMinimum ? (b.tier ? 'ok' : '') : 'bad'}">Bono ${year}: ${b.count}/${b.next ? b.next.races : b.count}${b.tier ? ` · ${euros(b.amount)}` : ''}${b.reachesMinimum ? '' : ' · bajo mínimo'}</small>`;
   return frame(`Corredores (${runners.length})`, `
+    ${runnersTabs('corredores')}
     <a class="btn block" href="#/bonos">Bonos por carreras ${year}</a>
     ${clothingLine()}
     <details class="card" ${runners.length ? '' : 'open'}>
@@ -2372,6 +2405,13 @@ const actions = {
   // corredor
   async 'doc-open'(el) { const doc = await run(() => api.getDocument(el.dataset.id)); if (doc) openDoc(doc); },
   async 'my-doc-open'(el) { const doc = await run(() => api.runnerGetDocument(S.code || S.previewCode, el.dataset.id)); if (doc) openDoc(doc); },
+  async 'my-tpl-open'() { const doc = await run(() => api.runnerGetContractTemplate(S.code || S.previewCode)); if (doc) openDoc(doc); },
+  async 'tpl-open'(el) { const doc = await run(() => api.getContractTemplate(el.dataset.c)); if (doc) openDoc(doc); },
+  async 'tpl-del'(el) {
+    const c = el.dataset.c;
+    if (!await confirmAction('Borrar contrato', `Se borrará el contrato «${esc(contractLabel(c))}». Los corredores de ese tipo dejarán de verlo.`, 'Borrar')) return;
+    await run(async () => { await api.deleteContractTemplate(c); await reload(); }, 'Contrato borrado'); render();
+  },
   async 'doc-del'(el) {
     const x = (S.docs || []).find((y) => y.id === el.dataset.id);
     if (!await confirmAction('Borrar documento', `Se borrará «${esc(x?.title || '')}». El corredor dejará de verlo.`, 'Borrar')) return;
@@ -2808,6 +2848,17 @@ const forms = {
       position <= 3 ? `${medal(position)} ¡Enhorabuena! Resultado enviado` : 'Resultado enviado');
     if (ok) go(runnerHref('mi'));
   },
+  async 'tpl-upload'(f) {
+    const file = f.file.files?.[0];
+    if (!file) return toast('Elige un archivo.', true);
+    if (!/^(application\/pdf|image\/)/.test(file.type)) return toast('Solo PDF o fotos (JPG, PNG, WEBP).', true);
+    const ok = await run(async () => {
+      const { b64, mime } = await fileToB64(file);
+      await api.uploadContractTemplate(f.dataset.contract, f.title.value.trim(), file.name, mime, b64);
+      await reload(); return true;
+    }, 'Contrato subido: ya lo ven los corredores de ese tipo');
+    if (ok) render();
+  },
   async 'doc-upload'(f) {
     const file = f.file.files?.[0];
     if (!file) return toast('Elige un archivo.', true);
@@ -3080,8 +3131,8 @@ $app.addEventListener('change', async (ev) => {
   } else if (t.dataset.runnerCat) {
     const id = t.dataset.runnerCat;
     await run(async () => { await api.updateRunner(id, { category: t.value || null }); runnerById(id).category = t.value || null; }, 'Categoría guardada');
-  } else if (t.name === 'file' && t.closest('[data-form="doc-upload"]')) {
-    const f = t.files?.[0]; const p = $app.querySelector('#doc-chosen');
+  } else if (t.name === 'file' && t.closest('[data-form="doc-upload"], [data-form="tpl-upload"]')) {
+    const f = t.files?.[0]; const p = t.closest('form').querySelector('#doc-chosen, .doc-chosen');
     if (p && f) p.textContent = `Elegido: ${f.name} (${fmtSize(f.size)})`;
   } else if (t.dataset.file && t.files?.[0]) {
     const file = t.files[0]; t.value = '';

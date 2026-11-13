@@ -502,4 +502,25 @@ select pg_temp.check((select time_seconds from results where race_id = :'rt' and
 set role anon;
 select pg_temp.check((select (x->>'time_seconds')::int from jsonb_array_elements(runner_team('DDDDDDDDDD')->'races') r, jsonb_array_elements(r->'results') x where r->>'id' = :'rt' and x->>'position' = '4') = 7200, 'tiempo: el equipo ve el tiempo de las carreras');
 reset role;
+-- contratos por tipo
+reset role;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+select upload_contract_template('renovacion_sin_licencia', 'Contrato sin licencia', 'c1.pdf', 'application/pdf', encode('%PDF-1.4 uno'::bytea, 'base64'));
+select upload_contract_template('renovacion_sin_licencia', 'Contrato sin licencia v2', 'c2.pdf', 'application/pdf', encode('%PDF-1.4 dos'::bytea, 'base64'));
+select pg_temp.check((select count(*) from contract_templates) = 1, 'tipo: subir otra vez el mismo tipo lo reemplaza');
+select pg_temp.expect_fail($q$select upload_contract_template('otro', 'x', 'x.pdf', 'application/pdf', 'aGk=')$q$, 'tipo: contrato desconocido rechazado');
+select pg_temp.expect_fail($q$select upload_contract_template('nuevo', 'x', 'x.exe', 'application/x-msdownload', 'aGk=')$q$, 'tipo: solo PDF o imágenes');
+select pg_temp.check(convert_from(decode(get_contract_template('renovacion_sin_licencia')->>'b64', 'base64'), 'UTF8') = '%PDF-1.4 dos', 'tipo: la dirección descarga el vigente');
+reset role;
+set role anon;
+select set_config('request.jwt.claim.sub', '', false);
+select pg_temp.check(runner_contract_template('BBBBBBBBBB')->>'title' = 'Contrato sin licencia v2', 'tipo: el corredor ve el contrato de su tipo');
+select pg_temp.check(convert_from(decode(runner_get_contract_template('BBBBBBBBBB')->>'b64', 'base64'), 'UTF8') = '%PDF-1.4 dos', 'tipo: y lo descarga');
+select pg_temp.check(runner_contract_template('CCCCCCCCCC') is null, 'tipo: quien tiene otro tipo (o ninguno) no ve ese contrato');
+select pg_temp.expect_fail($q$select runner_get_contract_template('CCCCCCCCCC')$q$, 'tipo: ni lo descarga');
+select pg_temp.expect_fail($q$select runner_contract_template('XXXXXXXXXXXX')$q$, 'tipo: sin enlace válido no');
+select pg_temp.expect_fail($q$select upload_contract_template('nuevo', 'x', 'x.pdf', 'application/pdf', 'aGk=')$q$, 'tipo: anon no sube');
+select pg_temp.expect_fail('select * from contract_templates', 'tipo: anon no lee la tabla');
+reset role;
 \echo TODAS LAS PRUEBAS SQL OK
