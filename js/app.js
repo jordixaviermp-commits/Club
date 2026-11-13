@@ -2673,6 +2673,7 @@ function viewRunners() {
   const f = S.rfilter || 'todos';
   return frame(`Corredores (${all.length})`, `
     ${runnersTabs('corredores')}
+    ${S.data?.settings?.enlaces_direccion?.ropa_respuestas ? clothingLine() : ''}
     <div class="rr-kpis">${RFILTERS.map(([id, label, cls]) => `<button class="rr-kpi ${cls}${f === id ? ' on' : ''}${id !== 'todos' && !n[id] ? ' zero' : ''}" data-act="r-filter" data-f="${id}" aria-pressed="${f === id}"><b>${n[id]}</b><span>${label}</span></button>`).join('')}</div>
     <div class="toolbar">
       ${searchBox('rlist', 'Buscar corredor…')}
@@ -2684,7 +2685,7 @@ function viewRunners() {
       <summary><b>⚙️ Gestionar plantilla</b> <span class="muted">· añadir, renovar, enlaces, bonos</span></summary>
       <div class="stack">
         <div class="quick"><a class="btn" href="#/bonos">💶 Bonos ${year}</a>${all.length ? '<button class="btn" data-act="all-links">🔗 Copiar todos los enlaces</button>' : ''}</div>
-        ${clothingLine()}
+        ${S.data?.settings?.enlaces_direccion?.ropa_respuestas ? '' : clothingLine()}
         <details class="card">
           <summary><b>+ Añadir corredores</b></summary>
           <form class="stack" data-form="bulk">
