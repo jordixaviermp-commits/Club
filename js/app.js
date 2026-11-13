@@ -2499,7 +2499,7 @@ function viewContracts() {
   const runners = S.data.runners;
   const body = S.tpls === null
     ? `<p class="card warn">Falta activar los contratos por tipo: ejecuta en Supabase el SQL <code>supabase/cambios/2026-11-13-contratos-tipo.sql</code>.</p>`
-    : `<p class="hint">Sube <b>un contrato por tipo</b>. Cada corredor verá en su pestaña «Contrato» el de su tipo, el que le hayas asignado en su ficha. Si vuelves a subir uno, <b>sustituye</b> al anterior.</p>
+    : `<p class="hint">Sube <b>un contrato por tipo</b>. Cada corredor verá en su pestaña «Contrato» el de su tipo, el que le hayas asignado en su ficha. Si vuelves a subir uno, <b>sustituye</b> al anterior (del mismo tipo). Los documentos que se subieron antes a cada corredor, uno a uno, no se borran solos: están más abajo.</p>
       ${CONTRACTS.map((c) => {
         const t = (S.tpls || []).find((x) => x.contract === c.id), n = runners.filter((r) => r.contract === c.id).length;
         return `<section class="card stack tpl-card"><h2>${esc(c.label)} <small class="muted">· ${n} corredor${n === 1 ? '' : 'es'}</small></h2>
@@ -2512,6 +2512,16 @@ function viewContracts() {
             <label>Título<input name="title" value="${esc(t?.title || 'Contrato ' + c.label.toLowerCase())}" maxlength="120"></label>
             <button class="btn primary">${t ? 'Sustituir' : 'Subir'}</button>
           </form></section>`; }).join('')}
+      ${(() => { // contratos antiguos subidos uno a uno a cada corredor (ficha → Subir documentos)
+        const old = (S.docs || []).filter((x) => /contrato/i.test(x.title)), rest = (S.docs || []).length - old.length;
+        if (!old.length) return '';
+        const who = new Set(old.map((x) => x.runner_id)).size;
+        return `<section class="card stack old-docs"><h2>🧹 Contratos antiguos de cada corredor</h2>
+          <p class="hint">Antes se subía un contrato a cada corredor, uno a uno. Esos <b>siguen en su ficha y los corredores los ven</b> junto al contrato nuevo de su tipo. Hay <b>${old.length}</b> en <b>${who}</b> corredor${who === 1 ? '' : 'es'}.${rest ? ` Otros ${rest} documento${rest === 1 ? '' : 's'} (que no se llaman «contrato») no se tocan.` : ''}</p>
+          <details><summary>Ver cuáles son</summary><ul class="mini-list">${old.map((x) => `<li><div><b>${esc(runnerById(x.runner_id)?.name || 'Corredor')}</b><small class="muted">${esc(x.title)} · ${x.year} · ${esc(x.filename)}</small></div></li>`).join('')}</ul></details>
+          <button class="btn" data-act="backup-docs">⬇️ Descargar una copia antes</button>
+          <button class="btn danger" data-act="docs-old-del">🗑️ Borrar los ${old.length} contratos antiguos</button>
+          <p class="hint">Así cada corredor verá solo el contrato de su tipo, el que subes arriba. No se puede deshacer: descarga antes la copia.</p></section>`; })()}
       ${(() => { const sin = runners.filter((r) => !CONTRACTS.some((c) => c.id === r.contract)); return sin.length
         ? `<p class="card warn">⚠️ <b>${sin.length}</b> corredor${sin.length === 1 ? '' : 'es'} sin tipo de contrato asignado, y no verán ninguno: ${esc(sin.slice(0, 12).map((r) => r.name).join(', '))}${sin.length > 12 ? '…' : ''}. Asígnalo en la ficha de cada uno (campo «Contrato»).</p>` : ''; })()}`;
   return frame('Corredores', `${runnersTabs('contratos')}${body}`);
@@ -2689,6 +2699,14 @@ const actions = {
   async 'my-doc-open'(el) { const doc = await run(() => api.runnerGetDocument(S.code || S.previewCode, el.dataset.id)); if (doc) openDoc(doc); },
   async 'my-tpl-open'() { const doc = await run(() => api.runnerGetContractTemplate(S.code || S.previewCode)); if (doc) openDoc(doc); },
   async 'tpl-open'(el) { const doc = await run(() => api.getContractTemplate(el.dataset.c)); if (doc) openDoc(doc); },
+  async 'docs-old-del'() {
+    const old = (S.docs || []).filter((x) => /contrato/i.test(x.title));
+    if (!old.length) return;
+    const who = new Set(old.map((x) => x.runner_id)).size;
+    if (!await confirmAction('Borrar contratos antiguos', `Se borrarán <b>${old.length}</b> contrato${old.length === 1 ? '' : 's'} subido${old.length === 1 ? '' : 's'} a <b>${who}</b> corredor${who === 1 ? '' : 'es'}. Los corredores solo verán el contrato de su tipo. <b>No se puede deshacer.</b> ¿Descargaste antes la copia?`, 'Borrar', 'danger')) return;
+    const n = await run(async () => { let done = 0; for (const x of old) { toast(`Borrando ${done + 1} de ${old.length}…`); await api.deleteDocument(x.id); done++; } await reload(); return done; });
+    if (n) { toast(`${n} contrato${n === 1 ? '' : 's'} antiguo${n === 1 ? '' : 's'} borrado${n === 1 ? '' : 's'}`); render(); }
+  },
   async 'tpl-del'(el) {
     const c = el.dataset.c;
     if (!await confirmAction('Borrar contrato', `Se borrará el contrato «${esc(contractLabel(c))}». Los corredores de ese tipo dejarán de verlo.`, 'Borrar')) return;
