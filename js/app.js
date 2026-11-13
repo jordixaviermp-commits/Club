@@ -2,7 +2,7 @@
 import { CONFIG } from './config.js';
 import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
-  CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, parseKm, kmText, socialAudit, resKeyOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
+  CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
   extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
@@ -162,7 +162,19 @@ async function run(fn, okMsg) {
   finally { S.busy = false; document.body.classList.remove('busy'); }
 }
 
+/** Registro de historias previas publicadas por la tarea automática (archivo público, sin datos personales). */
+const STORY_LOG_URLS = ['https://raw.githubusercontent.com/jordixaviermp-commits/Club/claude/historias-instagram/historias/registro.json'];
+async function loadStories() {
+  let log = null;
+  for (const url of STORY_LOG_URLS) {
+    try { const r = await fetch(url, { cache: 'no-cache' }); if (r.ok) { log = parseStoryLog(await r.json()); break; } } catch { /* sin conexión o sin registro todavía */ }
+  }
+  S.stories = log || { desde: null, byKey: new Map(), none: true };
+  if (['inscripciones', 'carreras', 'publicaciones', 'avisos', ''].includes(parseRoute().view) && S.session?.isAdmin && !S.draft) render();
+}
+
 async function reload() {
+  if (S.stories === undefined && S.session?.isAdmin) loadStories();
   try { await api.autoPromote(); } catch { /* aún falta su SQL */ } // pasa solas a resultados las carreras ya disputadas con puestos
   S.data = await api.loadAll();
   try { S.docs = await api.listDocuments(); } catch { S.docs = null; } // null = falta el SQL de contratos
@@ -1123,7 +1135,7 @@ function viewRegistrations() {
   const regs = [...S.data.registrations].sort((a, b) => a.date.localeCompare(b.date) || byName(a, b));
   const card = (g) => `<a class="card race link-card ${g.date < today ? 'past-reg ' : ''}${modClass(g.modality)}" href="#/inscripciones/${g.id}">
       <div class="race-head"><div><h3>${esc(g.name)}</h3>
-      <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality)}</div>${typeTag(g)}
+      <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality)}</div>${typeTag(g)}${pubTags(g)}
       ${g.suspended ? '<p class="state-tag">⛔ Suspendida: cuenta para el mínimo, no para el bono</p>' : g.date < today ? `<p class="state-tag">🏁 Ya disputada${g.entries.some((e) => e.self_position) ? ` · 📝 ${g.entries.filter((e) => e.self_position).length} de ${g.entries.length} han puesto su resultado` : ''}</p>` : ''}
       <p class="count">👥 ${g.entries.length} del club${g.entries.length ? ': ' +
         esc(g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p>
@@ -1301,6 +1313,7 @@ function viewRegistrationEdit() {
   const d = S.draft;
   if (!d) return frame('Inscripción', '<p class="empty">Esta inscripción ya no existe.</p>', { back: '#/inscripciones' });
   return frame(d.id ? 'Editar inscripción' : 'Nueva inscripción', `
+    ${d.id ? pubsBlock(d, false) : ''}
     <form class="card stack" data-form="save-reg">
       ${raceFields(d)}
       ${d.id ? '' : `<div id="dup-admin">${dupSuggestions(d.name, S.data.registrations, false)}</div>`}
@@ -1463,6 +1476,26 @@ function viewWeek() {
     ${socialAdminCard()}`, { back: '#/inscripciones' });
 }
 
+/** Estado de la historia previa (la publica la tarea automática 2 días antes) de una inscripción o carrera. */
+const pubStory = (g) => (Array.isArray(g.entries) && !g.entries.length ? null : storyState(g, S.stories?.byKey ? S.stories : null, postedSet().has(postKey(g)), todayISO()));
+const shortDate = (iso) => formatDate(iso, false);
+const storyLabel = (s) => ({ ok: `Historia ✓ ${s.date ? shortDate(s.date) : ''}${s.n > 1 ? ` · ${s.n} páginas` : ''}`.trim(), manual: 'Historia ✓ (marcada a mano)', hoy: 'Historia: sale hoy',
+  programada: `Historia: sale el ${s.date ? shortDate(s.date) : ''}`, falta: 'Historia: no consta' }[s.state]);
+const storyTag = (g) => { const s = pubStory(g); return s ? `<span class="pub-tag ${s.state === 'ok' || s.state === 'manual' ? 'ok' : s.state === 'falta' ? 'bad' : ''}">📸 ${s.state === 'falta' ? '⚠️ ' : ''}${esc(storyLabel(s))}</span>` : ''; };
+const postTag = (r) => ((r.results || []).length && (r.end_date || r.date) <= todayISO()
+  ? `<span class="pub-tag ${postedSet().has(resKey(r)) ? 'ok' : ''}">🖼️ Post de resultados ${postedSet().has(resKey(r)) ? '✓' : 'pendiente'}</span>` : '');
+const pubTags = (g, done = false) => { const t = storyTag(g) + (done ? postTag(g) : ''); return t ? `<p class="pub-tags">${t}</p>` : ''; };
+/** Bloque «Redes» en la ficha de una carrera o inscripción: historia previa (automática) y post de resultados (a mano). */
+function pubsBlock(d, done) {
+  const g = (done ? S.data.races : S.data.registrations).find((x) => x.id === d.id);
+  if (!g) return '';
+  const s = pubStory(g);
+  return `<section class="card pubs-card"><h3>📸 Redes</h3>
+    <p><b>Historia previa</b> <small class="muted">(la publica la tarea automática 2 días antes)</small><br>${s ? storyTag(g) : '<span class="muted">No toca o aún no hay datos.</span>'}</p>
+    ${s?.state === 'falta' ? `<button class="btn small" data-act="pub-story-manual" data-key="${esc(postKey(g))}">Marcar como publicada (a mano)</button>` : ''}
+    ${done && (g.results || []).length ? `<p><b>Post de resultados</b> <small class="muted">(lo publicas tú)</small></p><div class="row">${postCheck(g, resKey(g), 'Post de resultados publicado')}</div>` : ''}</section>`;
+}
+
 /** Texto de la publicación de resultados de una carrera ya en resultados. */
 const raceResultText = (r) => resultText({ name: r.name, date: r.date, end_date: r.end_date, place: r.place, province: r.province,
   podium: (r.results || []).filter((x) => x.position >= 1 && x.position <= 3).sort((a, b) => a.position - b.position).map((x) => ({ position: x.position, name: x.runner_name, category: x.category })),
@@ -1485,6 +1518,7 @@ function viewPublications() {
     ...a.resLate.map((x) => ({ icon: '⚠️', text: `Resultados sin publicar desde hace ${x.days} días: <b>${esc(x.race.name)}</b>`, card: resCard(x, true) })),
     ...a.noResults.map((x) => ({ icon: '❓', text: `<b>${esc(x.reg.name)}</b> terminó ${ago(x.days)} y nadie ha puesto su puesto (${x.people} inscrito${x.people === 1 ? '' : 's'}): no hay resultados que publicar`, link: `#/inscripciones/${x.reg.id}` })),
     ...a.suspendedPosted.map((x) => ({ icon: '⛔', text: `Se publicó el aviso de <b>${esc(x.name)}</b>, pero la carrera está suspendida: conviene publicar la anulación`, link: `#/inscripciones/${x.id}` })),
+    ...a.storyMissing.map((g) => ({ icon: '📸', text: `No consta la historia previa de <b>${esc(g.name)}</b> (${esc(shortDate(g.date))}); debía salir el ${esc(shortDate(storyDateOf(g)))}. Si se publicó y no consta, márcala a mano`, link: `#/${g.results ? 'carreras' : 'inscripciones'}/${g.id}`, storyKey: postKey(g) })),
     ...(a.orphans.length ? [{ icon: '🔗', text: `<b>${a.orphans.length}</b> marca${a.orphans.length === 1 ? '' : 's'} de «publicada» sin carrera (se cambió el nombre o la fecha después de marcarla, o se borró): ${esc(a.orphans.slice(0, 3).map((o) => o.key.replace('res|', '').split('|')[1] || o.key).join(', '))}${a.orphans.length > 3 ? '…' : ''}`, orphan: true }] : []),
   ];
   return frame('Publicaciones en redes', `
@@ -1497,7 +1531,7 @@ function viewPublications() {
     <p class="hint">Cada carrera tiene <b>dos publicaciones</b>: el <b>aviso</b> antes y los <b>resultados</b> unos días después. Marca ✓ cada una cuando esté hecha (el encargado de redes también las marca desde su enlace).</p>
     ${warn}
     ${anomalies.length ? `<h2 class="section">⚠️ Anomalías (${a.anomalies})</h2>${anomalies.map((x) => x.card || `<article class="card pen bad-box"><p>${x.icon} ${x.text}</p>
-      ${x.link ? `<a class="btn small" href="${x.link}">Abrir</a>` : ''}${x.orphan ? '<button class="btn small danger ghost" data-act="pub-orphans-del">Quitar esas marcas</button>' : ''}</article>`).join('')}` : '<p class="card pen ok">✅ Sin anomalías.</p>'}
+      ${x.storyKey ? `<button class="btn small" data-act="pub-story-manual" data-key="${esc(x.storyKey)}">Marcar como publicada</button>` : ''}${x.link ? `<a class="btn small" href="${x.link}">Abrir</a>` : ''}${x.orphan ? '<button class="btn small danger ghost" data-act="pub-orphans-del">Quitar esas marcas</button>' : ''}</article>`).join('')}` : '<p class="card pen ok">✅ Sin anomalías.</p>'}
     ${a.resOld.length ? `<article class="card"><p>📦 <b>${a.resOld.length}</b> carrera${a.resOld.length === 1 ? '' : 's'} de hace más de 45 días sin marca de «resultados publicados». No se vigilan (son de antes de este control), así que no cuentan como pendientes ni anomalías.</p>
       <button class="btn small" data-act="pub-old-done">✓ Darlas por publicadas</button></article>` : ''}
     <h2 class="section">🏁 Resultados por publicar (${a.resPending.length})</h2>
@@ -1507,11 +1541,13 @@ function viewPublications() {
     ${a.waiting.length ? `<h2 class="section">🕓 A la espera de los resultados (${a.waiting.length})</h2>
       <p class="hint">Ya se han corrido, pero los corredores aún no han puesto su puesto (tienen 3 días; luego pasan solas a resultados).</p>
       ${a.waiting.map((x) => `<article class="card"><p><b>${esc(x.reg.name)}</b> · ${esc(when(x.reg))}<br><small class="muted">terminó ${ago(x.days)} · ${x.people} inscrito${x.people === 1 ? '' : 's'}</small></p><a class="btn small ghost" href="#/inscripciones/${x.reg.id}">Abrir</a></article>`).join('')}` : ''}
-    <h2 class="section">📅 Avisos por publicar (${a.avisoPending.length})</h2>
-    ${a.avisoPending.length ? `<p class="hint">Carreras de los próximos 14 días con inscritos y sin aviso publicado.</p>${a.avisoPending.map((x) => postCard(x.reg)).join('')}` : '<p class="empty small">No hay avisos pendientes en los próximos 14 días.</p>'}
+    <h2 class="section">📸 Historias previas · automáticas</h2>
+    <p class="hint">La historia de cada carrera con inscritos la publica la tarea automática <b>2 días antes</b>. Aquí ves si consta como publicada (así sabes que habrá estadística de esa historia).${S.stories?.none ? ' <b>Aún no hay registro</b>: aparecerá cuando la tarea automática publique la próxima historia.' : ''}</p>
+    ${(() => { const up = S.data.registrations.filter((g) => !g.suspended && g.entries.length && g.date >= todayISO() && daysTo(g.date) <= 14).sort((x, y) => x.date.localeCompare(y.date) || byName(x, y));
+      return up.length ? up.map((g) => `<article class="card"><p><b>${esc(g.name)}</b> · ${esc(when(g))}<br>${storyTag(g)}</p><a class="btn small ghost" href="#/inscripciones/${g.id}">Abrir</a></article>`).join('') : '<p class="empty small">No hay carreras con inscritos en los próximos 14 días.</p>'; })()}
     ${a.resDone.length ? `<details class="card"><summary><b>✅ Resultados ya publicados (${a.resDone.length})</b></summary><ul class="mini-list">${a.resDone.map((x) => `<li><div><b>${esc(x.race.name)}</b><small class="muted">${esc(when(x.race))}</small></div>
       <label class="check"><input type="checkbox" data-act-change="post" data-key="${esc(x.key)}" checked> ✓</label></li>`).join('')}</ul><p class="hint">Quita la marca si te equivocaste.</p></details>` : ''}
-    ${socialAdminCard()}`, { back: '#/avisos' });
+    ${socialAdminCard()}`, { back: '#/avisos', actions: '<button class="icon-btn" data-act="pub-refresh" aria-label="Actualizar">↻</button>' });
 }
 
 /** Dirección: historial de cambios (quién cambió qué y cuándo). */
@@ -1682,7 +1718,7 @@ function adminAlerts() {
     corrections: (S.data.corrections || []).filter((c) => c.status === 'pendiente'),
   };
 }
-const pubAudit = (year = new Date().getFullYear()) => socialAudit(year, S.data.races, S.data.registrations, Array.isArray(S.data.socialPosts) ? S.data.socialPosts : [...postedSet()].map((key) => ({ key })), todayISO());
+const pubAudit = (year = new Date().getFullYear()) => socialAudit(year, S.data.races, S.data.registrations, Array.isArray(S.data.socialPosts) ? S.data.socialPosts : [...postedSet()].map((key) => ({ key })), todayISO(), S.stories?.byKey ? S.stories : null);
 /** Publicaciones que la dirección tiene por hacer: resultados con 3 o más días sin publicar y anomalías. */
 const pubDue = () => { const a = pubAudit(); return a.resPending.filter((x) => x.days >= 3).length + a.anomalies; };
 const alertCount = () => { const a = adminAlerts(); return a.circuits.length + a.weekTodo.length + a.backup.length + a.corrections.length + pubDue(); };
@@ -1763,7 +1799,7 @@ function raceListHtml() {
     const st = podiumsOf(r.results.map((x) => ({ race: r, res: x }))).filter((p) => p.stage);
     return `<a class="card race link-card ${modClass(r.modality)}" href="#/carreras/${r.id}">
       <div class="race-head"><div><h3>${esc(r.name)}</h3>
-      <p class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div>${modTag(r.modality)}</div>${typeTag(r)}
+      <p class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div>${modTag(r.modality)}</div>${typeTag(r)}${pubTags(r, true)}
       <p class="count">${r.results.length} participante${r.results.length === 1 ? '' : 's'}${medals ? ` · ${medals}` : ''}${r.stages?.length ? ` · ${r.stages.length} etapas${st.length ? `, ${st.length} podio${st.length === 1 ? '' : 's'} de etapa` : ''}` : ''}</p>
       ${res.length ? `<p class="pods">${res.map((x) => `${medal(x.position)} ${esc(x.runner_name)}${x.category ? ` <small>${esc(x.category)}</small>` : ''}`).join(' · ')}</p>` : ''}
       ${issues.length ? `<p class="issues">${issues.map((x) => `<span class="issue">⚠️ ${esc(x)}</span>`).join('')}</p>` : ''}</a>`;
@@ -1821,6 +1857,7 @@ function viewRaceEdit() {
   const d = S.draft;
   if (!d) return frame('Carrera', '<p class="empty">Esta carrera ya no existe.</p>', { back: '#/carreras' });
   return frame(d.id ? 'Editar carrera' : 'Nueva carrera', `
+    ${d.id ? pubsBlock(d, true) : ''}
     <form class="card stack" data-form="save-race">
       ${raceFields(d)}
       ${d.id ? '' : `<div id="dup-race">${raceDupes(d.name)}</div>`}
@@ -3030,6 +3067,8 @@ const actions = {
     if (!await confirmAction('Marcar como publicadas', `Se marcarán <b>${a.resOld.length}</b> carreras antiguas como «resultados publicados». Así dejan de aparecer.`, 'Marcar', 'primary')) return;
     await setPostedKeys(a.resOld.map((x) => x.key), true);
   },
+  async 'pub-refresh'() { await Promise.all([refreshPosts(true), loadStories()]); toast('Actualizado'); },
+  async 'pub-story-manual'(el) { await setPostedKeys([el.dataset.key], true); toast('Marcada como publicada'); },
   async 'pub-orphans-del'() { await setPostedKeys(pubAudit(S.year).orphans.map((o) => o.key), false); toast('Marcas quitadas'); },
   'print-report'() { window.print(); },
   'rep-frozen'(el) { S.repFrozen = el.dataset.v === '1'; render(); },

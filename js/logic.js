@@ -333,12 +333,43 @@ export function icsEvent(g, now = new Date()) {
 /** Clave del aviso previo de una carrera y de la publicación de sus resultados (no cambian al pasar a resultados). */
 export const postKeyOf = (g) => `${g.date}|${normalize(g.name)}`;
 export const resKeyOf = (g) => 'res|' + postKeyOf(g);
+/** Día en que se publica la historia previa (automática): dos días antes de la carrera. */
+export const storyDateOf = (g) => { const d = new Date(String(g.date).slice(0, 10) + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() - 2); return d.toISOString().slice(0, 10); };
+/** Interpreta el registro de historias publicadas (lo escribe la tarea automática): { desde, byKey: Map(clave → {n, publicada, ids}) }. */
+export function parseStoryLog(json) {
+  const byKey = new Map();
+  for (const h of Array.isArray(json?.historias) ? json.historias : []) {
+    if (!h?.carrera || !h?.fecha) continue;
+    const k = postKeyOf({ date: String(h.fecha).slice(0, 10), name: h.carrera });
+    const e = byKey.get(k) || { n: 0, publicada: null, ids: [] };
+    e.n++; if (h.publicada && (!e.publicada || h.publicada < e.publicada)) e.publicada = String(h.publicada).slice(0, 10); if (h.media_id) e.ids.push(String(h.media_id));
+    byKey.set(k, e);
+  }
+  return { desde: /^\d{4}-\d{2}-\d{2}$/.test(json?.desde || '') ? json.desde : null, byKey };
+}
+/**
+ * Estado de la historia previa de una carrera: { state: 'ok'|'manual'|'hoy'|'programada'|'falta', text, date, n } o null si no toca.
+ * `log`: resultado de parseStoryLog (o null si aún no hay registro); `marked`: la dirección la marcó a mano.
+ */
+export function storyState(g, log, marked, today) {
+  const hit = log?.byKey.get(postKeyOf(g));
+  if (hit) return { state: 'ok', date: hit.publicada, n: hit.n };
+  if (marked) return { state: 'manual' };
+  if (g.suspended) return null;
+  const sd = storyDateOf(g);
+  const made = String(g.created_at || '').slice(0, 10);
+  if (made && made > sd) return null;           // se creó después del día de la historia: no pudo haberla
+  if (sd > today) return { state: 'programada', date: sd };
+  if (sd === today) return { state: 'hoy', date: sd };
+  if (log?.desde && sd >= log.desde) return { state: 'falta', date: sd };  // debía publicarse y no consta
+  return null;                                   // de antes de que existiera el registro: no se sabe
+}
 
 /**
  * Qué publicaciones hay hechas, pendientes y con anomalía. Cada carrera tiene dos: el aviso (antes) y los resultados (unos días después).
  * `posts`: filas {key, posted_at?} marcadas. `today`: 'AAAA-MM-DD'.
  */
-export function socialAudit(year, races, registrations, posts, today) {
+export function socialAudit(year, races, registrations, posts, today, log = null) {
   const dayDiff = (a, b) => Math.round((Date.parse(a + 'T12:00:00Z') - Date.parse(b + 'T12:00:00Z')) / 86400000);
   const posted = new Set(posts.map((x) => x.key));
   const last = (g) => g.end_date || g.date;
@@ -359,9 +390,13 @@ export function socialAudit(year, races, registrations, posts, today) {
   const noResults = past.filter((x) => x.days >= 3 && x.days <= HORIZON && !(x.reg.entries || []).some((e) => e.self_position));
 
   // avisos previos
-  const avisoPending = registrations.filter((g) => !g.suspended && people(g) && g.date >= today && dayDiff(g.date, today) <= 14 && !posted.has(postKeyOf(g)))
+  const avisoPending = registrations.filter((g) => !g.suspended && people(g) && g.date >= today && dayDiff(g.date, today) <= 14 && !posted.has(postKeyOf(g)) && !log?.byKey.has(postKeyOf(g)))
     .map((g) => ({ reg: g, inDays: dayDiff(g.date, today) })).sort((a, b) => a.inDays - b.inDays);
   const suspendedPosted = registrations.filter((g) => g.suspended && people(g) && posted.has(postKeyOf(g)));
+
+  // historias previas que debían salir y no constan (solo carreras con inscritos o con resultados, de los últimos 45 días)
+  const storyMissing = [...registrations.filter((g) => people(g)), ...races.filter((r) => (r.results || []).length)]
+    .filter((g) => dayDiff(today, g.date) <= HORIZON && storyState(g, log, posted.has(postKeyOf(g)), today)?.state === 'falta');
 
   // marcas que ya no corresponden a ninguna carrera (se cambió el nombre o la fecha, o se borró)
   const valid = new Set([...races.flatMap((r) => [postKeyOf(r), resKeyOf(r)]), ...registrations.map(postKeyOf)]);
@@ -370,12 +405,12 @@ export function socialAudit(year, races, registrations, posts, today) {
 
   // publicadas en esta temporada
   const marks = new Set();
-  for (const g of [...races, ...registrations]) if (inYear(g) && posted.has(postKeyOf(g))) marks.add(postKeyOf(g));
+  for (const g of [...races, ...registrations]) if (inYear(g) && (posted.has(postKeyOf(g)) || log?.byKey.has(postKeyOf(g)))) marks.add(postKeyOf(g));
   for (const r of races) if (inYear(r) && posted.has(resKeyOf(r))) marks.add(resKeyOf(r));
 
   const pending = resPending.length + waiting.length + avisoPending.length;
-  const anomalies = resLate.length + noResults.length + suspendedPosted.length + orphans.length;
-  return { done: marks.size, pending, anomalies, resDone, resPending, resLate, resOld, waiting, noResults, avisoPending, suspendedPosted, orphans };
+  const anomalies = resLate.length + noResults.length + suspendedPosted.length + orphans.length + storyMissing.length;
+  return { done: marks.size, pending, anomalies, resDone, resPending, resLate, resOld, storyMissing, waiting, noResults, avisoPending, suspendedPosted, orphans };
 }
 
 // ---------- Cómputo de temporada (dirección) ----------
