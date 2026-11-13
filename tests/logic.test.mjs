@@ -384,3 +384,22 @@ test('yearSummary suma tiempos solo de quien los tiene', async () => {
   assert.equal(row.time, 3600); assert.equal(row.timed, 1); assert.equal(row.races, 2);
   assert.equal(s.totals.time, 3600); assert.equal(s.totals.timed, 1);
 });
+
+test('cómputo de temporada: resumen por corredor y detalle', async () => {
+  const { seasonByRunner, seasonDetail, SEASON_COLUMNS } = await import('../js/logic.js');
+  const runners = [{ id: 'a', name: 'Ana', category: 'M30', contract: 'nuevo' }, { id: 'b', name: 'Beto' }];
+  const races = [
+    { id: 'r1', name: 'Uno', date: '2026-03-01', modality: 'BTT', province: 'Huesca', country: 'España', km: 50, results: [{ runner_id: 'a', runner_name: 'Ana', position: 1, podium_type: 'suelta', time_seconds: 7200 }] },
+    { id: 'r2', name: 'Dos', date: '2026-04-01', end_date: '2026-04-03', modality: 'Carretera', province: 'Lleida', country: 'España', results: [{ runner_id: 'a', runner_name: 'Ana', position: 8 }] },
+    { id: 'r3', name: 'Vieja', date: '2025-04-01', modality: 'BTT', results: [{ runner_id: 'b', runner_name: 'Beto', position: 2 }] },
+  ];
+  const rows = seasonByRunner(2026, races, runners, (c) => c || '');
+  const ix = (n) => SEASON_COLUMNS.indexOf(n);
+  assert.equal(rows.length, 2);
+  const ana = rows.find((r) => r[0] === 'Ana'), beto = rows.find((r) => r[0] === 'Beto');
+  assert.equal(ana[ix('Carreras')], 2); assert.equal(ana[ix('Días de carrera')], 4); assert.equal(ana[ix('Oros')], 1);
+  assert.equal(ana[ix('Km')], 50); assert.equal(ana[ix('Tiempo total (h:mm:ss)')], '2:00:00'); assert.equal(ana[ix('Provincias')], 'Huesca, Lleida');
+  assert.equal(beto[ix('Carreras')], 0);
+  const det = seasonDetail(2026, races);
+  assert.equal(det.length, 2); assert.equal(det[0][3], 'Uno'); assert.equal(det[0][15], '2:00:00');
+});
