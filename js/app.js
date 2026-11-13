@@ -50,7 +50,7 @@ const S = {
   session: null, code: store.get(CODE_KEY), news: null, newsFresh: new Set(),
   data: null, runnerData: null,
   year: new Date().getFullYear(), draft: null, busy: false, showPast: false, installEvt: null,
-  fedSeguro: FEDERACIONES[store.get(FED_KEY)] ? store.get(FED_KEY) : null, mod: store.get(MOD_KEY) || 'all', sub: 'all', who: 'all', fold: new Set(), regView: store.get(VIEW_KEY) === 'cal' ? 'cal' : 'list', calMonth: null, calDay: null,
+  fedSeguro: FEDERACIONES[store.get(FED_KEY)] ? store.get(FED_KEY) : null, mod: store.get(MOD_KEY) || 'all', sub: 'all', who: 'all', fsub: 'all', kind: 'all', fold: new Set(), regView: store.get(VIEW_KEY) === 'cal' ? 'cal' : 'list', calMonth: null, calDay: null,
   q: { runner: '', admin: '', rlist: '' }, rdraft: null,
 };
 
@@ -534,20 +534,48 @@ const MOD_ICON = { Carretera: '🚴', BTT: '⛰️', Gravel: '🪨', Ciclocross:
 /** Deja solo las carreras de la modalidad elegida (todas si no hay filtro). */
 const byMod = (list) => (S.mod === 'all' ? list : list.filter((x) => x.modality === S.mod));
 /** Modalidad + formato (+ «con compañeros» / «aún no estoy apuntado» si se indica `me`). */
+/** Tipos de prueba para filtrar (corredores): por etapas, liga o copa (puntuable de un circuito) y campeonato. */
+const KIND_TEST = { stages: (g) => !!g.end_date && g.end_date > g.date, circuit: (g) => g.race_type === 'circuito', champ: (g) => g.race_type === 'campeonato' };
+const KIND_LABEL = { stages: '🗓️ Por etapas', circuit: '🏆 Liga o copa', champ: '🥇 Campeonato' };
 function regFilter(list, me = null) {
   let out = byMod(list);
   if (S.mod !== 'all' && S.sub !== 'all') out = out.filter((g) => (S.sub === '_none' ? !g.subtype : g.subtype === S.sub));
+  if (me && S.fsub !== 'all') out = out.filter((g) => g.subtype === S.fsub);
+  if (me && S.kind !== 'all') out = out.filter(KIND_TEST[S.kind] || (() => true));
   if (me && S.who === 'mates') out = out.filter((g) => (g.entries || []).some((e) => e.runner_id !== me.id));
   if (me && S.who === 'free') out = out.filter((g) => !(g.entries || []).some((e) => e.runner_id === me.id) && !(g.results || []).some((x) => x.runner_id === me.id));
   return out;
 }
-const filtersOn = (me) => S.mod !== 'all' || S.sub !== 'all' || (!!me && S.who !== 'all');
-const clearFilters = () => { S.mod = 'all'; S.sub = 'all'; S.who = 'all'; store.set(MOD_KEY, 'all'); };
+const filtersOn = (me) => S.mod !== 'all' || S.sub !== 'all' || (!!me && (S.who !== 'all' || S.fsub !== 'all' || S.kind !== 'all'));
+const clearFilters = () => { S.mod = 'all'; S.sub = 'all'; S.who = 'all'; S.fsub = 'all'; S.kind = 'all'; store.set(MOD_KEY, 'all'); };
 /**
  * Botones de filtro: modalidad → formato (al elegir modalidad) → situación (solo corredores).
  * Los números son carreras próximas. `regs`: todas las inscripciones; `me`: el corredor (null en dirección).
  */
+/** Filtros de los corredores: modalidad, formato (XCO, Critérium…) y tipo de prueba (etapas, liga o copa, campeonato). Rellena S.fd. */
+function runnerFilterModel(regs) {
+  const today = todayISO();
+  const up = regs.filter((g) => g.date >= today && !g.suspended);
+  const mods = MODALITIES.filter((m) => regs.some((g) => g.modality === m));
+  if (S.mod !== 'all' && !mods.includes(S.mod)) S.mod = 'all';
+  S.who = 'all'; S.sub = 'all';
+  const inMod = up.filter((g) => S.mod === 'all' || g.modality === S.mod);
+  const fmts = [...new Set(inMod.map((g) => g.subtype).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+  if (S.fsub !== 'all' && !fmts.includes(S.fsub)) S.fsub = 'all';
+  const okKind = (g) => S.kind === 'all' || KIND_TEST[S.kind](g), okFmt = (g) => S.fsub === 'all' || g.subtype === S.fsub;
+  const ch = (act, attr, val, cur, label, n, cls = '') => `<button type="button" class="chip modchip ${cls}${cur === val ? ' on' : ''}" data-act="${act}" data-${attr}="${esc(val)}" aria-pressed="${cur === val}">${label}${n == null ? '' : `<b>${n}</b>`}</button>`;
+  const kinds = Object.keys(KIND_TEST).map((k) => [k, inMod.filter((g) => okFmt(g) && KIND_TEST[k](g)).length]).filter(([k, n]) => n > 0 || S.kind === k);
+  const sec = (title, body) => `<p class="hint fsec">${title}</p><div class="modbar" role="group" aria-label="${title}">${body}</div>`;
+  const html = [
+    mods.length >= 2 ? sec('Modalidad', ch('mod-filter', 'm', 'all', S.mod, 'Todas', up.length) + mods.map((m) => ch('mod-filter', 'm', m, S.mod, `${MOD_ICON[m] || '🏁'} ${esc(m)}`, up.filter((g) => g.modality === m).length, modClass(m))).join('')) : '',
+    fmts.length ? sec('Formato', ch('fsub-filter', 's', 'all', S.fsub, 'Todos', null) + fmts.map((f) => ch('fsub-filter', 's', f, S.fsub, esc(f), inMod.filter((g) => g.subtype === f && okKind(g)).length)).join('')) : '',
+    kinds.length ? sec('Tipo de prueba', ch('kind-filter', 'k', 'all', S.kind, 'Todas', null) + kinds.map(([k, n]) => ch('kind-filter', 'k', k, S.kind, KIND_LABEL[k], n)).join('')) : '',
+  ].join('');
+  S.fd = { html, has: !!html, active: filtersOn(true) };
+}
+
 function modFilterBar(regs, me = null) {
+  if (me) { runnerFilterModel(regs); return ''; }
   const today = todayISO();
   const upOf = (list) => list.filter((g) => g.date >= today && !g.suspended);
   const mods = MODALITIES.filter((m) => regs.some((g) => g.modality === m));
@@ -568,26 +596,12 @@ function modFilterBar(regs, me = null) {
     ${chip('sub-filter', 's', 'all', S.sub, 'Todos', inMod.length)}
     ${subs.map(([k, n]) => chip('sub-filter', 's', k, S.sub, k === '_none' ? 'Sin formato' : esc(k), n)).join('')}
   </div>` : '';
-  const base = upOf(regFilter(regs));
-  const mates = (g) => (g.entries || []).some((e) => e.runner_id !== me.id);
-  const free = (g) => !(g.entries || []).some((e) => e.runner_id === me.id) && !(g.results || []).some((x) => x.runner_id === me.id);
-  const whoRow = me ? `<div class="modbar whobar" role="group" aria-label="Filtrar por situación">
-    ${chip('who-filter', 'w', 'all', S.who, 'Todas', base.length)}
-    ${chip('who-filter', 'w', 'mates', S.who, '👥 Con compañeros', base.filter(mates).length)}
-    ${chip('who-filter', 'w', 'free', S.who, '➕ Aún no estoy apuntado', base.filter(free).length)}
-  </div>` : '';
-  const shown = upOf(regFilter(regs, me));
+  const shown = upOf(regFilter(regs, null));
   const people = new Set(shown.flatMap((g) => (g.entries || []).map((e) => e.runner_id))).size;
   const n = shown.length;
-  const sum = filtersOn(me) ? `<p class="hint modsum">${[S.mod !== 'all' ? `${MOD_ICON[S.mod] || ''} <b>${esc(S.mod)}</b>` : '', S.sub !== 'all' ? `<b>${S.sub === '_none' ? 'sin formato' : esc(S.sub)}</b>` : '',
-    me && S.who === 'mates' ? '<b>con compañeros</b>' : '', me && S.who === 'free' ? '<b>sin apuntarme</b>' : '']
-    .filter(Boolean).join(' · ') || 'Filtro activo'}: ${n} carrera${n === 1 ? '' : 's'} próxima${n === 1 ? '' : 's'} · 👥 ${people} compañero${people === 1 ? '' : 's'} apuntado${people === 1 ? '' : 's'}
+  const sum = filtersOn(null) ? `<p class="hint modsum">${[S.mod !== 'all' ? `${MOD_ICON[S.mod] || ''} <b>${esc(S.mod)}</b>` : '', S.sub !== 'all' ? `<b>${S.sub === '_none' ? 'sin formato' : esc(S.sub)}</b>` : ''].filter(Boolean).join(' · ') || 'Filtro activo'}: ${n} carrera${n === 1 ? '' : 's'} próxima${n === 1 ? '' : 's'} · 👥 ${people} compañero${people === 1 ? '' : 's'} apuntado${people === 1 ? '' : 's'}
     <button class="link small" data-act="filters-clear">Quitar filtros</button></p>` : '';
-  if (!me) return modRow + subRow + whoRow + sum;
-  // Corredores: los filtros (modalidad y, si procede, formato) van en una ventanita que abre el botón de filtros junto al buscador.
-  S.who = 'all';
-  S.fd = { html: modRow + subRow, has: mods.length >= 2, active: filtersOn(me) };
-  return '';
+  return modRow + subRow + sum;
 }
 
 /** Lista de carreras agrupada por mes, con cabecera plegable («Diciembre 2026 · 4 carreras · 👥 6»). */
@@ -3047,13 +3061,15 @@ const actions = {
     S.mod = el.dataset.m; S.sub = 'all'; S.calDay = null; store.set(MOD_KEY, S.mod); render();
   },
   'sub-filter'(el) { S.sub = el.dataset.s; render(); },
+  'fsub-filter'(el) { S.fsub = el.dataset.s; render(); },
+  'kind-filter'(el) { S.kind = el.dataset.k; render(); },
   'who-filter'(el) { S.who = el.dataset.w; render(); },
   'filters-clear'() { clearFilters(); render(); },
   'gsearch'() { openGlobalSearch(); },
   'r-filters'() {
     const dlg = document.getElementById('dialog');
     dlg.innerHTML = `<form method="dialog" class="dlg fdlg"><h2>Filtros</h2>
-      <p class="hint">Modalidad</p>${S.fd?.html || ''}
+      ${S.fd?.html || ''}
       <div class="dlg-actions">${S.fd?.active ? '<button type="button" class="btn" data-act="filters-clear">Quitar filtros</button>' : ''}<button value="" class="btn ghost">Cerrar</button></div></form>`;
     dlg.onclose = null; dlg.showModal();
   },
