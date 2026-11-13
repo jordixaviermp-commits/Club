@@ -968,9 +968,7 @@ function runnerRegCard(g) {
            <button class="btn ghost small" data-act="r-ics" data-id="${g.id}" aria-label="Añadir al calendario del móvil">📅 Calendario</button>
            <button class="btn ghost small" data-act="r-leave" data-id="${g.id}">Borrarme</button></div>`
         : me.category
-          ? `<div class="row join-row"><button class="btn primary grow" data-act="r-join" data-id="${g.id}">Apuntarme · <b>${esc(me.category)}</b></button>
-             <button class="link small" data-act="cat-show" data-id="${g.id}">cambiar categoría</button>
-             <span class="cat-pick" hidden>${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, me.category, 'Categoría')}</span></div>`
+          ? `<div class="row join-row"><button class="btn primary grow" data-act="r-join" data-id="${g.id}">Apuntarme</button></div>`
           : `<div class="row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, me.category, 'Categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">Apuntarme</button></div>`}
     </article>`;
@@ -2905,7 +2903,6 @@ const actions = {
   'r-sort'(el) { S.rsort = el.dataset.s; render(); },
   'r-manage'() { (S.open ||= {}).rmanage = true; render(); document.getElementById('manage')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
   'theme'(el) { store.set(THEME_KEY, el.dataset.t); applyTheme(el.dataset.t); render(); },
-  'cat-show'(el) { const row = el.closest('.join-row'); row.querySelector('.cat-pick').hidden = false; row.querySelector('[data-act="r-join"]').textContent = 'Apuntarme'; el.remove(); },
   'r-ics'(el) {
     const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id);
     if (g) download(`${normalize(g.name).replace(/\W+/g, '-')}.ics`, icsEvent(g), 'text/calendar;charset=utf-8');
