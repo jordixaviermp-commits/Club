@@ -38,12 +38,15 @@ const TIPOS = [
 
 // Precios del material del Club para la temporada (compras adicionales a lo incluido en el contrato)
 // 1.er par de calcetines gratis: nuevo y renovación (no sin licencia). Gorra y camiseta de patrocinadores gratis: solo nuevo.
+// [prenda, precio de equipo, recargo por unidad comprada si no llega al mínimo]
 const precios = (t) => [
-  ['Maillot', '25 €'], ['Culote', '40 €'], ['Maillot manga larga HYDER', '45 €'],
-  ['Calcetines aero (par)', t.licencia ? '1.º gratis · 2.º 15 €' : '15 €'], ['Chaleco', '35 €'], ['Manguitos', '15 €'],
-  ['Camiseta interior', '20 €'],
-  ...(t.id === 'Nuevo' ? [['Gorra de patrocinadores', 'Gratis'], ['Camiseta de patrocinadores', 'Gratis']] : []),
+  ['Maillot', '25 €', '15 €'], ['Culote', '40 €', '25 €'], ['Maillot manga larga HYDER', '45 €', '25 €'],
+  ['Calcetines aero (par)', t.licencia ? '1.º gratis · 2.º 15 €' : '15 €', '10 €'], ['Chaleco', '35 €', '20 €'], ['Manguitos', '15 €', '10 €'],
+  ['Camiseta interior', '20 €', '10 €'],
+  ...(t.id === 'Nuevo' ? [['Gorra de patrocinadores', 'Gratis', '—'], ['Camiseta de patrocinadores', 'Gratis', '—']] : []),
 ];
+// Ejemplos de la cláusula QUINTA: [descripción de la compra, recargo total]
+const EJEMPLOS = [['no compra ninguna prenda aparte', 0], ['compra 1 culote aparte', 25], ['compra 2 culotes y 1 chaleco aparte', 70]];
 
 const ORD = ['', 'un', 'dos', 'tres', 'cuatro'];
 const euros = (n) => `${n} €`;
@@ -64,9 +67,11 @@ function tercera(t, y) {
     items.push('El presente acuerdo no incluye la tramitación ni el pago de la licencia federativa por parte del Club, ni la entrega de equipaciones. El deportista deberá disponer de licencia federativa en vigor y competir con la indumentaria oficial del Club, cuyo coste correrá a su cargo.');
     items.push(`El deportista podrá adquirir las prendas del Club a los precios de la temporada ${y} indicados a continuación.`);
   }
-  const tablaPrecios = `<table class="precios"><tr><th colspan="4">Precios ${y} del material del Club</th></tr>
+  const tablaPrecios = `<table class="precios"><tr><th colspan="6">Precios ${y} del material del Club</th></tr>
+<tr class="ph"><td>Prenda</td><td class="n">Precio</td><td class="n">Recargo*</td><td>Prenda</td><td class="n">Precio</td><td class="n">Recargo*</td></tr>
 ${precios(t).reduce((rows, p, i) => (i % 2 ? rows[rows.length - 1].push(p) : rows.push([p]), rows), [])
-  .map((r) => `<tr>${r.map(([n, e]) => `<td>${n}</td><td class="n">${e}</td>`).join('')}${r.length < 2 ? '<td></td><td></td>' : ''}</tr>`).join('\n')}
+  .map((r) => `<tr>${r.map(([n, e, x]) => `<td>${n}</td><td class="n">${e}</td><td class="n">${x}</td>`).join('')}${r.length < 2 ? '<td></td><td></td><td></td>' : ''}</tr>`).join('\n')}
+<tr><td colspan="6" class="nota">* Recargo por cada prenda comprada aparte si no se alcanza el mínimo de ${COMUN.minimo} participaciones (cláusula QUINTA).</td></tr>
 </table>`;
   items.push(`Se ayudará económicamente al corredor según el número de pruebas realizadas durante la temporada ${y}. Siendo la bonificación:`);
   return `<div>
@@ -90,20 +95,29 @@ function cuarta(t) {
 
 function quinta(t, y, min) {
   const cuentan = `Se consideran válidas las competiciones oficiales (según la definición de la cláusula SÉPTIMA) disputadas representando al Club y con su indumentaria oficial entre el 01 de Enero y el 31 de Diciembre de ${y}. Las pruebas de varios días o por etapas computarán como una participación por cada día de competición disputado.`;
-  if (!t.penalizacion) {
-    return `<p class="clause"><b>QUINTA.- Participación.</b> ${cuentan} En la presente modalidad de acuerdo no se establece un número mínimo de participaciones ni penalización alguna por no alcanzarlo; el número de participaciones únicamente determina la bonificación prevista en la cláusula TERCERA.</p>`;
+  const base = t.penalizacion || 0;
+  const recargo = `Las prendas que el deportista adquiera aparte a los precios de equipo de la cláusula TERCERA (no las incluidas en el presente acuerdo ni las entregadas gratuitamente) están subvencionadas por el Club. Por ello, si no alcanza el mínimo, deberá abonar además el <b>recargo indicado para cada prenda adquirida</b> en la tabla de precios.`;
+  const ejemplos = `<p>Ejemplos si no se alcanza el mínimo: ${EJEMPLOS.map(([d, x], i) => `<b>Caso ${i + 1}:</b> ${d} → ${base + x ? `abona <b>${euros(base + x)}</b>${base && x ? ` (${euros(base)} + ${euros(x)})` : ''}` : 'no abona nada'}`).join('; ')}.</p>`;
+  const plazo = 'Dichos importes deberán abonarse en un plazo máximo de 30 días desde la finalización de la temporada, pudiendo el Club compensarlos con cualquier cantidad que tuviera pendiente de abonar al deportista.';
+  const lesion = `<p>Quedará exento de ${base ? 'la penalización y de los recargos' : 'los recargos'} el deportista que no pueda alcanzar el mínimo a causa de una <b>lesión sufrida compitiendo en una prueba oficial representando al Club</b>, siempre que la acredite mediante informe médico y la comunique al Club en un plazo máximo de 7 días desde la prueba. Esta exención no se aplicará a lesiones o enfermedades producidas fuera de competición (entrenamientos, actividades particulares u otras causas).</p>`;
+  if (!base) {
+    return `<div class="clause">
+<p><b>QUINTA.- Participación y recargo por prendas.</b> ${cuentan} En la presente modalidad de acuerdo no se establece penalización por número de participaciones.</p>
+<p>No obstante, si el deportista ha adquirido prendas del Club y, a la finalización del presente acuerdo, no ha alcanzado un <b>mínimo de ${min} participaciones</b>, deberá abonar el recargo correspondiente. ${recargo.replace('Por ello, si no alcanza el mínimo, deberá abonar además el ', 'El importe a abonar será el ')} ${plazo}</p>
+${ejemplos}
+${lesion}
+</div>`;
   }
   return `<div class="clause">
 <p><b>QUINTA.- Participación mínima y penalización.</b> El deportista se compromete a participar en un <b>mínimo de ${min} competiciones</b> durante la vigencia del presente acuerdo. ${cuentan}</p>
-<p>En caso de que, a la finalización del presente acuerdo, el deportista no haya alcanzado dicho mínimo, deberá abonar al Club una <b>penalización de ${euros(t.penalizacion)} (${enLetras[t.penalizacion]})</b>, en concepto de compensación por la aportación económica realizada por el Club en la licencia y las equipaciones. Dicho importe deberá abonarse en un plazo máximo de 30 días desde la finalización de la temporada, pudiendo el Club compensarlo con cualquier cantidad que tuviera pendiente de abonar al deportista.</p>
-<p>Quedará exento de esta penalización el deportista que no pueda alcanzar el mínimo a causa de una <b>lesión sufrida compitiendo en una prueba oficial representando al Club</b>, siempre que la acredite mediante informe médico y la comunique al Club en un plazo máximo de 7 días desde la prueba. Esta exención no se aplicará a lesiones o enfermedades producidas fuera de competición (entrenamientos, actividades particulares u otras causas).</p>
+<p>En caso de que, a la finalización del presente acuerdo, el deportista no haya alcanzado dicho mínimo, deberá abonar al Club una <b>penalización de ${euros(base)} (${enLetras[base]})</b>, en concepto de compensación por la aportación económica realizada por el Club en la licencia y las equipaciones. ${recargo} ${plazo}</p>
+${ejemplos}
+${lesion}
 </div>`;
 }
 
 function sexta(t) {
-  const ref = t.penalizacion
-    ? 'dicha prueba se tendría en cuenta para el mínimo de participaciones de la cláusula QUINTA del presente acuerdo pero no contaría como prueba realizada en cuanto a la bonificación de participaciones en carreras incluida en la cláusula TERCERA'
-    : 'dicha prueba no contaría como prueba realizada en cuanto a la bonificación de participaciones en carreras incluida en la cláusula TERCERA';
+  const ref = 'dicha prueba se tendría en cuenta para el mínimo de participaciones de la cláusula QUINTA del presente acuerdo pero no contaría como prueba realizada en cuanto a la bonificación de participaciones en carreras incluida en la cláusula TERCERA';
   return `<p class="clause"><b>SEXTA.-</b> En caso de que el deportista estuviera inscrito en una prueba y esta fuera suspendida, ${ref}.</p>`;
 }
 
@@ -114,7 +128,7 @@ function html(t) {
 <style>
 @page { size: A4; margin: 16mm 17mm 18mm 17mm; }
 * { box-sizing: border-box; }
-body { font-family: Arial, "Liberation Sans", Helvetica, sans-serif; font-size: 9.1pt; color: #222; line-height: 1.38; margin: 0; }
+body { font-family: Arial, "Liberation Sans", Helvetica, sans-serif; font-size: 8.8pt; color: #222; line-height: 1.33; margin: 0; }
 h1 { font-size: 17pt; margin: 0 0 2px; letter-spacing: .3px; color: #111; }
 .sub { color: #6b7a99; font-size: 10pt; margin: 0 0 10px; padding-bottom: 9px; border-bottom: 2.5px solid #d32f2f; }
 h2 { font-size: 12pt; letter-spacing: .6px; margin: 11px 0 6px; padding-bottom: 4px; border-bottom: 1px solid #ddd; color: #111; }
@@ -124,13 +138,15 @@ p { margin: 0 0 8px; text-align: justify; }
 ul { margin: 4px 0 8px; padding-left: 16px; }
 li { margin-bottom: 5px; text-align: justify; }
 table { border-collapse: collapse; width: 62%; margin: 6px 0 12px; font-size: 9.2pt; }
-th, td { border: 1px solid #d6d9e0; padding: 5px 8px; }
+th, td { border: 1px solid #d6d9e0; padding: 4px 8px; }
 th { background: #f1f3f7; text-align: left; }
 td.n { text-align: right; font-weight: bold; }
 table { page-break-inside: avoid; }
 table.precios { width: 100%; font-size: 8.8pt; margin: 2px 0 8px; }
 table.precios th { text-align: center; }
 table.precios td { padding: 3px 8px; }
+table.precios tr.ph td { background: #f7f8fb; font-size: 8pt; color: #555; font-weight: bold; }
+table.precios td.nota { font-size: 8pt; color: #555; }
 .clause { page-break-inside: avoid; }
 .sign { display: flex; justify-content: space-between; margin-top: 34px; page-break-inside: avoid; }
 .sign div { width: 44%; text-align: center; border-top: 1px solid #555; padding-top: 6px; }

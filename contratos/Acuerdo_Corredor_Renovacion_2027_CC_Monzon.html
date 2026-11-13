@@ -3,7 +3,7 @@
 <style>
 @page { size: A4; margin: 16mm 17mm 18mm 17mm; }
 * { box-sizing: border-box; }
-body { font-family: Arial, "Liberation Sans", Helvetica, sans-serif; font-size: 9.1pt; color: #222; line-height: 1.38; margin: 0; }
+body { font-family: Arial, "Liberation Sans", Helvetica, sans-serif; font-size: 8.8pt; color: #222; line-height: 1.33; margin: 0; }
 h1 { font-size: 17pt; margin: 0 0 2px; letter-spacing: .3px; color: #111; }
 .sub { color: #6b7a99; font-size: 10pt; margin: 0 0 10px; padding-bottom: 9px; border-bottom: 2.5px solid #d32f2f; }
 h2 { font-size: 12pt; letter-spacing: .6px; margin: 11px 0 6px; padding-bottom: 4px; border-bottom: 1px solid #ddd; color: #111; }
@@ -13,13 +13,15 @@ p { margin: 0 0 8px; text-align: justify; }
 ul { margin: 4px 0 8px; padding-left: 16px; }
 li { margin-bottom: 5px; text-align: justify; }
 table { border-collapse: collapse; width: 62%; margin: 6px 0 12px; font-size: 9.2pt; }
-th, td { border: 1px solid #d6d9e0; padding: 5px 8px; }
+th, td { border: 1px solid #d6d9e0; padding: 4px 8px; }
 th { background: #f1f3f7; text-align: left; }
 td.n { text-align: right; font-weight: bold; }
 table { page-break-inside: avoid; }
 table.precios { width: 100%; font-size: 8.8pt; margin: 2px 0 8px; }
 table.precios th { text-align: center; }
 table.precios td { padding: 3px 8px; }
+table.precios tr.ph td { background: #f7f8fb; font-size: 8pt; color: #555; font-weight: bold; }
+table.precios td.nota { font-size: 8pt; color: #555; }
 .clause { page-break-inside: avoid; }
 .sign { display: flex; justify-content: space-between; margin-top: 34px; page-break-inside: avoid; }
 .sign div { width: 44%; text-align: center; border-top: 1px solid #555; padding-top: 6px; }
@@ -49,11 +51,13 @@ table.precios td { padding: 3px 8px; }
 <li>Se entregará al deportista el siguiente material: un maillot CARRERA, un culote y un par de calcetines aero (o equivalentes de la temporada).</li>
 <li>El deportista aportará la cantidad de <b>65 €</b> en concepto de licencia y equipaciones. El Club asume el resto del coste.</li>
 <li>Material adicional: el deportista podrá adquirir más prendas del Club a los precios de la temporada 2027 indicados a continuación.</li></ul>
-<table class="precios"><tr><th colspan="4">Precios 2027 del material del Club</th></tr>
-<tr><td>Maillot</td><td class="n">25 €</td><td>Culote</td><td class="n">40 €</td></tr>
-<tr><td>Maillot manga larga HYDER</td><td class="n">45 €</td><td>Calcetines aero (par)</td><td class="n">1.º gratis · 2.º 15 €</td></tr>
-<tr><td>Chaleco</td><td class="n">35 €</td><td>Manguitos</td><td class="n">15 €</td></tr>
-<tr><td>Camiseta interior</td><td class="n">20 €</td><td></td><td></td></tr>
+<table class="precios"><tr><th colspan="6">Precios 2027 del material del Club</th></tr>
+<tr class="ph"><td>Prenda</td><td class="n">Precio</td><td class="n">Recargo*</td><td>Prenda</td><td class="n">Precio</td><td class="n">Recargo*</td></tr>
+<tr><td>Maillot</td><td class="n">25 €</td><td class="n">15 €</td><td>Culote</td><td class="n">40 €</td><td class="n">25 €</td></tr>
+<tr><td>Maillot manga larga HYDER</td><td class="n">45 €</td><td class="n">25 €</td><td>Calcetines aero (par)</td><td class="n">1.º gratis · 2.º 15 €</td><td class="n">10 €</td></tr>
+<tr><td>Chaleco</td><td class="n">35 €</td><td class="n">20 €</td><td>Manguitos</td><td class="n">15 €</td><td class="n">10 €</td></tr>
+<tr><td>Camiseta interior</td><td class="n">20 €</td><td class="n">10 €</td><td></td><td></td><td></td></tr>
+<tr><td colspan="6" class="nota">* Recargo por cada prenda comprada aparte si no se alcanza el mínimo de 12 participaciones (cláusula QUINTA).</td></tr>
 </table>
 <ul><li>Se ayudará económicamente al corredor según el número de pruebas realizadas durante la temporada 2027. Siendo la bonificación:</li></ul>
 <table>
@@ -68,8 +72,9 @@ table.precios td { padding: 3px 8px; }
 
 <div class="clause">
 <p><b>QUINTA.- Participación mínima y penalización.</b> El deportista se compromete a participar en un <b>mínimo de 12 competiciones</b> durante la vigencia del presente acuerdo. Se consideran válidas las competiciones oficiales (según la definición de la cláusula SÉPTIMA) disputadas representando al Club y con su indumentaria oficial entre el 01 de Enero y el 31 de Diciembre de 2027. Las pruebas de varios días o por etapas computarán como una participación por cada día de competición disputado.</p>
-<p>En caso de que, a la finalización del presente acuerdo, el deportista no haya alcanzado dicho mínimo, deberá abonar al Club una <b>penalización de 100 € (CIEN EUROS)</b>, en concepto de compensación por la aportación económica realizada por el Club en la licencia y las equipaciones. Dicho importe deberá abonarse en un plazo máximo de 30 días desde la finalización de la temporada, pudiendo el Club compensarlo con cualquier cantidad que tuviera pendiente de abonar al deportista.</p>
-<p>Quedará exento de esta penalización el deportista que no pueda alcanzar el mínimo a causa de una <b>lesión sufrida compitiendo en una prueba oficial representando al Club</b>, siempre que la acredite mediante informe médico y la comunique al Club en un plazo máximo de 7 días desde la prueba. Esta exención no se aplicará a lesiones o enfermedades producidas fuera de competición (entrenamientos, actividades particulares u otras causas).</p>
+<p>En caso de que, a la finalización del presente acuerdo, el deportista no haya alcanzado dicho mínimo, deberá abonar al Club una <b>penalización de 100 € (CIEN EUROS)</b>, en concepto de compensación por la aportación económica realizada por el Club en la licencia y las equipaciones. Las prendas que el deportista adquiera aparte a los precios de equipo de la cláusula TERCERA (no las incluidas en el presente acuerdo ni las entregadas gratuitamente) están subvencionadas por el Club. Por ello, si no alcanza el mínimo, deberá abonar además el <b>recargo indicado para cada prenda adquirida</b> en la tabla de precios. Dichos importes deberán abonarse en un plazo máximo de 30 días desde la finalización de la temporada, pudiendo el Club compensarlos con cualquier cantidad que tuviera pendiente de abonar al deportista.</p>
+<p>Ejemplos si no se alcanza el mínimo: <b>Caso 1:</b> no compra ninguna prenda aparte → abona <b>100 €</b>; <b>Caso 2:</b> compra 1 culote aparte → abona <b>125 €</b> (100 € + 25 €); <b>Caso 3:</b> compra 2 culotes y 1 chaleco aparte → abona <b>170 €</b> (100 € + 70 €).</p>
+<p>Quedará exento de la penalización y de los recargos el deportista que no pueda alcanzar el mínimo a causa de una <b>lesión sufrida compitiendo en una prueba oficial representando al Club</b>, siempre que la acredite mediante informe médico y la comunique al Club en un plazo máximo de 7 días desde la prueba. Esta exención no se aplicará a lesiones o enfermedades producidas fuera de competición (entrenamientos, actividades particulares u otras causas).</p>
 </div>
 
 <p class="clause"><b>SEXTA.-</b> En caso de que el deportista estuviera inscrito en una prueba y esta fuera suspendida, dicha prueba se tendría en cuenta para el mínimo de participaciones de la cláusula QUINTA del presente acuerdo pero no contaría como prueba realizada en cuanto a la bonificación de participaciones en carreras incluida en la cláusula TERCERA.</p>

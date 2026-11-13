@@ -49,6 +49,7 @@ h1 span { color: #d32f2f; }
 .pgrid div b { font-size: 19px; color: #1d2433; text-align: right; }
 .pgrid div b small { display: block; font-size: 11.5px; font-weight: normal; color: #6b7590; }
 .pgrid .free b { color: #1e7d3c; }
+.pgrid small.rc { color: #c62828; font-weight: bold; }
 .rules { margin-top: 22px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .rules div { background: #fff; border-radius: 16px; padding: 14px 16px; font-size: 15px; line-height: 1.4; color: #39445c; display: flex; gap: 12px; align-items: flex-start; }
 .rules i { font-style: normal; font-size: 26px; line-height: 1; }
@@ -71,7 +72,7 @@ h1 span { color: #d32f2f; }
         <div class="step s1"><b>50 €</b><small>12 carreras</small></div>
         <div class="step s2"><b>100 €</b><small>17 carreras</small></div>
         <div class="step s3"><b>150 €</b><small>22 carreras</small></div></div></div>
-      <div class="pen bad">Si no llegas a 12 carreras pagas<b>175 €</b><small>🩹 Exento si es por lesión compitiendo con el Club</small></div>
+      <div class="pen bad">Si no llegas a 12 carreras pagas<b>175 €</b>+ recargo por cada prenda comprada aparte<small>🩹 Exento si es por lesión compitiendo con el Club</small></div>
     </div>
   </div>
 
@@ -85,7 +86,7 @@ h1 span { color: #d32f2f; }
         <div class="step s1"><b>50 €</b><small>12 carreras</small></div>
         <div class="step s2"><b>100 €</b><small>17 carreras</small></div>
         <div class="step s3"><b>150 €</b><small>22 carreras</small></div></div></div>
-      <div class="pen bad">Si no llegas a 12 carreras pagas<b>100 €</b><small>🩹 Exento si es por lesión compitiendo con el Club</small></div>
+      <div class="pen bad">Si no llegas a 12 carreras pagas<b>100 €</b>+ recargo por cada prenda comprada aparte<small>🩹 Exento si es por lesión compitiendo con el Club</small></div>
     </div>
   </div>
 
@@ -98,7 +99,7 @@ h1 span { color: #d32f2f; }
         <div class="step s1"><b>100 €</b><small>12 carreras</small></div>
         <div class="step s2"><b>150 €</b><small>17 carreras</small></div>
         <div class="step s3"><b>200 €</b><small>22 carreras</small></div></div></div>
-      <div class="pen good"><b>✅ Sin penalización</b>Sin mínimo: solo cuenta para el bono</div>
+      <div class="pen good"><b>✅ Sin penalización</b>Solo si compras prendas aparte y no llegas a 12: pagas su recargo<small>🩹 Exento si es por lesión compitiendo con el Club</small></div>
     </div>
   </div>
 </div>
@@ -113,15 +114,15 @@ h1 span { color: #d32f2f; }
 </div>
 
 <div class="prices">
-  <h3>🛒 Precios 2027 del material</h3>
+  <h3>🛒 Precios 2027 del material <span style="font-weight:normal;color:#c62828;font-size:16px">· recargo por unidad si no llegas a 12 carreras</span></h3>
   <div class="pgrid">
-    <div>Maillot<b>25 €</b></div>
-    <div>Culote<b>40 €</b></div>
-    <div>Hyder<b>45 €</b></div>
-    <div>Chaleco<b>35 €</b></div>
-    <div>Calcetines aero<b>15 €<small>1.º gratis: nuevo y renov.</small></b></div>
-    <div>Manguitos<b>15 €</b></div>
-    <div>Camiseta interior<b>20 €</b></div>
+    <div>Maillot<b>25 €<small class="rc">recargo 15 €</small></b></div>
+    <div>Culote<b>40 €<small class="rc">recargo 25 €</small></b></div>
+    <div>Hyder<b>45 €<small class="rc">recargo 25 €</small></b></div>
+    <div>Chaleco<b>35 €<small class="rc">recargo 20 €</small></b></div>
+    <div>Calcetines aero<b>15 €<small>1.º gratis: nuevo y renov.</small><small class="rc">recargo 10 €</small></b></div>
+    <div>Manguitos<b>15 €<small class="rc">recargo 10 €</small></b></div>
+    <div>Camiseta interior<b>20 €<small class="rc">recargo 10 €</small></b></div>
     <div class="free">Gorra y camiseta sponsors<b>Gratis<small>solo nuevo</small></b></div>
   </div>
 </div>
