@@ -278,7 +278,7 @@ function renderSummary() {
     <details class="fact"><summary><b>Lluvia</b> ${rain}</summary><p>La probabilidad más alta de precipitación a lo largo de la ruta.</p></details>
     <details class="fact"><summary><b>Luz</b> ${light}</summary><p>Con la salida y la puesta de sol del día, en el punto de salida.</p></details>
     <details class="fact"><summary><b>Subida más dura</b> ${h ? `${km(h.length)} km al ${pct(h.avg)}` : 'ninguna'}</summary>
-      <p>${h ? `Empieza en el km ${km(h.start)}, la pasas entre las ${hm(at(h.start))} y las ${hm(at(h.end))}. Sube ${int(h.gain)} m, máx. ${pct(h.max)}.` : 'No hay subidas de más de 40 m al 3 % o más.'}</p></details>`;
+      <p>${h ? `Empieza en el km ${km(h.start)}, la pasas entre las ${hm(at(h.start))} y las ${hm(at(h.end))}. Sube ${int(h.gain)} m, máx. ${pct(h.max)}.` : 'No hay subidas de 40 m o más al 2,5 % o más, ni puertos largos y tendidos.'}</p></details>`;
 }
 
 // ---------- Mapa ----------
@@ -445,7 +445,7 @@ function focusAt(d) {
 
 function renderClimbs() {
   const el = document.getElementById('climbs');
-  if (!S.climbs.length) { el.innerHTML = '<p class="hint">Sin subidas de más de 40 m al 3 % o más.</p>'; return; }
+  if (!S.climbs.length) { el.innerHTML = '<p class="hint">Sin subidas de 40 m o más al 2,5 % o más, ni puertos largos y tendidos.</p>'; return; }
   el.innerHTML = `<h3>Subidas (${S.climbs.length})</h3><div class="climbs">${S.climbs.map((c, i) => {
     const cat = R.climbCategory(c);
     const w = wxAt(c.end);
