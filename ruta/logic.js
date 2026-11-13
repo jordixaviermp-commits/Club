@@ -399,19 +399,53 @@ export function departureScore(wx, darkMin = 0) {
   return s / wx.length + darkMin * 0.3;
 }
 
+/** Distancia (m) a la que vas a los `ms` desde la salida. */
+export function distAtTime(points, t, ms) {
+  let a = 0, b = t.length - 1;
+  if (ms <= 0) return 0;
+  if (ms >= t[b]) return points[b].d;
+  while (a < b) { const m = (a + b) >> 1; if (t[m] < ms) a = m + 1; else b = m; }
+  const f = t[a] === t[a - 1] ? 0 : (ms - t[a - 1]) / (t[a] - t[a - 1]);
+  return points[a - 1].d + (points[a].d - points[a - 1].d) * f;
+}
+
 /**
- * Tomas de comida: cada `everyMin` minutos (la primera a los 25), con los gramos de hidratos
- * para cubrir `gph` g/h. Devuelve [{ ms, d, grams }]. `t`: línea de tiempos de timeline().
+ * Tomas de comida. Devuelve [{ ms, d, grams, moved }].
+ * Manual: una cada `everyMin` (la primera a los `firstMin`), con lo que toca a `gph` g/h en ese intervalo.
+ * Inteligente (`smart`): las mismas horas hasta `endGapMin` antes de llegar, los hidratos de toda la
+ * salida (redondeados a 10 g) a partes iguales, y cada toma se mueve hasta `shiftMin` minutos para no
+ * caer en una bajada (< −3 %) ni en una rampa dura (> 7 %): se come mejor en llano o subiendo suave.
  */
-export function feedingPlan(points, t, { gph = 90, everyMin = 30, firstMin = 25 } = {}) {
+export function feedingPlan(points, t, { gph = 90, everyMin = 30, firstMin = 25, smart = false, endGapMin = 20, shiftMin = 8 } = {}) {
   const total = t[t.length - 1];
+  const at = (ms) => distAtTime(points, t, ms);
+  if (!smart) {
+    const out = [];
+    const each = Math.round((gph * everyMin) / 60);
+    for (let ms = firstMin * 60000; ms < total - 10 * 60000; ms += everyMin * 60000) out.push({ ms, d: at(ms), grams: each, moved: '' });
+    return out;
+  }
+  const times = [];
+  for (let ms = firstMin * 60000; ms <= total - endGapMin * 60000; ms += everyMin * 60000) times.push(ms);
+  if (!times.length && total > 45 * 60000) times.push(Math.round(total / 2 / 60000) * 60000);
+  if (!times.length) return [];
+  const totalGrams = Math.round((gph * total) / 3600000 / 10) * 10;
+  const grams = Math.max(5, Math.round(totalGrams / times.length / 5) * 5);
+  const terrain = (ms) => gradeAt(points, at(ms), 150);
+  const cost = (g) => (g < -0.03 ? 100 : 0) + (g > 0.07 ? 50 : 0) + Math.abs(g) * 100;
   const out = [];
-  const each = Math.round((gph * everyMin) / 60);
-  for (let ms = firstMin * 60000; ms < total - 10 * 60000; ms += everyMin * 60000) {
-    let i = 1;
-    while (i < t.length - 1 && t[i] < ms) i++;
-    const f = t[i] === t[i - 1] ? 0 : (ms - t[i - 1]) / (t[i] - t[i - 1]);
-    out.push({ ms, d: points[i - 1].d + (points[i].d - points[i - 1].d) * f, grams: each });
+  for (const base of times) {
+    const prev = out[out.length - 1]?.ms ?? -Infinity;
+    let best = base, bestC = Infinity;
+    for (let dm = -shiftMin; dm <= shiftMin; dm++) {
+      const ms = base + dm * 60000;
+      if (ms < 10 * 60000 || ms > total - 5 * 60000 || ms - prev < 15 * 60000) continue;
+      const c = cost(terrain(ms)) + Math.abs(dm) * 0.6;
+      if (c < bestC) { bestC = c; best = ms; }
+    }
+    const g0 = terrain(base);
+    const moved = best === base ? '' : g0 < -0.03 ? 'bajada' : g0 > 0.07 ? 'rampa' : '';
+    out.push({ ms: best, d: at(best), grams, moved });
   }
   return out;
 }

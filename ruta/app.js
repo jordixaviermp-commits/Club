@@ -51,7 +51,8 @@ const S = {
   start: defaultStart(), flat: 27, mass: 80, stops: 0,
   wx: null, wxKey: '', wxErr: '', wxLoading: false,
   view: 'completa', mode: 'viento', arrowsKm: 4, wps: [], addingWp: false,
-  feeding: false, gph: 90, every: 30, feedOnMap: true,
+  feeding: false, gph: 90, every: 30, feedOnMap: true, feedMode: 'smart', custom: null,
+  carry: { bid: { n: 2, g: 0 }, gel: { n: 0, g: 25 }, bar: { n: 0, g: 30 } },
   exp: { wps: true, climbs: false, tomas: false, times: false }, cursorD: null,
   charts: ['viento', 'temp', 'lluvia', 'humedad', 'uv'], bgProfile: true, tCursor: null,
 };
@@ -60,7 +61,7 @@ let map = null, mapLayer = null, cursorMarker = null, fitted = false;
 function saveLast() {
   if (!S.id) return;
   store.set(K_LAST, { id: S.id, start: S.start, flat: S.flat, mass: S.mass, stops: S.stops, reversed: S.reversed, wps: S.wps,
-    gph: S.gph, every: S.every, feeding: S.feeding, view: S.view, mode: S.mode, charts: S.charts, bgProfile: S.bgProfile });
+    gph: S.gph, every: S.every, feeding: S.feeding, view: S.view, mode: S.mode, charts: S.charts, bgProfile: S.bgProfile, feedMode: S.feedMode, custom: S.custom, carry: S.carry });
 }
 function saveRecent(id, name, pts) {
   let list = store.get(K_REC, []).filter((r) => r.id !== id);
@@ -169,9 +170,9 @@ async function readFile(file) {
 function openRoute(name, points, settings = null) {
   const pts = Array.isArray(points[0]) ? points : R.decimate(points, 4000);
   const id = settings?.id || `r${Date.now().toString(36)}`;
-  Object.assign(S, { id, name, raw: pts, reversed: false, wps: [], feeding: false, wx: null, wxKey: '', wxErr: '', cursorD: null, tCursor: null });
+  Object.assign(S, { id, name, raw: pts, reversed: false, wps: [], feeding: false, custom: null, wx: null, wxKey: '', wxErr: '', cursorD: null, tCursor: null });
   if (settings) {
-    for (const k of ['start', 'flat', 'mass', 'stops', 'reversed', 'wps', 'gph', 'every', 'feeding', 'view', 'mode', 'charts', 'bgProfile']) if (settings[k] !== undefined) S[k] = settings[k];
+    for (const k of ['start', 'flat', 'mass', 'stops', 'reversed', 'wps', 'gph', 'every', 'feeding', 'view', 'mode', 'charts', 'bgProfile', 'feedMode', 'custom', 'carry']) if (settings[k] !== undefined) S[k] = settings[k];
     if (S.start < Date.now() - 3600000) { const d = new Date(S.start); const n = new Date(defaultStart()); n.setHours(d.getHours(), d.getMinutes()); S.start = n.getTime(); }
   }
   saveRecent(id, name, pts);
@@ -345,7 +346,7 @@ function drawMap() {
   if (S.feeding && S.feedOnMap) feeding().forEach((f, i) => {
     const p = R.pointAt(P, f.d);
     L.marker([p.lat, p.lon], { icon: L.divIcon({ className: '', iconSize: [22, 22], html: `<div class="cnum toma">${i + 1}</div>` }) })
-      .bindPopup(`<b>Toma ${i + 1}</b><br>${hm(S.start + f.ms)} · km ${km(f.d)} · ${f.grams} g`).addTo(mapLayer);
+      .bindPopup(`<b>${esc(tomaLabel(f, i))}</b><br>${hm(S.start + f.ms)} · km ${km(f.d)} · ${f.grams} g`).addTo(mapLayer);
   });
   const s = P[0], e = P[P.length - 1];
   L.circleMarker([s.lat, s.lon], { radius: 7, color: '#fff', weight: 2, fillColor: '#16a34a', fillOpacity: 1 }).bindTooltip('Salida').addTo(mapLayer);
@@ -382,9 +383,10 @@ function renderProfile() {
     for (let k = 0; k < cuts.length - 1; k++) strip += `<rect x="${x(cuts[k])}" y="${base + 20}" width="${x(cuts[k + 1]) - x(cuts[k]) + .5}" height="10" fill="${segColor(S.along[k])}"/>`;
     strip += `<text x="${PAD.l - 4}" y="${base + 29}" text-anchor="end">${S.mode === 'temp' ? 'Temp.' : S.mode === 'rachas' ? 'Rachas' : 'Viento'}</text>`;
   }
+  const feeds = S.feeding && S.feedOnMap ? feeding().map((f, i) => `<circle cx="${x(f.d)}" cy="${base - 7}" r="7" fill="#e6c229" stroke="#fff"/><text x="${x(f.d)}" y="${base - 3.5}" text-anchor="middle" style="fill:#111;font-size:9px;font-weight:700">${i + 1}</text>`).join('') : '';
   const cur = S.cursorD !== null ? `<line x1="${x(S.cursorD)}" x2="${x(S.cursorD)}" y1="${PAD.t}" y2="${base}" stroke="var(--text)" stroke-dasharray="3 3"/>` : '';
   document.getElementById('profile').innerHTML = `<svg class="profile" id="psvg" viewBox="0 0 ${PW} ${PH}" role="img" aria-label="Perfil de elevación">
-    ${yTicks.join('')}${polys}${climbs}${xTicks.join('')}<text x="${PW - PAD.r}" y="${base + 13}" text-anchor="end">km</text>${strip}${cur}</svg>
+    ${yTicks.join('')}${polys}${climbs}${xTicks.join('')}<text x="${PW - PAD.r}" y="${base + 13}" text-anchor="end">km</text>${strip}${feeds}${cur}</svg>
     <div class="legend"><span><i style="background:var(--g1)"></i>&lt; 3 % y bajadas</span><span><i style="background:var(--g2)"></i>3-6 %</span><span><i style="background:var(--g3)"></i>6-9 %</span><span><i style="background:var(--g4)"></i>9-12 %</span><span><i style="background:var(--g5)"></i>&gt; 12 %</span></div>`;
 }
 function profilePick(ev) {
@@ -419,7 +421,15 @@ function renderClimbs() {
 }
 
 // ---------- Tiempo, avituallamiento y exportar ----------
-const feeding = () => R.feedingPlan(S.track.points, S.tl.t, { gph: S.gph, everyMin: S.every });
+const WHAT = { g: ['Solo gramos', null], gel: ['Gel', 'gel'], bar: ['Barrita', 'bar'], bid: ['Bidón', 'bid'], fruta: ['Fruta', null], otro: ['Otro', null] };
+/** Tomas: la lista editada por el usuario o la calculada (inteligente o cada X minutos). */
+function feeding() {
+  if (S.custom) return S.custom.map((c) => ({ ...c, ms: Math.min(c.ms, S.tl.total), d: R.distAtTime(S.track.points, S.tl.t, Math.min(c.ms, S.tl.total)) }));
+  return R.feedingPlan(S.track.points, S.tl.t, { gph: S.gph, everyMin: S.every, smart: S.feedMode === 'smart' });
+}
+const tomaLabel = (f, i) => (f.label || (f.what && f.what !== 'g' ? `Toma ${i + 1}: ${WHAT[f.what][0].toLowerCase()}` : `Toma ${i + 1}: ${f.grams} g`)).slice(0, 15);
+/** Pasa a lista propia (la primera vez que se toca una toma). */
+function own() { if (!S.custom) S.custom = feeding().map((f) => ({ ms: f.ms, grams: f.grams, what: 'g', label: '' })); return S.custom; }
 
 // ---------- Gráficas del tiempo en la ruta ----------
 const CHARTS = {
@@ -536,16 +546,46 @@ function renderRest() {
 
   const tomas = S.feeding ? feeding() : [];
   const grams = tomas.reduce((s, f) => s + f.grams, 0);
+  const need = Math.round((S.gph * S.tl.total) / 3600000 / 10) * 10;
+  const carried = Object.values(S.carry).reduce((a, c) => a + c.n * c.g, 0);
+  const timeOpts = (sel) => { let o = ''; for (let m = 5; m * 60000 < S.tl.total; m += 5) { const ms = m * 60000; o += `<option value="${ms}" ${Math.abs(ms - sel) < 150000 ? 'selected' : ''}>${hm(S.start + ms)}</option>`; } return o; };
   const avit = S.feeding ? `
     <h3>Hidratos por hora</h3>
     <div class="opts">${[[60, '60 g/h', 'Hasta 2,5 h o ritmo suave'], [90, '90 g/h', 'Marchas y tiradas largas'], [120, '120 g/h', 'Solo si lo tienes entrenado']].map(([v, a, b]) =>
       `<button data-gph="${v}" class="${S.gph === v ? 'on' : ''}"><b>${a}</b><small>${b}</small></button>`).join('')}
       <button data-act="gph-manual" class="${![60, 90, 120].includes(S.gph) ? 'on' : ''}"><b>Manual</b><small>${![60, 90, 120].includes(S.gph) ? `${S.gph} g/h` : 'Tu cantidad'}</small></button></div>
+    <details class="more"><summary>¿Por qué no te pedimos el peso?</summary><p class="hint">Los hidratos que aprovechas por hora no dependen de lo que pesas, sino de lo que absorbe el intestino, y eso se entrena. Elige según la intensidad de la salida y lo que estés acostumbrado a tomar.</p></details>
+    <h3>Reparto de las tomas</h3>
+    <div class="seg narrow"><button data-feedmode="smart" class="${S.feedMode === 'smart' ? 'on' : ''}">Inteligente</button><button data-feedmode="manual" class="${S.feedMode === 'manual' ? 'on' : ''}">Manual</button></div>
     <label style="flex-direction:row;align-items:center;gap:.6rem">Una toma cada <select id="every">${[20, 30, 40, 45, 60].map((m) => `<option value="${m}" ${S.every === m ? 'selected' : ''}>${m} min</option>`).join('')}</select></label>
-    <label class="check"><input type="checkbox" id="feedmap" ${S.feedOnMap ? 'checked' : ''}> Marcar las tomas en el mapa</label>
-    <div class="facts"><div><small>Duración</small><b>${dur(S.tl.total)}</b></div><div><small>Hidratos</small><b>${int(grams)} g</b></div><div><small>Tomas</small><b>${tomas.length} × ${tomas[0]?.grams ?? 0} g</b></div></div>
-    <ul class="mini-list tomas">${tomas.map((f, i) => `<li><span class="dot">${i + 1}</span><div><b>${hm(S.start + f.ms)}</b><small class="muted">${dur(f.ms)} de ruta</small></div><span>km ${km(f.d)}</span><b>${f.grams} g</b></li>`).join('')}</ul>
-    <p class="hint">Una guía: ajústala a lo que toleras en los entrenamientos. Un gel suele llevar 20-30 g y una barrita 25-40 g.</p>
+    <details class="more"><summary>Cómo reparte las tomas</summary><p class="hint">${S.feedMode === 'smart'
+      ? `La primera a los 25 minutos y después cada ${S.every} minutos, hasta 20 minutos antes de llegar. Calcula los hidratos de toda la salida (${S.gph} g/h × ${dur(S.tl.total)} ≈ ${need} g) y los reparte a partes iguales. Luego mueve cada toma hasta 8 minutos para que no caiga en una bajada ni en una rampa dura: se come mejor en llano o subiendo suave.`
+      : `La primera a los 25 minutos y después cada ${S.every} minutos, con lo que toca a ${S.gph} g/h en cada intervalo, sin mirar el terreno.`}</p></details>
+    ${S.custom ? '<p class="hint">Estás usando tu propia lista de tomas. <button class="linkbtn" data-act="feed-reset">Volver al reparto automático</button></p>' : ''}
+    <label class="check"><input type="checkbox" id="feedmap" ${S.feedOnMap ? 'checked' : ''}> Marcar las tomas en el mapa y en el perfil</label>
+    <div class="facts"><div><small>Duración</small><b>${dur(S.tl.total)}</b></div><div><small>Hidratos · ${S.gph} g/h</small><b><mark>${int(grams)} g</mark></b></div>
+      <div><small>Tomas${S.custom ? '' : ` · cada ${S.every} min`}</small><b>${S.custom || new Set(tomas.map((f) => f.grams)).size > 1 ? `${tomas.length}` : `${tomas.length} × ${tomas[0]?.grams ?? 0} g`}</b></div></div>
+    <details class="more" ${S.custom ? 'open' : ''}><summary>Cambia el aviso de cada toma</summary>
+      <p>En cada toma puedes elegir qué te vas a tomar, añadir otra o quitarla. En cuanto cambies una, la lista pasa a ser tuya.</p>
+      ${tomas.map((f, i) => `<div class="toma-ed">
+        <div class="row"><span class="dot">${i + 1}</span><b>${hm(S.start + f.ms)}</b><small class="muted">${dur(f.ms)}</small><span class="muted">km ${km(f.d)}</span><b style="margin-left:auto">${f.grams} g</b></div>
+        ${f.moved ? `<p class="hint">Movida unos minutos para no caer en ${f.moved === 'bajada' ? 'la bajada' : 'la rampa'}.</p>` : ''}
+        <div class="row"><label class="inline">A las <select data-toma="${i}" data-f="ms">${timeOpts(f.ms)}</select></label></div>
+        <div class="row"><select data-toma="${i}" data-f="what">${Object.entries(WHAT).map(([k, [l]]) => `<option value="${k}" ${(f.what || 'g') === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+          <input type="number" data-toma="${i}" data-f="grams" value="${f.grams}" min="0" max="300" step="5" inputmode="numeric" style="width:5.5rem"> g</div>
+        <div class="row"><button class="linkbtn small" data-act="toma-dup" data-i="${i}">Otra 15 min después</button><button class="linkbtn small" data-act="toma-del" data-i="${i}">Quitar esta toma</button></div>
+        <label class="inline">Aviso <input data-toma="${i}" data-f="label" maxlength="15" value="${esc(tomaLabel(f, i))}"> <small class="muted">${tomaLabel(f, i).length}/15</small></label>
+      </div>`).join('')}
+      <button class="btn" data-act="toma-add">Añadir una toma</button>
+    </details>
+    <h3>Lo que llevas</h3>
+    ${[['bid', 'Bidones'], ['gel', 'Geles'], ['bar', 'Barritas']].map(([k, l]) => `<div class="carry">
+      <b>${l}</b><label class="inline"><input type="number" data-carry="${k}" value="${S.carry[k].g}" min="0" max="200" step="5" inputmode="numeric"> g/ud</label>
+      <span class="stepper"><button class="icon-btn" data-act="carry" data-k="${k}" data-n="-1" ${S.carry[k].n ? '' : 'disabled'}>−</button><b>${S.carry[k].n}</b><button class="icon-btn" data-act="carry" data-k="${k}" data-n="1">+</button></span>
+      <b class="tot">${S.carry[k].n * S.carry[k].g} g</b></div>`).join('')}
+    <p class="${carried < grams ? 'bad' : ''}">Llevas ${int(carried)} g de los ${int(grams)} g de las tomas${carried < grams ? `: te faltan ${int(grams - carried)} g (rellena en ruta o lleva más)` : carried > grams + 30 ? `: te sobran ${int(carried - grams)} g` : ''}.</p>
+    <details class="more"><summary>Cómo rellenar los bidones</summary><p class="hint">Si solo llevas agua, deja 0 g/ud. Si llevas bebida con hidratos, pon los gramos de cada bidón: los indica el bote (lo habitual es entre 30 y 60 g por bidón de 500-750 ml). Más concentrada cuesta más de digerir. Lo que lleven los bidones también cuenta para las tomas.</p></details>
+    <p class="hint">Una guía: ajústala a lo que toleras en los entrenamientos.</p>
     <button class="linkbtn" data-act="feed-off">Quitar el avituallamiento</button>`
     : `<p>Hidratos y tomas para tus ${dur(S.tl.total)} de salida.</p><button class="btn" data-act="feed-on">Calcular</button>`;
 
@@ -561,7 +601,7 @@ function renderRest() {
       <label>Nombre de la ruta en el ciclocomputador<input id="expname" maxlength="40" value="${esc(name15)}"></label>
       <label class="check"><input type="checkbox" data-exp="wps" ${S.exp.wps ? 'checked' : ''}> Tus waypoints (${S.wps.length})</label>
       <label class="check"><input type="checkbox" data-exp="climbs" ${S.exp.climbs ? 'checked' : ''}> Inicio de cada subida (${S.climbs.length})</label>
-      <label class="check"><input type="checkbox" data-exp="tomas" ${S.exp.tomas ? 'checked' : ''} ${S.feeding ? '' : 'disabled'}> Tus tomas de avituallamiento (${tomas.length})</label>
+      <label class="check"><input type="checkbox" data-exp="tomas" ${S.exp.tomas ? 'checked' : ''} ${S.feeding ? '' : 'disabled'}> Tus avisos de avituallamiento (${tomas.length})</label>
       <label class="check"><input type="checkbox" data-exp="times" ${S.exp.times ? 'checked' : ''}> Horas de paso previstas (para el «compañero virtual»)</label>
       <button class="btn primary" data-act="gpx">Descargar .gpx</button>
       <h3 style="margin-top:1rem">Pásasela a tu grupeta</h3>
@@ -577,7 +617,7 @@ function exportGPX() {
   const pt = (d) => R.pointAt(P, d);
   if (S.exp.wps) S.wps.forEach((w) => { const p = pt(w.d); wps.push({ lat: p.lat, lon: p.lon, name: w.name, desc: `${wpType(w.type)[2]} · km ${km(w.d)}`, sym: wpType(w.type)[3] }); });
   if (S.exp.climbs) S.climbs.forEach((c, i) => { const p = pt(c.start); wps.push({ lat: p.lat, lon: p.lon, name: `Subida ${i + 1}`.slice(0, 15), desc: `${km(c.length)} km al ${pct(c.avg)}`, sym: 'Summit' }); });
-  if (S.exp.tomas && S.feeding) feeding().forEach((f, i) => { const p = pt(f.d); wps.push({ lat: p.lat, lon: p.lon, name: `Toma ${i + 1}: ${f.grams} g`.slice(0, 15), desc: hm(S.start + f.ms), sym: 'Food' }); });
+  if (S.exp.tomas && S.feeding) feeding().forEach((f, i) => { const p = pt(f.d); wps.push({ lat: p.lat, lon: p.lon, name: tomaLabel(f, i), desc: `${hm(S.start + f.ms)} · ${f.grams} g`, sym: 'Food' }); });
   const text = R.toGPX(name, P, wps, S.exp.times ? { startMs: S.start, t: S.tl.t } : {});
   const file = `${name.replace(/[^\p{L}\p{N} _-]+/gu, '').trim().replace(/\s+/g, '-') || 'ruta'}.gpx`;
   return { text, file };
@@ -635,8 +675,10 @@ document.addEventListener('click', async (e) => {
   if (mode) { S.mode = mode.dataset.mode; return update(); }
   const view = e.target.closest('[data-view]');
   if (view) { S.view = view.dataset.view; return update(); }
+  const fm = e.target.closest('[data-feedmode]');
+  if (fm) { S.feedMode = fm.dataset.feedmode; S.custom = null; return update(); }
   const gph = e.target.closest('[data-gph]');
-  if (gph) { S.gph = +gph.dataset.gph; return update(); }
+  if (gph) { S.gph = +gph.dataset.gph; S.custom = null; return update(); }
   const b = e.target.closest('[data-act]');
   if (!b) return;
   const act = b.dataset.act;
@@ -664,6 +706,11 @@ document.addEventListener('click', async (e) => {
   else if (act === 'chart-all') { S.charts = Object.keys(CHARTS); saveLast(); renderCharts(); }
   else if (act === 'retry') { S.wxKey = ''; fetchWeather(); }
   else if (act === 'feed-on') { S.feeding = true; S.exp.tomas = true; update(); }
+  else if (act === 'feed-reset') { S.custom = null; update(); }
+  else if (act === 'toma-dup') { const c = own(), i = +b.dataset.i; c.splice(i + 1, 0, { ...c[i], ms: Math.min(S.tl.total - 60000, c[i].ms + 15 * 60000), label: '' }); c.sort((x, y) => x.ms - y.ms); update(); }
+  else if (act === 'toma-del') { own().splice(+b.dataset.i, 1); update(); }
+  else if (act === 'toma-add') { const c = own(); const last = c[c.length - 1]?.ms ?? 0; c.push({ ms: Math.min(S.tl.total - 5 * 60000, last + S.every * 60000), grams: c[c.length - 1]?.grams ?? 30, what: 'g', label: '' }); c.sort((x, y) => x.ms - y.ms); update(); }
+  else if (act === 'carry') { const k = S.carry[b.dataset.k]; k.n = Math.max(0, k.n + +b.dataset.n); update(); }
   else if (act === 'feed-off') { S.feeding = false; S.exp.tomas = false; update(); }
   else if (act === 'gph-manual') {
     const v = parseInt(prompt('Gramos de hidratos por hora', String(S.gph)) || '', 10);
@@ -689,7 +736,15 @@ document.addEventListener('change', (e) => {
     const v = parseFloat(String(t.value).replace(',', '.'));
     const lim = { flat: [10, 50], mass: [40, 150], stops: [0, 300] }[t.id];
     if (Number.isFinite(v)) { S[t.id] = Math.max(lim[0], Math.min(lim[1], v)); retime(); update(); }
-  } else if (t.id === 'every') { S.every = +t.value; update(); }
+  } else if (t.id === 'every') { S.every = +t.value; S.custom = null; update(); }
+  else if (t.dataset.toma !== undefined) {
+    const c = own(), f = c[+t.dataset.toma], k = t.dataset.f;
+    if (k === 'ms') { f.ms = +t.value; c.sort((x, y) => x.ms - y.ms); }
+    else if (k === 'grams') f.grams = Math.max(0, Math.min(300, parseInt(t.value, 10) || 0));
+    else if (k === 'label') f.label = t.value.trim().slice(0, 15);
+    else if (k === 'what') { f.what = t.value; const src = WHAT[t.value][1]; if (src && S.carry[src].g) f.grams = S.carry[src].g; f.label = ''; }
+    update();
+  } else if (t.dataset.carry) { S.carry[t.dataset.carry].g = Math.max(0, Math.min(200, parseInt(t.value, 10) || 0)); update(); }
   else if (t.id === 'feedmap') { S.feedOnMap = t.checked; drawMap(); }
   else if (t.dataset.exp) S.exp[t.dataset.exp] = t.checked;
   else if (t.id === 'bgprof') { S.bgProfile = t.checked; saveLast(); renderCharts(); }

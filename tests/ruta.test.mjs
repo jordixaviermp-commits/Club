@@ -129,3 +129,15 @@ test('subidas: los repechos cortos siguen saliendo y un falso llano no es subida
   const falso = perfil(20, (k) => 200 + k * 10); // 1 % durante 20 km
   assert.equal(R.findClimbs(falso.points).length, 0);
 });
+
+test('avituallamiento inteligente: reparte el total y no pone tomas en las bajadas', () => {
+  // 0-20 km llano, 20-35 km bajada al 5 %, 35-70 km llano
+  const tr = perfil(70, (k) => (k < 20 ? 800 : k < 35 ? 800 - (k - 20) * 50 : 50));
+  const tl = R.timeline(tr.points, { flatKmh: 27 });
+  const plan = R.feedingPlan(tr.points, tl.t, { gph: 90, everyMin: 30, smart: true });
+  const total = Math.round((90 * tl.total) / 3600000 / 10) * 10;
+  assert.ok(Math.abs(plan.reduce((a, f) => a + f.grams, 0) - total) <= plan.length * 5, 'suma ≈ total');
+  for (const f of plan) assert.ok(!(f.d > 20200 && f.d < 34800), `toma en la bajada, km ${f.d / 1000}`);
+  assert.ok(plan.every((f, i) => i === 0 || f.ms - plan[i - 1].ms >= 15 * 60000));
+  assert.ok(plan[plan.length - 1].ms <= tl.total - 5 * 60000);
+});

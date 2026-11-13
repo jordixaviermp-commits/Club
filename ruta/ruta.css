@@ -90,3 +90,20 @@ dialog .dlg h3 { display: flex; justify-content: space-between; align-items: cen
 .wchart { width: 100%; height: auto; display: block; touch-action: pan-y; cursor: crosshair; }
 .wchart text { fill: var(--muted); font-size: 10px; }
 #chart-add { width: auto; flex: 1; }
+/* Avituallamiento */
+.seg.narrow { display: inline-grid; min-width: 240px; }
+details.more { margin: .4rem 0 .8rem; }
+details.more summary { cursor: pointer; font-weight: 700; }
+details.more[open] > summary { margin-bottom: .4rem; }
+label.inline { flex-direction: row; align-items: center; gap: .4rem; font-weight: 600; }
+label.inline input { width: auto; flex: 1; min-width: 4rem; }
+.toma-ed { border: 1px solid var(--line); border-left: 4px solid #e6c229; border-radius: 10px; padding: .6rem .7rem; margin: .6rem 0; background: var(--card); }
+.toma-ed .row { margin: .3rem 0; }
+.toma-ed .dot { flex: none; width: 26px; height: 26px; border-radius: 50%; background: #e6c229; color: #111; font-weight: 700; display: grid; place-items: center; }
+.toma-ed select { width: auto; }
+.carry { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "n t" "g s"; gap: .3rem .6rem; align-items: center; padding: .5rem 0; border-bottom: 1px solid var(--line); }
+.carry > b:first-child { grid-area: n; } .carry .tot { grid-area: t; } .carry label { grid-area: g; } .carry .stepper { grid-area: s; }
+.carry input { width: 4.5rem; }
+.carry .stepper { display: inline-flex; align-items: center; gap: .4rem; }
+.carry .stepper .icon-btn { width: 38px; height: 38px; }
+.carry .tot { min-width: 3.5rem; text-align: right; }
