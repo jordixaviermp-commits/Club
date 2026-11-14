@@ -888,3 +888,11 @@ nav.tabs a { position: relative; }
 .net-act { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
 .net-links { display: flex; flex-direction: column; gap: .4rem; }
 .data-det > summary { cursor: pointer; padding: .2rem 0; } .data-det[open] > summary { margin-bottom: .6rem; }
+
+.net-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; margin: 0 0 .7rem; }
+.net-tab { position: relative; display: flex; flex-direction: column; align-items: center; gap: .1rem; padding: .5rem .2rem; border: 2px solid var(--line); border-radius: 14px; background: var(--card); color: var(--text); text-decoration: none; min-height: 58px; justify-content: center; }
+.net-tab span { font-size: 1.25rem; line-height: 1; } .net-tab b { font-size: .8rem; }
+.net-tab.on { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.net-tab em { position: absolute; top: 4px; right: 6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #d93025; color: #fff; font-size: .7rem; font-style: normal; font-weight: 700; line-height: 18px; text-align: center; }
+.enc-det > summary { cursor: pointer; font-weight: 600; } .enc-det[open] > summary { margin-bottom: .5rem; }
+.net-sub { margin: .7rem 0 .3rem; }
