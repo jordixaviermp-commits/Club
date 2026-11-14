@@ -114,3 +114,31 @@ label.inline input { width: auto; flex: 1; min-width: 4rem; }
 .carry .stepper { display: inline-flex; align-items: center; gap: .4rem; }
 .carry .stepper .icon-btn { width: 38px; height: 38px; }
 .carry .tot { min-width: 3.5rem; text-align: right; }
+/* Primer menú, mejor hora, perfil y subidas */
+:root { --prof-base: #d7dde3; --prof-line: #1d2b36; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --prof-base: #3a4651; --prof-line: #dfe7ec; } }
+:root[data-theme="dark"] { --prof-base: #3a4651; --prof-line: #dfe7ec; }
+.lbl { font-size: .85rem; font-weight: 600; color: var(--muted); margin: .8rem 0 .2rem; }
+.unit { display: flex; align-items: center; gap: .4rem; }
+.unit input { flex: 1; min-width: 0; }
+.unit span { color: var(--muted); font-weight: 600; }
+.chosen { border-left: 4px solid var(--accent); background: var(--accent-2); padding: .7rem .9rem; border-radius: 0 10px 10px 0; margin: .6rem 0; }
+.arrive { font-size: 1.1rem; font-weight: 700; margin: 1.2rem 0 .1rem; }
+.arrive mark { background: #fff27a; color: #111; padding: 0 .2rem; font-size: 1.6rem; }
+.btn.go { width: 100%; margin: 1rem 0; background: #e3f14b; border-color: #e3f14b; color: #111; font-weight: 700; min-height: 56px; font-size: 1.05rem; }
+.best .daynav { display: flex; justify-content: center; align-items: center; gap: 1rem; margin: .4rem 0 .8rem; }
+.best .tip { border-left: 4px solid #e6c229; background: var(--warn-bg); padding: .6rem .8rem; border-radius: 0 8px 8px 0; margin-bottom: .6rem; font-size: .92rem; }
+.best .tip .btn { margin-top: .5rem; }
+.daychart { width: 100%; height: auto; display: block; touch-action: pan-y; cursor: crosshair; }
+.daychart text { fill: var(--muted); font-size: 10px; }
+.seg.mini { margin: 0; }
+.seg.mini button { padding: .35rem .7rem; font-size: .85rem; }
+.seg.tabs3 button { font-size: .85rem; padding: .55rem .25rem; line-height: 1.2; }
+.profile text.hr { font-size: 12px; font-weight: 600; fill: var(--text); }
+.profile text.drag { font-size: 13px; font-weight: 700; fill: var(--text); }
+.profile .handle { cursor: ew-resize; touch-action: none; }
+#pinfo { min-height: 4.2em; }
+.climbs-row { display: flex; gap: .5rem; overflow-x: auto; padding: .2rem 0 .6rem; scroll-snap-type: x proximity; }
+.climbs-row .climb { flex: none; min-width: 168px; scroll-snap-align: start; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.climb .n { font-size: 1rem; }
+[hidden] { display: none !important; }

@@ -180,19 +180,33 @@ export function speedFor(power, grade, opts = {}) {
   return (a + b) / 2;
 }
 
+/** Rodadura, aerodinámica y tope bajando según el terreno. */
+export const TERRAIN = {
+  road: { label: 'Carretera', crr: 0.005, cda: 0.36, vmax: 55 },
+  gravel: { label: 'Gravel', crr: 0.011, cda: 0.40, vmax: 45 },
+  mtb: { label: 'MTB', crr: 0.02, cda: 0.48, vmax: 35 },
+};
+
 /**
  * Hora de paso (ms desde el inicio) para cada punto del track.
- * `flatKmh`: velocidad media en llano; `vmaxKmh`: tope bajando; `vminKmh`: suelo en rampas muy duras.
- * Devuelve un Float64Array con los ms desde la salida y el tiempo total.
+ * Modo velocidad (por defecto): `flatKmh` es la media en llano; se saca la potencia que la da y con ella
+ * la velocidad en cada pendiente. Modo potencia (`mode: 'power'`): `pFlat` W en llano, `pClimb` W desde el 3 %,
+ * 100 W en bajadas desde el −3 %, con el peso `rider` + `bike`. `terrain`: road, gravel o mtb.
+ * Paradas: `stopsPerHour` minutos de cada hora de reloj (o `stopsMin` en total, repartidos).
+ * Devuelve { t (ms desde la salida en cada punto), total, moving (sin paradas), power }.
  */
-export function timeline(points, { flatKmh = 27, mass = 80, vmaxKmh = 55, vminKmh = 5, stopsMin = 0 } = {}) {
-  const opts = { mass };
-  const P = powerFor(flatKmh / 3.6, 0, opts);
-  const vmax = vmaxKmh / 3.6, vmin = vminKmh / 3.6;
+export function timeline(points, { mode = 'speed', flatKmh = 27, mass = 80, pFlat = 200, pClimb = 220, rider = 72, bike = 8,
+  terrain = 'road', vmaxKmh, vminKmh = 5, stopsMin = 0, stopsPerHour = 0 } = {}) {
+  const T = TERRAIN[terrain] || TERRAIN.road;
+  const opts = { mass: mode === 'power' ? rider + bike : mass, crr: T.crr, cda: T.cda };
+  const P0 = mode === 'power' ? pFlat : powerFor(flatKmh / 3.6, 0, opts);
+  // en modo potencia se descuenta un 3 % de pérdidas de la transmisión
+  const powerAt = (g) => (mode !== 'power' ? P0 : 0.97 * (g >= 0.03 ? pClimb : g <= -0.03 ? 100 : pFlat));
+  const vmax = (vmaxKmh ?? T.vmax) / 3.6, vmin = vminKmh / 3.6;
   const memo = new Map();
   const v = (g) => {
     const k = Math.round(Math.max(-0.25, Math.min(0.25, g)) * 1000);
-    if (!memo.has(k)) memo.set(k, Math.min(vmax, Math.max(vmin, speedFor(P, k / 1000, opts))));
+    if (!memo.has(k)) memo.set(k, Math.min(vmax, Math.max(vmin, speedFor(powerAt(k / 1000), k / 1000, opts))));
     return memo.get(k);
   };
   const t = new Float64Array(points.length);
@@ -201,10 +215,12 @@ export function timeline(points, { flatKmh = 27, mass = 80, vmaxKmh = 55, vminKm
     const g = gradeAt(points, (points[i].d + points[i - 1].d) / 2, 100);
     t[i] = t[i - 1] + (dd / v(g)) * 1000;
   }
-  // las paradas se reparten a lo largo de la ruta, en proporción a la distancia
+  const moving = t[t.length - 1];
   const total = points[points.length - 1].d;
+  // paradas: X min de cada hora de reloj (la marcha ocupa 60 − X) o un total repartido por la distancia
+  if (stopsPerHour > 0 && stopsPerHour < 60) { const f = 60 / (60 - stopsPerHour); for (let i = 0; i < t.length; i++) t[i] *= f; }
   if (stopsMin > 0 && total > 0) for (let i = 0; i < t.length; i++) t[i] += (points[i].d / total) * stopsMin * 60000;
-  return { t, total: t[t.length - 1], power: P };
+  return { t, total: t[t.length - 1], moving, power: P0 };
 }
 
 /** ms desde la salida a la distancia d (interpolando la línea de tiempos). */
@@ -254,6 +270,8 @@ export function findClimbs(points, { minGain = 40, minLen = 500, minAvg = 0.025,
     return { start: m.a.d, end: m.b.d, length: m.len, gain: m.gain, avg: m.avg, max: Math.max(maxG, m.avg), top: m.b.es, startIdx: m.s, endIdx: m.e };
   };
   const shortOk = (m) => m.len >= minLen && m.gain >= minGain && m.avg >= minAvg;
+  // repechos pequeños (sin categoría): salen en «Todas»
+  const minorOk = (m) => m.len >= 300 && m.gain >= 20 && m.avg >= 0.03;
   const longOk = (m) => m.len >= minLen && ((m.gain >= 150 && m.avg >= 0.02) || (m.gain >= 300 && m.avg >= 0.015));
 
   // subidas largas: tramos seguidos de una misma subida
@@ -269,7 +287,7 @@ export function findClimbs(points, { minGain = 40, minLen = 500, minAvg = 0.025,
   const longs = groups.map(measure).filter((m) => longOk(m) && (m.len > 3000 || !shortOk(m)));
   const out = longs.map(make);
   const inside = (m) => longs.some((L) => m.a.d >= L.a.d - 200 && m.b.d <= L.b.d + 200);
-  for (const m of segs.map(measure)) if ((shortOk(m) || longOk(m)) && !inside(m)) out.push(make(m));
+  for (const m of segs.map(measure)) if ((shortOk(m) || longOk(m) || minorOk(m)) && !inside(m)) out.push(make(m));
   return out.sort((x, y) => x.start - y.start);
 }
 
@@ -384,6 +402,15 @@ export function climbCategory(c) {
   if (score >= 16000) return '3';
   if (score >= 8000) return '4';
   return '';
+}
+
+/** Color de cada categoría (la misma escala en el perfil, el mapa y las tarjetas). */
+export const CAT_COLOR = { '': '#9ccc65', 4: '#2e9e4f', 3: '#e6c229', 2: '#f08c2a', 1: '#d9342b', HC: '#8b1a1a' };
+export const catLabel = (c) => (c === '' ? 'Sin categoría' : c === 'HC' ? 'Especial (HC)' : `${c}ª categoría`);
+/** Filtros de la lista: todas; medianas y grandes (con categoría o ≥ 40 m de desnivel); solo grandes (con categoría). */
+export function climbFilter(climbs, which) {
+  if (which === 'todas') return climbs;
+  return climbs.filter((c) => { const k = climbCategory(c); return which === 'grandes' ? k !== '' : k !== '' || c.gain >= 40; });
 }
 
 /** Color por pendiente (fracción), los mismos tramos que la leyenda del perfil. */

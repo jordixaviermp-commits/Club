@@ -153,3 +153,24 @@ test('subidas: perfil real de 117 km (puerto tendido al ~1,9 % y cuatro repechos
   assert.ok(c.some(([s, g]) => s >= 18 && s <= 30 && g > 400), `falta el puerto largo: ${JSON.stringify(c)}`);
   for (const km of [17, 67, 82, 87]) assert.ok(near(km), `falta la subida del km ${km}: ${JSON.stringify(c)}`);
 });
+
+test('ritmo por potencia y peso, terreno y paradas por hora', () => {
+  const llano = perfil(30, () => 100);
+  const a = R.timeline(llano.points, { mode: 'power', pFlat: 200, rider: 72, bike: 8 });
+  const kmh = 30 / (a.moving / 3600000);
+  assert.ok(kmh > 29 && kmh < 35, `200 W en llano: ${kmh} km/h`);
+  const mtb = R.timeline(llano.points, { mode: 'power', pFlat: 200, rider: 72, bike: 8, terrain: 'mtb' });
+  assert.ok(mtb.moving > a.moving * 1.1);
+  const paradas = R.timeline(llano.points, { mode: 'power', pFlat: 200, stopsPerHour: 10 });
+  assert.ok(Math.abs(paradas.total / paradas.moving - 1.2) < 1e-9); // 10 min de cada hora parado: 60/50
+  const subida = perfil(10, (k) => 100 + k * 70); // 7 %
+  const c1 = R.timeline(subida.points, { mode: 'power', pFlat: 200, pClimb: 200 }).moving, c2 = R.timeline(subida.points, { mode: 'power', pFlat: 200, pClimb: 260 }).moving;
+  assert.ok(c2 < c1 * 0.85, 'más vatios en subida, menos tiempo');
+});
+
+test('filtros de subidas: todas, medianas y grandes, solo grandes', () => {
+  const c = [{ length: 600, avg: 0.04, gain: 24 }, { length: 1200, avg: 0.04, gain: 48 }, { length: 2400, avg: 0.043, gain: 103 }, { length: 5100, avg: 0.078, gain: 398 }];
+  assert.deepEqual(['todas', 'medianas', 'grandes'].map((k) => R.climbFilter(c, k).length), [4, 3, 2]);
+  assert.equal(R.climbCategory(c[3]), '2');
+  assert.equal(R.climbCategory({ length: 3100, avg: 0.074 }), '3');
+});
