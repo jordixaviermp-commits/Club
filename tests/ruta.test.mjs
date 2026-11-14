@@ -174,3 +174,35 @@ test('filtros de subidas: todas, medianas y grandes, solo grandes', () => {
   assert.equal(R.climbCategory(c[3]), '2');
   assert.equal(R.climbCategory({ length: 3100, avg: 0.074 }), '3');
 });
+
+test('altitud del terreno: muestras, peticiones de 100 en 100 e interpolación', () => {
+  const t = perfil(30, () => 0);
+  const s = R.demSamples(t.points, { step: 100 });
+  assert.equal(s.length, 301);
+  const urls = R.demUrls(s);
+  assert.equal(urls.length, 4);
+  assert.match(urls[0], /^https:\/\/api\.open-meteo\.com\/v1\/elevation\?latitude=/);
+  const ele = R.applyDem(t.points, s, s.map((p) => p.d / 100)); // 1 m cada 100 m
+  assert.ok(Math.abs(ele[ele.length - 1] - t.distance / 100) < 1e-6);
+  assert.ok(Math.abs(ele[100] - t.points[100].d / 100) < 1e-6);
+});
+
+test('fuentes: consulta de Overpass y solo las que quedan a menos de 500 m', () => {
+  const t = perfil(10, () => 300);
+  const q = R.fountainsQuery(t.points);
+  assert.match(q, /around:500,41\.90000,0\.19000/);
+  assert.match(q, /"amenity"="drinking_water"/);
+  const lon = (km) => 0.19 + (km * 1000) / 82900;
+  const json = { elements: [
+    { type: 'node', id: 1, lat: 41.9 + 0.002, lon: lon(5), tags: { amenity: 'drinking_water', name: 'Font del Poble' } }, // ~220 m
+    { type: 'node', id: 2, lat: 41.9 + 0.01, lon: lon(2), tags: { amenity: 'drinking_water' } }, // ~1,1 km: fuera
+    { type: 'node', id: 3, lat: 41.9, lon: lon(8), tags: { natural: 'spring', drinking_water: 'yes', seasonal: 'yes' } },
+    { type: 'node', id: 1, lat: 41.9 + 0.002, lon: lon(5), tags: { amenity: 'drinking_water' } }, // repetida
+  ] };
+  const f = R.parseFountains(json, t.points);
+  assert.deepEqual(f.map((x) => x.id), [1, 3]);
+  assert.equal(f[0].name, 'Font del Poble');
+  assert.ok(Math.abs(f[0].d / 1000 - 5) < 0.05 && f[0].off > 150 && f[0].off < 300);
+  assert.equal(f[1].kind, 'Manantial');
+  assert.equal(f[1].unsure, true);
+});
