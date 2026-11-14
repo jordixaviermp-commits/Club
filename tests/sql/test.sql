@@ -550,4 +550,18 @@ select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a
 select pg_temp.check((select count(*) from ig_snapshots) = 2, 'instagram: la dirección lee las cifras');
 select pg_temp.expect_fail('select * from ig_secret', 'instagram: ni la dirección lee el token desde la app');
 reset role;
+-- capturas de Insights: solo la dirección
+reset role;
+set role anon;
+select pg_temp.expect_fail($q$select * from ig_capturas$q$, 'capturas: anon no lee');
+select pg_temp.expect_fail($q$insert into ig_capturas (periodo, imagen) values ('x', 'data:,')$q$, 'capturas: anon no sube');
+reset role;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+insert into ig_capturas (periodo, seccion, imagen) values ('Octubre 2026', 'resumen', 'data:image/jpeg;base64,AAAA');
+select pg_temp.check((select count(*) from ig_capturas) = 1, 'capturas: la dirección sube y lee');
+select pg_temp.expect_fail($q$insert into ig_capturas (periodo, seccion, imagen) values ('x', 'raro', 'data:,')$q$, 'capturas: sección desconocida rechazada');
+delete from ig_capturas;
+select pg_temp.check((select count(*) from ig_capturas) = 0, 'capturas: la dirección borra');
+reset role;
 \echo TODAS LAS PRUEBAS SQL OK

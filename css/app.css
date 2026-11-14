@@ -851,3 +851,10 @@ html, body { max-width: 100%; overflow-x: clip; }
 .ig-track.gstack i { display: block; flex: none; height: 8px; border-radius: 0; } .ig-track.gstack i.m { background: var(--accent); } .ig-track.gstack i.f { background: var(--brand-cyan); } .ig-track.gstack i.u { background: #9aa7b0; }
 .ig-legend .dot.c { background: #9aa7b0; }
 @media print { .ig-panel.off { display: block !important; } .ig-part { break-after: avoid; } .ig-panel { break-before: page; } .ig-title + .ig-panel { break-before: auto; } }
+
+.ig-shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: .8rem; }
+.ig-shot { margin: 0; display: flex; flex-direction: column; gap: .3rem; }
+.ig-shot img { width: 100%; border-radius: 8px; border: 1px solid var(--line); cursor: zoom-in; display: block; }
+.ig-shot figcaption { font-size: .8rem; display: flex; flex-direction: column; align-items: flex-start; }
+.ig-shot-big { width: 100%; max-height: 70vh; object-fit: contain; border-radius: 8px; }
+@media print { .ig-shots { grid-template-columns: repeat(2, 1fr); } .ig-shot { break-inside: avoid; } .ig-shot img { max-height: 15cm; object-fit: contain; } }

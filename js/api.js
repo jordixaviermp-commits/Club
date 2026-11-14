@@ -165,6 +165,10 @@ export function supabaseApi(url, key) {
     async socialMark(code, key, posted) { ok(await sb.rpc('social_mark', { p_code: code, p_key: key, p_posted: !!posted })); },
     async listPosts() { try { return ok(await sb.from('social_posts').select('key,posted_at,posted_by').limit(1000)); } catch { return null; } },
     /** Estadísticas de Instagram guardadas por la captura automática (solo dirección). null = falta ejecutar el SQL. */
+    /** Capturas de Insights subidas por la dirección (null = falta ejecutar el SQL). */
+    async listIgShots() { try { return ok(await sb.from('ig_capturas').select('id,periodo,seccion,nota,imagen,created_at').order('created_at', { ascending: false }).limit(200)); } catch { return null; } },
+    async addIgShot(row) { ok(await sb.from('ig_capturas').insert({ periodo: row.periodo, seccion: row.seccion, nota: row.nota || null, imagen: row.imagen })); },
+    async deleteIgShot(id) { ok(await sb.from('ig_capturas').delete().eq('id', id)); },
     async listIg() {
       try {
         const out = [];
@@ -454,6 +458,9 @@ export function demoApi(storage = globalThis.localStorage) {
     },
     async listPosts() { requireAdmin(); return clone(load().social_posts || []); },
     async listIg() { requireAdmin(); return clone(load().ig_snapshots || []); },
+    async listIgShots() { requireAdmin(); return clone((load().ig_capturas || []).slice().reverse()); },
+    async addIgShot(row) { requireAdmin(); const d = load(); (d.ig_capturas ||= []).push({ id: uuid(), periodo: row.periodo, seccion: row.seccion, nota: row.nota || null, imagen: row.imagen, created_at: new Date().toISOString() }); save(); },
+    async deleteIgShot(id) { requireAdmin(); const d = load(); d.ig_capturas = (d.ig_capturas || []).filter((x) => x.id !== id); save(); },
     async setPosted(keys, value) {
       requireAdmin(); const d = load(); const set = new Set(keys);
       d.social_posts = (d.social_posts || []).filter((x) => !set.has(x.key));

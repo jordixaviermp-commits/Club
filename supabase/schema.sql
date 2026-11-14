@@ -244,6 +244,16 @@ create table if not exists public.ig_snapshots (
 );
 alter table public.ig_snapshots enable row level security;
 
+-- Capturas de pantalla de Insights que sube la dirección (ver supabase/cambios/2026-11-14-instagram-capturas.sql).
+create table if not exists public.ig_capturas (
+  id         uuid primary key default gen_random_uuid(),
+  periodo    text not null check (length(periodo) between 1 and 80),
+  seccion    text not null default 'otras' check (seccion in ('resumen','contenido','audiencia','otras')),
+  nota       text check (nota is null or length(nota) <= 300),
+  imagen     text not null check (length(imagen) <= 3000000),
+  created_at timestamptz not null default now()
+);
+
 -- Clave de la tarea automática: nadie la lee desde la app, solo la función de abajo.
 create table if not exists public.ig_secret (token text primary key);
 alter table public.ig_secret enable row level security;
@@ -318,16 +328,16 @@ $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['runners','registrations','registration_entries','races','results','settings','runner_documents','contract_templates','ig_snapshots','circuit_podiums','announcements','change_log','announcement_replies','correction_requests','social_posts'] loop
+  foreach t in array array['runners','registrations','registration_entries','races','results','settings','runner_documents','contract_templates','ig_snapshots','ig_capturas','circuit_podiums','announcements','change_log','announcement_replies','correction_requests','social_posts'] loop
     execute format('drop policy if exists admin_all on public.%I', t);
     execute format('create policy admin_all on public.%I for all to authenticated using (public.is_admin()) with check (public.is_admin())', t);
   end loop;
 end $$;
 
 revoke all on public.runners, public.registrations, public.registration_entries,
-              public.races, public.results, public.admins, public.settings, public.runner_documents, public.contract_templates, public.ig_snapshots, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts from anon, public;
+              public.races, public.results, public.admins, public.settings, public.runner_documents, public.contract_templates, public.ig_snapshots, public.ig_capturas, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts from anon, public;
 grant select, insert, update, delete on public.runners, public.registrations,
-              public.registration_entries, public.races, public.results, public.settings, public.runner_documents, public.contract_templates, public.ig_snapshots, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts to authenticated;
+              public.registration_entries, public.races, public.results, public.settings, public.runner_documents, public.contract_templates, public.ig_snapshots, public.ig_capturas, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts to authenticated;
 revoke all on public.admins from authenticated;
 
 -- ---------- Funciones de dirección (respetan la seguridad de arriba) ---
