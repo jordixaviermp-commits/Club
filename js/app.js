@@ -1540,16 +1540,29 @@ function viewSocial() {
 }
 async function copyText(t, okMsg) { try { await navigator.clipboard.writeText(t); toast(okMsg); } catch { prompt('Copia el texto:', t); } }
 
-/** Dirección: tarjeta con el enlace del encargado de redes. */
+/** Dirección: todo lo del encargado de redes en un solo desplegable pequeño (avisarle de las próximas carreras y su enlace). */
 function socialAdminCard() {
   const code = S.data.settings?.social?.code;
-  return `<section class="card"><h3>👤 Encargado de redes</h3>
-    <p class="hint">Dale un enlace propio y verá solo esto: las próximas carreras con quién va y los resultados recientes. Marca lo que publica y tú lo ves aquí, sin escribirte.</p>
+  const a = adminAlerts();
+  return `<details class="card enc-det" data-open-key="encargado"${S.open?.encargado ? ' open' : ''}>
+    <summary>👤 Encargado de redes <small class="muted">· avisarle y su enlace${a.weekTodo.length ? ` · ${a.weekTodo.length} por avisar` : ''}</small></summary>
+    <p class="net-sub"><b>Avisarle de las próximas carreras</b> <small class="muted">(cláusula 8: con una semana de antelación)</small></p>
+    ${a.week.length ? `<p class="hint">Próximos 7 días: <b>${a.week.length}</b> carrera${a.week.length === 1 ? '' : 's'} con inscritos, ${a.weekTodo.length} sin publicar.</p>
+      ${a.weekTodo.length ? `<div class="row"><button class="btn primary small" data-act="alert-week-copy">📋 Copiar texto</button><button class="btn small" data-act="alert-week-wa">WhatsApp</button><button class="btn small ghost" data-act="post-all">✓ Marcar todas</button></div>` : '<p class="pen ok">✅ Todas avisadas.</p>'}`
+      : '<p class="hint">No hay carreras con inscritos en los próximos 7 días.</p>'}
+    <p class="net-sub"><b>Su enlace</b> <small class="muted">(verá solo las próximas carreras con quién va y los resultados recientes; lo que marque lo ves tú)</small></p>
     ${S.data.socialPosts === null ? '<p class="warn card">Falta ejecutar en Supabase <code>supabase/cambios/2026-11-12-redes.sql</code>.</p>'
       : code ? `<p><code class="break">${esc(socialLink(code))}</code></p>
         <div class="row"><button class="btn primary small" data-act="soc-link-copy">Copiar enlace</button><button class="btn small" data-act="soc-link-wa">WhatsApp</button>
           <button class="btn small danger ghost" data-act="soc-link-off">Anular enlace</button></div>`
-      : '<button class="btn primary" data-act="soc-link-new">Crear enlace para el encargado de redes</button>'}</section>`;
+      : '<button class="btn primary small" data-act="soc-link-new">Crear enlace para el encargado de redes</button>'}</details>`;
+}
+
+/** Pestañas de la zona de redes (se repiten arriba en Panel, Calendario y Publicaciones). */
+function netTabs(on) {
+  let pend = 0, due = 0; try { pend = socialPending(); due = pubDue(); } catch { /* sin datos aún */ }
+  return `<nav class="net-tabs no-print" aria-label="Redes">${[['panel', '📋', 'Panel', '#/redes', pend], ['cal', '📅', 'Calendario', '#/semana', 0], ['pub', '📸', 'Publicaciones', '#/publicaciones', due]]
+    .map(([k, i, l, h, n]) => `<a class="net-tab${on === k ? ' on' : ''}" href="${h}"><span aria-hidden="true">${i}</span><b>${l}</b>${n ? `<em>${n}</em>` : ''}</a>`).join('')}</nav>`;
 }
 
 /** Dirección: carreras de los próximos días con quién va, para avisar al encargado de redes (cláusula 8). */
@@ -1583,12 +1596,12 @@ function viewWeek() {
   if (cal) {
     const regs = S.data.registrations.filter((g) => g.entries.length && !g.suspended);
     const done = S.data.races.filter((r) => (r.results || []).length);
-    return frame('Próximas carreras', `${views}
+    return frame('Próximas carreras', `${netTabs('cal')}${views}
       <p class="hint">Todas las carreras del club, próximas y ya hechas. En cada día sale ✓ si está publicada en redes (½ si hay alguna sin publicar). Toca un día y marca las casillas.</p>
       ${calendarView(regs, (g) => postCard(g), () => false, { done, doneCard: (r) => postCard(r, true), isPosted: (g) => postedSet().has(g.results ? resKey(g) : postKey(g)) })}`, { back: '#/redes' });
   }
   const list = weekRaces(days), posted = postedSet(), todo = list.filter((g) => !posted.has(postKey(g)));
-  return frame('Próximas carreras', `${views}
+  return frame('Próximas carreras', `${netTabs('cal')}${views}
     <p class="hint">Para avisar al encargado de redes con una semana de antelación (cláusula 8 del contrato). Salen las carreras con algún inscrito, sin las suspendidas. Marca ✓ las que ya has publicado.</p>
     <div class="years">${[7, 14, 30].map((n) => `<button class="chip${n === days ? ' on' : ''}" data-act="week-days" data-n="${n}">${n} días</button>`).join('')}</div>
     ${list.length ? `<p class="hint"><b>${todo.length}</b> sin publicar de ${list.length}.</p>
@@ -1597,8 +1610,7 @@ function viewWeek() {
       ${list.map((g) => postCard(g)).join('')}
       <details class="card"><summary><b>Ver el texto que se copia</b></summary><pre class="week-pre">${esc(weekText(days, todo.length ? todo : list))}</pre></details>`
       : `<p class="empty">No hay carreras con inscritos en los próximos ${days} días.</p>`}
-    <a class="btn block" href="#/publicaciones">📸 Control de publicaciones (resultados pendientes)</a>
-    ${socialAdminCard()}`, { back: '#/redes' });
+    `, { back: '#/redes' });
 }
 
 /** Estado de la historia previa (la publica la tarea automática 2 días antes) de una inscripción o carrera. */
@@ -1647,6 +1659,7 @@ function viewPublications() {
     ...(a.orphans.length ? [{ icon: '🔗', text: `<b>${a.orphans.length}</b> marca${a.orphans.length === 1 ? '' : 's'} de «publicada» sin carrera (se cambió el nombre o la fecha después de marcarla, o se borró): ${esc(a.orphans.slice(0, 3).map((o) => o.key.replace('res|', '').split('|')[1] || o.key).join(', '))}${a.orphans.length > 3 ? '…' : ''}`, orphan: true }] : []),
   ];
   return frame('Publicaciones en redes', `
+    ${netTabs('pub')}
     ${yearPicker(years)}
     <div class="rr-kpis pub-kpis">
       <div class="rr-kpi good"><b>${a.done}</b><span>✅ hechas</span></div>
@@ -1666,13 +1679,9 @@ function viewPublications() {
     ${a.waiting.length ? `<h2 class="section">🕓 A la espera de los resultados (${a.waiting.length})</h2>
       <p class="hint">Ya se han corrido, pero los corredores aún no han puesto su puesto (tienen 3 días; luego pasan solas a resultados).</p>
       ${a.waiting.map((x) => `<article class="card"><p><b>${esc(x.reg.name)}</b> · ${esc(when(x.reg))}<br><small class="muted">terminó ${ago(x.days)} · ${x.people} inscrito${x.people === 1 ? '' : 's'}</small></p><a class="btn small ghost" href="#/inscripciones/${x.reg.id}">Abrir</a></article>`).join('')}` : ''}
-    <h2 class="section">📸 Historias previas · automáticas</h2>
-    <p class="hint">La historia de cada carrera con inscritos la publica la tarea automática <b>2 días antes</b>. Aquí ves si consta como publicada (así sabes que habrá estadística de esa historia).${S.stories?.none ? ' <b>Aún no hay registro</b>: aparecerá cuando la tarea automática publique la próxima historia.' : ''}</p>
-    ${(() => { const up = S.data.registrations.filter((g) => !g.suspended && g.entries.length && g.date >= todayISO() && daysTo(g.date) <= 14).sort((x, y) => x.date.localeCompare(y.date) || byName(x, y));
-      return up.length ? up.map((g) => `<article class="card"><p><b>${esc(g.name)}</b> · ${esc(when(g))}<br>${storyTag(g)}</p><a class="btn small ghost" href="#/inscripciones/${g.id}">Abrir</a></article>`).join('') : '<p class="empty small">No hay carreras con inscritos en los próximos 14 días.</p>'; })()}
     ${a.resDone.length ? `<details class="card"><summary><b>✅ Resultados ya publicados (${a.resDone.length})</b></summary><ul class="mini-list">${a.resDone.map((x) => `<li><div><b>${esc(x.race.name)}</b><small class="muted">${esc(when(x.race))}</small></div>
       <label class="check"><input type="checkbox" data-act-change="post" data-key="${esc(x.key)}" checked> ✓</label></li>`).join('')}</ul><p class="hint">Quita la marca si te equivocaste.</p></details>` : ''}
-    ${socialAdminCard()}`, { back: '#/redes', actions: '<button class="icon-btn" data-act="pub-refresh" aria-label="Actualizar">↻</button>' });
+    <p class="hint">Las historias previas automáticas, el aviso y los resultados de cada carrera, de un vistazo, están en el <a href="#/redes">Panel</a>.</p>`, { back: '#/redes', actions: '<button class="icon-btn" data-act="pub-refresh" aria-label="Actualizar">↻</button>' });
 }
 
 
@@ -1713,6 +1722,7 @@ function viewNetworks() {
   const a = adminAlerts();
   const audit = pubAudit();
   return frame('Redes', `
+    ${netTabs('panel')}
     ${warn}
     <div class="net-kpis" role="tablist" aria-label="Estado de las publicaciones">${kpi('pend', '❗', 'Pendiente')}${kpi('curso', '⏳', 'En curso')}${kpi('hecho', '✅', 'Hecho')}</div>
     <p class="hint net-auto">${auto}<br>${next}</p>
@@ -1720,15 +1730,6 @@ function viewNetworks() {
     ${shown.length ? shown.slice(0, cap).map(card).join('') : `<p class="empty">${f === 'pend' ? 'Nada pendiente. 🎉' : f === 'curso' ? 'Nada en curso.' : 'Todavía no hay nada hecho en este rango.'}</p>`}
     ${shown.length > cap ? `<button class="btn block ghost" data-act="net-more">Ver las ${shown.length}</button>` : ''}
     ${audit.orphans.length ? `<a class="card pen bad-box net-orph" href="#/publicaciones">🔗 ${audit.orphans.length} marca${audit.orphans.length === 1 ? '' : 's'} de «publicada» sin carrera: revisar en el control detallado</a>` : ''}
-    ${a.week.length ? `<section class="card"><h3>📣 Avisar al encargado de redes</h3>
-      <p class="hint">Próximos 7 días: <b>${a.week.length}</b> carrera${a.week.length === 1 ? '' : 's'} con inscritos, ${a.weekTodo.length} sin publicar.</p>
-      ${a.weekTodo.length ? `<div class="row"><button class="btn primary" data-act="alert-week-copy">📋 Copiar texto</button><button class="btn" data-act="alert-week-wa">WhatsApp</button><button class="btn ghost" data-act="post-all">✓ Marcar todas</button></div>` : '<p class="pen ok">✅ Todas publicadas.</p>'}</section>` : ''}
-    <h2 class="section">Más herramientas de redes</h2>
-    <div class="net-links">
-      <a class="btn block" href="#/instagram">📈 Estadísticas de Instagram</a>
-      <a class="btn block" href="#/semana">📅 Calendario y próximas carreras para redes</a>
-      <a class="btn block" href="#/publicaciones">🔎 Control detallado y anomalías</a>
-    </div>
     ${socialAdminCard()}`, { actions: '<button class="icon-btn" data-act="pub-refresh" aria-label="Actualizar">↻</button>' });
 }
 
