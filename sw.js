@@ -1,6 +1,6 @@
 // Service worker: permite instalar la app y abrirla sin cobertura (muestra la última versión guardada).
 // Los datos siempre se piden en vivo a Supabase; aquí solo se guardan los archivos de la app.
-const CACHE = 'monzon-v99';
+const CACHE = 'monzon-v102';
 const SHELL = ['./', 'index.html', 'css/app.css', 'js/app.js', 'js/api.js', 'js/logic.js', 'js/config.js', 'js/seguros.js', 'js/enlaces.js', 'js/version.js',
   'js/vendor/supabase-2.117.3.js', 'manifest.webmanifest', 'icons/logo.png', 'icons/icon-192.png'];
 

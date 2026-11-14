@@ -842,79 +842,49 @@ const resultHref = (id) => (S.runnerData?.registrations.some((g) => g.id === id)
 const emptyRunnerDraft = (pre = {}) => ({ name: '', date: '', multi: false, end_date: '', place: '', province: '', country: DEFAULT_COUNTRY,
   modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', category: '', ...pre });
 
-/** Formulario para que el corredor ponga SU resultado (una sola vez). id = «reg_<uuid>» o «race_<uuid>». */
+/** Formulario para que el corredor ponga o cambie SU resultado. id = «reg_<uuid>» o «race_<uuid>». */
 function viewRunnerReport(key) {
   const d = S.runnerData;
   const [kind, id] = [key.slice(0, key.indexOf('_')), key.slice(key.indexOf('_') + 1)];
   const race = kind === 'reg' ? d.registrations.find((g) => g.id === id) : (d.my_results || []).find((r) => r.race_id === id);
   const back = runnerHref('mi');
   if (!race) return frame('Mi resultado', '<p class="empty">No se encuentra esta carrera.</p>', { back });
-  const already = kind === 'reg' ? race.my_result : race.position;
-  if (already) return viewCorrection(kind, id, race, back);
+  const cur = kind === 'reg' ? race.my_result : (race.position ? race : null); // resultado ya puesto (para cambiarlo)
   const cat = kind === 'reg' ? race.entries.find((e) => e.runner_id === d.me.id)?.category : race.category;
-  return frame('Mi resultado', `
+  return frame(cur ? 'Cambiar mi resultado' : 'Mi resultado', `${previewBanner()}
     <form class="card stack" data-form="r-report" data-kind="${kind}" data-id="${id}">
       <div><h3>${esc(race.name)}</h3><p class="muted">${when(race)}${place(race) ? ' · ' + esc(place(race)) : ''} · ${esc(race.modality)}</p></div>
       <div class="grid2">
-        <label>Tu puesto<input type="number" name="position" inputmode="numeric" min="1" max="999" required autofocus></label>
+        <label>Tu puesto<input type="number" name="position" inputmode="numeric" min="1" max="999" required autofocus value="${esc(cur?.position ?? '')}"></label>
         <label>Categoría${catSelect('name="category"', cat || d.me.category || '', 'Categoría')}</label>
       </div>
-      <label>⏱️ Tu tiempo <small class="muted">(opcional)</small><input type="text" name="time" inputmode="numeric" autocomplete="off" placeholder="2:05:30" maxlength="10"></label>
+      <label>⏱️ Tu tiempo <small class="muted">(opcional)</small><input type="text" name="time" inputmode="numeric" autocomplete="off" placeholder="2:05:30" maxlength="10" value="${esc(cur?.time_seconds ? formatTime(cur.time_seconds) : '')}"></label>
       <p class="hint">Horas:minutos:segundos, tal como sale en la clasificación (por ejemplo <b>2:05:30</b>, o <b>45:10</b> si fue menos de una hora). Sirve para ver cuántas horas acumula cada uno en Equipo.</p>
-      <input type="hidden" name="podium" value="${podiumKind(race)}">
+      <input type="hidden" name="podium" value="${podiumKind(race, cur?.podium_type)}">
       ${race.race_type === 'circuito' ? `<p class="hint">🏆 Esta carrera es puntuable de <b>${esc(race.circuit || 'un circuito')}</b>. Aquí pones solo tu puesto en <b>esta prueba</b>. Si acabas en el podio de la <b>general final</b>, se pide aparte, al terminar la liga, en <b>Contrato → Plus de bonificación</b>.</p>` : ''}
-      <p class="pen bad-box">⚠️ Revísalo bien: <b>una vez enviado no podrás cambiarlo</b>. Si te equivocas, tendrá que corregirlo la dirección.</p>
-      <button class="btn primary">Enviar mi resultado</button>
+      <p class="hint">${cur ? `Ahora tienes <b>${isPodium(cur.position) ? medal(cur.position) + ' ' : ''}${cur.position}º</b>. ` : ''}Puedes cambiarlo tú cuando quieras. El puesto <b>no cambia tu bono</b> (cuenta participar); los podios en la general final de una liga (plus) se piden aparte y los confirma la dirección.</p>
+      ${S.preview ? '' : `<button class="btn primary">${cur ? 'Guardar el cambio' : 'Enviar mi resultado'}</button>`}
     </form>`, { back });
 }
 
-/** El resultado ya está puesto: el corredor puede pedir que lo corrija la dirección. */
 /** Tipo de podio que lleva un resultado del corredor: no lo elige él (solo sirve para las estadísticas); la dirección puede cambiarlo. */
 const podiumKind = (race, current) => (PODIUM_TYPES.some((t) => t.id === current) ? current : race?.race_type === 'campeonato' ? 'campeonato' : 'suelta');
-
-function viewCorrection(kind, id, race, back) {
-  const d = S.runnerData;
-  const cur = kind === 'reg' ? race.my_result.position : race.position;
-  const curCat = kind === 'reg' ? d.registrations.find((g) => g.id === id)?.entries.find((e) => e.runner_id === d.me.id)?.category : race.category;
-  const mine = (S.corrections || []).filter((c) => c.target_id === id);
-  const pending = mine.find((c) => c.status === 'pendiente');
-  const done = mine.filter((c) => c.status !== 'pendiente').slice(0, 3);
-  const line = (c) => `${c.old_position}º → <b>${c.new_position}º</b>${c.new_category ? ' · ' + esc(c.new_category) : ''}`;
-  return frame('Mi resultado', `${previewBanner()}
-    <section class="card"><h3>${esc(race.name)}</h3><p class="muted">${when(race)} · ${esc(race.modality)}</p>
-      <p>Tu resultado: <b>${isPodium(cur) ? medal(cur) + ' ' : ''}${cur}º</b>${curCat ? ' · ' + esc(curCat) : ''}</p>
-      <p class="hint">El resultado se pone una sola vez. Si te equivocaste, pide la corrección: la dirección la revisará con un toque.</p></section>
-    ${done.map((c) => `<p class="card ${c.status === 'aceptada' ? 'pen ok' : 'warn'}">${c.status === 'aceptada' ? '✅ Aceptada' : '❌ Rechazada'}: ${line(c)}${c.reply ? `<br><small>${esc(c.reply)}</small>` : ''}</p>`).join('')}
-    ${S.corrections === null ? '<p class="card warn">Las correcciones aún no están activadas: pídeselo a la dirección del club.</p>'
-      : pending ? `<section class="card"><p>⏳ <b>Pediste corregir</b> ${line(pending)}${pending.note ? `<br><small class="muted">«${esc(pending.note)}»</small>` : ''}</p>
-          <p class="hint">La dirección lo revisará. Cuando lo haga lo verás aquí.</p>
-          ${S.preview ? '' : `<button class="btn ghost" data-act="corr-cancel" data-id="${pending.id}">Retirar la petición</button>`}</section>`
-      : `<form class="card stack" data-form="r-correct" data-kind="${kind}" data-id="${id}">
-          <h3>Pedir corrección</h3>
-          <div class="grid2">
-            <label>Puesto correcto<input type="number" name="position" inputmode="numeric" min="1" max="999" required></label>
-            <label>Categoría${catSelect('name="category"', curCat || '', 'Sin cambio')}</label>
-          </div>
-          <input type="hidden" name="podium" value="${podiumKind(race, kind === 'reg' ? race.my_result?.podium_type : race.podium_type)}">
-          <label>Motivo (opcional)<input name="note" maxlength="300" placeholder="Me equivoqué al teclear"></label>
-          <button class="btn primary">Enviar a la dirección</button></form>`}`, { back });
-}
 
 function viewRunnerNew() {
   if (!S.rdraft) S.rdraft = emptyRunnerDraft({ name: S.q.runner || '' });
   const d = S.rdraft;
-  const editing = !!d.id;
-  const reg = editing ? S.runnerData.registrations.find((x) => x.id === d.id) : null;
-  const others = reg ? reg.entries.filter((e) => e.runner_id !== S.runnerData.me.id).length : 0;
+  const editing = !!d.id, isRace = d.kind === 'race';
+  const reg = editing && !isRace ? S.runnerData.registrations.find((x) => x.id === d.id) : null;
+  const others = isRace ? d.others || 0 : reg ? reg.entries.filter((e) => e.runner_id !== S.runnerData.me.id).length : 0;
   if (!S.fed && !editing) loadFed().then(() => updateSearch('rname'));
   return frame(editing ? 'Editar mi carrera' : 'Añadir carrera', `
     <form class="card stack" data-form="r-create">
-      <p class="hint">${editing ? 'Puedes corregir los datos de esta carrera porque la añadiste tú. Los resultados y podios los pone la dirección.'
+      <p class="hint">${editing ? `Puedes corregir los datos de esta carrera porque la añadiste tú${isRace ? ' (aunque ya esté en resultados)' : ''}. Tu puesto lo cambias en «Cambiar mi resultado»; el de los demás lo pone cada uno.`
         : 'Escribe el nombre: si ya existe en el club o en el calendario de las federaciones te saldrá aquí debajo, para no duplicarla.<br>¿Se te olvidó apuntar una carrera que ya hiciste? Añádela igual con su fecha (desde el 1 de enero del año pasado) y luego pon tu resultado.'}</p>
       <label>Nombre de la carrera<input data-rf="name" value="${esc(d.name)}" required minlength="3" maxlength="120" autocomplete="off"></label>
       <div id="dup-list">${editing ? '' : dupSuggestions(d.name, S.runnerData.registrations, true)}</div>
       <div class="grid2">
-        <label>${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-rf="date" value="${esc(d.date)}" min="${pastLimit()}" required></label>
+        <label>${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-rf="date" value="${esc(d.date)}" min="${pastLimit()}"${isRace ? ` max="${todayISO()}"` : ''} required></label>
         <label>Modalidad<select data-rf="modality">${MODALITIES.map((m) => opt(m, m, d.modality)).join('')}</select></label>
       </div>
       ${detailInputs(d, 'data-rf')}
@@ -924,15 +894,15 @@ function viewRunnerNew() {
       <label>Lugar<input data-rf="place" value="${esc(d.place)}" maxlength="120"></label>
       <div class="grid2">
         <label>Provincia<input data-rf="province" list="dl-prov" value="${esc(d.province)}" autocomplete="off"></label>
-        ${editing ? '<span></span>' : `<label>Tu categoría${catSelect('data-rf="category" required', d.category, 'Elige tu categoría')}</label>`}
+        ${editing ? `<label>País<input data-rf="country" list="dl-country" value="${esc(d.country || '')}" maxlength="60"></label>` : `<label>Tu categoría${catSelect('data-rf="category" required', d.category, 'Elige tu categoría')}</label>`}
       </div>
       ${editing ? `<label>Notas<textarea data-rf="notes" rows="2" maxlength="500">${esc(d.notes || '')}</textarea></label>` : ''}
       <button class="btn primary">${editing ? 'Guardar cambios' : 'Añadir y apuntarme'}</button>
       <p class="hint">La dirección del club podrá corregirla o borrarla si hace falta.</p>
     </form>
     ${editing ? (others
-      ? `<p class="card hint">🗑️ No puedes borrarla: hay ${others} compañero${others === 1 ? '' : 's'} más apuntado${others === 1 ? '' : 's'}. Si hay que quitarla, pídeselo a la dirección del club.</p>`
-      : '<button class="btn danger ghost block" data-act="r-delete-mine">🗑️ Borrar esta carrera</button>') : ''}`, { back: runnerHref('') });
+      ? `<p class="card hint">🗑️ No puedes borrarla: hay ${others} compañero${others === 1 ? '' : 's'} más ${isRace ? 'con resultado en ella' : 'apuntado' + (others === 1 ? '' : 's')}. Si hay que quitarla, pídeselo a la dirección del club.</p>`
+      : '<button class="btn danger ghost block" data-act="r-delete-mine">🗑️ Borrar esta carrera</button>') : ''}`, { back: isRace ? runnerHref('mi') : runnerHref('') });
 }
 
 /** «Mis carreras»: sus carreras con resultados por temporada y las apuntadas pendientes de resultado. */
@@ -955,9 +925,10 @@ function myRacesCard(d) {
     return `<li class="mini tappable ${modClass(r.modality)}"><a class="mini-main" href="${runnerHref('carrera')}/race_${r.race_id}"><b>${esc(r.name)}</b>
       <small class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''} · ${esc(r.modality)}${r.km ? ` · ${kmText(r.km)}` : ''}</small>
       ${stagePods.length ? `<small>${stagePods.map((x) => `${medal(x.p)} ${esc(x.n)}`).join(' · ')}</small>` : ''}</a>
-      <span class="pos">${pos}</span></li>`;
+      <span class="pos">${pos}${r.mine_created && !S.preview ? `<br><a class="btn small edit-mine" href="#/editar/race_${r.race_id}" aria-label="Editar o borrar ${esc(r.name)}">✏️ Editar</a>` : ''}</span></li>`;
   };
   const myCat = (g) => g.entries.find((e) => e.runner_id === d.me.id)?.category;
+  const editMine = (g) => (g.mine_created && !S.preview ? `<a class="btn small edit-mine" href="#/editar/${g.id}" aria-label="Editar o borrar ${esc(g.name)}">✏️</a>` : '');
   const dleft = (g) => { const n = Math.round((new Date(g.date + 'T12:00:00Z') - new Date(today + 'T12:00:00Z')) / 864e5);
     return n === 0 ? 'hoy' : n === 1 ? 'mañana' : `en ${n} días`; };
   return `
@@ -979,16 +950,16 @@ function myRacesCard(d) {
   <section class="card season-block next-block" id="sec-next">
     <h2>📅 Mis próximas inscripciones <small>(${upcoming.length})</small></h2>
     <p class="hint">Carreras a las que estás apuntado y que aún no se han corrido. <b>Toca una para abrirla</b>: ves quién va, puedes borrarte y, si la añadiste tú, editarla.</p>
-    ${upcoming.length ? `<ul class="mini-list">${upcoming.map((g) => miniRow(g, `<span class="badge-next">${dleft(g)}${myCat(g) ? ` · ${esc(myCat(g))}` : ''}</span>`, `${runnerHref('carrera')}/${g.id}`)).join('')}</ul>`
+    ${upcoming.length ? `<ul class="mini-list">${upcoming.map((g) => miniRow(g, `<span class="badge-next">${dleft(g)}${myCat(g) ? ` · ${esc(myCat(g))}` : ''}</span>${editMine(g)}`, `${runnerHref('carrera')}/${g.id}`)).join('')}</ul>`
       : '<p class="empty small">No estás apuntado a ninguna. Búscalas en la pestaña Carreras.</p>'}
   </section>
 
   ${pending.length ? `<section class="card season-block pend-block" id="sec-pend">
     <h2>🏁 Ya corridas, pendientes de resultado <small>(${pending.length})</small></h2>
-    <p class="hint">Estabas apuntado y ya se han disputado. Pon tu resultado (una sola vez): <b>en cuanto lo pongas ya te cuenta para el bono</b>, y a los 3 días de acabar la carrera pasa sola a resultados. Si no fuiste, toca la carrera y pulsa «No fui: borrarme».</p>
-    <ul class="mini-list">${pending.map((g) => miniRow(g, g.my_result
+    <p class="hint">Estabas apuntado y ya se han disputado. Pon tu resultado (lo puedes cambiar después): <b>en cuanto lo pongas ya te cuenta para el bono</b>, y a los 3 días de acabar la carrera pasa sola a resultados. Si no fuiste, toca la carrera y pulsa «No fui: borrarme».</p>
+    <ul class="mini-list">${pending.map((g) => miniRow(g, (g.my_result
       ? `<span class="badge-sent">📝 ${g.my_result.position}º${g.my_result.time_seconds ? " · ⏱️ " + formatTime(g.my_result.time_seconds) : ""} · ya cuenta</span>`
-      : (S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>`), `${runnerHref('carrera')}/${g.id}`)).join('')}</ul>
+      : (S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>`)) + editMine(g), `${runnerHref('carrera')}/${g.id}`)).join('')}</ul>
   </section>` : ''}
 
   ${(() => { const todo = results.filter((x) => missingFields(x).length);
@@ -1007,6 +978,7 @@ function myRacesCard(d) {
     ${years.length > 1 ? `<div class="years">${years.map((y) => `<button class="chip${y === S.myYear ? ' on' : ''}" data-act="my-year" data-y="${y}">${y}</button>`).join('')}</div>` : ''}
     ${list.length ? `<ul class="mini-list">${list.map(row).join('')}</ul>`
       : `<p class="empty small">Todavía no hay carreras tuyas con resultado en ${S.myYear}.</p>`}
+    ${list.some((r) => r.mine_created) && !S.preview ? '<p class="hint">✏️ Las que añadiste tú las puedes editar (todos sus datos) o borrar.</p>' : ''}
     <p class="hint">Si falta alguna carrera o un puesto, díselo a la dirección del club.</p>
   </section>`;
 }
@@ -1036,6 +1008,14 @@ function runnerScreen(sub) {
   if (sub === 'resultado') return viewRunnerReport(parseRoute().id || '');
   if (sub === 'editar') {
     const id = parseRoute().id;
+    if (String(id || '').startsWith('race_')) { // carrera ya pasada a resultados que añadió él
+      const raceId = String(id).slice(5);
+      const r = (S.runnerData.my_results || []).find((x) => x.race_id === raceId && x.mine_created);
+      if (!r) return frame('Editar carrera', '<p class="empty">Esta carrera no existe o no la añadiste tú.</p>', { back: runnerHref('mi') });
+      if (S.rdraft?.id !== raceId) S.rdraft = emptyRunnerDraft({ id: raceId, kind: 'race', others: r.others || 0, name: r.name, date: r.date, multi: !!r.end_date, end_date: r.end_date || '',
+        place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY, modality: r.modality, notes: r.notes || '', race_type: r.race_type || 'suelta', circuit: r.circuit || '', subtype: r.subtype || '', km: r.km ?? '' });
+      return viewRunnerNew();
+    }
     const g = S.runnerData.registrations.find((x) => x.id === id && x.mine_created);
     if (!g) return frame('Editar carrera', '<p class="empty">Esta carrera no existe o no la añadiste tú.</p>', { back: runnerHref('') });
     if (S.rdraft?.id !== id) S.rdraft = emptyRunnerDraft({ id, name: g.name, date: g.date, multi: !!g.end_date, end_date: g.end_date || '',
@@ -1082,7 +1062,7 @@ function runnerRegCard(g) {
         ${modTag(g.modality)}</div>${typeTag(g)}
       ${g.suspended ? '<p class="state-tag">⛔ Suspendida: cuenta para el mínimo de carreras, no para el bono</p>' : ''}
       ${open || g.suspended ? '' : `<p class="state-tag">🏁 Ya disputada · pendiente de resultados</p>
-        ${mine && !S.preview ? (g.my_result ? `<p class="mine-created">📝 Tu resultado: ${g.my_result.position}º (enviado) · <a href="#/resultado/reg_${g.id}">✏️ Pedir corrección</a></p>`
+        ${mine && !S.preview ? (g.my_result ? `<p class="mine-created">📝 Tu resultado: ${g.my_result.position}º (enviado) · <a href="#/resultado/reg_${g.id}">✏️ Cambiar mi resultado</a></p>`
           : `<p class="row"><a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>
              <button class="btn ghost small" data-act="r-leave" data-id="${g.id}">No fui: borrarme</button></p>`) : ''}
         ${!mine && g.date >= pastLimit() ? `<div class="row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
@@ -1181,11 +1161,12 @@ function viewRunnerDoneRace(raceId) {
     <article class="card race done-race ${modClass(r.modality)}"><div class="race-head"><div><h3>${esc(r.name)}</h3>
       <p class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div>${modTag(r.modality)}</div>${typeTag(r)}
       ${my ? `<p class="joined-done">${my.position ? `✓ Tu puesto: ${isPodium(my.position) ? medal(my.position) + ' ' : ''}${my.position}º${my.category ? ' · ' + esc(my.category) : ''}${my.self_reported ? ' · 📝 puesto por ti' : ''}
-          ${S.preview ? '' : ((S.corrections || []).some((c) => c.target_id === raceId && c.status === 'pendiente') ? ' · ⏳ corrección pedida' : ` · <a href="#/resultado/race_${raceId}">✏️ Pedir corrección</a>`)}`
+          ${S.preview ? '' : ` · <a href="#/resultado/race_${raceId}">✏️ Cambiar mi resultado</a>`}`
         : `Corriste esta carrera. ${S.preview ? '' : `<a class="btn primary small" href="#/resultado/race_${raceId}">Poner mi puesto</a>`}`}</p>` : ''}
       ${team ? `<p class="count">🏁 ${team.results.length} del club${res.length ? ':' : ''}</p>
         ${res.length ? `<ol class="rank-mini">${res.map((x) => `<li class="${x.runner_id === meId ? 'me' : ''}"><span>${isPodium(x.position) ? medal(x.position) : x.position + 'º'}</span> ${esc(x.runner_name)}${x.category ? ` <small>${esc(x.category)}</small>` : ''}</li>`).join('')}</ol>` : ''}`
         : '<p class="muted small">Cargando quién más corrió…</p>'}
+      ${my?.mine_created && !S.preview ? `<p class="mine-created">Añadida por ti · <a href="#/editar/race_${raceId}">✏️ Editar o borrar</a></p>` : ''}
     </article>
     ${completeBox(r, 'race', raceId)}`, { back });
 }
@@ -1447,11 +1428,16 @@ function addRunnerSelect(d) {
       <button type="button" class="btn" data-act="add-many">Añadir los marcados</button></details>` : ''}`;
 }
 
+/** Al editar una carrera abierta desde la ficha de un corredor (#/carreras/<id>/<corredor>), «atrás» vuelve a esa ficha. */
+const editBack = (def) => { const rid = parseRoute().rest; return rid && runnerById(rid) ? `#/corredor/${rid}` : def; };
+/** Quién añadió la carrera (si fue un corredor). */
+const createdByLine = (d) => (d.created_by ? `<p class="hint">➕ Añadida por <b>${esc(runnerById(d.created_by)?.name || 'un corredor')}</b>: también puede editarla o borrarla desde su enlace.</p>` : '');
+
 function viewRegistrationEdit() {
   const d = S.draft;
-  if (!d) return frame('Inscripción', '<p class="empty">Esta inscripción ya no existe.</p>', { back: '#/inscripciones' });
+  if (!d) return frame('Inscripción', '<p class="empty">Esta inscripción ya no existe.</p>', { back: editBack('#/inscripciones') });
   return frame(d.id ? 'Editar inscripción' : 'Nueva inscripción', `
-    ${d.id ? pubsBlock(d, false) : ''}
+    ${d.id ? createdByLine(d) + pubsBlock(d, false) : ''}
     <form class="card stack" data-form="save-reg">
       ${raceFields(d)}
       ${d.id ? '' : `<div id="dup-admin">${dupSuggestions(d.name, S.data.registrations, false)}</div>`}
@@ -1469,7 +1455,7 @@ function viewRegistrationEdit() {
     ${d.id ? `<div class="stack">
       ${d.suspended ? '' : '<button class="btn" data-act="promote">Pasar a resultados</button>'}
       <button class="btn danger ghost" data-act="del-reg">Borrar inscripción</button></div>` : ''}`,
-  { back: '#/inscripciones' });
+  { back: editBack('#/inscripciones') });
 }
 
 /** Corredor: noticias de la dirección. Se marcan como leídas al abrir la pantalla. */
@@ -1993,9 +1979,9 @@ function raceDupes(name) {
 
 function viewRaceEdit() {
   const d = S.draft;
-  if (!d) return frame('Carrera', '<p class="empty">Esta carrera ya no existe.</p>', { back: '#/carreras' });
+  if (!d) return frame('Carrera', '<p class="empty">Esta carrera ya no existe.</p>', { back: editBack('#/carreras') });
   return frame(d.id ? 'Editar carrera' : 'Nueva carrera', `
-    ${d.id ? pubsBlock(d, true) : ''}
+    ${d.id ? createdByLine(d) + pubsBlock(d, true) : ''}
     <form class="card stack" data-form="save-race">
       ${raceFields(d)}
       ${d.id ? '' : `<div id="dup-race">${raceDupes(d.name)}</div>`}
@@ -2034,7 +2020,7 @@ function viewRaceEdit() {
     </form>
     ${d.id ? `<button class="btn block" data-act="race-repeat">📋 Repetir el año que viene</button>
     <button class="btn danger ghost block" data-act="del-race">Borrar carrera</button>` : ''}`,
-  { back: '#/carreras' });
+  { back: editBack('#/carreras') });
 }
 
 // ======================================================================
@@ -2377,9 +2363,10 @@ function adminRunnerRaces(r, year, forceOpen = false) {
     return y.position ? `${isPodium(y.position) ? medal(y.position) + ' ' : ''}${y.position}º` : '<span class="muted">sin puesto</span>'; };
   return `<details class="runner-races"${forceOpen || S.open?.[key] ? ' open' : ''} data-open-key="${key}">
     <summary>Carreras ${year}: <b>${races.length}</b>${days !== races.length ? ` (${days} días)` : ''} · apuntado a ${upcoming.length} próxima${upcoming.length === 1 ? '' : 's'}${pending.length ? ` · ${pending.length} ya disputada${pending.length === 1 ? '' : 's'} sin pasar a resultados` : ''}</summary>
-    ${races.length ? `<ul class="mini-list">${races.map((x) => miniRow(x, `<a class="pos" href="#/carreras/${x.id}">${res(x)}</a>`)).join('')}</ul>` : `<p class="hint">Sin carreras con resultados en ${year}.</p>`}
-    ${pending.length ? `<p class="hint"><b>Ya disputadas, aún sin pasar a resultados</b> (le cuentan para el bono si puso su puesto):</p><ul class="mini-list">${pending.map((g) => miniRow(g, `<a class="btn small" href="#/inscripciones/${g.id}">Abrir</a>`)).join('')}</ul>` : ''}
-    ${upcoming.length ? `<p class="hint"><b>Próximas:</b></p><ul class="mini-list">${upcoming.map((g) => miniRow(g, `<a class="btn small" href="#/inscripciones/${g.id}">Abrir</a>`)).join('')}</ul>` : ''}
+    <p class="hint">Toca una carrera para abrirla y editarla o borrarla.</p>
+    ${races.length ? `<ul class="mini-list">${races.map((x) => miniRow(x, `<a class="pos" href="#/carreras/${x.id}/${r.id}">${res(x)} ✏️</a>`, `#/carreras/${x.id}/${r.id}`)).join('')}</ul>` : `<p class="hint">Sin carreras con resultados en ${year}.</p>`}
+    ${pending.length ? `<p class="hint"><b>Ya disputadas, aún sin pasar a resultados</b> (le cuentan para el bono si puso su puesto):</p><ul class="mini-list">${pending.map((g) => miniRow(g, `<a class="btn small" href="#/inscripciones/${g.id}/${r.id}">✏️ Editar</a>`, `#/inscripciones/${g.id}/${r.id}`)).join('')}</ul>` : ''}
+    ${upcoming.length ? `<p class="hint"><b>Próximas:</b></p><ul class="mini-list">${upcoming.map((g) => miniRow(g, `<a class="btn small" href="#/inscripciones/${g.id}/${r.id}">✏️ Editar</a>`, `#/inscripciones/${g.id}/${r.id}`)).join('')}</ul>` : ''}
   </details>`;
 }
 
@@ -2961,9 +2948,10 @@ const actions = {
   },
   async 'r-delete-mine'() {
     const d = S.rdraft;
-    if (!await confirmAction('Borrar carrera', `Se borrará «${esc(d.name)}» y tu inscripción en ella.`, 'Borrar')) return;
-    const ok = await run(async () => { await api.runnerDelete(S.code, d.id); await loadRunner(); return true; }, 'Carrera borrada');
-    if (ok) { S.rdraft = null; go('#/'); }
+    const isRace = d.kind === 'race';
+    if (!await confirmAction('Borrar carrera', `Se borrará «${esc(d.name)}» y ${isRace ? 'tu resultado' : 'tu inscripción'} en ella.`, 'Borrar')) return;
+    const ok = await run(async () => { await (isRace ? api.runnerDeleteRace(S.code, d.id) : api.runnerDelete(S.code, d.id)); await loadRunner(); return true; }, 'Carrera borrada');
+    if (ok) { S.rdraft = null; go(isRace ? runnerHref('mi') : '#/'); }
   },
   async 'r-new'() { S.rdraft = null; if (!S.fed) loadFed(); go('#/nueva'); },
   async 'r-new-fed'(el) {
@@ -3110,11 +3098,11 @@ const actions = {
   },
   async 'del-reg'() {
     if (!await confirmAction('Borrar inscripción', `Se borrará «${esc(S.draft.name)}» con todos sus inscritos.`, 'Borrar')) return;
-    if (await run(async () => { await api.deleteRegistration(S.draft.id); await reload(); return true; }, 'Inscripción borrada')) go('#/inscripciones');
+    if (await run(async () => { await api.deleteRegistration(S.draft.id); await reload(); return true; }, 'Inscripción borrada')) go(editBack('#/inscripciones'));
   },
   async 'del-race'() {
     if (!await confirmAction('Borrar carrera', `Se borrará «${esc(S.draft.name)}» con todos sus resultados.`, 'Borrar')) return;
-    if (await run(async () => { await api.deleteRace(S.draft.id); await reload(); return true; }, 'Carrera borrada')) go('#/carreras');
+    if (await run(async () => { await api.deleteRace(S.draft.id); await reload(); return true; }, 'Carrera borrada')) go(editBack('#/carreras'));
   },
 
   async 'runner-menu'(el) {
@@ -3263,10 +3251,6 @@ const actions = {
     render();
     toast(`${ids.length} corredor${ids.length === 1 ? '' : 'es'} añadido${ids.length === 1 ? '' : 's'}`);
   },
-  async 'corr-cancel'(el) {
-    if (!await confirmAction('Retirar la petición', '¿Retirar tu petición de corrección?', 'Retirar')) return;
-    await run(async () => { await api.runnerCancelCorrection(S.code, el.dataset.id); await loadCorrections(); }, 'Petición retirada'); render();
-  },
   async 'corr-accept'(el) {
     await run(async () => { await api.resolveCorrection(el.dataset.id, true, null); await reload(); }, 'Corrección aceptada y aplicada'); render();
   },
@@ -3341,14 +3325,6 @@ const actions = {
 };
 
 const forms = {
-  async 'r-correct'(f) {
-    if (S.preview) return toast('Vista previa: aquí no se puede cambiar nada.', true);
-    const position = Number(f.position.value);
-    if (!Number.isInteger(position) || position < 1) return toast('Pon un puesto válido (1, 2, 3…).', true);
-    const ok = await run(async () => { await api.runnerRequestCorrection(S.code, f.dataset.kind, f.dataset.id, position, f.category.value || null, f.podium.value, cleanName(f.note.value)); await loadCorrections(); return true; },
-      'Petición enviada: la dirección la revisará');
-    if (ok) render();
-  },
   async 'r-complete'(f) {
     if (S.preview) return toast('Vista previa: aquí no se puede cambiar nada.', true);
     const data = { province: cleanName(f.province?.value || ''), km: f.km?.value || '', subtype: f.subtype?.value || '' };
@@ -3409,6 +3385,18 @@ const forms = {
     if (d.multi && !d.end_date) return toast('Falta el último día.', true);
     if (!d.id && !d.category) return toast('Elige tu categoría para apuntarte.', true);
     if (d.race_type === 'circuito' && !cleanName(d.circuit)) return toast('Falta el nombre del circuito.', true);
+    if (d.id && d.kind === 'race') { // editar una carrera propia que ya está en resultados
+      const subtype = SUBTYPES[d.modality]?.includes(d.subtype) ? d.subtype : null;
+      if (String(d.km ?? '').trim() !== '' && parseKm(d.km) === null) return toast('La distancia tiene que estar entre 0 y 1000 km.', true);
+      const ok = await run(async () => {
+        await api.runnerUpdateRace(S.code, d.id, { name, date: d.date, end_date: d.multi ? d.end_date : null, place: cleanName(d.place),
+          province: cleanName(d.province), country: d.country, modality: d.modality, notes: d.notes || '',
+          race_type: d.race_type || 'suelta', circuit: d.race_type === 'circuito' ? cleanName(d.circuit) : null, subtype, km: parseKm(d.km) });
+        await loadRunner(); if (S.team) await loadTeam(); return true;
+      }, 'Carrera actualizada');
+      if (ok) { S.rdraft = null; go(runnerHref('mi')); }
+      return;
+    }
     if (d.id) { // editar una carrera propia
       const ok = await run(async () => {
         await api.runnerUpdate(S.code, d.id, { name, date: d.date, end_date: d.multi ? d.end_date : null, place: cleanName(d.place),
@@ -3444,7 +3432,7 @@ const forms = {
     const rawTime = f.time.value.trim(), time = rawTime ? parseTime(rawTime) : null;
     if (rawTime && !time) return toast('Pon el tiempo así: 2:05:30 (horas:minutos:segundos), o déjalo vacío.', true);
     const txt = `${position}º${cat ? ' en ' + cat : ''}${time ? ' · ⏱️ ' + formatTime(time) : ''}${position <= 3 && pod === 'campeonato' ? ` · ${podiumLabel(pod)}` : ''}`;
-    if (!await confirmAction('Enviar resultado', `Vas a enviar: <b>${esc(txt)}</b>.<br>Después no podrás cambiarlo.`, 'Enviar', 'primary')) return;
+    if (!await confirmAction('Guardar resultado', `Vas a guardar: <b>${esc(txt)}</b>.<br>Si te equivocas, lo puedes cambiar después.`, 'Guardar', 'primary')) return;
     const ok = await run(async () => { await api.runnerReport(S.code, f.dataset.kind, f.dataset.id, position, cat, pod, time); await loadRunner(); return true; },
       position <= 3 ? `${medal(position)} ¡Enhorabuena! Resultado enviado` : 'Resultado enviado');
     if (ok) go(runnerHref('mi'));
@@ -3504,7 +3492,7 @@ const forms = {
   },
   async 'save-reg'() {
     const id = await run(saveRegistrationDraft, 'Inscripción guardada');
-    if (id) go('#/inscripciones');
+    if (id) go(editBack('#/inscripciones'));
   },
   async 'save-race'() {
     const d = S.draft;
@@ -3539,7 +3527,7 @@ const forms = {
       race.stages = d.stages.length ? d.stages.map((n, j) => cleanName(n) || `Etapa ${j + 1}`) : null;
       const r = await api.saveRace(race, results); await reload(); return r;
     }, 'Carrera guardada');
-    if (id) go('#/carreras');
+    if (id) go(editBack('#/carreras'));
   },
 };
 
@@ -3614,7 +3602,7 @@ document.addEventListener('visibilitychange', async () => {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'corr-cancel', 'news-reply']);
+const RUNNER_ACTIONS = new Set(['r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
 // los enlaces de la ventana emergente (p. ej. las carreras de un compañero) cierran la ventana al navegar
 document.getElementById('dialog').addEventListener('click', (ev) => { if (ev.target.closest('a[href^="#/"]')) ev.currentTarget.close(); });
 $app.addEventListener('click', (ev) => {
