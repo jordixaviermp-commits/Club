@@ -46,3 +46,16 @@ test('sin datos no inventa nada', () => {
   assert.equal(s.nDays, 0); assert.equal(s.account, null); assert.equal(s.audience, null);
   assert.equal(s.totals.pctNonFollowers, null); assert.equal(s.stories.n, 0); assert.deepEqual(s.posts, []);
 });
+
+test('día/franja de publicación, desglose edad-género y comparación con el periodo anterior', async () => {
+  const { igPrevTotals } = await import('../js/logic.js');
+  const s = igSummary(rows);
+  assert.equal(s.byWeekday.reduce((n, d) => n + d.n, 0), 3);
+  assert.equal(s.bySlot.reduce((n, x) => n + x.n, 0), 3);
+  assert.deepEqual(s.audience.genderAge['35-44'], { F: 52, M: 164, U: 0 });
+  assert.equal(s.followerSeries.length, 2);
+  const many = Array.from({ length: 20 }, (_, i) => ({ kind: 'day', key: `2026-11-${String(i + 1).padStart(2, '0')}`, data: { views: i < 10 ? 10 : 20, follows: 1 } }));
+  assert.equal(igPrevTotals(many, '2026-11-11', '2026-11-20').views, 100);
+  assert.equal(igPrevTotals(many, '', ''), null);
+  assert.equal(igPrevTotals(many, '2026-11-01', '2026-11-10'), null);   // antes no hay nada guardado
+});

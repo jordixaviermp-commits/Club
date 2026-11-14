@@ -919,6 +919,16 @@ export function igSummary(rows, from = '', to = '') {
 
   const posts = of('media').map((r) => ({ id: r.key, ...r.data, date: String(r.data?.ts || '').slice(0, 10) }))
     .filter((p) => p.date && inRange(p.date)).sort((a, b) => (b.views || 0) - (a.views || 0));
+  // cuándo funcionan mejor las publicaciones (día de la semana y franja horaria, hora de Madrid)
+  const wd = Array.from({ length: 7 }, (_, i) => ({ d: i, n: 0, views: 0 })), slot = [['Mañana', 6, 14], ['Tarde', 14, 20], ['Noche', 20, 30]].map(([name]) => ({ name, n: 0, views: 0 }));
+  for (const p of posts) {
+    const dt = new Date(p.ts); if (isNaN(dt)) continue;
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Madrid', weekday: 'short', hour: 'numeric', hourCycle: 'h23' }).formatToParts(dt);
+    const day = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(parts.find((x) => x.type === 'weekday').value), h = Number(parts.find((x) => x.type === 'hour').value);
+    wd[day].n++; wd[day].views += p.views || 0;
+    const k = h >= 6 && h < 14 ? 0 : h >= 14 && h < 20 ? 1 : 2; slot[k].n++; slot[k].views += p.views || 0;
+    p.er = p.reach ? Math.round(((p.engagement ?? ((p.likes || 0) + (p.comments || 0) + (p.shares || 0) + (p.saves || 0))) / p.reach) * 1000) / 10 : null;
+  }
   const kinds = new Map();
   for (const p of posts) {
     const k = p.product === 'REELS' ? 'Reels' : p.type === 'CAROUSEL_ALBUM' ? 'Carruseles' : p.type === 'VIDEO' ? 'Vídeos' : 'Fotos';
@@ -943,9 +953,20 @@ export function igSummary(rows, from = '', to = '') {
     for (const [k, v] of Object.entries(ga)) { const [sex, age] = k.split('.'); if (sex in g) g[sex] += v; if (age in ages) ages[age] += v; }
     const top = (o, n) => Object.entries(o || {}).sort((a, b) => b[1] - a[1]).slice(0, n).map(([name, v]) => ({ name, v }));
     const tot = g.F + g.M + g.U;
-    audience = { date: aud.key, total: tot, gender: g, ages: IG_AGES.map((a) => ({ age: a, v: ages[a] })), countries: top(aud.data.country, 6), cities: top(aud.data.city, 10),
+    const ga2 = Object.fromEntries(IG_AGES.map((a) => [a, { F: ga['F.' + a] || 0, M: ga['M.' + a] || 0, U: ga['U.' + a] || 0 }]));
+    audience = { genderAge: ga2, date: aud.key, total: tot, gender: g, ages: IG_AGES.map((a) => ({ age: a, v: ages[a] })), countries: top(aud.data.country, 6), cities: top(aud.data.city, 10),
       pctMen: tot ? Math.round((g.M / tot) * 100) : null, pctWomen: tot ? Math.round((g.F / tot) * 100) : null };
   }
   return { days: days.map((r) => ({ date: r.key, ...r.data })), nDays: days.length, first: days[0]?.key || '', last: days[days.length - 1]?.key || '',
-    totals: t, byMonth: [...byMonth.values()], posts, byKind: [...kinds.values()].sort((a, b) => b.views - a.views), stories: st, account, audience };
+    totals: t, byMonth: [...byMonth.values()], posts, byKind: [...kinds.values()].sort((a, b) => b.views - a.views), stories: st, storyList: stories.sort((a, b) => String(b.ts).localeCompare(String(a.ts))),
+    byWeekday: wd, bySlot: slot, followerSeries: acc.filter((r) => r.data.followers != null).map((r) => ({ date: r.key, v: r.data.followers })), account, audience };
+}
+
+/** Totales del periodo anterior de la misma duración (para «+12 % vs periodo anterior»). null si no hay datos o el periodo no está acotado. */
+export function igPrevTotals(rows, from, to) {
+  if (!from || !to) return null;
+  const a = new Date(from + 'T12:00:00'), b = new Date(to + 'T12:00:00'), n = Math.round((b - a) / 864e5) + 1;
+  const pt = new Date(a); pt.setDate(pt.getDate() - 1); const pf = new Date(pt); pf.setDate(pf.getDate() - (n - 1));
+  const g = igSummary(rows, todayISO(pf), todayISO(pt));
+  return g.nDays >= Math.min(7, n) ? g.totals : null;
 }
