@@ -1,5 +1,6 @@
 // Planificar ruta: interfaz. Las reglas están en logic.js; el tiempo viene de Open-Meteo y el mapa de OpenStreetMap.
 import * as R from './logic.js';
+import { buildCard } from './card.js';
 
 const main = document.getElementById('main');
 const dialog = document.getElementById('dialog');
@@ -50,39 +51,56 @@ const wpType = (id) => WP_TYPES.find((t) => t[0] === id) || WP_TYPES[WP_TYPES.le
 // ---------- Estado ----------
 const S = {
   id: null, name: '', raw: null, reversed: false, track: null, climbs: [], samples: [], tl: null, etas: [], along: null,
-  start: paramStart() || defaultStart(), flat: 27, mass: 80, stops: 0,
+  eleSrc: 'file', dem: null, demLoading: false, demErr: '', fountains: null, fLoading: false, fErr: '',
+  start: paramStart() || defaultStart(), stage: 'setup', range: null, climbView: 'medianas', profColor: 'subidas',
+  pace: { mode: 'speed', kmh: 27, pFlat: 200, pClimb: 220, rider: 72, bike: 8, terrain: 'road', stopsPH: 0 },
   wx: null, wxKey: '', wxErr: '', wxLoading: false,
   view: 'completa', mode: 'viento', arrowsKm: 4, wps: [], addingWp: false,
   feeding: false, gph: 90, every: 30, feedOnMap: true, feedMode: 'smart', custom: null,
   carry: { bid: { n: 2, g: 0 }, gel: { n: 0, g: 25 }, bar: { n: 0, g: 30 } },
-  exp: { wps: true, climbs: false, tomas: false, times: false }, cursorD: null,
+  exp: { wps: true, climbs: false, tomas: false, times: false, fuentes: true }, cursorD: null,
   charts: ['viento', 'temp', 'lluvia', 'humedad', 'uv'], bgProfile: true, tCursor: null,
 };
 let map = null, mapLayer = null, arrowLayer = null, cursorMarker = null, fitted = false;
 
 function saveLast() {
   if (!S.id) return;
-  store.set(K_LAST, { id: S.id, start: S.start, flat: S.flat, mass: S.mass, stops: S.stops, reversed: S.reversed, wps: S.wps,
+  store.set(K_LAST, { id: S.id, start: S.start, pace: S.pace, eleSrc: S.eleSrc, stage: S.stage, range: S.range, climbView: S.climbView, profColor: S.profColor, reversed: S.reversed, wps: S.wps,
     gph: S.gph, every: S.every, feeding: S.feeding, view: S.view, mode: S.mode, charts: S.charts, bgProfile: S.bgProfile, feedMode: S.feedMode, custom: S.custom, carry: S.carry });
 }
-function saveRecent(id, name, pts) {
+function saveRecent(id, name, pts, dem = null) {
   let list = store.get(K_REC, []).filter((r) => r.id !== id);
-  list.unshift({ id, name, pts, at: Date.now() });
+  list.unshift({ id, name, pts, dem, at: Date.now() });
   list = list.slice(0, 8);
   while (list.length && !store.set(K_REC, list)) list.pop(); // si no cabe, se van quitando las más antiguas
 }
 
 // ---------- Cálculos ----------
 function build() {
-  const pts = (S.reversed ? [...S.raw].reverse() : S.raw).map(([lat, lon, ele]) => ({ lat, lon, ele }));
-  S.track = R.buildTrack(pts);
+  const useDem = S.eleSrc === 'dem' && S.dem && S.dem.length === S.raw.length;
+  const src = S.raw.map(([lat, lon, ele], i) => ({ lat, lon, ele: useDem ? S.dem[i] : ele }));
+  const pts = S.reversed ? src.reverse() : src;
+  S.full = R.buildTrack(pts);
+  // «planificar solo un tramo»: se queda con los puntos entre los dos tiradores del perfil
+  if (S.range) {
+    const [a, b] = S.range;
+    const part = S.full.points.filter((p) => p.d >= a && p.d <= b).map((p) => ({ lat: p.lat, lon: p.lon, ele: p.ele }));
+    if (part.length > 1) S.track = R.buildTrack(part); else { S.range = null; S.track = S.full; }
+  } else S.track = S.full;
   S.climbs = R.findClimbs(S.track.points);
   S.samples = R.samplePoints(S.track.points);
   retime();
 }
+const paceOpts = () => {
+  const p = S.pace;
+  return p.mode === 'power'
+    ? { mode: 'power', pFlat: p.pFlat, pClimb: p.pClimb, rider: p.rider, bike: p.bike, terrain: p.terrain, stopsPerHour: p.stopsPH }
+    : { mode: 'speed', flatKmh: p.kmh, terrain: p.terrain, stopsPerHour: p.stopsPH };
+};
+const paceText = () => (S.pace.mode === 'power' ? `${S.pace.pFlat} W en llano, ${S.pace.pClimb} W en subidas, ${S.pace.rider + S.pace.bike} kg` : `${nf1.format(S.pace.kmh).replace(/,0$/, '')} km/h de media`);
 function etasFor(start) { return S.samples.map((s) => start + R.timeAt(S.track.points, S.tl.t, s.d)); }
 function retime() {
-  S.tl = R.timeline(S.track.points, { flatKmh: S.flat, mass: S.mass, stopsMin: S.stops });
+  S.tl = R.timeline(S.track.points, paceOpts());
   S.etas = etasFor(S.start);
   S.along = S.wx ? R.weatherAlong(S.samples, S.etas, S.wx) : null;
 }
@@ -115,6 +133,59 @@ async function fetchWeather() {
   retime(); update();
 }
 
+/** Altitud del modelo del terreno para el track (Open-Meteo, de 100 en 100 puntos). */
+async function fetchDem() {
+  if (S.demLoading) return;
+  S.demLoading = true; S.demErr = ''; update();
+  try {
+    let d = 0;
+    const pts = S.raw.map(([lat, lon], i) => { if (i) d += R.haversine(S.raw[i - 1][0], S.raw[i - 1][1], lat, lon); return { lat, lon, d }; });
+    const samples = R.demSamples(pts);
+    const elevs = [];
+    for (const url of R.demUrls(samples)) {
+      const res = await fetch(url);
+      const j = await res.json();
+      if (!res.ok || !Array.isArray(j.elevation)) throw new Error(j.reason || `Error ${res.status}`);
+      elevs.push(...j.elevation);
+    }
+    S.dem = R.applyDem(pts, samples, elevs).map((e) => Math.round(e * 10) / 10);
+    saveRecent(S.id, S.name, S.raw, S.dem);
+  } catch (e) {
+    S.demErr = `No se ha podido cargar la altitud del terreno (${e.message}).`;
+    if (S.track?.hasEle) S.eleSrc = 'file';
+  }
+  S.demLoading = false;
+  build(); update(); fetchWeather();
+}
+
+/** Fuentes de agua de OpenStreetMap a menos de 500 m (se guardan por ruta; «Buscar las más recientes» las vuelve a pedir). */
+const K_FONT = 'ruta-fuentes';
+async function fetchFountains(force = false) {
+  if (S.fLoading || !S.full) return;
+  const cache = store.get(K_FONT, {});
+  if (!force && cache[S.id]) { S.fountains = cache[S.id]; return; }
+  S.fLoading = true; S.fErr = ''; renderFountains();
+  const body = `data=${encodeURIComponent(R.fountainsQuery(S.full.points))}`;
+  let json = null, err = '';
+  for (const url of ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter']) {
+    try {
+      const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
+      if (!res.ok) throw new Error(`Error ${res.status}`);
+      json = await res.json(); break;
+    } catch (e) { err = e.message; }
+  }
+  S.fLoading = false;
+  if (!json) { S.fErr = `No se han podido buscar las fuentes (${err}). OpenStreetMap a veces va saturado: prueba en un rato.`; return renderFountains(); }
+  const elements = (json.elements || []).map((e) => ({ type: 'node', id: e.id, lat: e.lat, lon: e.lon, tags: e.tags }));
+  S.fountains = { at: Date.now(), elements };
+  const all = { ...cache, [S.id]: S.fountains };
+  const keys = Object.keys(all);
+  while (keys.length > 15) delete all[keys.shift()];
+  store.set(K_FONT, all);
+  update();
+}
+const fountains = () => (S.fountains ? R.parseFountains({ elements: S.fountains.elements }, S.track.points) : []);
+
 /** Salida y puesta del sol del día de salida (en el primer punto), si la previsión las trae. */
 function sunTimes(startMs = S.start) {
   const first = Array.isArray(S.wx) ? S.wx[0] : S.wx;
@@ -125,19 +196,73 @@ function sunTimes(startMs = S.start) {
 }
 const darkMinutes = (start, end) => { const s = sunTimes(start); return s ? Math.max(0, s.rise - start) / 60000 + Math.max(0, end - s.set) / 60000 : 0; };
 
-function bestDeparture() {
-  if (!S.wx) return toast('Primero tiene que cargar la previsión', true);
-  const sun = sunTimes() || { rise: startOfDay(S.start) + 7 * 3600000, set: startOfDay(S.start) + 19 * 3600000 };
+// ---------- Mejor hora de salida ----------
+const BEST = { open: false, sel: null };
+/** Salidas posibles del día (cada 15 min, con previsión para toda la ruta): la de menos viento de cara y lluvia, con luz. */
+function bestOfDay(day) {
+  const first = Array.isArray(S.wx) ? S.wx[0] : S.wx;
+  const last = first?.hourly?.time?.length ? first.hourly.time[first.hourly.time.length - 1] * 1000 : 0;
   let best = null;
-  const from = Math.max(Math.ceil((sun.rise - 30 * 60000) / 900000) * 900000, Date.now());
-  for (let st = from; st + S.tl.total <= sun.set + 30 * 60000; st += 900000) {
+  for (let st = Math.max(day, Math.ceil(Date.now() / 900000) * 900000); st < day + 86400000; st += 900000) {
+    if (st + S.tl.total > last) break;
     const wx = R.weatherAlong(S.samples, etasFor(st), S.wx);
     const score = R.departureScore(wx, darkMinutes(st, st + S.tl.total));
-    if (!best || score < best.score) best = { st, score };
+    if (!best || score < best.score) best = { st, score, w: wx[0] };
   }
-  if (!best) return toast('Ese día no da tiempo a hacer la ruta con luz', true);
-  S.start = best.st; retime(); update();
-  toast(`Mejor hora: ${hm(best.st)} (menos viento de cara y lluvia, con luz)`);
+  return best;
+}
+function openBest() { BEST.open = true; BEST.sel = null; renderBest(); if (!dialog.open) dialog.showModal(); }
+function renderBest() {
+  const day = startOfDay(S.start), today = startOfDay(Date.now());
+  const label = day === today ? 'Hoy' : day === today + 86400000 ? 'Mañana' : dayShort(day);
+  let body;
+  if (S.wxErr) body = `<p class="warn">${esc(S.wxErr)}</p>`;
+  else if (!S.wx || S.wxLoading) body = '<p class="hint">Cargando la previsión…</p>';
+  else {
+    const best = bestOfDay(day);
+    const first = Array.isArray(S.wx) ? S.wx[0] : S.wx, h = first.hourly;
+    const hourAt = (k, ms) => R.interpHourly(h.time, h[k], ms);
+    const sel = BEST.sel ?? best?.st ?? null;
+    body = `${best ? `<div class="tip">Para toda la salida, con luz, menos viento y menos lluvia: <b>a las ${hm(best.st)}</b>, ${int(best.w.temp)} °C y viento de ${int(best.w.wind)} km/h al salir.
+        <br><button class="btn small" data-act="best-apply" data-st="${best.st}">Salir a las ${hm(best.st)}</button></div>`
+      : '<p class="warn">Ese día ya no da tiempo a hacer la ruta con la previsión disponible.</p>'}
+      ${sel !== null ? `<p class="readout"><b>${hm(sel)}</b>: ${int(hourAt('temperature_2m', sel))} °C, viento ${int(hourAt('wind_speed_10m', sel))} km/h (rachas ${int(hourAt('wind_gusts_10m', sel))} km/h), lluvia ${int(hourAt('precipitation_probability', sel) ?? 0)} %</p>` : ''}
+      ${dayChart(day, h, sel)}
+      ${sel !== null ? `<button class="btn primary block" data-act="best-apply" data-st="${sel}">Salir a las ${hm(sel)}</button>` : ''}
+      <div class="legend"><span><i style="background:#e8711a"></i>Temperatura (°C, eje izquierdo)</span><span><i style="background:var(--accent)"></i>Viento (km/h, eje derecho)</span><span><i style="background:#9cc7ef"></i>Lluvia (probabilidad)</span><span><i style="background:#f5c518"></i>Luz del día</span></div>
+      <p class="hint">Toca la gráfica para elegir otra hora.</p>`;
+  }
+  dialog.innerHTML = `<div class="dlg best"><h3>Mejor hora de salida <button class="linkbtn" data-act="best-close" aria-label="Cerrar">✕</button></h3>
+    <div class="daynav"><button class="btn small" data-act="best-day" data-n="-1" ${day <= today ? 'disabled' : ''} aria-label="Día anterior">‹</button><b>${label}</b>
+      <button class="btn small" data-act="best-day" data-n="1" ${day >= today + 14 * 86400000 ? 'disabled' : ''} aria-label="Día siguiente">›</button></div>${body}</div>`;
+}
+const DW = 340, DH = 180, DP = { l: 30, r: 30, t: 16, b: 22 };
+function dayChart(day, h, sel) {
+  const xs = (ms) => DP.l + ((ms - day) / 86400000) * (DW - DP.l - DP.r);
+  const idx = h.time.map((t, i) => [t * 1000, i]).filter(([ms]) => ms >= day && ms <= day + 86400000);
+  if (!idx.length) return '';
+  const temps = idx.map(([, i]) => h.temperature_2m[i]), winds = idx.map(([, i]) => h.wind_speed_10m[i]);
+  const tLo = Math.floor(Math.min(...temps) / 5) * 5, tHi = Math.ceil((Math.max(...temps) + 0.1) / 5) * 5;
+  const wHi = Math.max(10, Math.ceil(Math.max(...winds) / 10) * 10);
+  const yT = (v) => DP.t + (1 - (v - tLo) / (tHi - tLo || 1)) * (DH - DP.t - DP.b);
+  const yW = (v) => DP.t + (1 - v / wHi) * (DH - DP.t - DP.b);
+  const base = DH - DP.b;
+  const bars = idx.map(([ms, i]) => { const p = h.precipitation_probability?.[i] ?? 0; const hgt = (p / 100) * (base - DP.t) * 0.45; return p ? `<rect x="${xs(ms) - 3}" y="${base - hgt}" width="6" height="${hgt}" fill="#9cc7ef"/>` : ''; }).join('');
+  const sun = sunTimes(day + 12 * 3600000);
+  const light = sun ? `<rect x="${xs(sun.rise)}" y="${DP.t - 8}" width="${xs(sun.set) - xs(sun.rise)}" height="4" fill="#f5c518"/>` : '';
+  const line = (vals, y, color) => `<polyline points="${idx.map(([ms], k) => `${xs(ms).toFixed(1)},${y(vals[k]).toFixed(1)}`).join(' ')}" fill="none" stroke="${color}" stroke-width="2"/>`;
+  const ticks = [0, 6, 12, 18].map((hh) => `<text x="${xs(day + hh * 3600000)}" y="${DH - 6}" text-anchor="middle">${String(hh).padStart(2, '0')}:00</text><line x1="${xs(day + hh * 3600000)}" x2="${xs(day + hh * 3600000)}" y1="${DP.t}" y2="${base}" stroke="var(--line)"/>`).join('');
+  const lt = [tLo, (tLo + tHi) / 2, tHi].map((v) => `<text x="${DP.l - 4}" y="${yT(v) + 3}" text-anchor="end" style="fill:#e8711a">${int(v)}°</text>`).join('');
+  const rt = [0, wHi / 2, wHi].map((v) => `<text x="${DW - DP.r + 4}" y="${yW(v) + 3}" style="fill:var(--accent)">${int(v)}</text>`).join('');
+  const cur = sel !== null && sel >= day && sel <= day + 86400000 ? `<line x1="${xs(sel)}" x2="${xs(sel)}" y1="${DP.t - 8}" y2="${base}" stroke="var(--text)" stroke-dasharray="4 3"/>` : '';
+  return `<svg class="daychart" id="daychart" data-day="${day}" viewBox="0 0 ${DW} ${DH}" role="img" aria-label="Tiempo del día">${ticks}${light}${bars}${line(temps, yT, '#e8711a')}${line(winds, yW, 'var(--accent)')}${lt}${rt}${cur}</svg>`;
+}
+function dayPick(ev) {
+  const svg = ev.target.closest('#daychart'), r = svg.getBoundingClientRect(), day = +svg.dataset.day;
+  const fx = ((ev.clientX - r.left) / r.width) * DW;
+  const ms = day + Math.max(0, Math.min(1, (fx - DP.l) / (DW - DP.l - DP.r))) * 86400000;
+  BEST.sel = Math.min(day + 86400000 - 900000, Math.round(ms / 900000) * 900000);
+  renderBest();
 }
 
 // ---------- Inicio ----------
@@ -172,14 +297,19 @@ async function readFile(file) {
 function openRoute(name, points, settings = null) {
   const pts = Array.isArray(points[0]) ? points : R.decimate(points, 4000);
   const id = settings?.id || `r${Date.now().toString(36)}`;
-  Object.assign(S, { id, name, raw: pts, reversed: false, wps: [], feeding: false, custom: null, wx: null, wxKey: '', wxErr: '', cursorD: null, tCursor: null });
+  Object.assign(S, { id, name, raw: pts, dem: settings?.dem || null, eleSrc: 'file', demErr: '', fountains: null, fErr: '', reversed: false, range: null, stage: 'setup', wps: [], feeding: false, custom: null, wx: null, wxKey: '', wxErr: '', cursorD: null, tCursor: null });
   if (settings) {
-    for (const k of ['start', 'flat', 'mass', 'stops', 'reversed', 'wps', 'gph', 'every', 'feeding', 'view', 'mode', 'charts', 'bgProfile', 'feedMode', 'custom', 'carry']) if (settings[k] !== undefined) S[k] = settings[k];
+    for (const k of ['start', 'pace', 'eleSrc', 'stage', 'range', 'climbView', 'profColor', 'reversed', 'wps', 'gph', 'every', 'feeding', 'view', 'mode', 'charts', 'bgProfile', 'feedMode', 'custom', 'carry']) if (settings[k] !== undefined) S[k] = settings[k];
+    if (settings.flat && !settings.pace) S.pace = { ...S.pace, kmh: settings.flat }; // ajustes guardados por la versión anterior
     if (S.start < Date.now() - 3600000) { const d = new Date(S.start); const n = new Date(defaultStart()); n.setHours(d.getHours(), d.getMinutes()); S.start = n.getTime(); }
   }
   saveRecent(id, name, pts);
   fitted = false;
-  build(); renderPlan(); fetchWeather();
+  build();
+  // sin altitud en el archivo: se usa la del terreno
+  if (!S.track.hasEle) { S.eleSrc = 'dem'; if (!S.dem) fetchDem(); else build(); }
+  if (S.eleSrc === 'dem' && S.dem) build();
+  render(); fetchWeather();
 }
 function showRecent() {
   const rec = store.get(K_REC, []);
@@ -188,6 +318,61 @@ function showRecent() {
       <span class="row"><button class="btn small" data-act="open-rec" data-id="${r.id}">Abrir</button><button class="btn small ghost" data-act="del-rec" data-id="${r.id}" aria-label="Quitar">✕</button></span></li>`).join('')}</ul>`
       : '<p class="muted">Aún no has planificado ninguna ruta en este dispositivo.</p>'}</div>`;
   dialog.showModal();
+}
+
+// ---------- Primer menú: track, salida y ritmo ----------
+function render() { if (S.stage === 'plan') renderPlan(); else renderSetup(); }
+function salidaHtml() {
+  return `<label>Hora de salida <input type="datetime-local" id="start" value="${localInput(S.start)}"></label>
+    <button class="btn block" data-act="best">Mejor hora</button>
+    <div class="shift"><span>${dayName(S.start)}</span> · <button class="linkbtn" data-act="shift" data-min="-15">−15 min</button> <button class="linkbtn" data-act="shift" data-min="15">+15 min</button></div>`;
+}
+function ritmoHtml() {
+  const p = S.pace;
+  const num = (k, label, unit, min, max, step = 1) => `<label>${label}<span class="unit"><input type="number" data-pace="${k}" value="${p[k]}" min="${min}" max="${max}" step="${step}" inputmode="decimal"><span>${unit}</span></span></label>`;
+  return `<p class="lbl">Cómo calcular el tiempo</p>
+    <div class="seg"><button data-pace-mode="speed" class="${p.mode === 'speed' ? 'on' : ''}">Velocidad media</button><button data-pace-mode="power" class="${p.mode === 'power' ? 'on' : ''}">Potencia y peso</button></div>
+    ${p.mode === 'power' ? `<div class="grid2">${num('pFlat', 'Potencia en llano', 'W', 60, 500)}${num('rider', 'Peso del ciclista, equipado', 'kg', 30, 150)}${num('bike', 'Peso de la bici, con bidones', 'kg', 5, 30)}${num('pClimb', 'Potencia en subidas', 'W', 60, 600)}</div>`
+      : num('kmh', 'Velocidad media', 'km/h', 10, 50, 0.5)}
+    <p class="lbl">Terreno</p>
+    <div class="seg">${Object.entries(R.TERRAIN).map(([k, v]) => `<button data-terrain="${k}" class="${p.terrain === k ? 'on' : ''}">${v.label}</button>`).join('')}</div>
+    <p class="hint">${p.mode === 'power' ? 'Potencias medias, no normalizadas. La de subidas se aplica desde el 3 % de pendiente. En las bajadas (desde el −3 %) se cuentan 100 W: casi no se pedalea.'
+      : `La media es la de llano y sin viento: subiendo vas más lento y bajando más rápido (como mucho ${R.TERRAIN[p.terrain].vmax} km/h).`}</p>
+    <p class="lbl">Paradas (min por hora)</p>
+    <div class="seg">${[0, 5, 10, 15].map((m) => `<button data-stops="${m}" class="${p.stopsPH === m ? 'on' : ''}">${m}</button>`).join('')}</div>`;
+}
+const arriveHtml = () => `<p class="arrive">Llegada <mark>${hm(S.start + S.tl.total)}</mark></p>
+  <p class="muted">${dur(S.tl.total)} · ${km(S.track.distance)} km · ${int(S.track.gain)} m+ · ${nf1.format(S.track.distance / S.tl.moving * 3600)} km/h sin viento</p>`;
+function eleHtml() {
+  const q = S.full?.quality || {};
+  const noisy = S.eleSrc === 'file' && q.noise >= 4;
+  const note = S.demLoading ? 'Cargando la altitud del terreno…'
+    : S.eleSrc === 'dem' ? 'Modelo del terreno Copernicus (90 m): uniforme para cualquier track, pero no ve puentes ni túneles (se corrigen solos los saltos de ida y vuelta).'
+    : !S.track.hasEle ? 'El archivo no trae altitud.'
+    : `La que trae el archivo${q.noise ? ` (ruido ±${nf1.format(q.noise)} m${q.repaired ? `, ${q.repaired} salto${q.repaired > 1 ? 's' : ''} de túnel o puente arreglado${q.repaired > 1 ? 's' : ''}` : ''})` : ''}.`;
+  return `<p class="lbl">Altitud</p>
+    <div class="seg"><button data-elesrc="file" class="${S.eleSrc === 'file' ? 'on' : ''}" ${S.track.hasEle ? '' : 'disabled'}>Del archivo</button><button data-elesrc="dem" class="${S.eleSrc === 'dem' ? 'on' : ''}">Del terreno</button></div>
+    <p class="hint">${note}</p>
+    ${noisy ? '<p class="warn">La altitud de este archivo tiene mucho ruido (suele pasar con el GPS del móvil o del reloj). Prueba con la del terreno: el desnivel y las subidas saldrán más fiables.</p>' : ''}
+    ${S.demErr ? `<p class="warn">${esc(S.demErr)}</p>` : ''}`;
+}
+function renderSetup() {
+  document.getElementById('change').hidden = true;
+  if (map) { map.remove(); map = null; }
+  const t = S.track;
+  main.innerHTML = `
+    <p class="intro">Sube el track, di cuándo sales y mira el viento, el tiempo y las subidas a la hora a la que pasas por cada sitio.</p>
+    <div class="step"><b>1</b><h2>Track</h2></div>
+    <button class="linkbtn" data-act="home">← Archivo o Recientes</button>
+    <div class="chosen"><b>${esc(S.name)}</b> · ${km(t.distance)} km · ${int(t.gain)} m+${S.range ? ` <small class="muted">(solo un tramo)</small>` : ''}<br><button class="linkbtn" data-act="home">Elegir otra</button></div>
+    <p class="hint">En el sentido del track. Si vas a hacerla al revés, dale la vuelta.</p>
+    <button class="btn" data-act="reverse">Invertir sentido</button>
+    ${eleHtml()}
+    <div class="step"><b>2</b><h2>Salida</h2></div>${salidaHtml()}
+    <div class="step"><b>3</b><h2>Ritmo</h2></div>${ritmoHtml()}
+    <div id="arrive">${arriveHtml()}</div>
+    <button class="btn go" data-act="go">Ver la previsión</button>
+    ${foot()}`;
 }
 
 // ---------- Planificación ----------
@@ -202,39 +387,37 @@ function renderPlan() {
     <div id="legend" class="legend"></div>
     <div class="map-wrap"><div id="map"></div><div class="hint-map" id="maphint" hidden>Toca el track donde quieras el waypoint · <button class="linkbtn" style="color:inherit" data-act="cancelwp">Cancelar</button></div></div>
     <label class="row" style="flex-direction:row;align-items:center">Flechas cada <input type="range" id="arrows" min="2" max="10" step="1" value="${S.arrowsKm}" style="flex:1"> <span id="arrowsv">${S.arrowsKm} km</span></label>
-    <h3 style="margin-top:1rem">Elevación</h3>
+    <div class="row" style="margin-top:1rem;justify-content:space-between"><h3 style="margin:0">Elevación</h3>
+      <div class="seg mini" id="profcolor"></div></div>
+    <p id="pinfo" class="readout">Toca el perfil para ver la hora, el tiempo y el viento en ese punto.</p>
     <div id="profile"></div>
-    <p id="pinfo" class="hint">Toca el perfil para ver la hora, el tiempo y el viento en ese punto.</p>
+    <p class="hint">Arrastra los tiradores de los extremos del perfil para planificar solo un tramo.</p>
     <div id="climbs"></div>
+    <div id="fountains"></div>
     <div id="rest"></div>
     ${foot()}`;
   initMap();
   update();
+  fetchFountains();
 }
 
 function update() {
   if (!S.track) return;
   saveLast();
-  renderTop(); renderSummary(); renderLegend(); drawMap(); renderProfile(); renderClimbs(); renderRest();
+  if (BEST.open && dialog.open) renderBest();
+  if (S.stage !== 'plan') return renderSetup();
+  renderTop(); renderSummary(); renderLegend(); drawMap(); renderProfile(); renderClimbs(); renderFountains(); renderRest();
   document.querySelectorAll('#modes button').forEach((b) => b.classList.toggle('on', b.dataset.mode === S.mode));
 }
 
 function renderTop() {
   const t = S.track;
   document.getElementById('top').innerHTML = `
-    <div class="title-row"><h2>${esc(S.name)}</h2><p class="muted">${dayShort(S.start)} · ${km(t.distance)} km · ${int(t.gain)} m+</p></div>
+    <div class="title-row"><h2>${esc(S.name)}</h2><p class="muted">${dayShort(S.start)} · ${km(t.distance)} km · ${int(t.gain)} m+ · ${R.TERRAIN[S.pace.terrain].label.toLowerCase()}</p>
+      ${S.range ? `<p class="hint">Solo el tramo del km ${km(S.range[0])} al ${km(S.range[1])} de ${km(S.full.distance)} km. <button class="linkbtn" data-act="range-off">Toda la ruta</button></p>` : ''}</div>
     <div class="panel">
-      <label>Hora de salida <input type="datetime-local" id="start" value="${localInput(S.start)}"></label>
-      <button class="btn block" data-act="best">Mejor hora</button>
-      <div class="shift"><span>${dayName(S.start)}</span> · <button class="linkbtn" data-act="shift" data-min="-15">−15 min</button> <button class="linkbtn" data-act="shift" data-min="15">+15 min</button></div>
-      <details><summary>Ritmo: <b>${S.flat} km/h en llano</b></summary>
-        <div class="grid2" style="margin-top:.6rem">
-          <label>Media en llano (km/h)<input type="number" id="flat" min="10" max="50" step="0.5" value="${S.flat}" inputmode="decimal"></label>
-          <label>Peso con bici (kg)<input type="number" id="mass" min="40" max="150" step="1" value="${S.mass}" inputmode="numeric"></label>
-          <label>Paradas (min en total)<input type="number" id="stops" min="0" max="300" step="5" value="${S.stops}" inputmode="numeric"></label>
-        </div>
-        <p class="hint">Se calcula la potencia que da esa media en llano y, con ella, lo que tardas en cada tramo según la pendiente (bajando, como mucho 55 km/h).</p>
-      </details>
+      ${salidaHtml()}
+      <details><summary>Ritmo: <b>${paceText()}</b></summary><div style="margin-top:.6rem">${ritmoHtml()}</div></details>
       <button class="btn" data-act="reverse" style="margin-top:.6rem">Invertir sentido</button>
     </div>
     <div class="seg" id="view"><button data-view="sencilla" class="${S.view === 'sencilla' ? 'on' : ''}">Sencilla</button><button data-view="completa" class="${S.view === 'completa' ? 'on' : ''}">Completa</button></div>
@@ -242,12 +425,12 @@ function renderTop() {
 }
 
 function hardest() {
-  return S.climbs.reduce((b, c) => (!b || c.length * c.avg > b.length * b.avg ? c : b), null);
+  return S.climbs.reduce((b, c) => (!b || c.gain > b.gain ? c : b), null);
 }
 
 function renderSummary() {
   const t = S.track, total = S.tl.total, end = S.start + total;
-  const moving = total - S.stops * 60000;
+  const moving = S.tl.moving;
   let wind = '<span class="muted">cargando la previsión…</span>', temp = wind, rain = wind, light = wind;
   if (S.wxErr) wind = temp = rain = light = `<span class="bad">${esc(S.wxErr)}</span>`;
   else if (S.along) {
@@ -280,7 +463,7 @@ function renderSummary() {
     <details class="fact"><summary><b>Lluvia</b> ${rain}</summary><p>La probabilidad más alta de precipitación a lo largo de la ruta.</p></details>
     <details class="fact"><summary><b>Luz</b> ${light}</summary><p>Con la salida y la puesta de sol del día, en el punto de salida.</p></details>
     <details class="fact"><summary><b>Subida más dura</b> ${h ? `${km(h.length)} km al ${pct(h.avg)}` : 'ninguna'}</summary>
-      <p>${h ? `Empieza en el km ${km(h.start)}, la pasas entre las ${hm(at(h.start))} y las ${hm(at(h.end))}. Sube ${int(h.gain)} m, máx. ${pct(h.max)}.` : 'No hay subidas de más de 40 m al 3 % o más.'}</p></details>`;
+      <p>${h ? `Empieza en el km ${km(h.start)}, la pasas entre las ${hm(at(h.start))} y las ${hm(at(h.end))}. Sube ${int(h.gain)} m, máx. ${pct(h.max)}.` : 'No hay subidas de 40 m o más al 2,5 % o más, ni puertos largos y tendidos.'}</p></details>`;
 }
 
 // ---------- Mapa ----------
@@ -320,6 +503,7 @@ function drawMap() {
   if (!map) return;
   mapLayer.clearLayers();
   const P = S.track.points;
+  if (!fitted) { map.fitBounds(L.latLngBounds(P.map((p) => [p.lat, p.lon])), { padding: [16, 16] }); fitted = true; }
   const cuts = S.samples.map((s) => s.d);
   // un tramo por punto de previsión, coloreado con el tiempo de ese punto
   for (let k = 0; k < cuts.length - 1; k++) {
@@ -329,10 +513,10 @@ function drawMap() {
     L.polyline(line, { color: segColor(w), weight: 6, opacity: .9 }).addTo(mapLayer);
   }
   drawArrows();
-  S.climbs.forEach((c, i) => {
-    const p = R.pointAt(P, c.start);
-    L.marker([p.lat, p.lon], { icon: L.divIcon({ className: '', iconSize: [24, 24], html: `<div class="cnum" style="background:${R.gradeColor(c.avg)}">${i + 1}</div>` }) })
-      .bindPopup(`<b>Subida ${i + 1}</b><br>km ${km(c.start)} · ${km(c.length)} km al ${pct(c.avg)}<br>${hm(at(c.start))} → ${hm(at(c.end))}`).addTo(mapLayer);
+  shown().forEach((c) => {
+    const p = R.pointAt(P, c.start), k = catOf(c);
+    L.marker([p.lat, p.lon], { icon: L.divIcon({ className: '', iconSize: [24, 24], html: `<div class="cnum" style="background:${catColor(c)};color:${['3', ''].includes(k) ? '#111' : '#fff'}">${climbNo(c)}</div>` }) })
+      .bindPopup(`<b>Subida ${climbNo(c)}</b> · ${R.catLabel(k)}<br>km ${km(c.start)} · ${km(c.length)} km al ${pct(c.avg)}<br>${hm(at(c.start))} → ${hm(at(c.end))}`).addTo(mapLayer);
   });
   S.wps.forEach((w, i) => {
     const p = R.pointAt(P, w.d);
@@ -344,46 +528,119 @@ function drawMap() {
     L.marker([p.lat, p.lon], { icon: L.divIcon({ className: '', iconSize: [22, 22], html: `<div class="cnum toma">${i + 1}</div>` }) })
       .bindPopup(`<b>${esc(tomaLabel(f, i))}</b><br>${hm(S.start + f.ms)} · km ${km(f.d)} · ${f.grams} g`).addTo(mapLayer);
   });
+  fountains().forEach((f) => {
+    L.marker([f.lat, f.lon], { icon: L.divIcon({ className: '', iconSize: [22, 22], html: '<div class="cnum fuente">💧</div>' }) })
+      .bindPopup(`<b>${esc(f.name || f.kind)}</b><br>km ${km(f.d)} · ${hm(at(f.d))}<br>${f.off < 30 ? 'En la ruta' : `A ${int(f.off)} m de la ruta`}`).addTo(mapLayer);
+  });
   const s = P[0], e = P[P.length - 1];
   L.circleMarker([s.lat, s.lon], { radius: 7, color: '#fff', weight: 2, fillColor: '#16a34a', fillOpacity: 1 }).bindTooltip('Salida').addTo(mapLayer);
   L.circleMarker([e.lat, e.lon], { radius: 7, color: '#fff', weight: 2, fillColor: '#111', fillOpacity: 1 }).bindTooltip('Llegada').addTo(mapLayer);
   cursorMarker = null;
-  if (!fitted) { map.fitBounds(L.latLngBounds(P.map((p) => [p.lat, p.lon])), { padding: [16, 16] }); fitted = true; }
 }
 
 // ---------- Perfil ----------
-const PW = 720, PH = 230, PAD = { l: 38, r: 8, t: 12, b: 44 };
+const PW = 720, PH = 260, PAD = { l: 40, r: 14, t: 26, b: 40 };
+const DRAG = { side: null, d: null };
+const shown = () => R.climbFilter(S.climbs, S.climbView);
+const climbNo = (c) => S.climbs.indexOf(c) + 1;
+const catOf = (c) => R.climbCategory(c);
+const catColor = (c) => R.CAT_COLOR[catOf(c)];
+const px = (d) => PAD.l + (d / S.track.distance) * (PW - PAD.l - PAD.r);
 function renderProfile() {
   const t = S.track, P = t.points, total = t.distance;
   const lo = Math.floor((t.minEle - 20) / 50) * 50, hi = Math.ceil((t.maxEle + 20) / 50) * 50;
-  const x = (d) => PAD.l + (d / total) * (PW - PAD.l - PAD.r);
+  const x = px;
   const y = (e) => PAD.t + (1 - (e - lo) / (hi - lo || 1)) * (PH - PAD.t - PAD.b);
   const base = PH - PAD.b;
-  const step = Math.max(100, total / 300);
-  let polys = '';
-  for (let d = 0; d < total; d += step) {
-    const d2 = Math.min(total, d + step);
-    const a = R.pointAt(P, d), b = R.pointAt(P, d2);
-    const g = (b.es - a.es) / (d2 - d || 1);
-    polys += `<polygon points="${x(d).toFixed(1)},${base} ${x(d).toFixed(1)},${y(a.es).toFixed(1)} ${x(d2).toFixed(1)},${y(b.es).toFixed(1)} ${x(d2).toFixed(1)},${base}" fill="${R.gradeColor(g)}" stroke="${R.gradeColor(g)}" stroke-width=".5"/>`;
+  const step = Math.max(60, total / 360);
+  const area = (d1, d2, fill) => {
+    const pts = [`${x(d1).toFixed(1)},${base}`];
+    for (let d = d1; d < d2; d += step) pts.push(`${x(d).toFixed(1)},${y(R.pointAt(P, d).es).toFixed(1)}`);
+    pts.push(`${x(d2).toFixed(1)},${y(R.pointAt(P, d2).es).toFixed(1)}`, `${x(d2).toFixed(1)},${base}`);
+    return `<polygon points="${pts.join(' ')}" fill="${fill}"/>`;
+  };
+  let fills = '';
+  if (S.profColor === 'pendiente') {
+    for (let d = 0; d < total; d += step * 2) {
+      const d2 = Math.min(total, d + step * 2), g = (R.pointAt(P, d2).es - R.pointAt(P, d).es) / (d2 - d || 1);
+      fills += area(d, d2, R.gradeColor(g));
+    }
+  } else {
+    fills = area(0, total, 'var(--prof-base)') + shown().map((c) => area(c.start, c.end, catColor(c))).join('');
   }
+  let outline = '';
+  for (let d = 0; d <= total; d += step) outline += `${x(d).toFixed(1)},${y(R.pointAt(P, d).es).toFixed(1)} `;
   const yTicks = []; const ys = Math.max(50, Math.ceil((hi - lo) / 4 / 50) * 50);
-  for (let e = lo; e <= hi; e += ys) yTicks.push(`<line x1="${PAD.l}" x2="${PW - PAD.r}" y1="${y(e)}" y2="${y(e)}" stroke="var(--line)"/><text x="${PAD.l - 4}" y="${y(e) + 4}" text-anchor="end">${e}</text>`);
+  for (let e = lo; e <= hi; e += ys) yTicks.push(`<line x1="${PAD.l}" x2="${PW - PAD.r}" y1="${y(e)}" y2="${y(e)}" stroke="var(--line)"/><text x="${PAD.l - 5}" y="${y(e) + 4}" text-anchor="end">${e}</text>`);
   const xs = total > 100000 ? 20000 : total > 40000 ? 10000 : 5000;
   const xTicks = []; for (let d = 0; d <= total; d += xs) xTicks.push(`<text x="${x(d)}" y="${base + 13}" text-anchor="middle">${d / 1000}</text>`);
-  const climbs = S.climbs.map((c, i) => `<rect x="${x(c.start)}" y="${PAD.t}" width="${Math.max(1, x(c.end) - x(c.start))}" height="${base - PAD.t}" fill="var(--accent)" opacity=".07"/>
-    <text x="${(x(c.start) + x(c.end)) / 2}" y="${y(c.top) - 4}" text-anchor="middle" style="font-weight:700;fill:var(--text)">${i + 1}</text>`).join('');
+  // horas de paso arriba: salida, horas en punto con sitio y llegada
+  const tAt = (ms) => R.distAtTime(P, S.tl.t, ms);
+  const hours = [[0, hm(S.start), 'start']];
+  for (let h = Math.ceil(S.start / 3600000) * 3600000; h < S.start + S.tl.total; h += 3600000) {
+    const xx = x(tAt(h - S.start));
+    if (xx - x(0) > 50 && x(total) - xx > 50) hours.push([tAt(h - S.start), hm(h), 'middle']);
+  }
+  hours.push([total, hm(S.start + S.tl.total), 'end']);
+  const hl = hours.map(([d, l, a]) => `<text x="${x(d)}" y="${PAD.t - 10}" text-anchor="${a}" class="hr">${l}</text>`).join('');
+  const nums = shown().map((c) => `<text x="${(x(c.start) + x(c.end)) / 2}" y="${y(c.top) - 6}" text-anchor="middle" style="font-weight:700;fill:var(--text)">${climbNo(c)}</text>`).join('');
   let strip = '';
   if (S.along) {
     const cuts = S.samples.map((s) => s.d);
-    for (let k = 0; k < cuts.length - 1; k++) strip += `<rect x="${x(cuts[k])}" y="${base + 20}" width="${x(cuts[k + 1]) - x(cuts[k]) + .5}" height="10" fill="${segColor(S.along[k])}"/>`;
-    strip += `<text x="${PAD.l - 4}" y="${base + 29}" text-anchor="end">${S.mode === 'temp' ? 'Temp.' : S.mode === 'rachas' ? 'Rachas' : 'Viento'}</text>`;
+    for (let k = 0; k < cuts.length - 1; k++) strip += `<rect x="${x(cuts[k])}" y="${base + 20}" width="${x(cuts[k + 1]) - x(cuts[k]) + .5}" height="9" fill="${segColor(S.along[k])}"/>`;
+    strip += `<text x="${PAD.l - 5}" y="${base + 28}" text-anchor="end">${S.mode === 'temp' ? 'Temp.' : S.mode === 'rachas' ? 'Rachas' : 'Viento'}</text>`;
   }
-  const feeds = S.feeding && S.feedOnMap ? feeding().map((f, i) => `<circle cx="${x(f.d)}" cy="${base - 7}" r="7" fill="#e6c229" stroke="#fff"/><text x="${x(f.d)}" y="${base - 3.5}" text-anchor="middle" style="fill:#111;font-size:9px;font-weight:700">${i + 1}</text>`).join('') : '';
-  const cur = S.cursorD !== null ? `<line x1="${x(S.cursorD)}" x2="${x(S.cursorD)}" y1="${PAD.t}" y2="${base}" stroke="var(--text)" stroke-dasharray="3 3"/>` : '';
+  const feeds = S.feeding && S.feedOnMap ? feeding().map((f, i) => `<circle cx="${x(f.d)}" cy="${base - 8}" r="7" fill="#e6c229" stroke="#fff"/><text x="${x(f.d)}" y="${base - 4.5}" text-anchor="middle" style="fill:#111;font-size:9px;font-weight:700">${i + 1}</text>`).join('') : '';
+  const drops = fountains().map((f) => `<text x="${x(f.d)}" y="${base - 2}" text-anchor="middle" style="font-size:13px">💧</text>`).join('');
+  let cur = '';
+  if (S.cursorD !== null && S.cursorD <= total) {
+    const cy = y(R.pointAt(P, S.cursorD).es);
+    cur = `<line x1="${x(S.cursorD)}" x2="${x(S.cursorD)}" y1="${PAD.t}" y2="${base}" stroke="var(--text)" stroke-dasharray="3 3"/><circle cx="${x(S.cursorD)}" cy="${cy}" r="5" fill="var(--accent)" stroke="#fff" stroke-width="2"/>`;
+  }
+  // tiradores para planificar solo un tramo
+  const da = DRAG.side === 'a' && DRAG.d !== null ? DRAG.d : 0, db = DRAG.side === 'b' && DRAG.d !== null ? DRAG.d : total;
+  const dim = `${da > 0 ? `<rect x="${PAD.l}" y="${PAD.t}" width="${x(da) - PAD.l}" height="${base - PAD.t}" fill="var(--bg)" opacity=".7"/>` : ''}${db < total ? `<rect x="${x(db)}" y="${PAD.t}" width="${x(total) - x(db)}" height="${base - PAD.t}" fill="var(--bg)" opacity=".7"/>` : ''}`;
+  const handle = (side, d) => `<g data-handle="${side}" class="handle"><rect x="${x(d) - 18}" y="${PAD.t}" width="36" height="${base - PAD.t}" fill="transparent"/>
+    <line x1="${x(d)}" x2="${x(d)}" y1="${PAD.t}" y2="${base}" stroke="var(--text)" stroke-width="2"/><rect x="${x(d) - 7}" y="${(PAD.t + base) / 2 - 22}" width="14" height="44" rx="7" fill="var(--card)" stroke="var(--text)" stroke-width="2"/></g>`;
+  const dragLbl = DRAG.side && DRAG.d !== null ? `<text x="${x(DRAG.d)}" y="${PAD.t + 14}" text-anchor="${DRAG.side === 'a' ? 'start' : 'end'}" class="drag">km ${km(DRAG.d)}</text>` : '';
   document.getElementById('profile').innerHTML = `<svg class="profile" id="psvg" viewBox="0 0 ${PW} ${PH}" role="img" aria-label="Perfil de elevación">
-    ${yTicks.join('')}${polys}${climbs}${xTicks.join('')}<text x="${PW - PAD.r}" y="${base + 13}" text-anchor="end">km</text>${strip}${feeds}${cur}</svg>
-    <div class="legend"><span><i style="background:var(--g1)"></i>&lt; 3 % y bajadas</span><span><i style="background:var(--g2)"></i>3-6 %</span><span><i style="background:var(--g3)"></i>6-9 %</span><span><i style="background:var(--g4)"></i>9-12 %</span><span><i style="background:var(--g5)"></i>&gt; 12 %</span></div>`;
+    ${yTicks.join('')}${fills}<polyline points="${outline}" fill="none" stroke="var(--prof-line)" stroke-width="1.6"/>${nums}${xTicks.join('')}${hl}<text x="${PW - PAD.r}" y="${base + 13}" text-anchor="end">km</text>${strip}${feeds}${drops}${cur}${dim}${handle('a', da)}${handle('b', db)}${dragLbl}</svg>
+    ${S.profColor === 'pendiente'
+      ? '<div class="legend"><b>Pendiente</b><span><i style="background:var(--g1)"></i>&lt; 3 % y bajadas</span><span><i style="background:var(--g2)"></i>3-6 %</span><span><i style="background:var(--g3)"></i>6-9 %</span><span><i style="background:var(--g4)"></i>9-12 %</span><span><i style="background:var(--g5)"></i>&gt; 12 %</span></div>'
+      : catLegend()}
+    <div class="legend"><b>Viento</b><span><i style="background:var(--head)"></i>De cara</span><span><i style="background:var(--cross)"></i>Cruzado o flojo</span><span><i style="background:var(--tail)"></i>Favorable</span></div>`;
+  const pc = document.getElementById('profcolor');
+  if (pc) pc.innerHTML = [['subidas', 'Subidas'], ['pendiente', 'Pendiente']].map(([k, l]) => `<button data-profcolor="${k}" class="${S.profColor === k ? 'on' : ''}">${l}</button>`).join('');
+}
+function catLegend() {
+  const cats = [...new Set(shown().map(catOf))].sort((a, b) => ['', '4', '3', '2', '1', 'HC'].indexOf(a) - ['', '4', '3', '2', '1', 'HC'].indexOf(b));
+  return cats.length ? `<div class="legend">${cats.map((k) => `<span><i style="background:${R.CAT_COLOR[k]}"></i>${R.catLabel(k)}</span>`).join('')}</div>` : '';
+}
+function dFromEvent(ev) {
+  const r = document.getElementById('psvg').getBoundingClientRect();
+  const fx = ((ev.clientX - r.left) / r.width) * PW;
+  return Math.max(0, Math.min(S.track.distance, ((fx - PAD.l) / (PW - PAD.l - PAD.r)) * S.track.distance));
+}
+function handleMove(ev) {
+  const d = dFromEvent(ev), total = S.track.distance, minGap = Math.min(2000, total / 4);
+  DRAG.d = DRAG.side === 'a' ? Math.min(d, total - minGap) : Math.max(d, minGap);
+  renderProfile();
+}
+function handleUp() {
+  const side = DRAG.side, d = DRAG.d;
+  DRAG.side = null; DRAG.d = null;
+  if (d === null || (side === 'a' && d < 100) || (side === 'b' && d > S.track.distance - 100)) return renderProfile();
+  const off = S.range ? S.range[0] : 0;
+  const a = side === 'a' ? off + d : off, b = side === 'b' ? off + d : off + S.track.distance;
+  setRange([a, b]);
+}
+/** Planifica solo el tramo [a, b] (en km de la ruta entera), o toda la ruta con null. */
+function setRange(r) {
+  const oldOff = S.range ? S.range[0] : 0, newOff = r ? r[0] : 0, newLen = r ? r[1] - r[0] : S.full.distance;
+  S.wps = S.wps.map((w) => ({ ...w, d: w.d + oldOff - newOff })).filter((w) => w.d >= 0 && w.d <= newLen);
+  S.range = r; S.custom = null; S.cursorD = null; S.tCursor = null; fitted = false;
+  build(); update(); fetchWeather();
+  toast(r ? `Planificando del km ${km(r[0])} al ${km(r[1])}` : 'Planificando toda la ruta');
 }
 function profilePick(ev) {
   const svg = document.getElementById('psvg');
@@ -400,7 +657,7 @@ function profilePick(ev) {
 function drawArrows() {
   if (!arrowLayer) return;
   arrowLayer.clearLayers();
-  if (!S.along || !S.track) return;
+  if (!S.along || !S.track || !map?._loaded) return;
   const P = S.track.points, placed = [];
   for (let d = S.arrowsKm * 500; d < S.track.distance; d += S.arrowsKm * 1000) {
     const p = R.pointAt(P, d), w = wxAt(d);
@@ -434,8 +691,12 @@ function focusAt(d) {
   S.tCursor = at(d) - S.start;
   const p = R.pointAt(S.track.points, d), w = wxAt(d);
   const g = R.gradeAt(S.track.points, d, 100);
-  let txt = `<b>km ${km(d)}, ${hm(at(d))}</b> · Elevación ${int(p.es)} m · Pendiente ${pct(g)}`;
-  if (w && w.wind !== undefined) txt += ` · ${int(w.temp)} °C · Lluvia ${int(w.rainProb ?? 0)} % · Viento ${int(w.wind)} km/h del ${compass(w.windFrom)}, ${KIND[w.rel.kind].toLowerCase()} (rachas ${int(w.gust)})`;
+  let txt = `<b>${km(d)} km, ${hm(at(d))}</b> · Elevación: <b>${int(p.es)} m</b><br>Pendiente: ${pct(g)}`;
+  if (w && w.wind !== undefined) {
+    txt += ` · Temperatura: ${int(w.temp)} °C${w.feels !== null && w.feels !== undefined ? ` (sensación ${int(w.feels)} °C)` : ''}`;
+    const comp = Math.abs(w.rel.head) >= 0.5 ? ` (${int(Math.abs(w.rel.head))} km/h de componente)` : '';
+    txt += `<br>Viento: ${int(w.wind)} km/h del ${compass(w.windFrom)}, ${w.rel.kind === 'cara' ? 'de cara' : w.rel.kind === 'favor' ? 'favorable' : 'cruzado o flojo'}${comp} · rachas ${int(w.gust)} km/h`;
+  }
   document.getElementById('pinfo').innerHTML = txt;
   renderProfile();
   if (map) {
@@ -445,16 +706,37 @@ function focusAt(d) {
   renderCharts();
 }
 
+function renderFountains() {
+  const el = document.getElementById('fountains');
+  if (!el) return;
+  const list = S.fountains ? fountains() : [];
+  const when = S.fountains ? new Date(S.fountains.at).toLocaleDateString('es-ES') : '';
+  el.innerHTML = `<h3>💧 Fuentes</h3>
+    ${S.fLoading ? '<p class="hint">Buscando fuentes de agua en OpenStreetMap… (puede tardar unos segundos por cada 30 km)</p>' : ''}
+    ${S.fErr ? `<p class="warn">${esc(S.fErr)}</p>` : ''}
+    ${S.fountains ? `<p>${list.length ? `<b>${list.length}</b> fuente${list.length > 1 ? 's' : ''}` : 'Ninguna fuente'} a menos de 500 m de la ruta <span class="muted">(datos de OpenStreetMap del ${when})</span>.
+      <button class="linkbtn" data-act="fuentes-reload">Buscar las más recientes</button></p>
+      ${list.length ? `<ul class="mini-list fuentes">${list.map((f) => `<li class="tappable"><button class="sv-item" data-act="fuente-go" data-d="${f.d}">
+        <b>km ${km(f.d)} · ${esc(f.name || f.kind)}</b><small class="muted">${hm(at(f.d))} · ${f.off < 30 ? 'en la ruta' : `a ${int(f.off)} m de la ruta`}${f.name ? ` · ${f.kind.toLowerCase()}` : ''}${f.unsure ? ' · puede no tener agua siempre' : ''}</small></button></li>`).join('')}</ul>
+        <p class="hint">Son las que alguien ha marcado como agua potable en OpenStreetMap: puede faltar alguna o estar cerrada. Si conoces una que no sale, se puede añadir en openstreetmap.org.</p>` : ''}`
+      : (!S.fLoading && !S.fErr ? '<p class="hint">Aún no se han buscado.</p>' : '')}`;
+}
+
 function renderClimbs() {
   const el = document.getElementById('climbs');
-  if (!S.climbs.length) { el.innerHTML = '<p class="hint">Sin subidas de más de 40 m al 3 % o más.</p>'; return; }
-  el.innerHTML = `<h3>Subidas (${S.climbs.length})</h3><div class="climbs">${S.climbs.map((c, i) => {
-    const cat = R.climbCategory(c);
-    const w = wxAt(c.end);
-    return `<div class="climb"><span class="n" style="background:${R.gradeColor(c.avg)}">${i + 1}</span><div><b>km ${km(c.start)}</b>
-      <small>${km(c.length)} km · ${pct(c.avg)} · ${int(c.gain)} m${cat ? ` · ${cat === 'HC' ? 'HC' : cat + 'ª cat.'}` : ''}</small>
-      <small>${hm(at(c.start))} → ${hm(at(c.end))}${w && w.wind !== undefined ? ` · ${int(w.temp)} °C arriba` : ''}</small></div></div>`;
-  }).join('')}</div>`;
+  if (!S.climbs.length) { el.innerHTML = '<p class="hint">Sin subidas: nada que suba 20 m o más al 3 % o más.</p>'; return; }
+  const list = shown();
+  const n = (w) => R.climbFilter(S.climbs, w).length;
+  el.innerHTML = `<h3>Subidas ${list.length}</h3>
+    <div class="seg tabs3">${[['todas', 'Todas'], ['medianas', 'Medianas y grandes'], ['grandes', 'Solo grandes']].map(([k, l]) => `<button data-climbview="${k}" class="${S.climbView === k ? 'on' : ''}">${l} (${n(k)})</button>`).join('')}</div>
+    <details class="more"><summary>Cómo se calculan</summary><p class="hint">Una subida va de un punto bajo a una cima; si en medio se baja poco (unos 25 m, o menos del 15 % de lo subido) sigue siendo la misma.
+      Se quitan la aproximación y el final llanos. La categoría sale de longitud × pendiente media, como en Strava: 4ª desde 8.000 (p. ej. 2 km al 4 %), 3ª desde 16.000, 2ª desde 32.000, 1ª desde 64.000 y especial desde 80.000.
+      «Todas» incluye los repechos pequeños (desde 20 m al 3 %); «Medianas y grandes», las de 40 m o más o con categoría; «Solo grandes», las que tienen categoría. Los puertos largos y tendidos (300 m al 1,5 %, o 150 m al 2 %) cuentan como una sola subida.</p></details>
+    ${list.length ? `<div class="climbs-row">${list.map((c) => {
+      const w = wxAt(c.end);
+      return `<button class="climb" data-act="climb-go" data-d="${c.start}"><span class="n" style="background:${catColor(c)};color:${['3', ''].includes(catOf(c)) ? '#111' : '#fff'}">${climbNo(c)}</span><span><b>km ${km(c.start)}</b>
+        <small>${km(c.length)} km · ${pct(c.avg)} · ${int(c.gain)} m</small><small>${hm(at(c.start))} → ${hm(at(c.end))}${w && w.wind !== undefined ? ` · ${int(w.temp)} °C` : ''}</small></span></button>`;
+    }).join('')}</div>` : '<p class="hint">Ninguna con este filtro.</p>'}`;
 }
 
 // ---------- Tiempo, avituallamiento y exportar ----------
@@ -621,6 +903,7 @@ function renderRest() {
       <span class="stepper"><button class="icon-btn" data-act="carry" data-k="${k}" data-n="-1" ${S.carry[k].n ? '' : 'disabled'}>−</button><b>${S.carry[k].n}</b><button class="icon-btn" data-act="carry" data-k="${k}" data-n="1">+</button></span>
       <b class="tot">${S.carry[k].n * S.carry[k].g} g</b></div>`).join('')}
     <p class="${carried < grams ? 'bad' : ''}">Llevas ${int(carried)} g de los ${int(grams)} g de las tomas${carried < grams ? `: te faltan ${int(grams - carried)} g (rellena en ruta o lleva más)` : carried > grams + 30 ? `: te sobran ${int(carried - grams)} g` : ''}.</p>
+    ${fountains().length ? `<p class="hint">💧 Agua por el camino: ${fountains().slice(0, 8).map((f) => `km ${km(f.d)}`).join(', ')}${fountains().length > 8 ? '…' : ''} (ver «Fuentes» arriba).</p>` : ''}
     <details class="more"><summary>Cómo rellenar los bidones</summary><p class="hint">Si solo llevas agua, deja 0 g/ud. Si llevas bebida con hidratos, pon los gramos de cada bidón: los indica el bote (lo habitual es entre 30 y 60 g por bidón de 500-750 ml). Más concentrada cuesta más de digerir. Lo que lleven los bidones también cuenta para las tomas.</p></details>
     <p class="hint">Una guía: ajústala a lo que toleras en los entrenamientos.</p>
     <button class="linkbtn" data-act="feed-off">Quitar el avituallamiento</button>`
@@ -639,12 +922,14 @@ function renderRest() {
       <label class="check"><input type="checkbox" data-exp="wps" ${S.exp.wps ? 'checked' : ''}> Tus waypoints (${S.wps.length})</label>
       <label class="check"><input type="checkbox" data-exp="climbs" ${S.exp.climbs ? 'checked' : ''}> Inicio de cada subida (${S.climbs.length})</label>
       <label class="check"><input type="checkbox" data-exp="tomas" ${S.exp.tomas ? 'checked' : ''} ${S.feeding ? '' : 'disabled'}> Tus avisos de avituallamiento (${tomas.length})</label>
+      <label class="check"><input type="checkbox" data-exp="fuentes" ${S.exp.fuentes ? 'checked' : ''}> Fuentes de agua (${fountains().length})</label>
       <label class="check"><input type="checkbox" data-exp="times" ${S.exp.times ? 'checked' : ''}> Horas de paso previstas (para el «compañero virtual»)</label>
       <button class="btn primary" data-act="gpx">Descargar .gpx</button>
       <h3 style="margin-top:1rem">Pásasela a tu grupeta</h3>
-      <p class="hint">Un mensaje con la salida, los kilómetros, el desnivel y el tiempo previsto.</p>
-      <button class="btn wa" data-act="whatsapp">Compartir por WhatsApp</button>
-      <button class="btn" data-act="share">Compartir con el .gpx</button>
+      <p class="hint">Una ficha en imagen con el mapa del viento, el perfil con las subidas y el tiempo, lista para el grupo de WhatsApp.</p>
+      <button class="btn wa" data-act="card">🖼️ Crear la ficha para compartir</button>
+      <label class="check"><input type="checkbox" data-exp="cardgpx" ${S.exp.cardgpx ? 'checked' : ''}> Adjuntar también el .gpx</label>
+      <button class="linkbtn" data-act="whatsapp">Enviar solo el texto por WhatsApp</button>
     </div>`;
 }
 
@@ -655,6 +940,7 @@ function exportGPX() {
   if (S.exp.wps) S.wps.forEach((w) => { const p = pt(w.d); wps.push({ lat: p.lat, lon: p.lon, name: w.name, desc: `${wpType(w.type)[2]} · km ${km(w.d)}`, sym: wpType(w.type)[3] }); });
   if (S.exp.climbs) S.climbs.forEach((c, i) => { const p = pt(c.start); wps.push({ lat: p.lat, lon: p.lon, name: `Subida ${i + 1}`.slice(0, 15), desc: `${km(c.length)} km al ${pct(c.avg)}`, sym: 'Summit' }); });
   if (S.exp.tomas && S.feeding) feeding().forEach((f, i) => { const p = pt(f.d); wps.push({ lat: p.lat, lon: p.lon, name: tomaLabel(f, i), desc: `${hm(S.start + f.ms)} · ${f.grams} g`, sym: 'Food' }); });
+  if (S.exp.fuentes) fountains().forEach((f) => wps.push({ lat: f.lat, lon: f.lon, name: (f.name || f.kind).slice(0, 15), desc: `${f.kind} · km ${km(f.d)}`, sym: 'Drinking Water' }));
   const text = R.toGPX(name, P, wps, S.exp.times ? { startMs: S.start, t: S.tl.t } : {});
   const file = `${name.replace(/[^\p{L}\p{N} _-]+/gu, '').trim().replace(/\s+/g, '-') || 'ruta'}.gpx`;
   return { text, file };
@@ -668,7 +954,7 @@ function download(name, text) {
 function shareText() {
   const t = S.track, end = S.start + S.tl.total;
   const lines = [`🚴 ${S.name}`, `📅 ${dayName(S.start)} ${new Date(S.start).toLocaleDateString('es-ES')} · salida ${hm(S.start)}, llegada ${hm(end)}`,
-    `📏 ${km(t.distance)} km · ⛰️ ${int(t.gain)} m+ · ${S.flat} km/h en llano`];
+    `📏 ${km(t.distance)} km · ⛰️ ${int(t.gain)} m+ · ${paceText()}`];
   const h = hardest();
   if (h) lines.push(`🔺 Subida más dura: ${km(h.length)} km al ${pct(h.avg)} (km ${km(h.start)})`);
   if (S.along) {
@@ -676,6 +962,60 @@ function shareText() {
     lines.push(`🌡️ ${int(Math.min(...a.map((w) => w.temp)))}-${int(Math.max(...a.map((w) => w.temp)))} °C · 💨 máx. ${int(Math.max(...a.map((w) => w.wind)))} km/h · 🌧️ ${int(Math.max(...a.map((w) => w.rainProb ?? 0)))} %`);
   }
   return lines.join('\n');
+}
+
+// ---------- Ficha para compartir ----------
+const CARD = { blob: null, url: '' };
+async function openCard() {
+  dialog.innerHTML = '<div class="dlg"><h3>Ficha para compartir <button class="linkbtn" data-act="close">✕</button></h3><p class="hint">Preparando la imagen…</p></div>';
+  if (!dialog.open) dialog.showModal();
+  const t = S.track, end = S.start + S.tl.total;
+  const lines = [
+    `${dayName(S.start)} ${new Date(S.start).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}. Salida a las ${hm(S.start)}, llegada hacia las ${hm(end)}.`,
+    `${km(t.distance)} km y ${int(t.gain)} m de desnivel, unas ${dur(S.tl.total)}.`,
+  ];
+  if (S.along) {
+    const a = S.along.filter((w) => w.wind !== undefined);
+    if (a.length) {
+      const head = Math.round((a.filter((w) => w.rel.kind === 'cara').length / a.length) * 100), rain = Math.max(...a.map((w) => w.rainProb ?? 0));
+      lines.push(`${int(Math.min(...a.map((w) => w.temp)))} a ${int(Math.max(...a.map((w) => w.temp)))} °C · viento hasta ${int(Math.max(...a.map((w) => w.wind)))} km/h${head ? `, ${head} % de cara` : ''} · ${rain < 10 ? 'sin lluvia prevista' : `lluvia hasta ${int(rain)} %`}`);
+    }
+  }
+  const h = hardest();
+  try {
+    const { blob, tiles } = await buildCard({
+      name: S.name, club: 'Club Ciclista Monzón', logo: '../icons/logo.png', start: S.start, track: t, tl: S.tl, samples: S.samples, along: S.along, lines,
+      climbs: shown().map((c) => ({ start: c.start, end: c.end, top: c.top, n: climbNo(c), color: catColor(c) })),
+      hard: h ? `Subida más dura: ${km(h.length)} km al ${pct(h.avg)}` : '',
+      footer: S.along ? `Previsión de Open-Meteo del ${new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}` : '',
+    });
+    if (CARD.url) URL.revokeObjectURL(CARD.url);
+    CARD.blob = blob; CARD.url = URL.createObjectURL(blob);
+    if (!dialog.open) return;
+    dialog.innerHTML = `<div class="dlg cardlg"><h3>Ficha para compartir <button class="linkbtn" data-act="close">✕</button></h3>
+      ${tiles ? '' : '<p class="hint">No se ha podido cargar el fondo del mapa (sin conexión con OpenStreetMap): la ruta sale sobre fondo liso.</p>'}
+      <div class="cardprev"><img src="${CARD.url}" alt="Ficha de la ruta: mapa con el viento, perfil y tiempo"></div>
+      <button class="btn wa block" data-act="card-share">Compartir${S.exp.cardgpx ? ' con el .gpx' : ''}</button>
+      <button class="btn block" data-act="card-save">Descargar la imagen</button></div>`;
+  } catch (e) {
+    dialog.innerHTML = `<div class="dlg"><h3>Ficha para compartir <button class="linkbtn" data-act="close">✕</button></h3><p class="warn">No se ha podido crear la imagen (${esc(e.message)}).</p></div>`;
+  }
+}
+const cardName = () => `${S.name.replace(/[^\p{L}\p{N} _-]+/gu, '').trim().replace(/\s+/g, '-') || 'ruta'}.png`;
+function saveBlob(name, blob) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+async function shareCard() {
+  if (!CARD.blob) return;
+  const files = [new File([CARD.blob], cardName(), { type: 'image/png' })];
+  if (S.exp.cardgpx) { const { text, file } = exportGPX(); files.push(new File([text], file, { type: 'application/gpx+xml' })); }
+  try {
+    if (navigator.canShare?.({ files })) await navigator.share({ title: S.name, text: shareText(), files });
+    else if (navigator.canShare?.({ files: files.slice(0, 1) })) { await navigator.share({ title: S.name, text: shareText(), files: files.slice(0, 1) }); if (S.exp.cardgpx) toast('Este móvil no deja adjuntar el .gpx: descárgalo y adjúntalo a mano'); }
+    else { saveBlob(cardName(), CARD.blob); toast('Este navegador no comparte imágenes: la he descargado para que la adjuntes'); }
+  } catch (err) { if (err.name !== 'AbortError') { saveBlob(cardName(), CARD.blob); toast('No se ha podido compartir: imagen descargada'); } }
 }
 
 function wpDialog(d) {
@@ -705,13 +1045,26 @@ function wpDialog(d) {
 }
 
 // ---------- Eventos ----------
-document.getElementById('change').addEventListener('click', () => { S.track = null; S.id = null; renderHome(); window.scrollTo(0, 0); });
+document.getElementById('change').addEventListener('click', () => { S.stage = 'setup'; saveLast(); render(); window.scrollTo(0, 0); });
+dialog.addEventListener('close', () => { BEST.open = false; });
 
 document.addEventListener('click', async (e) => {
   const mode = e.target.closest('[data-mode]');
   if (mode) { S.mode = mode.dataset.mode; return update(); }
   const view = e.target.closest('[data-view]');
   if (view) { S.view = view.dataset.view; return update(); }
+  const pm = e.target.closest('[data-pace-mode]');
+  if (pm) { S.pace.mode = pm.dataset.paceMode; retime(); return update(); }
+  const ter = e.target.closest('[data-terrain]');
+  if (ter) { S.pace.terrain = ter.dataset.terrain; retime(); return update(); }
+  const st = e.target.closest('[data-stops]');
+  if (st) { S.pace.stopsPH = +st.dataset.stops; retime(); return update(); }
+  const es_ = e.target.closest('[data-elesrc]');
+  if (es_ && !es_.disabled) { S.eleSrc = es_.dataset.elesrc; if (S.eleSrc === 'dem' && !S.dem) return fetchDem(); build(); return update(); }
+  const cv = e.target.closest('[data-climbview]');
+  if (cv) { S.climbView = cv.dataset.climbview; return update(); }
+  const pc = e.target.closest('[data-profcolor]');
+  if (pc) { S.profColor = pc.dataset.profcolor; saveLast(); return renderProfile(); }
   const fm = e.target.closest('[data-feedmode]');
   if (fm) { S.feedMode = fm.dataset.feedmode; S.custom = null; return update(); }
   const gph = e.target.closest('[data-gph]');
@@ -730,12 +1083,21 @@ document.addEventListener('click', async (e) => {
     const id = act === 'resume' ? last?.id : b.dataset.id;
     const r = store.get(K_REC, []).find((x) => x.id === id);
     if (dialog.open) dialog.close();
-    if (r) openRoute(r.name, r.pts, act === 'resume' ? last : { id: r.id });
+    if (r) openRoute(r.name, r.pts, act === 'resume' ? { ...last, dem: r.dem } : { id: r.id, dem: r.dem });
   } else if (act === 'forget') { store.del(K_LAST); renderHome(); }
   else if (act === 'del-rec') { store.set(K_REC, store.get(K_REC, []).filter((x) => x.id !== b.dataset.id)); showRecent(); }
-  else if (act === 'best') bestDeparture();
+  else if (act === 'best') openBest();
+  else if (act === 'best-close') dialog.close();
+  else if (act === 'best-day') { S.start += +b.dataset.n * 86400000; BEST.sel = null; retime(); update(); fetchWeather(); }
+  else if (act === 'best-apply') { S.start = +b.dataset.st; dialog.close(); retime(); update(); fetchWeather(); toast(`Salida a las ${hm(S.start)}`); }
+  else if (act === 'go') { S.stage = 'plan'; saveLast(); render(); window.scrollTo(0, 0); }
+  else if (act === 'home') { S.track = null; S.id = null; renderHome(); window.scrollTo(0, 0); }
+  else if (act === 'range-off') { setRange(null); }
+  else if (act === 'fuentes-reload') fetchFountains(true);
+  else if (act === 'fuente-go') { focusAt(+b.dataset.d); document.getElementById('profile').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  else if (act === 'climb-go') { focusAt(+b.dataset.d); document.getElementById('profile').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
   else if (act === 'shift') { S.start += +b.dataset.min * 60000; retime(); update(); fetchWeather(); }
-  else if (act === 'reverse') { S.reversed = !S.reversed; S.wps = S.wps.map((w) => ({ ...w, d: S.track.distance - w.d })).sort((a, c) => a.d - c.d); fitted = true; build(); update(); fetchWeather(); toast(S.reversed ? 'Ruta en sentido contrario' : 'Ruta en su sentido original'); }
+  else if (act === 'reverse') { S.range = null; S.reversed = !S.reversed; S.wps = S.wps.map((w) => ({ ...w, d: S.track.distance - w.d })).sort((a, c) => a.d - c.d); fitted = true; build(); update(); fetchWeather(); toast(S.reversed ? 'Ruta en sentido contrario' : 'Ruta en su sentido original'); }
   else if (act === 'addwp') setAdding(true);
   else if (act === 'cancelwp') setAdding(false);
   else if (act === 'del-wp') { S.wps.splice(+b.dataset.i, 1); map?.closePopup(); update(); }
@@ -754,25 +1116,19 @@ document.addEventListener('click', async (e) => {
     if (v > 0 && v <= 200) { S.gph = v; update(); }
   } else if (act === 'gpx') { const { text, file } = exportGPX(); download(file, text); }
   else if (act === 'whatsapp') window.open(`https://wa.me/?text=${encodeURIComponent(shareText())}`, '_blank', 'noopener');
-  else if (act === 'share') {
-    const { text, file } = exportGPX();
-    const f = new File([text], file, { type: 'application/gpx+xml' });
-    try {
-      if (navigator.canShare?.({ files: [f] })) await navigator.share({ title: S.name, text: shareText(), files: [f] });
-      else if (navigator.share) await navigator.share({ title: S.name, text: shareText() });
-      else { await navigator.clipboard.writeText(shareText()); toast('Resumen copiado'); }
-    } catch (err) { if (err.name !== 'AbortError') toast('No se ha podido compartir', true); }
-  }
+  else if (act === 'card') openCard();
+  else if (act === 'card-share') shareCard();
+  else if (act === 'card-save') { if (CARD.blob) saveBlob(cardName(), CARD.blob); }
 });
 
 document.addEventListener('change', (e) => {
   const t = e.target;
   if (t.id === 'file' && t.files[0]) readFile(t.files[0]);
   else if (t.id === 'start' && t.value) { S.start = new Date(t.value).getTime(); retime(); update(); fetchWeather(); }
-  else if (['flat', 'mass', 'stops'].includes(t.id)) {
+  else if (t.dataset.pace) {
     const v = parseFloat(String(t.value).replace(',', '.'));
-    const lim = { flat: [10, 50], mass: [40, 150], stops: [0, 300] }[t.id];
-    if (Number.isFinite(v)) { S[t.id] = Math.max(lim[0], Math.min(lim[1], v)); retime(); update(); }
+    const lim = { kmh: [10, 50], pFlat: [60, 500], pClimb: [60, 600], rider: [30, 150], bike: [5, 30] }[t.dataset.pace];
+    if (Number.isFinite(v)) { S.pace[t.dataset.pace] = Math.max(lim[0], Math.min(lim[1], v)); retime(); update(); }
   } else if (t.id === 'every') { S.every = +t.value; S.custom = null; update(); }
   else if (t.dataset.toma !== undefined) {
     const c = own(), f = c[+t.dataset.toma], k = t.dataset.f;
@@ -791,11 +1147,22 @@ document.addEventListener('change', (e) => {
 document.addEventListener('input', (e) => {
   if (e.target.id === 'arrows') { S.arrowsKm = +e.target.value; document.getElementById('arrowsv').textContent = `${S.arrowsKm} km`; drawMap(); }
 });
-document.addEventListener('pointerdown', (e) => { if (e.target.closest('#psvg')) profilePick(e); else if (e.target.closest('.wchart')) chartPick(e); });
-document.addEventListener('pointermove', (e) => { if (!e.buttons) return; if (e.target.closest('#psvg')) profilePick(e); else if (e.target.closest('.wchart')) chartPick(e); });
+document.addEventListener('pointerdown', (e) => {
+  const hd = e.target.closest('[data-handle]');
+  if (hd) { e.preventDefault(); DRAG.side = hd.dataset.handle; DRAG.d = null; hd.setPointerCapture?.(e.pointerId); return; }
+  if (e.target.closest('#psvg')) profilePick(e); else if (e.target.closest('.wchart')) chartPick(e); else if (e.target.closest('#daychart')) dayPick(e);
+});
+document.addEventListener('pointermove', (e) => {
+  if (DRAG.side) { e.preventDefault(); return handleMove(e); }
+  if (!e.buttons) return;
+  if (e.target.closest('#psvg')) profilePick(e); else if (e.target.closest('.wchart')) chartPick(e); else if (e.target.closest('#daychart')) dayPick(e);
+});
+document.addEventListener('pointerup', () => { if (DRAG.side) handleUp(); });
+document.addEventListener('pointercancel', () => { DRAG.side = null; renderProfile(); });
 
 // Arrastrar un .gpx o .fit sobre la página (ordenador)
 document.addEventListener('dragover', (e) => e.preventDefault());
 document.addEventListener('drop', (e) => { e.preventDefault(); const f = e.dataTransfer?.files?.[0]; if (f) readFile(f); });
 
+// Si se vuelve a abrir con la última ruta a medias, se sigue en el mismo paso
 renderHome();

@@ -141,3 +141,68 @@ test('avituallamiento inteligente: reparte el total y no pone tomas en las bajad
   assert.ok(plan.every((f, i) => i === 0 || f.ms - plan[i - 1].ms >= 15 * 60000));
   assert.ok(plan[plan.length - 1].ms <= tl.total - 5 * 60000);
 });
+
+test('subidas: perfil real de 117 km (puerto tendido al ~1,9 % y cuatro repechos)', () => {
+  // altitudes leídas del perfil de una ruta de un usuario (km, m)
+  const K = [[0, 100], [5, 105], [10, 110], [15, 120], [16.7, 122], [17.7, 178], [19, 140], [20, 150], [25, 230], [28, 290], [30, 300], [35, 345],
+    [40, 400], [43, 450], [45, 520], [47, 600], [49, 700], [50, 720], [55, 722], [58, 700], [62, 640], [66.9, 580], [68.1, 646], [72, 560],
+    [80, 480], [81.7, 470], [83.4, 544], [85, 500], [87, 497], [88.8, 551], [93, 400], [100, 150], [110, 110], [117, 150]];
+  const f = (k) => { let i = 1; while (i < K.length - 1 && K[i][0] < k) i++; const [a, b] = [K[i - 1], K[i]]; return a[1] + (b[1] - a[1]) * ((k - a[0]) / (b[0] - a[0])) + 4 * Math.sin(k * 2.3); };
+  const c = R.findClimbs(perfil(117, f).points).map((x) => [Math.round(x.start / 1000), Math.round(x.gain)]);
+  const near = (km) => c.some(([s]) => Math.abs(s - km) <= 3);
+  assert.ok(c.some(([s, g]) => s >= 18 && s <= 30 && g > 400), `falta el puerto largo: ${JSON.stringify(c)}`);
+  for (const km of [17, 67, 82, 87]) assert.ok(near(km), `falta la subida del km ${km}: ${JSON.stringify(c)}`);
+});
+
+test('ritmo por potencia y peso, terreno y paradas por hora', () => {
+  const llano = perfil(30, () => 100);
+  const a = R.timeline(llano.points, { mode: 'power', pFlat: 200, rider: 72, bike: 8 });
+  const kmh = 30 / (a.moving / 3600000);
+  assert.ok(kmh > 29 && kmh < 35, `200 W en llano: ${kmh} km/h`);
+  const mtb = R.timeline(llano.points, { mode: 'power', pFlat: 200, rider: 72, bike: 8, terrain: 'mtb' });
+  assert.ok(mtb.moving > a.moving * 1.1);
+  const paradas = R.timeline(llano.points, { mode: 'power', pFlat: 200, stopsPerHour: 10 });
+  assert.ok(Math.abs(paradas.total / paradas.moving - 1.2) < 1e-9); // 10 min de cada hora parado: 60/50
+  const subida = perfil(10, (k) => 100 + k * 70); // 7 %
+  const c1 = R.timeline(subida.points, { mode: 'power', pFlat: 200, pClimb: 200 }).moving, c2 = R.timeline(subida.points, { mode: 'power', pFlat: 200, pClimb: 260 }).moving;
+  assert.ok(c2 < c1 * 0.85, 'más vatios en subida, menos tiempo');
+});
+
+test('filtros de subidas: todas, medianas y grandes, solo grandes', () => {
+  const c = [{ length: 600, avg: 0.04, gain: 24 }, { length: 1200, avg: 0.04, gain: 48 }, { length: 2400, avg: 0.043, gain: 103 }, { length: 5100, avg: 0.078, gain: 398 }];
+  assert.deepEqual(['todas', 'medianas', 'grandes'].map((k) => R.climbFilter(c, k).length), [4, 3, 2]);
+  assert.equal(R.climbCategory(c[3]), '2');
+  assert.equal(R.climbCategory({ length: 3100, avg: 0.074 }), '3');
+});
+
+test('altitud del terreno: muestras, peticiones de 100 en 100 e interpolación', () => {
+  const t = perfil(30, () => 0);
+  const s = R.demSamples(t.points, { step: 100 });
+  assert.equal(s.length, 301);
+  const urls = R.demUrls(s);
+  assert.equal(urls.length, 4);
+  assert.match(urls[0], /^https:\/\/api\.open-meteo\.com\/v1\/elevation\?latitude=/);
+  const ele = R.applyDem(t.points, s, s.map((p) => p.d / 100)); // 1 m cada 100 m
+  assert.ok(Math.abs(ele[ele.length - 1] - t.distance / 100) < 1e-6);
+  assert.ok(Math.abs(ele[100] - t.points[100].d / 100) < 1e-6);
+});
+
+test('fuentes: consulta de Overpass y solo las que quedan a menos de 500 m', () => {
+  const t = perfil(10, () => 300);
+  const q = R.fountainsQuery(t.points);
+  assert.match(q, /around:500,41\.90000,0\.19000/);
+  assert.match(q, /"amenity"="drinking_water"/);
+  const lon = (km) => 0.19 + (km * 1000) / 82900;
+  const json = { elements: [
+    { type: 'node', id: 1, lat: 41.9 + 0.002, lon: lon(5), tags: { amenity: 'drinking_water', name: 'Font del Poble' } }, // ~220 m
+    { type: 'node', id: 2, lat: 41.9 + 0.01, lon: lon(2), tags: { amenity: 'drinking_water' } }, // ~1,1 km: fuera
+    { type: 'node', id: 3, lat: 41.9, lon: lon(8), tags: { natural: 'spring', drinking_water: 'yes', seasonal: 'yes' } },
+    { type: 'node', id: 1, lat: 41.9 + 0.002, lon: lon(5), tags: { amenity: 'drinking_water' } }, // repetida
+  ] };
+  const f = R.parseFountains(json, t.points);
+  assert.deepEqual(f.map((x) => x.id), [1, 3]);
+  assert.equal(f[0].name, 'Font del Poble');
+  assert.ok(Math.abs(f[0].d / 1000 - 5) < 0.05 && f[0].off > 150 && f[0].off < 300);
+  assert.equal(f[1].kind, 'Manantial');
+  assert.equal(f[1].unsure, true);
+});
