@@ -1094,6 +1094,7 @@ function runnerRegCard(g) {
         `<li class="${e.runner_id === me.id ? 'me' : ''}">${esc(e.name)}${e.category ? ` <small>${esc(e.category)}</small>` : ''}</li>`).join('')}</ul>` : ''}
       ${!open || g.suspended ? '' : mine
         ? `<div class="row joined"><span>✓ Estás inscrito${mine.category ? ' en ' + esc(mine.category) : ''}</span>
+           <a class="btn ghost small" href="ruta/?fecha=${esc(g.date)}" aria-label="Planificar la ruta de esta carrera: viento, tiempo y subidas">🗺️ Ruta</a>
            <button class="btn ghost small" data-act="r-ics" data-id="${g.id}" aria-label="Añadir al calendario del móvil">📅 Calendario</button>
            <button class="btn ghost small" data-act="r-leave" data-id="${g.id}">Borrarme</button></div>`
         : `<div class="row join-row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
@@ -1223,6 +1224,7 @@ function viewRunnerMine() {
   return frame(runnerTitle(), `
     ${previewBanner()}
     <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
+    <a class="btn block ruta-link" href="ruta/"><span>🗺️ Planificar ruta <span class="new-tag">NUEVO</span></span><small class="muted">Sube tu track y mira viento, tiempo y subidas</small></a>
     ${myRacesCard(d)}
     <a class="btn block" href="${runnerHref('contrato')}">📄 Mi contrato y mi bonificación</a>
     ${installHint()}
@@ -2122,13 +2124,20 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
       : `<p class="muted">Todavía no hay carreras${mod ? ` de ${esc(mod)}` : ''} este año.</p>`}
     ${idle.length ? `<p class="muted small">Sin carreras${mod ? ` de ${esc(mod)}` : ''} todavía: ${names(idle, 30)}.</p>` : ''}</section>`;
 
-  // --- podios
+  // --- podios: totales, tipos y los últimos por carrera (no una lista larga de personas)
   const types = s.byPodiumType.filter((t) => t.podiums);
+  const medals = [1, 2, 3].map((k) => [k, s.podiumList.filter((p) => p.position === k).length]);
+  const byRace = new Map();
+  for (const p of s.podiumList) { const k = p.raceId + '|' + p.date; (byRace.get(k) || byRace.set(k, { ...p, items: [] }).get(k)).items.push(p); }
+  const raceRows = [...byRace.values()].sort((x, y) => y.date.localeCompare(x.date));
+  const raceRow = (r) => `<li class="${modClass(r.modality)}"><div class="pr-head">${raceLink(r.raceId, r.race)} <span class="muted">· ${formatDate(r.date, false)}</span> ${mod ? '' : `<span class="tag ${modClass(r.modality)}">${esc(r.modality)}</span>`}</div>
+      <p class="pr-who">${r.items.sort((a, b) => a.position - b.position).map((p) => `${medal(p.position)} ${esc(p.runner)}${p.category ? ` <small class="muted">${esc(p.category)}</small>` : ''}${p.stage ? ` <small class="muted">(${esc(p.stage)})</small>` : ''}`).join(' · ')}</p></li>`;
+  const SHOWN = 4;
   const pods = `<section class="card"><h2>Podios${mod ? ` de ${esc(mod)}` : ' del año'}</h2>
+    ${s.podiumList.length ? `<div class="pod-totals">${medals.map(([k, n]) => `<span><b>${medal(k)} ${n}</b></span>`).join('')}<small class="muted">en ${raceRows.length} carrera${raceRows.length === 1 ? '' : 's'}</small></div>` : ''}
     ${types.length ? `<div class="pills">${types.map((t) => `<span class="pill">${esc(t.label)} <b>${t.podiums}</b>${t.wins ? ` · 🥇 ${t.wins}` : ''}</span>`).join('')}</div>` : ''}
-    ${s.podiumList.length ? `<ul class="podium-list">${s.podiumList.map((p) => `<li class="${modClass(p.modality)}"><span class="medal">${medal(p.position)}</span><div>
-        <b>${esc(p.runner)}</b>${p.category ? ` <small class="muted">${esc(p.category)}</small>` : ''} · ${p.position}º ${mod ? '' : `<span class="tag ${modClass(p.modality)}">${esc(p.modality)}</span>`}
-        <br>${raceLink(p.raceId, p.race)} <span class="muted">· ${formatDate(p.date, false)} · ${esc(podiumLabel(p.type))}${p.stage ? ': ' + esc(p.stage) : ''}</span></div></li>`).join('')}</ul>`
+    ${raceRows.length ? `<p class="hint pod-sub">Últimos podios del equipo</p><ul class="podium-list podium-races">${raceRows.slice(0, SHOWN).map(raceRow).join('')}</ul>
+      ${raceRows.length > SHOWN ? `<details class="pod-more"><summary>Ver las ${raceRows.length - SHOWN} carrera${raceRows.length - SHOWN === 1 ? '' : 's'} anteriores</summary><ul class="podium-list podium-races">${raceRows.slice(SHOWN).map(raceRow).join('')}</ul></details>` : ''}`
       : '<p class="muted">Sin podios este año.</p>'}</section>`;
 
   // --- dónde
