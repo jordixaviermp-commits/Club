@@ -106,7 +106,7 @@ export function parseFIT(buf) {
  * Prepara el track: quita puntos repetidos, calcula distancia acumulada (m), suaviza la altitud
  * (media móvil de ±`win` m, quita el ruido del GPS) y devuelve el desnivel positivo.
  */
-export function buildTrack(raw, { win = 60 } = {}) {
+export function buildTrack(raw, { win = null } = {}) {
   const pts = [];
   for (const r of raw) {
     const last = pts[pts.length - 1];
@@ -120,17 +120,105 @@ export function buildTrack(raw, { win = 60 } = {}) {
   for (const x of pts) { if (x.ele === null) x.ele = lastE; else lastE = x.ele; }
   let dist = 0;
   pts.forEach((x, i) => { if (i) dist += haversine(pts[i - 1].lat, pts[i - 1].lon, x.lat, x.lon); x.d = dist; });
-  // media móvil por distancia con dos punteros
+  const e = cleanElevation(pts);
+  // suavizado: más fuerte cuanto más ruido trae la altitud (GPS de móvil o de reloj)
+  const noise = noiseLevel(pts, e);
+  const w = win ?? Math.min(250, Math.max(60, 25 * noise));
+  const sm = movingAvg(pts, e, w);
+  pts.forEach((x, i) => { x.es = sm[i]; });
+  // ruido que queda tras suavizar (lo usa el detector de subidas para no confundirlo con una rampa)
+  const spacing = dist / Math.max(1, pts.length - 1);
+  pts.esNoise = noise / Math.sqrt(Math.max(1, (2 * w) / Math.max(1, spacing)));
+  // desnivel con histéresis: solo cuenta lo que sube o baja más de 3 m seguidos (el ruido no suma)
+  let gain = 0, loss = 0, ref = sm[0];
+  for (const v of sm) { if (v - ref >= 3) { gain += v - ref; ref = v; } else if (ref - v >= 3) { loss += ref - v; ref = v; } }
+  const eles = sm;
+  return { points: pts, distance: dist, gain, loss, hasEle, minEle: Math.min(...eles), maxEle: Math.max(...eles),
+    quality: { noise: Math.round(noise * 10) / 10, window: Math.round(w), repaired: e.repaired } };
+}
+
+/** Media móvil por distancia (±w m) con dos punteros. */
+function movingAvg(pts, vals, w) {
+  const out = new Array(pts.length);
   let lo = 0, hi = 0, sum = 0;
   for (let i = 0; i < pts.length; i++) {
-    while (hi < pts.length && pts[hi].d <= pts[i].d + win) sum += pts[hi++].ele;
-    while (pts[lo].d < pts[i].d - win) sum -= pts[lo++].ele;
-    pts[i].es = sum / (hi - lo);
+    while (hi < pts.length && pts[hi].d <= pts[i].d + w) sum += vals[hi++];
+    while (pts[lo].d < pts[i].d - w) sum -= vals[lo++];
+    out[i] = sum / (hi - lo);
   }
-  let gain = 0, loss = 0;
-  for (let i = 1; i < pts.length; i++) { const dh = pts[i].es - pts[i - 1].es; if (dh > 0) gain += dh; else loss -= dh; }
-  const eles = pts.map((x) => x.es);
-  return { points: pts, distance: dist, gain, loss, hasEle, minEle: Math.min(...eles), maxEle: Math.max(...eles) };
+  return out;
+}
+
+/**
+ * Limpia la altitud antes de suavizar: quita picos sueltos y arregla los escalones de ida y vuelta
+ * (túneles, puentes y viaductos en el modelo del terreno, saltos del GPS).
+ * Devuelve las altitudes limpias (con `repaired` = escalones arreglados).
+ */
+export function cleanElevation(pts) {
+  // 1) picos sueltos (filtro de Hampel por distancia, ±50 m)
+  const raw = pts.map((p) => p.ele);
+  const e = raw.slice();
+  let lo = 0, hi = 0;
+  for (let i = 0; i < pts.length; i++) {
+    while (hi < pts.length && pts[hi].d <= pts[i].d + 50) hi++;
+    while (pts[lo].d < pts[i].d - 50) lo++;
+    if (hi - lo < 5) continue;
+    const win = raw.slice(lo, hi).sort((x, y) => x - y);
+    const med = win[win.length >> 1];
+    const mad = win.map((v) => Math.abs(v - med)).sort((x, y) => x - y)[win.length >> 1] * 1.4826;
+    if (Math.abs(raw[i] - med) > Math.max(6, 3 * mad)) e[i] = med;
+  }
+  // 2) escalones de ida y vuelta, buscados sobre la mediana de ±40 m (el ruido del GPS no cuenta):
+  //    un cambio de más de 20 m en menos de 60 m (pendiente imposible en una carretera) que se deshace
+  //    con otro de signo contrario en menos de 3 km se sustituye por una recta entre los extremos.
+  const med = medianFilter(pts, e, 40);
+  const jumps = [];
+  for (let i = 1, j = 0; i < pts.length; i++) {
+    while (pts[i].d - pts[j].d > 60) j++;
+    const dh = med[i] - med[j];
+    if (Math.abs(dh) > 20 && Math.abs(dh) / Math.max(1, pts[i].d - pts[j].d) > 0.4) {
+      if (jumps.length && pts[i].d - pts[jumps[jumps.length - 1].i].d < 80 && Math.sign(jumps[jumps.length - 1].dh) === Math.sign(dh)) {
+        if (Math.abs(dh) > Math.abs(jumps[jumps.length - 1].dh)) jumps[jumps.length - 1] = { i, j, dh };
+      } else jumps.push({ i, j, dh });
+    }
+  }
+  let repaired = 0;
+  const used = new Set();
+  for (let a = 0; a < jumps.length; a++) {
+    if (used.has(a)) continue;
+    for (let b = a + 1; b < jumps.length && pts[jumps[b].i].d - pts[jumps[a].i].d < 3000; b++) {
+      const A = jumps[a], B = jumps[b];
+      if (used.has(b) || Math.sign(A.dh) === Math.sign(B.dh) || Math.abs(A.dh + B.dh) > 0.4 * Math.abs(A.dh)) continue;
+      const i0 = Math.max(0, A.j - 1), i1 = Math.min(pts.length - 1, B.i + 1), e0 = med[i0], e1 = med[i1];
+      for (let k = i0 + 1; k < i1; k++) e[k] = e0 + (e1 - e0) * ((pts[k].d - pts[i0].d) / Math.max(1, pts[i1].d - pts[i0].d));
+      used.add(a); used.add(b); repaired++;
+      break;
+    }
+  }
+  e.repaired = repaired;
+  return e;
+}
+
+/** Mediana móvil por distancia (±w m). */
+function medianFilter(pts, vals, w) {
+  const out = new Array(pts.length);
+  let lo = 0, hi = 0;
+  for (let i = 0; i < pts.length; i++) {
+    while (hi < pts.length && pts[hi].d <= pts[i].d + w) hi++;
+    while (pts[lo].d < pts[i].d - w) lo++;
+    const win = vals.slice(lo, hi).sort((x, y) => x - y);
+    out[i] = win[win.length >> 1];
+  }
+  return out;
+}
+
+/** Ruido de la altitud (m): desviación típica de cada punto respecto a la media de ±100 m. */
+function noiseLevel(pts, e) {
+  if (pts.length < 20) return 0;
+  const ref = movingAvg(pts, e, 100);
+  let s = 0;
+  for (let i = 0; i < pts.length; i++) s += (e[i] - ref[i]) ** 2;
+  return Math.sqrt(s / pts.length);
 }
 
 /** Índice del primer punto con distancia acumulada ≥ d (búsqueda binaria). */
@@ -255,11 +343,19 @@ export function findClimbs(points, { minGain = 40, minLen = 500, minAvg = 0.025,
 
   const measure = ([l, h]) => {
     let s = l, e = h;
-    // pendiente media de los próximos (o últimos) 1000 m, sin salirse de la subida
-    const ahead = (i) => { const to = Math.min(points[e].d, points[i].d + 1000); return (pointAt(points, to).es - points[i].es) / Math.max(1, to - points[i].d); };
-    const behind = (i) => { const from = Math.max(points[s].d, points[i].d - 1000); return (points[i].es - pointAt(points, from).es) / Math.max(1, points[i].d - from); };
-    while (s < e && points[e].d - points[s].d > minLen && ahead(s) < flat) s++;
-    while (e > s && points[e].d - points[s].d > minLen && behind(e) < flat) e--;
+    // pendiente media de los próximos (o últimos) W m, sin salirse de la subida; W crece con la subida
+    // (200 m en un repecho, hasta 1 km en un puerto largo) para no confundir un rellano con el final
+    const W = Math.min(1000, Math.max(200, 0.05 * (points[h].d - points[l].d)));
+    const ahead = (i) => { const to = Math.min(points[e].d, points[i].d + W); return (pointAt(points, to).es - points[i].es) / Math.max(1, to - points[i].d); };
+    const behind = (i) => { const from = Math.max(points[s].d, points[i].d - W); return (points[i].es - pointAt(points, from).es) / Math.max(1, points[i].d - from); };
+    // primero por altura: desde la cima hacia atrás, la subida empieza donde la altitud deja por última vez
+    // el nivel de la base (unos metros por encima del punto más bajo; el ruido del llano no cuenta)
+    const thr = Math.max(3, 0.03 * (points[h].es - points[l].es), 4 * (points.esNoise || 0));
+    s = h;
+    while (s > l && points[s - 1].es >= points[l].es + thr) s--;
+    if (s > l) s--;
+    while (s < e && points[e].d - points[s].d > 200 && ahead(s) < flat) s++;
+    while (e > s && points[e].d - points[s].d > 200 && behind(e) < flat) e--;
     const a = points[s], b = points[e];
     const gain = b.es - a.es, len = b.d - a.d;
     return { s, e, a, b, gain, len, avg: len > 0 ? gain / len : 0 };
