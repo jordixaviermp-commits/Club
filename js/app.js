@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, monthGrid, addMonths, formatRange, daysOf, numDays,
+  extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -2158,7 +2158,7 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
 // ======================================================================
 
 const resumenTabs = (on) => `<div class="years subtabs no-print"><a class="chip${on === 'club' ? ' on' : ''}" href="#/resumen">🏁 Club</a><a class="chip${on === 'ig' ? ' on' : ''}" href="#/instagram">📸 Instagram</a></div>`;
-const nf = (n) => (n == null ? '—' : Number(n).toLocaleString('es-ES'));
+const nf = (n) => (n == null ? '—' : Number(n).toLocaleString('de-DE'));   // 5.200 (el «es-ES» no pone el punto en 4 cifras)
 const IG_MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const igShort = (iso) => `${Number(iso.slice(8))} ${IG_MES[Number(iso.slice(5, 7)) - 1]} ${iso.slice(2, 4)}`;
 const igMonthName = (ym) => `${IG_MES[Number(ym.slice(5, 7)) - 1]} ${ym.slice(2, 4)}`;
@@ -2181,32 +2181,15 @@ async function loadIg(force = false) {
   if (parseRoute().view === 'instagram') render();
 }
 
-async function loadIgShots(force = false) {
-  if (S.igShots !== undefined && !force) return;
-  S.igShots = undefined;
-  try { S.igShots = await api.listIgShots(); } catch { S.igShots = null; }
-  if (parseRoute().view === 'instagram') render();
-}
-const IG_SEC = { resumen: 'Resumen', contenido: 'Contenido', audiencia: 'Audiencia', otras: 'Otras' };
-/** Reduce la captura (máx. 1600 px, JPEG) para que ocupe poco en la base de datos y se vea nítida. */
-async function shotToDataUrl(file) {
-  const img = await createImageBitmap(file);
-  const k = Math.min(1, 1600 / Math.max(img.width, img.height));
-  const c = Object.assign(document.createElement('canvas'), { width: Math.round(img.width * k), height: Math.round(img.height * k) });
-  const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(img, 0, 0, c.width, c.height);
-  return c.toDataURL('image/jpeg', 0.82);
-}
-
 function viewInstagram() {
   if (!S.ig) loadIg();
-  if (S.igShots === undefined) loadIgShots();
   const head = (inner) => frame('Instagram', `${resumenTabs('ig')}${inner}`);
   if (!S.ig || S.ig.loading) return head('<p class="empty">Cargando…</p>');
   if (S.ig.missing) return head('<p class="card warn">Aún no está activado: falta ejecutar en Supabase <code>supabase/cambios/2026-11-14-instagram.sql</code> (ver docs/instagram-captura.md).</p>');
   if (S.ig.failed) return head(`<p class="card warn">${esc(S.ig.failed)}</p>`);
-  const period = S.igPeriod || 'all', tab = S.igTab || 'cap', sort = S.igSort || 'views';
+  const period = S.igPeriod || 'all', tab = S.igTab || 'per', sort = S.igSort || 'views';
   const [from, to] = igRange(period);
-  const g = igSummary(S.ig.rows, from, to), t = g.totals, prev = igPrevTotals(S.ig.rows, from, to);
+  const g = igSummary(S.ig.rows, from, to), t = g.totals, prev = igPrevTotals(S.ig.rows, from, to), P = igPeriods(S.ig.rows, from, to);
   const periods = [['all', 'Todo lo guardado'], ['30', 'Últimos 30 días'], ['month', 'Este mes'], ['year', `Año ${S.year}`]];
   const label = g.nDays ? `${dateEs(g.first)} – ${dateEs(g.last)}` : 'sin datos en este periodo';
   const periodBar = `<div class="years no-print">${periods.map(([k, l]) => `<button class="chip${k === period ? ' on' : ''}" data-act="ig-period" data-p="${k}">${l}</button>`).join('')}</div>`;
@@ -2282,34 +2265,50 @@ function viewInstagram() {
     <h3 class="ig-h">Países</h3><ul class="ig-list tight">${a.countries.map((x) => bar(IG_COUNTRY[x.name] || x.name, x.v, a.countries[0].v)).join('')}</ul>`) : '';
   const audiencia = `${fol}${gen}${geo}` || '<p class="empty">Sin datos de audiencia todavía.</p>';
 
-  // ---------------- CAPTURAS (las sube la dirección) ----------------
-  const shots = S.igShots;
-  let cap;
-  if (shots === undefined) cap = '<p class="empty">Cargando…</p>';
-  else if (shots === null) cap = '<p class="card warn">Falta ejecutar en Supabase <code>supabase/cambios/2026-11-14-instagram-capturas.sql</code> para poder subir capturas.</p>';
-  else {
-    const groups = new Map();
-    for (const x of shots) { if (!groups.has(x.periodo)) groups.set(x.periodo, []); groups.get(x.periodo).push(x); }
-    cap = `<form class="card stack no-print" data-form="ig-shot-upload"><h2>📷 Subir capturas de Insights</h2>
-      <label>Periodo<input name="periodo" required maxlength="80" list="dl-igper" placeholder="Ej.: Octubre 2026 o Temporada 2026" value="${esc(S.igLastPeriod || '')}" autocomplete="off"></label>
-      <datalist id="dl-igper">${[...groups.keys()].map((k) => `<option value="${esc(k)}">`).join('')}</datalist>
-      <label>Qué enseña<select name="seccion">${Object.entries(IG_SEC).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label>
-      <label>Nota (opcional)<input name="nota" maxlength="300" placeholder="Ej.: últimos 30 días" autocomplete="off"></label>
-      <label class="btn file">📎 Elegir captura(s)<input type="file" name="files" accept="image/*" multiple hidden required></label><span class="doc-chosen muted small"></span>
-      <button class="btn primary">Subir</button>
-      <p class="hint">Haz la captura en Instagram → Insights (Resumen, Contenido o Audiencia) y súbela aquí con su periodo. Se ve en esta pestaña y sale en el PDF, agrupada por periodo. Solo la ve la dirección.</p></form>
-      ${groups.size ? [...groups].map(([per, list]) => `<section class="card report ig-sec"><h2>${esc(per)}</h2><div class="ig-shots">${list.map((x) => `<figure class="ig-shot"><img src="${esc(x.imagen)}" alt="Captura de Insights: ${esc(IG_SEC[x.seccion])}" data-act="ig-shot-view" data-id="${esc(x.id)}" loading="lazy"><figcaption><b>${esc(IG_SEC[x.seccion] || '')}</b>${x.nota ? ` · ${esc(x.nota)}` : ''}<button class="link no-print" data-act="ig-shot-del" data-id="${esc(x.id)}">🗑️ Quitar</button></figcaption></figure>`).join('')}</div></section>`).join('')
-        : '<p class="empty">Aún no hay capturas. Sube la primera con el formulario de arriba.</p>'}`;
-  }
-
+  // ---------------- PERIODOS (resúmenes de Insights que vuelca Claude desde las capturas) ----------------
+  const pl = P.list, pt = P.totals;
+  const plabel = (x) => `${Number(x.from.slice(8))} ${IG_MES[Number(x.from.slice(5, 7)) - 1]}–${igShort(x.to)}`;
+  const signed = (n) => (n >= 0 ? '+' : '−') + nf(Math.abs(n));
+  const maxPerViews = maxOf(pl.map((x) => x.views || 0));
+  const TYPES = [['v_story', 'Historias', 'm'], ['v_feed', 'Publicaciones', 'f'], ['v_reel', 'Reels', 'u']];
+  const perBlock = !pl.length ? '<p class="empty">Aún no hay periodos. Mándale a Claude una captura de Instagram → Insights (con el periodo elegido, por ejemplo «30 días») y vuelca los números aquí.</p>' : [
+    rep(`<h2>Total <small class="muted">· ${pl.length} periodo${pl.length === 1 ? '' : 's'}, ${nf(pt.days)} días</small></h2><div class="rp-kpis">
+      ${pt.views != null ? kpi(nf(pt.views), 'Reproducciones', pt.days ? `${nf(Math.round(pt.views / pt.days))} al día` : '') : ''}
+      ${pt.interactions != null ? kpi(nf(pt.interactions), 'Interacciones') : ''}
+      ${pt.net_follows != null ? kpi(signed(pt.net_follows), 'Seguidores netos') : ''}
+      ${pt.viewersMax != null ? kpi(nf(pt.viewersMax), 'Espectadores', pl.length > 1 ? 'el mayor de un periodo' : 'del periodo') : ''}
+      ${pt.likes != null ? kpi(nf(pt.likes), 'Me gusta') : ''}${pt.shares != null ? kpi(nf(pt.shares), 'Compartidos') : ''}${pt.saves != null ? kpi(nf(pt.saves), 'Guardados') : ''}${pt.profile_visits != null ? kpi(nf(pt.profile_visits), 'Visitas al perfil') : ''}</div>
+      <p class="rp-note" style="margin:0">Los espectadores son personas distintas y no se suman entre periodos. ${pl.some((x) => (x.approx || []).length) ? 'Las cifras marcadas con ≈ vienen redondeadas («6,9 mil»).' : ''}</p>`),
+    P.overlaps.length ? `<p class="card warn">⚠️ Estos periodos se pisan: ${P.overlaps.map(([a, b]) => `${plabel(a)} y ${plabel(b)}`).join('; ')}. Los totales cuentan dos veces los días repetidos; dime cuál quitar.</p>` : '',
+    pl.some((x) => x.views != null) ? rep(`<h2>Reproducciones por periodo</h2><div class="ig-bars" role="img" aria-label="Reproducciones por periodo">${pl.map((x) => `<div class="ig-col" title="${esc(plabel(x))}: ${nf(x.views)}"><i style="height:${Math.max(2, ((x.views || 0) / maxPerViews) * 100)}%"></i><small>${esc(plabel(x))}</small></div>`).join('')}</div>
+      <ul class="ig-list tight" style="margin-top:.5rem">${pl.map((x) => bar(plabel(x), x.views || 0, maxPerViews, x.days ? ` <small>${nf(Math.round((x.views || 0) / x.days))}/d</small>` : '')).join('')}</ul>`) : '',
+    pl.some((x) => TYPES.some(([k]) => x[k] != null)) ? rep(`<h2>Por tipo de contenido</h2><div class="ig-bars" role="img" aria-label="Reproducciones por tipo de contenido">${pl.map((x) => { const tot = TYPES.reduce((n, [k]) => n + (x[k] || 0), 0), mx = maxOf(pl.map((y) => TYPES.reduce((n, [k]) => n + (y[k] || 0), 0)));
+        return `<div class="ig-col" title="${esc(plabel(x))}"><div class="ig-stackcol" style="height:${Math.max(2, (tot / mx) * 100)}%">${TYPES.filter(([k]) => x[k]).map(([k, , c]) => `<i class="${c}" style="flex:${x[k]}"></i>`).join('')}</div><small>${esc(plabel(x))}</small></div>`; }).join('')}</div>
+      <p class="ig-legend">${TYPES.map(([, l, c]) => `<span><i class="dot ${c === 'm' ? 'a' : c === 'f' ? 'b' : 'c'}"></i>${l}</span>`).join('')}</p>
+      <ul class="ig-list tight">${pl.map((x) => `<li class="ig-post"><small><b>${esc(plabel(x))}</b>: ${TYPES.filter(([k]) => x[k] != null).map(([k, l]) => `${l} ${(x.approx || []).includes(k) ? '≈' : ''}${nf(x[k])}`).join(' · ')}</small></li>`).join('')}</ul>`) : '',
+    pl.some((x) => x.net_follows != null) ? rep(`<h2>Seguidores netos por periodo</h2><ul class="ig-list tight">${pl.filter((x) => x.net_follows != null).map((x) => bar(plabel(x), Math.abs(x.net_follows), maxOf(pl.map((y) => Math.abs(y.net_follows || 0))), '').replace(`<b>${nf(Math.abs(x.net_follows))}</b>`, `<b>${signed(x.net_follows)}</b>`)).join('')}</ul>`) : '',
+    rep(`<h2>Detalle por periodo</h2><ul class="ig-list">${[...pl].reverse().map((x) => `<li><div class="ig-post"><div><b>${esc(plabel(x))}</b> · ${x.days} días</div>
+      <small>${[x.views != null ? `${nf(x.views)} reproducciones` : '', x.viewers != null ? `${nf(x.viewers)} espectadores` : '', x.interactions != null ? `${nf(x.interactions)} interacciones` : '', x.net_follows != null ? `${signed(x.net_follows)} seguidores netos` : '', x.views_f_pct != null ? `${x.views_f_pct} % de seguidores` : ''].filter(Boolean).join(' · ')}</small>
+      ${x.note ? `<small>${esc(x.note)}</small>` : ''}<button class="link no-print" data-act="ig-per-del" data-key="${esc(x.key)}">🗑️ Quitar este periodo</button></div></li>`).join('')}</ul>`),
+  ].join('');
+  const per = perBlock;
   const noDataMsg = '<p class="empty">No hay cifras guardadas todavía. Las capturas de la pestaña «Capturas» sirven para el dossier; esta parte se rellena con datos guardados.</p>';
-  const panels = { cap, res: noData ? noDataMsg : resumen, con: noData ? noDataMsg : contenido, aud: noData ? noDataMsg : audiencia };
-  const tabs = [['cap', 'Capturas'], ['res', 'Resumen'], ['con', 'Contenido'], ['aud', 'Audiencia']];
+  // contenido destacado y audiencia según Insights (periodos)
+  const postsP = P.posts.length ? rep(`<h2>Contenido destacado según Insights</h2><ul class="ig-list">${P.posts.slice(0, 10).map((x, i) => `<li><span class="ig-rank">${i + 1}</span><div class="ig-post"><div><b>${esc(x.t || 'Publicación')}</b></div><small>${x.d ? dateEs(x.d) + ' · ' : ''}${[x.v != null ? `${nf(x.v)} reproducciones` : '', x.l != null ? `${nf(x.l)} ♥` : '', x.c != null ? `${nf(x.c)} 💬` : '', x.s != null ? `${nf(x.s)} ↗` : '', x.k != null ? `${nf(x.k)} 🔖` : ''].filter(Boolean).join(' · ')}</small></div></li>`).join('')}</ul>`) : '';
+  const A = P.audience;
+  const pctList = (o, n = 10) => Object.entries(o || {}).sort((a, b) => b[1] - a[1]).slice(0, n);
+  const audP = A ? rep(`<h2>Audiencia según Insights <small class="muted">· ${esc(plabel(A))}</small></h2>
+    ${A.gender ? `<div class="rp-kpis">${Object.entries(A.gender).map(([k, v]) => kpi(`${v} %`, k === 'M' ? 'Hombres' : k === 'F' ? 'Mujeres' : k)).join('')}</div>` : ''}
+    ${A.ages ? `<h3 class="ig-h">Edad</h3><ul class="ig-list tight">${Object.entries(A.ages).map(([k, v]) => bar(k, v, maxOf(Object.values(A.ages)), ' %')).join('')}</ul>` : ''}
+    ${A.cities ? `<h3 class="ig-h">Ciudades</h3><ul class="ig-list tight">${pctList(A.cities).map(([k, v], i, arr) => bar(k.split(',')[0], v, arr[0][1], ' %')).join('')}</ul>` : ''}
+    ${A.countries ? `<h3 class="ig-h">Países</h3><ul class="ig-list tight">${pctList(A.countries, 6).map(([k, v], i, arr) => bar(IG_COUNTRY[k] || k, v, arr[0][1], ' %')).join('')}</ul>` : ''}`) : '';
+  const panels = { per, res: noData ? noDataMsg : resumen, con: (noData && !postsP) ? noDataMsg : `${postsP}${noData ? '' : contenido}`, aud: (noData && !audP) ? noDataMsg : `${audP}${noData ? '' : audiencia}` };
+  const tabs = [['per', 'Periodos'], ['res', 'Diario'], ['con', 'Contenido'], ['aud', 'Audiencia']];
   return head(`
     <div class="no-print">${periodBar}
       <div class="years">${tabs.map(([k, l]) => `<button class="chip${k === tab ? ' on' : ''}" data-act="ig-tab" data-t="${k}">${l}</button>`).join('')}</div>
       <div class="row-btns rp-actions"><button class="btn primary" data-act="print-report">🖨️ Imprimir o guardar PDF</button><button class="btn" data-act="ig-csv">📊 Excel</button></div>
-      <p class="hint">El PDF incluye todas las partes (Capturas, Resumen, Contenido y Audiencia), listo para el dossier de memorias o para enseñar a un patrocinador: en el cuadro de imprimir elige «Guardar como PDF». Las partes Resumen, Contenido y Audiencia se calculan con las cifras ya guardadas; las capturas las subes tú.</p></div>
+      <p class="hint">Para añadir datos, mándale a Claude la captura de Instagram → Insights y él los vuelca aquí: se suman y salen en gráficos. El PDF incluye todas las partes (Periodos, Diario, Contenido y Audiencia), listo para el dossier de memorias o para enseñar a un patrocinador: en el cuadro de imprimir elige «Guardar como PDF».</p></div>
     <div class="print-only ig-title"><b>Club Ciclista Monzón · Estadísticas de Instagram</b><span>${esc(label)}</span></div>
     ${tabs.map(([k, l]) => `<div class="ig-panel${k === tab ? '' : ' off'}"><h2 class="print-only ig-part">${l}</h2>${panels[k]}</div>`).join('')}
     <p class="rp-note">Fuente: Instagram (estadísticas de la cuenta profesional del club). Alcance = personas distintas que vieron el contenido; las visualizaciones cuentan también las repeticiones.</p>`);
@@ -3388,15 +3387,9 @@ const actions = {
   'print-report'() { window.print(); },
   'ig-period'(el) { S.igPeriod = el.dataset.p; render(); },
   'ig-tab'(el) { S.igTab = el.dataset.t; render(); },
-  'ig-shot-view'(el) {
-    const x = (S.igShots || []).find((y) => y.id === el.dataset.id); if (!x) return;
-    const dlg = document.getElementById('dialog');
-    dlg.innerHTML = `<form method="dialog" class="dlg"><h2>${esc(x.periodo)} · ${esc(IG_SEC[x.seccion] || '')}</h2><img class="ig-shot-big" src="${esc(x.imagen)}" alt="Captura de Insights"><div class="dlg-actions"><button value="" class="btn ghost">Cerrar</button></div></form>`;
-    dlg.onclose = null; dlg.showModal();
-  },
-  async 'ig-shot-del'(el) {
-    if (!await confirmAction('Quitar captura', 'Se borra esta captura de Insights de la base de datos.', 'Quitar')) return;
-    await run(async () => { await api.deleteIgShot(el.dataset.id); await loadIgShots(true); }, 'Captura quitada');
+  async 'ig-per-del'(el) {
+    if (!await confirmAction('Quitar periodo', 'Se borra este resumen de periodo (no toca el resto de datos).', 'Quitar')) return;
+    await run(async () => { await api.deleteIgPeriod(el.dataset.key); await loadIg(true); }, 'Periodo quitado');
   },
   'ig-sort'(el) { S.igSort = el.dataset.s; render(); },
   'ig-all'() { S.igAll = !S.igAll; render(); },
@@ -3406,8 +3399,14 @@ const actions = {
       ['Fecha', 'Visualizaciones', 'Personas alcanzadas', 'Interacciones', 'Me gusta', 'Comentarios', 'Compartidos', 'Guardados', 'Nuevos seguidores', 'Visualizaciones de seguidores', 'Visualizaciones de no seguidores']);
     const posts = toCsv(g.posts.map((p) => [p.date, p.title || '', p.type || '', p.link || '', p.views ?? '', p.reach ?? '', p.likes ?? '', p.comments ?? '', p.shares ?? '', p.saves ?? '', p.visits ?? '']),
       ['Fecha', 'Título', 'Tipo', 'Enlace', 'Visualizaciones', 'Personas alcanzadas', 'Me gusta', 'Comentarios', 'Compartidos', 'Guardados', 'Visitas al perfil']);
-    download(`monzon-instagram-dias-${tag}.csv`, days, 'text/csv;charset=utf-8');
-    setTimeout(() => download(`monzon-instagram-publicaciones-${tag}.csv`, posts, 'text/csv;charset=utf-8'), 400);
+    const P = igPeriods(S.ig?.rows || [], from, to);
+    if (P.list.length) {
+      const per = toCsv(P.list.map((x) => [x.from, x.to, x.days, x.views ?? '', x.viewers ?? '', x.interactions ?? '', x.net_follows ?? '', x.v_story ?? '', x.v_feed ?? '', x.v_reel ?? '', x.likes ?? '', x.comments ?? '', x.shares ?? '', x.saves ?? '', x.profile_visits ?? '']),
+        ['Desde', 'Hasta', 'Días', 'Reproducciones', 'Espectadores', 'Interacciones', 'Seguidores netos', 'Reproducciones de historias', 'Reproducciones de publicaciones', 'Reproducciones de reels', 'Me gusta', 'Comentarios', 'Compartidos', 'Guardados', 'Visitas al perfil']);
+      download(`monzon-instagram-periodos-${tag}.csv`, per, 'text/csv;charset=utf-8');
+    }
+    setTimeout(() => download(`monzon-instagram-dias-${tag}.csv`, days, 'text/csv;charset=utf-8'), 400);
+    setTimeout(() => download(`monzon-instagram-publicaciones-${tag}.csv`, posts, 'text/csv;charset=utf-8'), 800);
   },
   'rep-frozen'(el) { S.repFrozen = el.dataset.v === '1'; render(); },
   async 'rep-freeze'() {
@@ -3622,20 +3621,6 @@ const forms = {
     const ok = await run(async () => { await api.runnerReport(S.code, f.dataset.kind, f.dataset.id, position, cat, pod, time); await loadRunner(); return true; },
       position <= 3 ? `${medal(position)} ¡Enhorabuena! Resultado enviado` : 'Resultado enviado');
     if (ok) go(runnerHref('mi'));
-  },
-  async 'ig-shot-upload'(f) {
-    const files = [...(f.files.files || [])];
-    const periodo = f.periodo.value.trim();
-    if (!files.length) return toast('Elige al menos una captura.', true);
-    if (!periodo) return toast('Escribe el periodo (por ejemplo «Octubre 2026»).', true);
-    const ok = await run(async () => {
-      for (const file of files) {
-        if (!/^image\//.test(file.type)) throw new Error('Solo imágenes (captura de pantalla).');
-        await api.addIgShot({ periodo, seccion: f.seccion.value, nota: f.nota.value.trim(), imagen: await shotToDataUrl(file) });
-      }
-      S.igLastPeriod = periodo; await loadIgShots(true); return true;
-    }, files.length === 1 ? 'Captura subida' : `${files.length} capturas subidas`);
-    if (ok) render();
   },
   async 'tpl-upload'(f) {
     const file = f.file.files?.[0];
@@ -3921,9 +3906,9 @@ $app.addEventListener('change', async (ev) => {
   } else if (t.dataset.runnerCat) {
     const id = t.dataset.runnerCat;
     await run(async () => { await api.updateRunner(id, { category: t.value || null }); runnerById(id).category = t.value || null; }, 'Categoría guardada');
-  } else if (t.name === 'file' && t.closest('[data-form="doc-upload"], [data-form="tpl-upload"], [data-form="ig-shot-upload"]')) {
+  } else if (t.name === 'file' && t.closest('[data-form="doc-upload"], [data-form="tpl-upload"]')) {
     const f = t.files?.[0]; const p = t.closest('form').querySelector('#doc-chosen, .doc-chosen');
-    if (p && f) p.textContent = t.files.length > 1 ? `Elegidas ${t.files.length} capturas` : `Elegido: ${f.name} (${fmtSize(f.size)})`;
+    if (p && f) p.textContent = `Elegido: ${f.name} (${fmtSize(f.size)})`;
   } else if (t.dataset.file && t.files?.[0]) {
     const file = t.files[0]; t.value = '';
     await fileHandlers[t.dataset.file](file);

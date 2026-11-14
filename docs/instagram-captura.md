@@ -1,11 +1,28 @@
 # Estadísticas de Instagram en la app
 
-**Estado actual (14/11/2026): modo manual.** La dirección sube desde la app las capturas de pantalla de Insights
-(Resumen → Instagram → Capturas) y salen agrupadas por periodo en la pestaña y en el PDF. Es lo que va al dossier de memorias.
-No hay ninguna captura automática activa (se descartó por coste); las cifras ya guardadas son las de la primera captura
-(15/10–13/11/2026) y no se actualizan solas.
+**Modo manual (decidido el 14/11/2026).** La dirección manda a Claude una captura de Instagram → Insights y Claude **vuelca los números**
+como una fila `period` en `ig_snapshots`; la app los suma y los pinta (Resumen → Instagram → Periodos). No hay captura automática (se descartó por coste).
 
-SQL necesario (una vez): `supabase/cambios/2026-11-14-instagram-capturas.sql` (tabla `ig_capturas`, solo dirección).
+SQL necesario (una vez): `supabase/cambios/2026-11-15-instagram-periodos.sql` (admite el tipo `period` en `ig_save`).
+
+## Fila `period` (la escribe Claude con `ig_save`, desde una sesión del entorno «Club»)
+
+`kind` = `period`, `key` = `AAAA-MM-DD_AAAA-MM-DD` (desde_hasta, ambos incluidos), `data` (solo los campos que salgan en la captura; **nada de nombres de usuario**):
+
+| Campo | Qué es |
+|---|---|
+| `views` | reproducciones del periodo |
+| `viewers` | espectadores (personas distintas; **no se suma** entre periodos) |
+| `interactions`, `likes`, `comments`, `shares`, `saves`, `profile_visits`, `link_taps` | interacciones |
+| `net_follows`, `follows`, `unfollows` | seguidores netos / altas / bajas |
+| `v_story`, `v_feed`, `v_reel` | reproducciones por tipo de contenido (historias, publicaciones, reels) |
+| `views_f_pct` | % de reproducciones de seguidores |
+| `posts` | lista `{t: título, d: AAAA-MM-DD, v, l, c, s, k}` de contenido destacado |
+| `gender`, `ages`, `cities`, `countries` | audiencia en **%** (`{M: 56, F: 17}`, `{"35-44": 31}`, `{"Monzón, Aragón": 25}`, `{ES: 98}`) |
+| `approx` | lista de campos redondeados en la captura («6,9 mil» → `6900`) |
+| `note` | observación (por ejemplo «captura cortada: faltan interacciones») |
+
+Al repetir un periodo se fusionan los campos (se puede completar con otra captura del mismo periodo). Para quitar uno, el botón 🗑️ de la app.
 
 ---
 

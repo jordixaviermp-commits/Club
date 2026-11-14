@@ -553,20 +553,18 @@ select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a
 select pg_temp.check((select count(*) from ig_snapshots) = 2, 'instagram: la dirección lee las cifras');
 select pg_temp.expect_fail('select * from ig_secret', 'instagram: ni la dirección lee el token desde la app');
 reset role;
--- capturas de Insights: solo la dirección
+-- resúmenes por periodo de Insights (kind «period»): se guardan con la clave de captura y los ve la dirección
 reset role;
+select token as igtok2 from ig_secret \gset
 set role anon;
-select pg_temp.expect_fail($q$select * from ig_capturas$q$, 'capturas: anon no lee');
-select pg_temp.expect_fail($q$insert into ig_capturas (periodo, imagen) values ('x', 'data:,')$q$, 'capturas: anon no sube');
+select set_config('request.headers', json_build_object('x-ig-token', :'igtok2')::text, false);
+select ig_save('[{"kind":"period","key":"2026-10-15_2026-11-13","data":{"views":11736,"net_follows":3}}]') as igper \gset
+select pg_temp.check(:igper = 1, 'periodo: se guarda con la clave de captura');
+select ig_save('[{"kind":"period","key":"2026-10-15_2026-11-13","data":{"interactions":294}}]');
+select set_config('request.headers', '{}', false);
 reset role;
-set role authenticated;
-select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
-insert into ig_capturas (periodo, seccion, imagen) values ('Octubre 2026', 'resumen', 'data:image/jpeg;base64,AAAA');
-select pg_temp.check((select count(*) from ig_capturas) = 1, 'capturas: la dirección sube y lee');
-select pg_temp.expect_fail($q$insert into ig_capturas (periodo, seccion, imagen) values ('x', 'raro', 'data:,')$q$, 'capturas: sección desconocida rechazada');
-delete from ig_capturas;
-select pg_temp.check((select count(*) from ig_capturas) = 0, 'capturas: la dirección borra');
-reset role;
+select pg_temp.check((select (data->>'views')::int from ig_snapshots where kind='period') = 11736 and (select (data->>'interactions')::int from ig_snapshots where kind='period') = 294, 'periodo: al repetir se fusionan los campos');
+select pg_temp.expect_fail($q$insert into ig_snapshots (kind, key, data) values ('rarito', 'x', '{}')$q$, 'periodo: tipo desconocido rechazado');
 -- ===== El creador sigue pudiendo editar/borrar su carrera después de pasar a resultados =====
 reset role;
 set role anon;
