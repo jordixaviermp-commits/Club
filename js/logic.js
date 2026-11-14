@@ -996,3 +996,69 @@ export function igPeriods(rows, from = '', to = '') {
   posts.sort((a, b) => (b.v || 0) - (a.v || 0));
   return { list, totals, overlaps, posts, audience: audP ? { period: audP.key, from: audP.from, to: audP.to, gender: audP.gender || null, ages: audP.ages || null, cities: audP.cities || null, countries: audP.countries || null } : null, topHours: hoursP ? { from: hoursP.from, to: hoursP.to, list: hoursP.top_hours } : null };
 }
+
+// ======================================================================
+//  Panel de redes (dirección): estado de las 3 publicaciones de cada carrera
+// ======================================================================
+
+/**
+ * Para cada carrera con inscritos (o ya con resultados) cerca de hoy, el estado de sus tres publicaciones:
+ *  - story: historia previa (automática, 2 días antes)   - aviso: post antes de la carrera   - res: post de resultados.
+ * Cada pieza: { k, st: 'ok'|'curso'|'pend'|'late'|'na', text, key?, date?, days? }.
+ * `status` de la carrera: 'pend' (hay algo por hacer), 'curso' (programado o a la espera) o 'hecho'.
+ * `posted`: Set de claves marcadas como publicadas; `log`: parseStoryLog (o null).
+ */
+export function socialBoard(races, registrations, posted, today, log = null, { back = 45, ahead = 30 } = {}) {
+  const dayDiff = (a, b) => Math.round((Date.parse(a + 'T12:00:00Z') - Date.parse(b + 'T12:00:00Z')) / 86400000);
+  const last = (g) => g.end_date || g.date;
+  const short = (iso) => formatDate(iso, false);
+  const people = (g) => (g.entries || []).length;
+  const raceKeys = new Set(races.filter((r) => (r.results || []).length).map(postKeyOf));
+  const events = [
+    ...races.filter((r) => (r.results || []).length).map((r) => ({ g: r, kind: 'race' })),
+    ...registrations.filter((g) => (people(g) || (g.suspended && posted.has(postKeyOf(g)))) && !raceKeys.has(postKeyOf(g))).map((g) => ({ g, kind: 'reg' })),
+  ];
+  const items = [];
+  for (const { g, kind } of events) {
+    const fromToday = dayDiff(g.date, today), lastDays = dayDiff(today, last(g));       // días hasta el inicio / desde el final
+    if (fromToday > ahead || lastDays > back) continue;
+    const pk = postKeyOf(g), rk = resKeyOf(g), past = last(g) < today;
+    const pieces = [];
+    if (g.suspended) {
+      pieces.push({ k: 'aviso', st: posted.has(pk) ? 'pend' : 'na', text: posted.has(pk) ? 'Suspendida: conviene publicar la anulación' : 'Suspendida', key: pk });
+    } else {
+      // historia previa
+      const s = storyState(g, log, posted.has(pk), today);
+      if (s) pieces.push({ k: 'story', ...(
+        s.state === 'ok' ? { st: 'ok', text: `Historia ✓ ${s.date ? short(s.date) : ''}${s.n > 1 ? ` · ${s.n} páginas` : ''}`.trim() }
+        : s.state === 'manual' ? { st: 'ok', text: 'Historia ✓ (marcada a mano)' }
+        : s.state === 'hoy' ? { st: 'curso', text: 'Historia: sale hoy', date: s.date }
+        : s.state === 'programada' ? { st: 'curso', text: `Historia: sale el ${short(s.date)}`, date: s.date }
+        : { st: 'pend', text: 'Historia: no consta', date: s.date }), key: pk });
+      // aviso
+      if (kind === 'reg') {
+        if (posted.has(pk)) pieces.push({ k: 'aviso', st: 'ok', text: 'Aviso ✓', key: pk });
+        else if (!past) pieces.push(fromToday <= 14 ? { k: 'aviso', st: 'pend', text: `Aviso: sin publicar (faltan ${Math.max(0, fromToday)} días)`, key: pk, days: fromToday } : { k: 'aviso', st: 'curso', text: 'Aviso: aún no toca', key: pk });
+      } else if (posted.has(pk)) pieces.push({ k: 'aviso', st: 'ok', text: 'Aviso ✓', key: pk });
+      // resultados
+      if (past) {
+        if (kind === 'race') {
+          if (posted.has(rk)) pieces.push({ k: 'res', st: 'ok', text: 'Resultados ✓', key: rk });
+          else if (lastDays <= 7) pieces.push({ k: 'res', st: 'pend', text: lastDays <= 0 ? 'Resultados: por publicar (hoy)' : `Resultados: por publicar (terminó hace ${lastDays} ${lastDays === 1 ? 'día' : 'días'})`, key: rk, days: lastDays });
+          else if (lastDays <= 45) pieces.push({ k: 'res', st: 'late', text: `Resultados: sin publicar hace ${lastDays} días`, key: rk, days: lastDays });
+        } else if (lastDays < 3 || (g.entries || []).some((e) => e.self_position)) pieces.push({ k: 'res', st: 'curso', text: 'Resultados: esperando los puestos de los corredores' });
+        else pieces.push({ k: 'res', st: 'pend', text: 'Resultados: nadie ha puesto su puesto, no hay nada que publicar', days: lastDays });
+      }
+    }
+    if (!pieces.length) continue;
+    const bad = pieces.some((x) => x.st === 'pend' || x.st === 'late'), run = pieces.some((x) => x.st === 'curso');
+    items.push({ id: g.id, kind, g, name: g.name, date: g.date, end_date: g.end_date || null, place: g.place || '', modality: g.modality, suspended: !!g.suspended, pieces,
+      status: bad ? 'pend' : run ? 'curso' : 'hecho', distance: Math.abs(fromToday > 0 ? fromToday : -lastDays) });
+  }
+  const rank = { pend: 0, curso: 1, hecho: 2 };
+  items.sort((a, b) => rank[a.status] - rank[b.status] || a.distance - b.distance || a.date.localeCompare(b.date));
+  const counts = { pend: 0, curso: 0, hecho: 0 };
+  for (const it of items) counts[it.status]++;
+  const nextStory = items.flatMap((it) => it.pieces.filter((x) => x.k === 'story' && x.st === 'curso').map((x) => ({ item: it, ...x }))).sort((a, b) => a.date.localeCompare(b.date))[0] || null;
+  return { items, counts, nextStory };
+}

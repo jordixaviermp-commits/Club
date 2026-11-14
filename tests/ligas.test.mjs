@@ -15,7 +15,7 @@ test('ligas.json: cada carrera tiene los datos que usa la app', () => {
     assert.match(r.date, /^\d{4}-\d{2}-\d{2}$/);
     assert.ok(!Number.isNaN(Date.parse(r.date)), r.date);
     assert.ok(MODALITIES.includes(r.modality), r.modality);
-    assert.ok(PROVINCES.includes(r.province), r.province);
+    assert.ok(r.province ? PROVINCES.includes(r.province) : r.country !== 'España', r.name);   // fuera de España (Andorra) no hay provincia
     if (r.url) assert.match(r.url, /^https:\/\//);
     // «circuit» es opcional (solo las ligas con clasificación general); si lo lleva, igual en todas las pruebas de la liga
     const k = r.date + '|' + r.name;
@@ -28,7 +28,7 @@ test('cada liga usa un solo nombre de circuito', () => {
   const por = new Map();
   for (const r of data.races) if (r.circuit) (por.get(r.league) || por.set(r.league, new Set()).get(r.league)).add(r.circuit);
   for (const [liga, nombres] of por) assert.equal(nombres.size, 1, liga);
-  assert.ok(por.has("Xallenger BTT Terres de l'Ebre 2027") && por.has('Open Maxxis Marathon by Bryton 2027'));
+  assert.ok(por.has("Xallenger BTT Terres de l'Ebre 2027") && por.has('Open Maxxis Marathon by Bryton 2027') && por.has('Copa Catalana Internacional BTT 2027'));
 });
 
 test('las carreras de la liga salen al buscar por liga, pueblo o nombre', () => {
@@ -50,4 +50,15 @@ test('Hivernal de Resistència BTT: las 3 pruebas salen al buscar por liga, pueb
   assert.ok(names('resistencia').length >= 3);   // sin tildes
   const h = data.races.filter((r) => /Hivernal/.test(r.name));
   assert.deepEqual(h.map((r) => r.date), ['2026-12-27', '2027-01-10', '2027-01-17']);
+});
+
+test('Copa Catalana Internacional BTT 2027: 6 pruebas de XCO que se encuentran por liga, pueblo y nombre', () => {
+  const names = (q) => searchRaces(q, data.races).map((r) => r.name);
+  assert.equal(names('copa catalana').length, 6);
+  assert.ok(names('banyoles').includes('Copa Catalana Internacional BTT – Banyoles'));
+  assert.ok(names('naturland').length === 1 && names('molina').length >= 1 && names('santa susanna').length === 1);
+  const cc = data.races.filter((r) => r.league === 'Copa Catalana Internacional BTT 2027');
+  assert.deepEqual(cc.map((r) => r.date), ['2027-01-30', '2027-02-20', '2027-04-04', '2027-04-24', '2027-05-29', '2027-06-26']);
+  assert.ok(cc.every((r) => r.subtype === 'XCO' && r.circuit === 'Copa Catalana Internacional BTT'));
+  assert.equal(cc.find((r) => r.place === 'Naturland').country, 'Andorra');
 });

@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, monthGrid, addMonths, formatRange, daysOf, numDays,
+  extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -170,7 +170,7 @@ async function loadStories() {
     try { const r = await fetch(url, { cache: 'no-cache' }); if (r.ok) { log = parseStoryLog(await r.json()); break; } } catch { /* sin conexión o sin registro todavía */ }
   }
   S.stories = log || { desde: null, byKey: new Map(), none: true };
-  if (['inscripciones', 'carreras', 'publicaciones', 'avisos', ''].includes(parseRoute().view) && S.session?.isAdmin && !S.draft) render();
+  if (['inscripciones', 'carreras', 'publicaciones', 'avisos', 'redes', ''].includes(parseRoute().view) && S.session?.isAdmin && !S.draft) render();
 }
 
 async function reload() {
@@ -250,7 +250,7 @@ const ADMIN_TABS = [
   ['carreras', 'Carreras', 'M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3'],
   ['resumen', 'Resumen', 'M4 20V10M10 20V4M16 20v-7M22 20H2'],
   ['corredores', 'Corredores', 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8'],
-  ['datos', 'Datos', 'M12 3c-4.4 0-8 1.3-8 3v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6c0-1.7-3.6-3-8-3zM4 6c0 1.7 3.6 3 8 3s8-1.3 8-3M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3'],
+  ['redes', 'Redes', 'M18 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM8.6 13.5l6.8 4M15.4 6.5l-6.8 4'],
 ];
 const icon = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
 // Menú de pie de página de los corredores (y de la vista previa de la dirección).
@@ -274,11 +274,12 @@ const adminScreens = () => [
   ['📊', 'Cómputo de la temporada', '#/computo', 'computo fin temporada descargar csv excel control cerrar'],
   ['🖨️', 'Informe de temporada', '#/informe', 'informe imprimir pdf bono saldo penalizacion cierre hojas corredor'],
   ['💶', 'Bonos', '#/bonos', 'bonos bonificacion minimo penalizacion tramos plus circuito condiciones'],
-  ['📸', 'Publicaciones en redes', '#/publicaciones', 'redes instagram historia post resultados publicar anomalias encargado'],
+  ['📱', 'Redes: panel de historias, avisos y resultados', '#/redes', 'redes instagram historia post resultados avisos publicar pendiente encargado panel'],
+  ['📸', 'Publicaciones en redes (control detallado)', '#/publicaciones', 'redes instagram historia post resultados publicar anomalias encargado'],
   ['📅', 'Próximas carreras (para redes)', '#/semana', 'semana redes avisar encargado proximas'],
   ['🔔', 'Avisos', '#/avisos', 'avisos pendientes campanita correcciones puestos'],
   ['📣', 'Noticias para los corredores', '#/noticias', 'noticias anuncios quedada comunicado'],
-  ['🗂️', 'Datos: copias, versión y aspecto', '#/datos', 'datos copia seguridad backup restaurar importar csv version aspecto oscuro claro sesion cerrar'],
+  ['🗂️', 'Datos: copias, versión y aspecto (en Resumen)', '#/resumen', 'datos copia seguridad backup restaurar importar csv version aspecto oscuro claro sesion cerrar'],
   ['🕘', 'Historial de cambios', '#/historial', 'historial cambios quien modifico'],
   ['🏁', 'Federaciones y ligas', '#/federaciones', 'federaciones ligas calendario fcc fac catalana aragonesa'],
   ['⚕️', 'En caso de accidente', '#/accidente', 'accidente seguro poliza telefono gerosalud divina rc responsabilidad civil'],
@@ -381,7 +382,7 @@ function frame(title, body, { back, actions = '', rtab = null } = {}) {
     ? `<nav class="tabs">${RUNNER_TABS.map(([v, label, d]) =>
       `<a href="${runnerHref(v)}" class="${v === rtab ? 'on' : ''}">${icon(d)}<span>${label}</span></a>`).join('')}</nav>`
     : admin ? `<nav class="tabs">${ADMIN_TABS.map(([v, label, d]) =>
-      `<a href="#/${v}" class="${view === v || (!view && v === 'inscripciones') || (v === 'corredores' && ['contratos', 'computo', 'informe'].includes(view)) || (v === 'resumen' && view === 'instagram') ? 'on' : ''}">${icon(d)}<span>${label}</span></a>`).join('')}</nav>` : '';
+      `<a href="#/${v}" class="${view === v || (!view && v === 'inscripciones') || (v === 'corredores' && ['contratos', 'computo', 'informe'].includes(view)) || (v === 'resumen' && ['instagram', 'datos'].includes(view)) || (v === 'redes' && ['semana', 'publicaciones'].includes(view)) ? 'on' : ''}">${icon(d)}${v === 'redes' && S.data && socialPending() ? `<b class="tab-n">${socialPending()}</b>` : ''}<span>${label}</span></a>`).join('')}</nav>` : '';
   return `
     ${api.mode === 'demo' ? `<div class="demo-bar">Modo demostración: datos de prueba guardados solo en este móvil.</div>` : ''}
     <header class="top">
@@ -416,7 +417,7 @@ function render() {
     html = ({
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
       carreras: S.draft ? viewRaceEdit : viewRaces,
-      resumen: viewSummary, instagram: viewInstagram, corredores: viewRunners, contratos: viewContracts, computo: viewSeasonCount, informe: viewSeasonReport, publicaciones: viewPublications, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
+      resumen: viewSummary, instagram: viewInstagram, redes: viewNetworks, corredores: viewRunners, contratos: viewContracts, computo: viewSeasonCount, informe: viewSeasonReport, publicaciones: viewPublications, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
       vista: () => (S.preview && S.runnerData ? runnerScreen(parseRoute().id || '') : viewRunners()),
       equipo: () => (S.preview ? viewTeam() : viewSummary()),
     }[view] || viewRegistrations)();
@@ -1584,7 +1585,7 @@ function viewWeek() {
     const done = S.data.races.filter((r) => (r.results || []).length);
     return frame('Próximas carreras', `${views}
       <p class="hint">Todas las carreras del club, próximas y ya hechas. En cada día sale ✓ si está publicada en redes (½ si hay alguna sin publicar). Toca un día y marca las casillas.</p>
-      ${calendarView(regs, (g) => postCard(g), () => false, { done, doneCard: (r) => postCard(r, true), isPosted: (g) => postedSet().has(g.results ? resKey(g) : postKey(g)) })}`, { back: '#/inscripciones' });
+      ${calendarView(regs, (g) => postCard(g), () => false, { done, doneCard: (r) => postCard(r, true), isPosted: (g) => postedSet().has(g.results ? resKey(g) : postKey(g)) })}`, { back: '#/redes' });
   }
   const list = weekRaces(days), posted = postedSet(), todo = list.filter((g) => !posted.has(postKey(g)));
   return frame('Próximas carreras', `${views}
@@ -1597,7 +1598,7 @@ function viewWeek() {
       <details class="card"><summary><b>Ver el texto que se copia</b></summary><pre class="week-pre">${esc(weekText(days, todo.length ? todo : list))}</pre></details>`
       : `<p class="empty">No hay carreras con inscritos en los próximos ${days} días.</p>`}
     <a class="btn block" href="#/publicaciones">📸 Control de publicaciones (resultados pendientes)</a>
-    ${socialAdminCard()}`, { back: '#/inscripciones' });
+    ${socialAdminCard()}`, { back: '#/redes' });
 }
 
 /** Estado de la historia previa (la publica la tarea automática 2 días antes) de una inscripción o carrera. */
@@ -1671,7 +1672,64 @@ function viewPublications() {
       return up.length ? up.map((g) => `<article class="card"><p><b>${esc(g.name)}</b> · ${esc(when(g))}<br>${storyTag(g)}</p><a class="btn small ghost" href="#/inscripciones/${g.id}">Abrir</a></article>`).join('') : '<p class="empty small">No hay carreras con inscritos en los próximos 14 días.</p>'; })()}
     ${a.resDone.length ? `<details class="card"><summary><b>✅ Resultados ya publicados (${a.resDone.length})</b></summary><ul class="mini-list">${a.resDone.map((x) => `<li><div><b>${esc(x.race.name)}</b><small class="muted">${esc(when(x.race))}</small></div>
       <label class="check"><input type="checkbox" data-act-change="post" data-key="${esc(x.key)}" checked> ✓</label></li>`).join('')}</ul><p class="hint">Quita la marca si te equivocaste.</p></details>` : ''}
-    ${socialAdminCard()}`, { back: '#/avisos', actions: '<button class="icon-btn" data-act="pub-refresh" aria-label="Actualizar">↻</button>' });
+    ${socialAdminCard()}`, { back: '#/redes', actions: '<button class="icon-btn" data-act="pub-refresh" aria-label="Actualizar">↻</button>' });
+}
+
+
+// ======================================================================
+//  Redes (dirección): panel de lo pendiente, en curso y hecho
+// ======================================================================
+
+const NET_ICON = { story: '📸', aviso: '📝', res: '🖼️' };
+const NET_LABEL = { story: 'Historia previa', aviso: 'Aviso', res: 'Resultados' };
+const NET_GLYPH = { ok: '✓', curso: '⏳', pend: '❗', late: '⚠️', na: '' };
+
+function viewNetworks() {
+  const wide = !!S.netAll;
+  const b = netBoard(wide ? { back: 365, ahead: 365 } : undefined);
+  const f = S.netFilter || (b.counts.pend ? 'pend' : b.counts.curso ? 'curso' : 'hecho');
+  const shown = b.items.filter((x) => x.status === f);
+  const cap = f === 'hecho' && !S.netMore ? 12 : 200;
+  const warn = S.data.socialPosts === null ? '<p class="warn card">Falta ejecutar en Supabase <code>supabase/cambios/2026-11-12-redes.sql</code>: sin él las marcas solo se guardan en este móvil.</p>' : '';
+  const posted = postedSet();
+  const piece = (it, x) => {
+    const isRes = x.k === 'res', canMark = x.key && (x.k === 'aviso' || isRes);
+    const act = x.k === 'story' ? (x.st === 'pend' ? `<button class="btn small" data-act="pub-story-manual" data-key="${esc(x.key)}">Marcar a mano</button>` : '')
+      : canMark && (x.st !== 'curso' || x.k === 'aviso' && posted.has(x.key)) ? `<label class="check post-check"><input type="checkbox" data-act-change="post" data-key="${esc(x.key)}" ${posted.has(x.key) ? 'checked' : ''}> Publicado</label>` : '';
+    const copy = isRes && it.kind === 'race' && x.st !== 'ok' && x.st !== 'curso' ? `<button class="btn small" data-act="pub-copy" data-id="${esc(it.id)}">📋 Copiar texto</button>` : '';
+    return `<li class="net-piece ${x.st}"><span class="net-k" title="${NET_LABEL[x.k]}">${NET_ICON[x.k]}</span><span class="net-tx">${esc(x.text)}</span><span class="net-glyph" aria-hidden="true">${NET_GLYPH[x.st]}</span>${act || copy ? `<span class="net-act">${act}${copy}</span>` : ''}</li>`;
+  };
+  const card = (it) => `<article class="card net-card ${it.status}${it.suspended ? ' gone' : ''}"><div class="race-head"><div><h3>${esc(it.name)}</h3>
+      <p class="muted">${when(it.g)}${place(it.g) ? ' · ' + esc(place(it.g)) : ''}</p></div>${modTag(it.modality)}</div>
+      <ul class="net-pieces">${it.pieces.map((x) => piece(it, x)).join('')}</ul>
+      <div class="row"><a class="btn small ghost" href="#/${it.kind === 'race' ? 'carreras' : 'inscripciones'}/${esc(it.id)}">Abrir</a></div></article>`;
+  const kpi = (k, icon, label) => `<button class="net-kpi ${k}${f === k ? ' on' : ''}${b.counts[k] ? '' : ' zero'}" data-act="net-filter" data-f="${k}"><b>${b.counts[k]}</b><span>${icon} ${label}</span></button>`;
+  // tarea automática de historias
+  const log = S.stories, lastPub = log?.byKey ? [...log.byKey.values()].map((x) => x.publicada).filter(Boolean).sort().pop() : null;
+  const auto = !log ? 'Comprobando la tarea automática de historias…'
+    : log.none ? 'Tarea automática de historias: aún no hay ninguna registrada.'
+    : `Tarea automática de historias: última registrada el <b>${esc(lastPub ? formatDate(lastPub, false) : '—')}</b> · ${log.byKey.size} carrera${log.byKey.size === 1 ? '' : 's'} desde el ${esc(log.desde ? formatDate(log.desde, false) : '—')}.`;
+  const next = b.nextStory ? `Próxima historia automática: <b>${esc(b.nextStory.item.name)}</b> · ${esc(b.nextStory.text.replace('Historia: ', ''))}.` : 'No hay ninguna historia programada de momento.';
+  const a = adminAlerts();
+  const audit = pubAudit();
+  return frame('Redes', `
+    ${warn}
+    <div class="net-kpis" role="tablist" aria-label="Estado de las publicaciones">${kpi('pend', '❗', 'Pendiente')}${kpi('curso', '⏳', 'En curso')}${kpi('hecho', '✅', 'Hecho')}</div>
+    <p class="hint net-auto">${auto}<br>${next}</p>
+    <div class="years"><button class="chip${wide ? '' : ' on'}" data-act="net-range" data-w="0">Próximas y recientes</button><button class="chip${wide ? ' on' : ''}" data-act="net-range" data-w="1">Toda la temporada</button></div>
+    ${shown.length ? shown.slice(0, cap).map(card).join('') : `<p class="empty">${f === 'pend' ? 'Nada pendiente. 🎉' : f === 'curso' ? 'Nada en curso.' : 'Todavía no hay nada hecho en este rango.'}</p>`}
+    ${shown.length > cap ? `<button class="btn block ghost" data-act="net-more">Ver las ${shown.length}</button>` : ''}
+    ${audit.orphans.length ? `<a class="card pen bad-box net-orph" href="#/publicaciones">🔗 ${audit.orphans.length} marca${audit.orphans.length === 1 ? '' : 's'} de «publicada» sin carrera: revisar en el control detallado</a>` : ''}
+    ${a.week.length ? `<section class="card"><h3>📣 Avisar al encargado de redes</h3>
+      <p class="hint">Próximos 7 días: <b>${a.week.length}</b> carrera${a.week.length === 1 ? '' : 's'} con inscritos, ${a.weekTodo.length} sin publicar.</p>
+      ${a.weekTodo.length ? `<div class="row"><button class="btn primary" data-act="alert-week-copy">📋 Copiar texto</button><button class="btn" data-act="alert-week-wa">WhatsApp</button><button class="btn ghost" data-act="post-all">✓ Marcar todas</button></div>` : '<p class="pen ok">✅ Todas publicadas.</p>'}</section>` : ''}
+    <h2 class="section">Más herramientas de redes</h2>
+    <div class="net-links">
+      <a class="btn block" href="#/instagram">📈 Estadísticas de Instagram</a>
+      <a class="btn block" href="#/semana">📅 Calendario y próximas carreras para redes</a>
+      <a class="btn block" href="#/publicaciones">🔎 Control detallado y anomalías</a>
+    </div>
+    ${socialAdminCard()}`, { actions: '<button class="icon-btn" data-act="pub-refresh" aria-label="Actualizar">↻</button>' });
 }
 
 /** Dirección: historial de cambios (quién cambió qué y cuándo). */
@@ -1697,7 +1755,7 @@ function viewHistory() {
     ${list === undefined ? '<p class="empty">Cargando…</p>' : list === null ? '<p class="card warn">Falta ejecutar en Supabase el SQL del historial: <code>supabase/cambios/2026-11-12-historial-1.sql</code>, <code>…-2.sql</code> y <code>…-3.sql</code>.</p>' : `
     <div class="years">${[['all', 'Todo'], ['cor', 'Corredores'], ['dir', 'Dirección'], ['sis', 'Automático']].map(([k, l]) => `<button class="chip${f === k ? ' on' : ''}" data-act="hist-filter" data-f="${k}">${l}</button>`).join('')}</div>
     ${shown.length ? `<ul class="hist-list">${shown.map((c) => `<li class="hist-${who(c)}"><div><b>${esc(c.actor)}</b> <span class="muted">${timeAgo(c.at)}</span></div><p>${esc(c.summary)}</p></li>`).join('')}</ul>`
-      : '<p class="empty">Todavía no hay cambios apuntados.</p>'}`}`, { back: '#/datos' });
+      : '<p class="empty">Todavía no hay cambios apuntados.</p>'}`}`, { back: '#/resumen' });
 }
 
 /** Dirección: quién ha respondido a una noticia que pide confirmación. */
@@ -1828,7 +1886,7 @@ async function refreshPosts(force = false) {
     const sig = (a) => a.map((x) => x.key).sort().join('\n');
     const changed = sig(rows) !== sig(S.data.socialPosts);
     S.data.socialPosts = rows;
-    if ((changed || force) && ['semana', 'avisos', 'inscripciones', ''].includes(parseRoute().view) && !S.draft) render();
+    if ((changed || force) && ['semana', 'avisos', 'redes', 'inscripciones', ''].includes(parseRoute().view) && !S.draft) render();
   } catch { /* sin conexión */ }
 }
 function adminAlerts() {
@@ -1845,24 +1903,19 @@ function adminAlerts() {
 const pubAudit = (year = new Date().getFullYear()) => socialAudit(year, S.data.races, S.data.registrations, Array.isArray(S.data.socialPosts) ? S.data.socialPosts : [...postedSet()].map((key) => ({ key })), todayISO(), S.stories?.byKey ? S.stories : null);
 /** Publicaciones que la dirección tiene por hacer: resultados con 3 o más días sin publicar y anomalías. */
 const pubDue = () => { const a = pubAudit(); return a.resPending.filter((x) => x.days >= 3).length + a.anomalies; };
-const alertCount = () => { const a = adminAlerts(); return a.circuits.length + a.weekTodo.length + a.backup.length + a.corrections.length + pubDue(); };
+const alertCount = () => { const a = adminAlerts(); return a.circuits.length + a.backup.length + a.corrections.length; };   // lo de redes está en la pestaña Redes
+/** Estado de las publicaciones de cada carrera (panel de Redes) y cuántas tienen algo pendiente. */
+const netBoard = (opts) => socialBoard(S.data.races, S.data.registrations, postedSet(), todayISO(), S.stories?.byKey ? S.stories : null, opts);
+const socialPending = () => { try { return netBoard().counts.pend; } catch { return 0; } };
 
 function viewAlerts() {
   const a = adminAlerts();
   const per = bonusCfg(new Date().getFullYear()).circuitExtra ?? 4;
-  const none = !a.circuits.length && !a.week.length && !a.noContract.length && !a.backup.length && !a.corrections.length;
-  const raceCard = (g) => postCard(g);
+  const none = !a.circuits.length && !a.noContract.length && !a.backup.length && !a.corrections.length;
   return frame('Avisos', `
     <a class="btn primary block" href="#/noticias">📣 Noticias para los corredores${S.data.announcements ? ` (${S.data.announcements.length})` : ''}</a>
-    <a class="btn block" href="#/semana">📅 Próximas carreras (para redes)</a>
-    ${(() => { const p = pubAudit(), due = pubDue(); return `<a class="btn block${due ? ' primary' : ''}" href="#/publicaciones">📸 Publicaciones en redes${due ? ` · ${due} por hacer` : ''}<small class="muted"> · ✅ ${p.done} · ⏳ ${p.pending} · ⚠️ ${p.anomalies}</small></a>`; })()}
+    <a class="btn block" href="#/redes">📱 Redes: historias, avisos y resultados${socialPending() ? ` · ${socialPending()} pendiente${socialPending() === 1 ? '' : 's'}` : ''}</a>
     ${none ? '<p class="card pen ok">✅ No tienes nada pendiente.</p>' : ''}
-    ${a.week.length ? `<h2 class="section">📅 Para publicar en redes: próximos 7 días (${a.weekTodo.length} sin publicar)</h2>
-      <p class="hint">Carreras con inscritos que empiezan esta semana. Copia el texto para el encargado de redes y marca cada una cuando esté publicada.</p>
-      ${a.weekTodo.length ? `<div class="row"><button class="btn primary" data-act="alert-week-copy">📋 Copiar texto</button><button class="btn" data-act="alert-week-wa">WhatsApp</button>
-        <button class="btn ghost" data-act="post-all">✓ Marcar todas</button></div>` : '<p class="pen ok">✅ Todas publicadas.</p>'}
-      ${a.week.map(raceCard).join('')}
-      <a class="btn block ghost" href="#/semana">Ver más días</a>` : ''}
     ${a.corrections.length ? `<h2 class="section">✏️ Correcciones de puesto pedidas (${a.corrections.length})</h2>
       <p class="hint">Un corredor dice que se equivocó al poner su puesto. Si aceptas, se aplica el cambio al momento.</p>
       ${a.corrections.map((c) => `<article class="card"><h3>${esc(runnerById(c.runner_id)?.name || '?')}</h3>
@@ -2150,7 +2203,8 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
     ${pods}
     ${mod ? byMod : ''}
     ${places}
-    ${admin ? `<button class="btn block" data-act="csv-year">Exportar ${S.year} a CSV (Excel)</button>` : ''}`;
+    ${admin ? `<button class="btn block" data-act="csv-year">Exportar ${S.year} a CSV (Excel)</button>` : ''}
+    ${admin ? `<details class="card data-det" data-open-key="datos"${S.open?.datos ? ' open' : ''}><summary>⚙️ Datos y copias <small class="muted">· copia de seguridad, restaurar, aspecto, versión y cerrar sesión</small></summary>${dataBody()}</details>` : ''}`;
 }
 
 // ======================================================================
@@ -3009,8 +3063,8 @@ function viewRunners() {
 //  Datos: copias, migración, privacidad
 // ======================================================================
 
-function viewData() {
-  return frame('Datos', `
+/** Contenido de «Datos»: copias, restaurar, historial, privacidad, aspecto, versión y cerrar sesión. */
+const dataBody = () => `
     <section class="card stack"><h2>Copia de seguridad</h2>
       <p>Descarga todos los datos (corredores, inscripciones, carreras y resultados) en un archivo. Guárdalo en tu Drive o correo una vez al mes.</p>
       <button class="btn primary" data-act="backup">Descargar copia de datos</button>
@@ -3035,8 +3089,8 @@ function viewData() {
     ${api.mode === 'demo' ? `<button class="btn ghost block" data-act="demo-reset">Reiniciar datos de demostración</button>` : ''}
     ${themeLine()}${versionLine()}
     <p class="muted center">Sesión: ${esc(S.session?.email)}</p>
-    <button class="btn ghost block" data-act="logout">Cerrar sesión</button>`);
-}
+    <button class="btn ghost block" data-act="logout">Cerrar sesión</button>`;
+function viewData() { return frame('Datos', dataBody()); }
 
 // ======================================================================
 //  Acciones
@@ -3388,6 +3442,9 @@ const actions = {
   async 'pub-orphans-del'() { await setPostedKeys(pubAudit(S.year).orphans.map((o) => o.key), false); toast('Marcas quitadas'); },
   'print-report'() { window.print(); },
   'ig-period'(el) { S.igPeriod = el.dataset.p; render(); },
+  'net-filter'(el) { S.netFilter = el.dataset.f; S.netMore = false; render(); },
+  'net-range'(el) { S.netAll = el.dataset.w === '1'; S.netMore = false; render(); },
+  'net-more'() { S.netMore = true; render(); },
   'ig-tab'(el) { S.igTab = el.dataset.t; render(); },
   async 'ig-per-del'(el) {
     if (!await confirmAction('Quitar periodo', 'Se borra este resumen de periodo (no toca el resto de datos).', 'Quitar')) return;
