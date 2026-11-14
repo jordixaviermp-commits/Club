@@ -328,6 +328,7 @@ label.check input { accent-color: var(--accent); }
 .runner-races > summary { cursor: pointer; font-size: .85rem; color: var(--muted); padding: .2rem 0; }
 .runner-races[open] > summary { margin-bottom: .4rem; }
 .mini-list .pos { flex: none; font-weight: 700; text-decoration: none; color: var(--text); }
+.edit-mine { flex: none; margin-top: .3rem; text-decoration: none; }
 
 /* Resumen del equipo */
 .team-btn { font-size: 1.02rem; }

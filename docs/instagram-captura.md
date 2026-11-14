@@ -1,4 +1,16 @@
-# Estadísticas de Instagram: captura diaria
+# Estadísticas de Instagram en la app
+
+**Estado actual (14/11/2026): modo manual.** La dirección sube desde la app las capturas de pantalla de Insights
+(Resumen → Instagram → Capturas) y salen agrupadas por periodo en la pestaña y en el PDF. Es lo que va al dossier de memorias.
+No hay ninguna captura automática activa (se descartó por coste); las cifras ya guardadas son las de la primera captura
+(15/10–13/11/2026) y no se actualizan solas.
+
+SQL necesario (una vez): `supabase/cambios/2026-11-14-instagram-capturas.sql` (tabla `ig_capturas`, solo dirección).
+
+---
+
+## Anexo: captura automática (por si se retoma)
+
 
 Windsor solo da los **últimos 30 días** de la cuenta, y las **historias solo 24 horas**. Por eso una tarea automática
 guarda cada día una foto de las cifras en la base de datos (tabla privada `ig_snapshots`, solo la lee la dirección).
