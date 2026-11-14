@@ -76,6 +76,8 @@ test('periodos de Insights: totales sumables, solapes y audiencia más reciente'
   assert.equal(g.totals.viewersMax, 2666); assert.equal(g.totals.viewersAvg, 2233);      // los espectadores no se suman
   assert.equal(g.overlaps.length, 1);                                                    // 14/11–13/12 y 01/12–31/12 se pisan
   assert.equal(g.audience.to, '2026-12-13'); assert.deepEqual(g.audience.ages, { '35-44': 30 });
+  assert.equal(g.topHours, null);
+  assert.deepEqual(igPeriods([{ kind: 'period', key: '2026-10-15_2026-11-13', data: { top_hours: ['Domingos 21–24 h'] } }]).topHours.list, ['Domingos 21–24 h']);
   assert.equal(igPeriods(rows, '2026-12-20', '').list.length, 1);
   assert.equal(igPeriods([], '', '').list.length, 0);
 });

@@ -2277,7 +2277,7 @@ function viewInstagram() {
       ${pt.interactions != null ? kpi(nf(pt.interactions), 'Interacciones') : ''}
       ${pt.net_follows != null ? kpi(signed(pt.net_follows), 'Seguidores netos') : ''}
       ${pt.viewersMax != null ? kpi(nf(pt.viewersMax), 'Espectadores', pl.length > 1 ? 'el mayor de un periodo' : 'del periodo') : ''}
-      ${pt.likes != null ? kpi(nf(pt.likes), 'Me gusta') : ''}${pt.shares != null ? kpi(nf(pt.shares), 'Compartidos') : ''}${pt.saves != null ? kpi(nf(pt.saves), 'Guardados') : ''}${pt.profile_visits != null ? kpi(nf(pt.profile_visits), 'Visitas al perfil') : ''}</div>
+      ${pt.likes != null ? kpi(nf(pt.likes), 'Me gusta') : ''}${pt.shares != null ? kpi(nf(pt.shares), 'Compartidos') : ''}${pt.saves != null ? kpi(nf(pt.saves), 'Guardados') : ''}${pt.profile_visits != null ? kpi(nf(pt.profile_visits), 'Visitas al perfil') : ''}${pt.link_taps != null ? kpi(nf(pt.link_taps), 'Toques en el enlace') : ''}</div>
       <p class="rp-note" style="margin:0">Los espectadores son personas distintas y no se suman entre periodos. ${pl.some((x) => (x.approx || []).length) ? 'Las cifras marcadas con ≈ vienen redondeadas («6,9 mil»).' : ''}</p>`),
     P.overlaps.length ? `<p class="card warn">⚠️ Estos periodos se pisan: ${P.overlaps.map(([a, b]) => `${plabel(a)} y ${plabel(b)}`).join('; ')}. Los totales cuentan dos veces los días repetidos; dime cuál quitar.</p>` : '',
     pl.some((x) => x.views != null) ? rep(`<h2>Reproducciones por periodo</h2><div class="ig-bars" role="img" aria-label="Reproducciones por periodo">${pl.map((x) => `<div class="ig-col" title="${esc(plabel(x))}: ${nf(x.views)}"><i style="height:${Math.max(2, ((x.views || 0) / maxPerViews) * 100)}%"></i><small>${esc(plabel(x))}</small></div>`).join('')}</div>
@@ -2302,7 +2302,8 @@ function viewInstagram() {
     ${A.ages ? `<h3 class="ig-h">Edad</h3><ul class="ig-list tight">${Object.entries(A.ages).map(([k, v]) => bar(k, v, maxOf(Object.values(A.ages)), ' %')).join('')}</ul>` : ''}
     ${A.cities ? `<h3 class="ig-h">Ciudades</h3><ul class="ig-list tight">${pctList(A.cities).map(([k, v], i, arr) => bar(k.split(',')[0], v, arr[0][1], ' %')).join('')}</ul>` : ''}
     ${A.countries ? `<h3 class="ig-h">Países</h3><ul class="ig-list tight">${pctList(A.countries, 6).map(([k, v], i, arr) => bar(IG_COUNTRY[k] || k, v, arr[0][1], ' %')).join('')}</ul>` : ''}`) : '';
-  const panels = { per, res: noData ? noDataMsg : resumen, con: (noData && !postsP) ? noDataMsg : `${postsP}${noData ? '' : contenido}`, aud: (noData && !audP) ? noDataMsg : `${audP}${noData ? '' : audiencia}` };
+  const hoursP = P.topHours ? rep(`<h2>¿Cuándo están más activos los seguidores?</h2><ul class="ig-list tight">${P.topHours.list.map((h) => `<li class="ig-post"><b>${esc(h)}</b></li>`).join('')}</ul><p class="rp-note">Según Insights (${esc(plabel(P.topHours))}), hora de España. Para publicar cuando más gente está conectada.</p>`) : '';
+  const panels = { per, res: noData ? noDataMsg : resumen, con: (noData && !postsP) ? noDataMsg : `${postsP}${noData ? '' : contenido}`, aud: (noData && !audP && !hoursP) ? noDataMsg : `${audP}${hoursP}${noData || audP ? '' : audiencia}` };
   const tabs = [['per', 'Periodos'], ['res', 'Diario'], ['con', 'Contenido'], ['aud', 'Audiencia']];
   return head(`
     <div class="no-print">${periodBar}

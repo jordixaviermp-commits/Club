@@ -990,8 +990,9 @@ export function igPeriods(rows, from = '', to = '') {
   if (viewers.length) { totals.viewersMax = Math.max(...viewers); totals.viewersAvg = Math.round(viewers.reduce((n, v) => n + v, 0) / viewers.length); }
   const latest = (k) => [...list].reverse().find((p) => p[k] && Object.keys(p[k]).length);
   const audP = ['ages', 'gender', 'cities', 'countries'].map(latest).filter(Boolean).sort((a, b) => b.to.localeCompare(a.to))[0] || null;
+  const hoursP = [...list].reverse().find((p) => Array.isArray(p.top_hours) && p.top_hours.length) || null;
   const seen = new Set(), posts = [];
   for (const p of list) for (const x of p.posts || []) { const id = `${x.d || ''}|${x.t || ''}`; if (!seen.has(id)) { seen.add(id); posts.push({ ...x, period: p.key }); } }
   posts.sort((a, b) => (b.v || 0) - (a.v || 0));
-  return { list, totals, overlaps, posts, audience: audP ? { period: audP.key, from: audP.from, to: audP.to, gender: audP.gender || null, ages: audP.ages || null, cities: audP.cities || null, countries: audP.countries || null } : null };
+  return { list, totals, overlaps, posts, audience: audP ? { period: audP.key, from: audP.from, to: audP.to, gender: audP.gender || null, ages: audP.ages || null, cities: audP.cities || null, countries: audP.countries || null } : null, topHours: hoursP ? { from: hoursP.from, to: hoursP.to, list: hoursP.top_hours } : null };
 }
