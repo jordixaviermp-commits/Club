@@ -158,7 +158,9 @@ insert into registration_entries (registration_id, runner_id) values ('20000000-
   ('20000000-0000-0000-0000-000000000050', '10000000-0000-0000-0000-000000000003');
 set role anon;
 select runner_report_result('BBBBBBBBBB', 'reg', '20000000-0000-0000-0000-000000000050', 2, 'Élite', 'campeonato');
-select pg_temp.expect_fail($q$select runner_report_result('BBBBBBBBBB', 'reg', '20000000-0000-0000-0000-000000000050', 1, null, null)$q$, 'no puede corregir su resultado');
+select runner_report_result('BBBBBBBBBB', 'reg', '20000000-0000-0000-0000-000000000050', 3, 'Élite', 'campeonato');
+select runner_report_result('BBBBBBBBBB', 'reg', '20000000-0000-0000-0000-000000000050', 2, 'Élite', 'campeonato');
+select pg_temp.check((select (g->'my_result'->>'position')::int from jsonb_array_elements(runner_view('BBBBBBBBBB')->'registrations') g where g->>'id' = '20000000-0000-0000-0000-000000000050') = 2, 'puede cambiar su propio resultado');
 select pg_temp.expect_fail($q$select runner_report_result('BBBBBBBBBB', 'reg', '20000000-0000-0000-0000-000000000009', 1, null, null)$q$, 'no pone resultado donde no está apuntado');
 select pg_temp.check((select (g->'my_result'->>'position')::int from jsonb_array_elements(runner_view('BBBBBBBBBB')->'registrations') g where g->>'id' = '20000000-0000-0000-0000-000000000050') = 2, 've su resultado enviado');
 reset role;
@@ -171,8 +173,9 @@ select pg_temp.check((select self_reported from results where race_id = :'rp' an
 reset role;
 set role anon;
 select runner_report_result('CCCCCCCCCC', 'race', :'rp', 7, null, null);
-select pg_temp.expect_fail($q$select runner_report_result('CCCCCCCCCC', 'race', '$q$ || :'rp' || $q$', 1, null, null)$q$, 'en carrera ya en resultados tampoco corrige');
-select pg_temp.expect_fail($q$select runner_report_result('BBBBBBBBBB', 'race', '$q$ || :'rp' || $q$', 1, null, null)$q$, 'no cambia un puesto ya puesto');
+select runner_report_result('CCCCCCCCCC', 'race', :'rp', 6, null, null);
+select runner_report_result('CCCCCCCCCC', 'race', :'rp', 7, null, null);
+select pg_temp.expect_fail($q$select runner_report_result('XXXXXXXXXXXX', 'race', '$q$ || :'rp' || $q$', 1, null, null)$q$, 'sin enlace no cambia puestos');
 select pg_temp.check(jsonb_array_length(runner_view('BBBBBBBBBB')->'my_results') >= 1, 'mis carreras: ve sus resultados');
 select pg_temp.check((runner_view('BBBBBBBBBB')->'my_results')::text not like '%Pere Soler%', 'mis carreras: solo las suyas');
 select pg_temp.check(jsonb_array_length(runner_team('BBBBBBBBBB')->'races') >= 1, 'resumen equipo: ve las carreras del equipo');

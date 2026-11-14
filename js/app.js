@@ -842,63 +842,33 @@ const resultHref = (id) => (S.runnerData?.registrations.some((g) => g.id === id)
 const emptyRunnerDraft = (pre = {}) => ({ name: '', date: '', multi: false, end_date: '', place: '', province: '', country: DEFAULT_COUNTRY,
   modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', category: '', ...pre });
 
-/** Formulario para que el corredor ponga SU resultado (una sola vez). id = «reg_<uuid>» o «race_<uuid>». */
+/** Formulario para que el corredor ponga o cambie SU resultado. id = «reg_<uuid>» o «race_<uuid>». */
 function viewRunnerReport(key) {
   const d = S.runnerData;
   const [kind, id] = [key.slice(0, key.indexOf('_')), key.slice(key.indexOf('_') + 1)];
   const race = kind === 'reg' ? d.registrations.find((g) => g.id === id) : (d.my_results || []).find((r) => r.race_id === id);
   const back = runnerHref('mi');
   if (!race) return frame('Mi resultado', '<p class="empty">No se encuentra esta carrera.</p>', { back });
-  const already = kind === 'reg' ? race.my_result : race.position;
-  if (already) return viewCorrection(kind, id, race, back);
+  const cur = kind === 'reg' ? race.my_result : (race.position ? race : null); // resultado ya puesto (para cambiarlo)
   const cat = kind === 'reg' ? race.entries.find((e) => e.runner_id === d.me.id)?.category : race.category;
-  return frame('Mi resultado', `
+  return frame(cur ? 'Cambiar mi resultado' : 'Mi resultado', `${previewBanner()}
     <form class="card stack" data-form="r-report" data-kind="${kind}" data-id="${id}">
       <div><h3>${esc(race.name)}</h3><p class="muted">${when(race)}${place(race) ? ' · ' + esc(place(race)) : ''} · ${esc(race.modality)}</p></div>
       <div class="grid2">
-        <label>Tu puesto<input type="number" name="position" inputmode="numeric" min="1" max="999" required autofocus></label>
+        <label>Tu puesto<input type="number" name="position" inputmode="numeric" min="1" max="999" required autofocus value="${esc(cur?.position ?? '')}"></label>
         <label>Categoría${catSelect('name="category"', cat || d.me.category || '', 'Categoría')}</label>
       </div>
-      <label>⏱️ Tu tiempo <small class="muted">(opcional)</small><input type="text" name="time" inputmode="numeric" autocomplete="off" placeholder="2:05:30" maxlength="10"></label>
+      <label>⏱️ Tu tiempo <small class="muted">(opcional)</small><input type="text" name="time" inputmode="numeric" autocomplete="off" placeholder="2:05:30" maxlength="10" value="${esc(cur?.time_seconds ? formatTime(cur.time_seconds) : '')}"></label>
       <p class="hint">Horas:minutos:segundos, tal como sale en la clasificación (por ejemplo <b>2:05:30</b>, o <b>45:10</b> si fue menos de una hora). Sirve para ver cuántas horas acumula cada uno en Equipo.</p>
-      <input type="hidden" name="podium" value="${podiumKind(race)}">
+      <input type="hidden" name="podium" value="${podiumKind(race, cur?.podium_type)}">
       ${race.race_type === 'circuito' ? `<p class="hint">🏆 Esta carrera es puntuable de <b>${esc(race.circuit || 'un circuito')}</b>. Aquí pones solo tu puesto en <b>esta prueba</b>. Si acabas en el podio de la <b>general final</b>, se pide aparte, al terminar la liga, en <b>Contrato → Plus de bonificación</b>.</p>` : ''}
-      <p class="pen bad-box">⚠️ Revísalo bien: <b>una vez enviado no podrás cambiarlo</b>. Si te equivocas, tendrá que corregirlo la dirección.</p>
-      <button class="btn primary">Enviar mi resultado</button>
+      <p class="hint">${cur ? `Ahora tienes <b>${isPodium(cur.position) ? medal(cur.position) + ' ' : ''}${cur.position}º</b>. ` : ''}Puedes cambiarlo tú cuando quieras. El puesto <b>no cambia tu bono</b> (cuenta participar); los podios en la general final de una liga (plus) se piden aparte y los confirma la dirección.</p>
+      ${S.preview ? '' : `<button class="btn primary">${cur ? 'Guardar el cambio' : 'Enviar mi resultado'}</button>`}
     </form>`, { back });
 }
 
-/** El resultado ya está puesto: el corredor puede pedir que lo corrija la dirección. */
 /** Tipo de podio que lleva un resultado del corredor: no lo elige él (solo sirve para las estadísticas); la dirección puede cambiarlo. */
 const podiumKind = (race, current) => (PODIUM_TYPES.some((t) => t.id === current) ? current : race?.race_type === 'campeonato' ? 'campeonato' : 'suelta');
-
-function viewCorrection(kind, id, race, back) {
-  const d = S.runnerData;
-  const cur = kind === 'reg' ? race.my_result.position : race.position;
-  const curCat = kind === 'reg' ? d.registrations.find((g) => g.id === id)?.entries.find((e) => e.runner_id === d.me.id)?.category : race.category;
-  const mine = (S.corrections || []).filter((c) => c.target_id === id);
-  const pending = mine.find((c) => c.status === 'pendiente');
-  const done = mine.filter((c) => c.status !== 'pendiente').slice(0, 3);
-  const line = (c) => `${c.old_position}º → <b>${c.new_position}º</b>${c.new_category ? ' · ' + esc(c.new_category) : ''}`;
-  return frame('Mi resultado', `${previewBanner()}
-    <section class="card"><h3>${esc(race.name)}</h3><p class="muted">${when(race)} · ${esc(race.modality)}</p>
-      <p>Tu resultado: <b>${isPodium(cur) ? medal(cur) + ' ' : ''}${cur}º</b>${curCat ? ' · ' + esc(curCat) : ''}</p>
-      <p class="hint">El resultado se pone una sola vez. Si te equivocaste, pide la corrección: la dirección la revisará con un toque.</p></section>
-    ${done.map((c) => `<p class="card ${c.status === 'aceptada' ? 'pen ok' : 'warn'}">${c.status === 'aceptada' ? '✅ Aceptada' : '❌ Rechazada'}: ${line(c)}${c.reply ? `<br><small>${esc(c.reply)}</small>` : ''}</p>`).join('')}
-    ${S.corrections === null ? '<p class="card warn">Las correcciones aún no están activadas: pídeselo a la dirección del club.</p>'
-      : pending ? `<section class="card"><p>⏳ <b>Pediste corregir</b> ${line(pending)}${pending.note ? `<br><small class="muted">«${esc(pending.note)}»</small>` : ''}</p>
-          <p class="hint">La dirección lo revisará. Cuando lo haga lo verás aquí.</p>
-          ${S.preview ? '' : `<button class="btn ghost" data-act="corr-cancel" data-id="${pending.id}">Retirar la petición</button>`}</section>`
-      : `<form class="card stack" data-form="r-correct" data-kind="${kind}" data-id="${id}">
-          <h3>Pedir corrección</h3>
-          <div class="grid2">
-            <label>Puesto correcto<input type="number" name="position" inputmode="numeric" min="1" max="999" required></label>
-            <label>Categoría${catSelect('name="category"', curCat || '', 'Sin cambio')}</label>
-          </div>
-          <input type="hidden" name="podium" value="${podiumKind(race, kind === 'reg' ? race.my_result?.podium_type : race.podium_type)}">
-          <label>Motivo (opcional)<input name="note" maxlength="300" placeholder="Me equivoqué al teclear"></label>
-          <button class="btn primary">Enviar a la dirección</button></form>`}`, { back });
-}
 
 function viewRunnerNew() {
   if (!S.rdraft) S.rdraft = emptyRunnerDraft({ name: S.q.runner || '' });
@@ -909,7 +879,7 @@ function viewRunnerNew() {
   if (!S.fed && !editing) loadFed().then(() => updateSearch('rname'));
   return frame(editing ? 'Editar mi carrera' : 'Añadir carrera', `
     <form class="card stack" data-form="r-create">
-      <p class="hint">${editing ? `Puedes corregir los datos de esta carrera porque la añadiste tú${isRace ? ' (aunque ya esté en resultados)' : ''}. Los puestos no se cambian aquí: ${isRace ? 'si el tuyo está mal, pide una corrección' : 'cada uno pone el suyo'}.`
+      <p class="hint">${editing ? `Puedes corregir los datos de esta carrera porque la añadiste tú${isRace ? ' (aunque ya esté en resultados)' : ''}. Tu puesto lo cambias en «Cambiar mi resultado»; el de los demás lo pone cada uno.`
         : 'Escribe el nombre: si ya existe en el club o en el calendario de las federaciones te saldrá aquí debajo, para no duplicarla.<br>¿Se te olvidó apuntar una carrera que ya hiciste? Añádela igual con su fecha (desde el 1 de enero del año pasado) y luego pon tu resultado.'}</p>
       <label>Nombre de la carrera<input data-rf="name" value="${esc(d.name)}" required minlength="3" maxlength="120" autocomplete="off"></label>
       <div id="dup-list">${editing ? '' : dupSuggestions(d.name, S.runnerData.registrations, true)}</div>
@@ -986,7 +956,7 @@ function myRacesCard(d) {
 
   ${pending.length ? `<section class="card season-block pend-block" id="sec-pend">
     <h2>🏁 Ya corridas, pendientes de resultado <small>(${pending.length})</small></h2>
-    <p class="hint">Estabas apuntado y ya se han disputado. Pon tu resultado (una sola vez): <b>en cuanto lo pongas ya te cuenta para el bono</b>, y a los 3 días de acabar la carrera pasa sola a resultados. Si no fuiste, toca la carrera y pulsa «No fui: borrarme».</p>
+    <p class="hint">Estabas apuntado y ya se han disputado. Pon tu resultado (lo puedes cambiar después): <b>en cuanto lo pongas ya te cuenta para el bono</b>, y a los 3 días de acabar la carrera pasa sola a resultados. Si no fuiste, toca la carrera y pulsa «No fui: borrarme».</p>
     <ul class="mini-list">${pending.map((g) => miniRow(g, (g.my_result
       ? `<span class="badge-sent">📝 ${g.my_result.position}º${g.my_result.time_seconds ? " · ⏱️ " + formatTime(g.my_result.time_seconds) : ""} · ya cuenta</span>`
       : (S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>`)) + editMine(g), `${runnerHref('carrera')}/${g.id}`)).join('')}</ul>
@@ -1092,7 +1062,7 @@ function runnerRegCard(g) {
         ${modTag(g.modality)}</div>${typeTag(g)}
       ${g.suspended ? '<p class="state-tag">⛔ Suspendida: cuenta para el mínimo de carreras, no para el bono</p>' : ''}
       ${open || g.suspended ? '' : `<p class="state-tag">🏁 Ya disputada · pendiente de resultados</p>
-        ${mine && !S.preview ? (g.my_result ? `<p class="mine-created">📝 Tu resultado: ${g.my_result.position}º (enviado) · <a href="#/resultado/reg_${g.id}">✏️ Pedir corrección</a></p>`
+        ${mine && !S.preview ? (g.my_result ? `<p class="mine-created">📝 Tu resultado: ${g.my_result.position}º (enviado) · <a href="#/resultado/reg_${g.id}">✏️ Cambiar mi resultado</a></p>`
           : `<p class="row"><a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>
              <button class="btn ghost small" data-act="r-leave" data-id="${g.id}">No fui: borrarme</button></p>`) : ''}
         ${!mine && g.date >= pastLimit() ? `<div class="row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
@@ -1191,7 +1161,7 @@ function viewRunnerDoneRace(raceId) {
     <article class="card race done-race ${modClass(r.modality)}"><div class="race-head"><div><h3>${esc(r.name)}</h3>
       <p class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div>${modTag(r.modality)}</div>${typeTag(r)}
       ${my ? `<p class="joined-done">${my.position ? `✓ Tu puesto: ${isPodium(my.position) ? medal(my.position) + ' ' : ''}${my.position}º${my.category ? ' · ' + esc(my.category) : ''}${my.self_reported ? ' · 📝 puesto por ti' : ''}
-          ${S.preview ? '' : ((S.corrections || []).some((c) => c.target_id === raceId && c.status === 'pendiente') ? ' · ⏳ corrección pedida' : ` · <a href="#/resultado/race_${raceId}">✏️ Pedir corrección</a>`)}`
+          ${S.preview ? '' : ` · <a href="#/resultado/race_${raceId}">✏️ Cambiar mi resultado</a>`}`
         : `Corriste esta carrera. ${S.preview ? '' : `<a class="btn primary small" href="#/resultado/race_${raceId}">Poner mi puesto</a>`}`}</p>` : ''}
       ${team ? `<p class="count">🏁 ${team.results.length} del club${res.length ? ':' : ''}</p>
         ${res.length ? `<ol class="rank-mini">${res.map((x) => `<li class="${x.runner_id === meId ? 'me' : ''}"><span>${isPodium(x.position) ? medal(x.position) : x.position + 'º'}</span> ${esc(x.runner_name)}${x.category ? ` <small>${esc(x.category)}</small>` : ''}</li>`).join('')}</ol>` : ''}`
@@ -3281,10 +3251,6 @@ const actions = {
     render();
     toast(`${ids.length} corredor${ids.length === 1 ? '' : 'es'} añadido${ids.length === 1 ? '' : 's'}`);
   },
-  async 'corr-cancel'(el) {
-    if (!await confirmAction('Retirar la petición', '¿Retirar tu petición de corrección?', 'Retirar')) return;
-    await run(async () => { await api.runnerCancelCorrection(S.code, el.dataset.id); await loadCorrections(); }, 'Petición retirada'); render();
-  },
   async 'corr-accept'(el) {
     await run(async () => { await api.resolveCorrection(el.dataset.id, true, null); await reload(); }, 'Corrección aceptada y aplicada'); render();
   },
@@ -3359,14 +3325,6 @@ const actions = {
 };
 
 const forms = {
-  async 'r-correct'(f) {
-    if (S.preview) return toast('Vista previa: aquí no se puede cambiar nada.', true);
-    const position = Number(f.position.value);
-    if (!Number.isInteger(position) || position < 1) return toast('Pon un puesto válido (1, 2, 3…).', true);
-    const ok = await run(async () => { await api.runnerRequestCorrection(S.code, f.dataset.kind, f.dataset.id, position, f.category.value || null, f.podium.value, cleanName(f.note.value)); await loadCorrections(); return true; },
-      'Petición enviada: la dirección la revisará');
-    if (ok) render();
-  },
   async 'r-complete'(f) {
     if (S.preview) return toast('Vista previa: aquí no se puede cambiar nada.', true);
     const data = { province: cleanName(f.province?.value || ''), km: f.km?.value || '', subtype: f.subtype?.value || '' };
@@ -3474,7 +3432,7 @@ const forms = {
     const rawTime = f.time.value.trim(), time = rawTime ? parseTime(rawTime) : null;
     if (rawTime && !time) return toast('Pon el tiempo así: 2:05:30 (horas:minutos:segundos), o déjalo vacío.', true);
     const txt = `${position}º${cat ? ' en ' + cat : ''}${time ? ' · ⏱️ ' + formatTime(time) : ''}${position <= 3 && pod === 'campeonato' ? ` · ${podiumLabel(pod)}` : ''}`;
-    if (!await confirmAction('Enviar resultado', `Vas a enviar: <b>${esc(txt)}</b>.<br>Después no podrás cambiarlo.`, 'Enviar', 'primary')) return;
+    if (!await confirmAction('Guardar resultado', `Vas a guardar: <b>${esc(txt)}</b>.<br>Si te equivocas, lo puedes cambiar después.`, 'Guardar', 'primary')) return;
     const ok = await run(async () => { await api.runnerReport(S.code, f.dataset.kind, f.dataset.id, position, cat, pod, time); await loadRunner(); return true; },
       position <= 3 ? `${medal(position)} ¡Enhorabuena! Resultado enviado` : 'Resultado enviado');
     if (ok) go(runnerHref('mi'));
@@ -3644,7 +3602,7 @@ document.addEventListener('visibilitychange', async () => {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'corr-cancel', 'news-reply']);
+const RUNNER_ACTIONS = new Set(['r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
 // los enlaces de la ventana emergente (p. ej. las carreras de un compañero) cierran la ventana al navegar
 document.getElementById('dialog').addEventListener('click', (ev) => { if (ev.target.closest('a[href^="#/"]')) ev.currentTarget.close(); });
 $app.addEventListener('click', (ev) => {

@@ -69,7 +69,7 @@ alter table public.registrations add column if not exists created_by uuid refere
 -- Quién añadió la carrera (se conserva al pasar a resultados): puede seguir editándola o borrándola.
 alter table public.races add column if not exists created_by uuid references public.runners(id) on delete set null;
 
--- Resultado puesto por el propio corredor (una sola vez; después solo lo cambia la dirección).
+-- Resultado puesto por el propio corredor (puede cambiarlo él; el puesto no cuenta para el bono, solo participar).
 alter table public.registration_entries add column if not exists self_position integer;
 alter table public.registration_entries add column if not exists self_podium_type text;
 alter table public.registration_entries add column if not exists self_reported_at timestamptz;
@@ -851,13 +851,15 @@ begin
   perform set_config('app.actor', '', true);
 end $$;
 
--- El corredor pone SU resultado una sola vez (después solo lo corrige la dirección).
+-- El corredor pone o cambia SU resultado (puesto, categoría y tiempo). El puesto no cuenta para el bono
+-- (solo participar); los podios de la general de una liga (plus) van aparte y los confirma la dirección.
+-- Si tenía una petición de corrección pendiente de esa carrera, se retira: ya lo ha cambiado él.
 --  p_kind = 'reg': inscripción ya disputada en la que está apuntado (se copiará al pasar a resultados).
---  p_kind = 'race': carrera ya en resultados donde su puesto está vacío.
+--  p_kind = 'race': carrera ya en resultados en la que participó.
 create or replace function public.runner_report_result(p_code text, p_kind text, p_id uuid, p_position int,
                                                        p_category text, p_podium_type text, p_time int default null)
 returns void language plpgsql security definer set search_path = public as $$
-declare v_runner uuid; v_who text; v_pod text := case when p_position between 1 and 3 then coalesce(nullif(p_podium_type,''), 'suelta') else null end;
+declare v_runner uuid; v_who text; v_old int; v_pod text := case when p_position between 1 and 3 then coalesce(nullif(p_podium_type,''), 'suelta') else null end;
 begin
   select id, name into v_runner, v_who from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
@@ -869,23 +871,28 @@ begin
                     where e.registration_id = p_id and e.runner_id = v_runner and g.date <= current_date) then
       raise exception 'no_es_tuya' using errcode = '42501';
     end if;
+    select self_position into v_old from registration_entries where registration_id = p_id and runner_id = v_runner;
     update registration_entries set self_position = p_position, self_podium_type = v_pod, self_reported_at = now(), self_time_seconds = p_time,
            category = coalesce(nullif(p_category, ''), category)
-     where registration_id = p_id and runner_id = v_runner and self_position is null;
-    if not found then raise exception 'resultado_ya_puesto'; end if;
-    perform public.log_change(v_who, 'result', p_id, 'resultado', format('puso su resultado: %sº en %s', p_position, (select name from registrations where id = p_id)));
+     where registration_id = p_id and runner_id = v_runner;
+    perform public.log_change(v_who, 'result', p_id, 'resultado',
+      case when v_old is null then format('puso su resultado: %sº en %s', p_position, (select name from registrations where id = p_id))
+           else format('cambió su resultado: %sº → %sº en %s', v_old, p_position, (select name from registrations where id = p_id)) end);
   elsif p_kind = 'race' then
     if not exists (select 1 from results where race_id = p_id and runner_id = v_runner) then
       raise exception 'no_es_tuya' using errcode = '42501';
     end if;
+    select position into v_old from results where race_id = p_id and runner_id = v_runner;
     update results set position = p_position, podium_type = coalesce(v_pod, 'suelta'), self_reported = true, time_seconds = p_time,
            category = coalesce(nullif(p_category, ''), category)
-     where race_id = p_id and runner_id = v_runner and position is null;
-    if not found then raise exception 'resultado_ya_puesto'; end if;
-    perform public.log_change(v_who, 'result', p_id, 'resultado', format('puso su resultado: %sº en %s', p_position, (select name from races where id = p_id)));
+     where race_id = p_id and runner_id = v_runner;
+    perform public.log_change(v_who, 'result', p_id, 'resultado',
+      case when v_old is null then format('puso su resultado: %sº en %s', p_position, (select name from races where id = p_id))
+           else format('cambió su resultado: %sº → %sº en %s', v_old, p_position, (select name from races where id = p_id)) end);
   else
     raise exception 'tipo_no_valido';
   end if;
+  delete from correction_requests where runner_id = v_runner and target_id = p_id and status = 'pendiente';
 end $$;
 
 -- Documentos: la dirección sube y descarga; el corredor ve y descarga solo los suyos.

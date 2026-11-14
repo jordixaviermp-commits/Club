@@ -10,7 +10,7 @@ const OPTIONAL = new Set(['settings', 'circuit_podiums', 'announcements', 'annou
 export function friendlyError(e) {
   const msg = String(e?.message || e || '');
   if (/enlace_no_valido/.test(msg)) return 'Este enlace ya no es válido. Pide uno nuevo a la dirección del club.';
-  if (/resultado_ya_puesto/.test(msg)) return 'Ya pusiste tu resultado en esta carrera. Si hay que corregirlo, pídeselo a la dirección del club.';
+  if (/resultado_ya_puesto/.test(msg)) return 'Para poder cambiar tu resultado falta activarlo en la base de datos. Avisa a la dirección del club.';
   if (/puesto_no_valido/.test(msg)) return 'Pon un puesto válido (1, 2, 3…).';
   if (/tiempo_no_valido/.test(msg)) return 'Pon un tiempo válido, por ejemplo 2:05:30 (horas:minutos:segundos).';
   if (/PGRST202|runner_report_result/.test(msg) && /tiempo|schema cache|Could not find/i.test(msg)) return 'Para guardar el tiempo falta activarlo en la base de datos. Avisa a la dirección (o guarda el resultado sin tiempo).';
@@ -567,18 +567,19 @@ export function demoApi(storage = globalThis.localStorage) {
         const g = d.registrations.find((x) => x.id === id);
         if (g?.suspended) throw new Error('carrera_suspendida');
         if (!e || !g || g.date > todayISO()) throw new Error('no_es_tuya');
-        if (e.self_position) throw new Error('resultado_ya_puesto');
+        const old = e.self_position;
         Object.assign(e, { self_position: position, self_podium_type: pod, self_time_seconds: timeSeconds || null, self_reported_at: new Date().toISOString() });
         if (category) e.category = category;
-        logc(me.name, 'resultado', `puso su resultado: ${position}º en ${g.name}`);
+        logc(me.name, 'resultado', old ? `cambió su resultado: ${old}º → ${position}º en ${g.name}` : `puso su resultado: ${position}º en ${g.name}`);
       } else {
         const r = d.results.find((x) => x.race_id === id && x.runner_id === me.id);
         if (!r) throw new Error('no_es_tuya');
-        if (r.position) throw new Error('resultado_ya_puesto');
+        const old = r.position;
         Object.assign(r, { position, podium_type: pod || 'suelta', time_seconds: timeSeconds || null, self_reported: true });
         if (category) r.category = category;
-        logc(me.name, 'resultado', `puso su resultado: ${position}º en ${d.races.find((x) => x.id === id)?.name}`);
+        logc(me.name, 'resultado', old ? `cambió su resultado: ${old}º → ${position}º en ${d.races.find((x) => x.id === id)?.name}` : `puso su resultado: ${position}º en ${d.races.find((x) => x.id === id)?.name}`);
       }
+      d.correction_requests = (d.correction_requests || []).filter((c) => !(c.runner_id === me.id && c.target_id === id && c.status === 'pendiente'));
       save();
     },
     async runnerUpdate(code, id, reg) {

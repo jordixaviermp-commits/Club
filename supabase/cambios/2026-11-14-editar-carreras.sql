@@ -1,6 +1,8 @@
 -- =====================================================================
 --  Cambio del 14/11/2026: quien añadió una carrera puede seguir editándola
---  o borrándola aunque ya esté en resultados (la dirección, siempre).
+--  o borrándola aunque ya esté en resultados (la dirección, siempre), y
+--  cada corredor puede cambiar su propio resultado (el puesto no cuenta
+--  para el bono; los podios del plus los confirma la dirección aparte).
 --  Versión corta para pegar desde el móvil (equivale a ejecutar
 --  supabase/schema.sql completo). Se puede ejecutar más de una vez.
 --  Termina en la línea «grant execute … to anon, authenticated;».
@@ -182,5 +184,45 @@ begin
   perform set_config('app.actor', '', true);
 end $$;
 
+create or replace function public.runner_report_result(p_code text, p_kind text, p_id uuid, p_position int,
+                                                       p_category text, p_podium_type text, p_time int default null)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_runner uuid; v_who text; v_old int; v_pod text := case when p_position between 1 and 3 then coalesce(nullif(p_podium_type,''), 'suelta') else null end;
+begin
+  select id, name into v_runner, v_who from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  if p_position is null or p_position < 1 or p_position > 999 then raise exception 'puesto_no_valido'; end if;
+  if p_time is not null and (p_time < 1 or p_time > 3600000) then raise exception 'tiempo_no_valido'; end if;  -- segundos: de 1 s a 1000 h
+  if p_kind = 'reg' then
+    if exists (select 1 from registrations where id = p_id and suspended) then raise exception 'carrera_suspendida'; end if;
+    if not exists (select 1 from registration_entries e join registrations g on g.id = e.registration_id
+                    where e.registration_id = p_id and e.runner_id = v_runner and g.date <= current_date) then
+      raise exception 'no_es_tuya' using errcode = '42501';
+    end if;
+    select self_position into v_old from registration_entries where registration_id = p_id and runner_id = v_runner;
+    update registration_entries set self_position = p_position, self_podium_type = v_pod, self_reported_at = now(), self_time_seconds = p_time,
+           category = coalesce(nullif(p_category, ''), category)
+     where registration_id = p_id and runner_id = v_runner;
+    perform public.log_change(v_who, 'result', p_id, 'resultado',
+      case when v_old is null then format('puso su resultado: %sº en %s', p_position, (select name from registrations where id = p_id))
+           else format('cambió su resultado: %sº → %sº en %s', v_old, p_position, (select name from registrations where id = p_id)) end);
+  elsif p_kind = 'race' then
+    if not exists (select 1 from results where race_id = p_id and runner_id = v_runner) then
+      raise exception 'no_es_tuya' using errcode = '42501';
+    end if;
+    select position into v_old from results where race_id = p_id and runner_id = v_runner;
+    update results set position = p_position, podium_type = coalesce(v_pod, 'suelta'), self_reported = true, time_seconds = p_time,
+           category = coalesce(nullif(p_category, ''), category)
+     where race_id = p_id and runner_id = v_runner;
+    perform public.log_change(v_who, 'result', p_id, 'resultado',
+      case when v_old is null then format('puso su resultado: %sº en %s', p_position, (select name from races where id = p_id))
+           else format('cambió su resultado: %sº → %sº en %s', v_old, p_position, (select name from races where id = p_id)) end);
+  else
+    raise exception 'tipo_no_valido';
+  end if;
+  delete from correction_requests where runner_id = v_runner and target_id = p_id and status = 'pendiente';
+end $$;
+
 revoke execute on function public.runner_update_race(text, uuid, jsonb), public.runner_delete_race(text, uuid) from public;
-grant execute on function public.runner_update_race(text, uuid, jsonb), public.runner_delete_race(text, uuid) to anon, authenticated;
+grant execute on function public.runner_update_race(text, uuid, jsonb), public.runner_delete_race(text, uuid),
+  public.runner_report_result(text, text, uuid, int, text, text, int) to anon, authenticated;
