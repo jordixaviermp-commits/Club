@@ -550,4 +550,32 @@ select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a
 select pg_temp.check((select count(*) from ig_snapshots) = 2, 'instagram: la dirección lee las cifras');
 select pg_temp.expect_fail('select * from ig_secret', 'instagram: ni la dirección lee el token desde la app');
 reset role;
+-- ===== El creador sigue pudiendo editar/borrar su carrera después de pasar a resultados =====
+reset role;
+set role anon;
+select runner_create_registration('BBBBBBBBBB', jsonb_build_object('name','Cursa Creador','date', current_date - 2), 'Élite') as creada \gset
+reset role;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+select promote_registration(:'creada') as rcreada \gset
+reset role;
+select pg_temp.check((select created_by from races where id = :'rcreada') = '10000000-0000-0000-0000-000000000002', 'la carrera conserva quién la añadió');
+set role anon;
+select pg_temp.check((select (x->>'mine_created')::boolean from jsonb_array_elements(runner_view('BBBBBBBBBB')->'my_results') x where x->>'race_id' = :'rcreada'), 'el corredor sabe que la añadió él');
+select runner_update_race('BBBBBBBBBB', :'rcreada', jsonb_build_object('name','Cursa Creador Editada','date', current_date - 3, 'modality','Gravel', 'km', '72.5', 'race_type', 'circuito', 'circuit', 'Open Test'));
+reset role;
+select pg_temp.check((select name = 'Cursa Creador Editada' and modality = 'Gravel' and km = 72.5 and circuit = 'Open Test' from races where id = :'rcreada'), 'edita su carrera ya en resultados');
+select pg_temp.check(exists (select 1 from change_log where entity_id = :'rcreada' and actor = 'Anna Puig'), 'el historial dice quién la editó');
+set role anon;
+select pg_temp.expect_fail($q$select runner_update_race('CCCCCCCCCC', '$q$ || :'rcreada' || $q$', '{"name":"Hack","date":"2000-01-01"}')$q$, 'no edita la carrera de otro');
+select pg_temp.expect_fail($q$select runner_update_race('BBBBBBBBBB', '$q$ || :'rcreada' || $q$', jsonb_build_object('name','Futura','date', current_date + 5))$q$, 'una carrera en resultados no puede ir a fecha futura');
+select pg_temp.expect_fail($q$select runner_delete_race('CCCCCCCCCC', '$q$ || :'rcreada' || $q$')$q$, 'no borra la carrera de otro');
+select runner_join_race('CCCCCCCCCC', :'rcreada', null);
+select pg_temp.expect_fail($q$select runner_delete_race('BBBBBBBBBB', '$q$ || :'rcreada' || $q$')$q$, 'no borra si otros tienen resultado');
+reset role;
+delete from results where race_id = :'rcreada' and runner_id = '10000000-0000-0000-0000-000000000003';
+set role anon;
+select runner_delete_race('BBBBBBBBBB', :'rcreada');
+reset role;
+select pg_temp.check(not exists (select 1 from races where id = :'rcreada'), 'borra su carrera si solo está él');
 \echo TODAS LAS PRUEBAS SQL OK

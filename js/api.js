@@ -17,6 +17,7 @@ export function friendlyError(e) {
   if (/carrera_suspendida/.test(msg)) return 'Esta carrera se ha suspendido: no se puede poner resultado ni pasarla a resultados.';
   if (/otros_apuntados/.test(msg)) return 'No puedes borrarla: hay más compañeros apuntados. Pídeselo a la dirección del club.';
   if (/plus_confirmado/.test(msg)) return 'La dirección ya ha confirmado este plus, así que no se puede retirar. Si hay un error, díselo a la dirección.';
+  if (/PGRST202|Could not find/i.test(msg) && /runner_(update|delete)_race/.test(msg)) return 'Para editar carreras ya pasadas a resultados falta activarlo en la base de datos. Avisa a la dirección.';
   if (/no_es_tuya/.test(msg)) return 'Solo puedes cambiar las carreras que has añadido tú.';
   if (/ya_existe/.test(msg)) return 'Ya existe: otra carrera con ese nombre ese día, un circuito ya comunicado o una petición tuya pendiente.';
   if (/sin_cambios/.test(msg)) return 'Eso es lo mismo que ya pusiste: cambia el puesto, la categoría o el tipo de podio.';
@@ -154,6 +155,8 @@ export function supabaseApi(url, key) {
     },
     async runnerUpdate(code, id, reg) { ok(await sb.rpc('runner_update_registration', { p_code: code, p_id: id, p_reg: reg })); },
     async runnerDelete(code, id) { ok(await sb.rpc('runner_delete_registration', { p_code: code, p_id: id })); },
+    async runnerUpdateRace(code, id, race) { ok(await sb.rpc('runner_update_race', { p_code: code, p_id: id, p_race: race })); },
+    async runnerDeleteRace(code, id) { ok(await sb.rpc('runner_delete_race', { p_code: code, p_id: id })); },
     async runnerCreate(code, reg, category) { return ok(await sb.rpc('runner_create_registration', { p_code: code, p_reg: reg, p_category: category || null })); },
     async runnerJoin(code, regId, category) { ok(await sb.rpc('runner_join', { p_code: code, p_registration: regId, p_category: category || null })); },
     async runnerLeave(code, regId) { ok(await sb.rpc('runner_leave', { p_code: code, p_registration: regId })); },
@@ -249,7 +252,7 @@ export function demoApi(storage = globalThis.localStorage) {
       if (g.suspended || (g.end_date || g.date) >= limit) continue;
       const ents = d.registration_entries.filter((e) => e.registration_id === g.id && e.self_position);
       if (!ents.length) continue;
-      const { created_by, created_at, ...rest } = g;
+      const { created_at, ...rest } = g;
       const race = { ...rest, id: uuid(), created_at: new Date().toISOString() };
       d.races.push(race);
       for (const e of ents) {
@@ -519,6 +522,7 @@ export function demoApi(storage = globalThis.localStorage) {
           const r = d.races.find((y) => y.id === x.race_id);
           return r && { race_id: r.id, name: r.name, date: r.date, end_date: r.end_date || null, place: r.place, province: r.province,
             country: r.country, modality: r.modality, stages: r.stages || null, race_type: r.race_type || 'suelta', circuit: r.circuit || null, subtype: r.subtype || null, km: r.km ?? null,
+            notes: r.notes || null, mine_created: r.created_by === me.id, others: d.results.filter((y) => y.race_id === r.id && y.runner_id !== me.id).length,
             category: x.category, position: x.position,
             podium_type: x.podium_type, stage_positions: x.stage_positions || null, time_seconds: x.time_seconds || null, self_reported: !!x.self_reported };
         }).filter(Boolean).sort((a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name)),
@@ -593,6 +597,27 @@ export function demoApi(storage = globalThis.localStorage) {
       if (d.registration_entries.some((e) => e.registration_id === id && e.runner_id !== me.id)) throw new Error('otros_apuntados');
       d.registrations = d.registrations.filter((x) => x.id !== id);
       d.registration_entries = d.registration_entries.filter((e) => e.registration_id !== id); save();
+    },
+    async runnerUpdateRace(code, id, race) {
+      const me = byCode(code); const d = load();
+      const r = d.races.find((x) => x.id === id && x.created_by === me.id);
+      if (!r) throw new Error('no_es_tuya');
+      const name = String(race.name || '').replace(/\s+/g, ' ').trim();
+      if (name.length < 3 || name.length > 120) throw new Error('nombre_no_valido');
+      if (!race.date || race.date < pastLimit() || race.date > todayISO()) throw new Error('fecha_no_valida');
+      if (race.end_date && (race.end_date < race.date || numDays(race.date, race.end_date) > 31)) throw new Error('fecha_no_valida');
+      if (d.races.some((x) => x.id !== id && x.date === race.date && x.name.toLowerCase() === name.toLowerCase())) throw new Error('ya_existe');
+      Object.assign(r, fields({ ...race, name }));
+      logc(me.name, 'update', `cambió la carrera ${name}`); save();
+    },
+    async runnerDeleteRace(code, id) {
+      const me = byCode(code); const d = load();
+      const r = d.races.find((x) => x.id === id && x.created_by === me.id);
+      if (!r) throw new Error('no_es_tuya');
+      if (d.results.some((x) => x.race_id === id && x.runner_id !== me.id)) throw new Error('otros_apuntados');
+      d.races = d.races.filter((x) => x.id !== id);
+      d.results = d.results.filter((x) => x.race_id !== id);
+      logc(me.name, 'delete', `borró la carrera ${r.name} (${r.date})`); save();
     },
     async runnerTeam(code) {
       byCode(code); const d = load();

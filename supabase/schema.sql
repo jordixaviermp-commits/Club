@@ -66,6 +66,8 @@ create index if not exists entries_runner_idx on public.registration_entries(run
 
 -- Inscripciones creadas por un corredor (null = creada por la dirección).
 alter table public.registrations add column if not exists created_by uuid references public.runners(id) on delete set null;
+-- Quién añadió la carrera (se conserva al pasar a resultados): puede seguir editándola o borrándola.
+alter table public.races add column if not exists created_by uuid references public.runners(id) on delete set null;
 
 -- Resultado puesto por el propio corredor (una sola vez; después solo lo cambia la dirección).
 alter table public.registration_entries add column if not exists self_position integer;
@@ -406,8 +408,8 @@ begin
             where not r.suspended and coalesce(r.end_date, r.date) < current_date - 3
               and exists (select 1 from registration_entries e where e.registration_id = r.id and e.self_position is not null)
             for update skip locked loop
-    insert into races (name, date, end_date, place, province, country, modality, notes, race_type, circuit, subtype, km)
-    values (g.name, g.date, g.end_date, g.place, g.province, g.country, g.modality, g.notes, g.race_type, g.circuit, g.subtype, g.km)
+    insert into races (name, date, end_date, place, province, country, modality, notes, race_type, circuit, subtype, km, created_by)
+    values (g.name, g.date, g.end_date, g.place, g.province, g.country, g.modality, g.notes, g.race_type, g.circuit, g.subtype, g.km, g.created_by)
     returning id into v_race;
     insert into results (race_id, runner_id, runner_name, category, position, podium_type, self_reported, time_seconds)
     select v_race, e.runner_id, rn.name, e.category, e.self_position,
@@ -537,8 +539,8 @@ begin
   perform public.require_admin();
   if exists (select 1 from registrations where id = p_id and suspended) then raise exception 'carrera_suspendida'; end if;
   perform set_config('app.skip_log', 'on', true);
-  insert into races (name, date, end_date, place, province, country, modality, notes, race_type, circuit, subtype, km)
-  select name, date, end_date, place, province, country, modality, notes, race_type, circuit, subtype, km from registrations where id = p_id
+  insert into races (name, date, end_date, place, province, country, modality, notes, race_type, circuit, subtype, km, created_by)
+  select name, date, end_date, place, province, country, modality, notes, race_type, circuit, subtype, km, created_by from registrations where id = p_id
   returning id into v_race;
   if v_race is null then raise exception 'no_existe'; end if;
   insert into results (race_id, runner_id, runner_name, category, position, podium_type, self_reported, time_seconds)
@@ -640,7 +642,9 @@ begin
       select jsonb_agg(jsonb_build_object(
                'race_id', r.id, 'name', r.name, 'date', r.date, 'end_date', r.end_date, 'place', r.place,
                'province', r.province, 'country', r.country, 'modality', r.modality, 'stages', r.stages,
-               'race_type', r.race_type, 'circuit', r.circuit, 'subtype', r.subtype, 'km', r.km,
+               'race_type', r.race_type, 'circuit', r.circuit, 'subtype', r.subtype, 'km', r.km, 'notes', r.notes,
+               'mine_created', r.created_by = me.id,
+               'others', (select count(*) from results o where o.race_id = r.id and o.runner_id is distinct from me.id),
                'category', x.category, 'position', x.position, 'podium_type', x.podium_type,
                'stage_positions', x.stage_positions, 'self_reported', x.self_reported, 'time_seconds', x.time_seconds)
              order by r.date desc, r.name)
@@ -789,6 +793,62 @@ begin
     raise exception 'otros_apuntados';
   end if;
   delete from registrations where id = p_id;
+end $$;
+
+-- Un corredor corrige los datos de una carrera ya pasada a resultados que añadió él (no los puestos).
+create or replace function public.runner_update_race(p_code text, p_id uuid, p_race jsonb)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_runner uuid; v_who text;
+  v_name text := btrim(regexp_replace(coalesce(p_race->>'name',''), '\s+', ' ', 'g'));
+  v_date date := nullif(p_race->>'date','')::date;
+  v_end  date := nullif(nullif(p_race->>'end_date',''), p_race->>'date')::date;
+  v_type text := coalesce(nullif(p_race->>'race_type',''), 'suelta');
+  v_km   numeric := case when coalesce(p_race->>'km', '') ~ '^[0-9]+([.][0-9]+)?$' then (p_race->>'km')::numeric end;
+begin
+  select id, name into v_runner, v_who from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  if not exists (select 1 from races where id = p_id and created_by = v_runner) then
+    raise exception 'no_es_tuya' using errcode = '42501';
+  end if;
+  if length(v_name) < 3 or length(v_name) > 120 then raise exception 'nombre_no_valido'; end if;
+  if v_date is null or v_date < make_date(extract(year from current_date)::int - 1, 1, 1) or v_date > current_date then raise exception 'fecha_no_valida'; end if;
+  if v_end is not null and (v_end < v_date or v_end > v_date + 30) then raise exception 'fecha_no_valida'; end if;
+  if v_type not in ('suelta','campeonato','circuito') then v_type := 'suelta'; end if;
+  if exists (select 1 from races where id <> p_id and date = v_date and lower(name) = lower(v_name)) then
+    raise exception 'ya_existe';
+  end if;
+  perform set_config('app.actor', v_who, true);
+  update races set name = v_name, date = v_date, end_date = v_end,
+    place = nullif(left(btrim(coalesce(p_race->>'place','')), 120), ''),
+    province = nullif(left(btrim(coalesce(p_race->>'province','')), 60), ''),
+    country = coalesce(nullif(left(btrim(coalesce(p_race->>'country','')), 60), ''), 'España'),
+    modality = coalesce(nullif(p_race->>'modality',''), 'Carretera'),
+    notes = nullif(left(btrim(coalesce(p_race->>'notes','')), 500), ''),
+    race_type = v_type,
+    circuit = case when v_type = 'circuito' then nullif(left(btrim(coalesce(p_race->>'circuit', '')), 120), '') end,
+    subtype = nullif(left(btrim(coalesce(p_race->>'subtype', '')), 30), ''),
+    km = case when v_km > 0 and v_km <= 1000 then round(v_km, 1) end
+  where id = p_id;
+  perform set_config('app.actor', '', true);
+end $$;
+
+-- Un corredor borra una carrera ya en resultados que añadió él, solo si nadie más tiene resultado en ella.
+create or replace function public.runner_delete_race(p_code text, p_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_runner uuid; v_who text;
+begin
+  select id, name into v_runner, v_who from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  if not exists (select 1 from races where id = p_id and created_by = v_runner) then
+    raise exception 'no_es_tuya' using errcode = '42501';
+  end if;
+  if exists (select 1 from results where race_id = p_id and runner_id is distinct from v_runner) then
+    raise exception 'otros_apuntados';
+  end if;
+  perform set_config('app.actor', v_who, true);
+  delete from races where id = p_id;
+  perform set_config('app.actor', '', true);
 end $$;
 
 -- El corredor pone SU resultado una sola vez (después solo lo corrige la dirección).
@@ -1198,6 +1258,7 @@ revoke execute on all functions in schema public from public, anon;
 grant execute on function public.runner_view(text), public.runner_join(text, uuid, text),
                           public.runner_create_registration(text, jsonb, text),
                           public.runner_update_registration(text, uuid, jsonb), public.runner_delete_registration(text, uuid),
+                          public.runner_update_race(text, uuid, jsonb), public.runner_delete_race(text, uuid),
                           public.runner_report_result(text, text, uuid, int, text, text, int),
                           public.runner_documents_list(text), public.runner_get_document(text, uuid), public.runner_contract_template(text), public.runner_get_contract_template(text),
                           public.runner_team(text),
