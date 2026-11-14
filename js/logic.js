@@ -883,3 +883,90 @@ export function searchRaces(query, races, min = 1) {
     .sort((a, b) => b.score - a.score || a.race.date.localeCompare(b.race.date))
     .map((x) => x.race);
 }
+
+// ======================================================================
+//  Estadísticas de Instagram (filas de ig_snapshots: {kind, key, data})
+// ======================================================================
+
+const sumOf = (arr, k) => arr.reduce((n, d) => n + (Number(d[k]) || 0), 0);
+const IG_AGES = ['18-24', '25-34', '35-44', '45-54', '55-64', '65+'];
+
+/**
+ * Resume las cifras guardadas de Instagram entre dos fechas (AAAA-MM-DD, inclusive; vacías = sin límite).
+ * Devuelve solo lo que hay: si no hay datos de algo, ese bloque viene vacío (nunca inventa).
+ */
+export function igSummary(rows, from = '', to = '') {
+  const inRange = (d) => (!from || d >= from) && (!to || d <= to);
+  const of = (kind) => (rows || []).filter((r) => r.kind === kind);
+  const days = of('day').filter((r) => inRange(r.key)).sort((a, b) => a.key.localeCompare(b.key));
+  const dd = days.map((r) => r.data || {});
+  const t = {
+    views: sumOf(dd, 'views'), interactions: sumOf(dd, 'interactions'), likes: sumOf(dd, 'likes'), comments: sumOf(dd, 'comments'),
+    shares: sumOf(dd, 'shares'), saves: sumOf(dd, 'saves'), taps: sumOf(dd, 'taps'), follows: sumOf(dd, 'follows'),
+    viewsF: sumOf(dd, 'views_f'), viewsNF: sumOf(dd, 'views_nf'),
+  };
+  const reachDays = dd.filter((d) => Number(d.reach) > 0);
+  t.reachAvg = reachDays.length ? Math.round(sumOf(reachDays, 'reach') / reachDays.length) : 0;
+  const split = t.viewsF + t.viewsNF;
+  t.pctNonFollowers = split ? Math.round((t.viewsNF / split) * 100) : null;
+
+  const byMonth = new Map();
+  for (const r of days) {
+    const m = byMonth.get(r.key.slice(0, 7)) || { ym: r.key.slice(0, 7), views: 0, interactions: 0, days: 0 };
+    m.views += Number(r.data.views) || 0; m.interactions += Number(r.data.interactions) || 0; m.days++;
+    byMonth.set(m.ym, m);
+  }
+
+  const posts = of('media').map((r) => ({ id: r.key, ...r.data, date: String(r.data?.ts || '').slice(0, 10) }))
+    .filter((p) => p.date && inRange(p.date)).sort((a, b) => (b.views || 0) - (a.views || 0));
+  // cuándo funcionan mejor las publicaciones (día de la semana y franja horaria, hora de Madrid)
+  const wd = Array.from({ length: 7 }, (_, i) => ({ d: i, n: 0, views: 0 })), slot = [['Mañana', 6, 14], ['Tarde', 14, 20], ['Noche', 20, 30]].map(([name]) => ({ name, n: 0, views: 0 }));
+  for (const p of posts) {
+    const dt = new Date(p.ts); if (isNaN(dt)) continue;
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Madrid', weekday: 'short', hour: 'numeric', hourCycle: 'h23' }).formatToParts(dt);
+    const day = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(parts.find((x) => x.type === 'weekday').value), h = Number(parts.find((x) => x.type === 'hour').value);
+    wd[day].n++; wd[day].views += p.views || 0;
+    const k = h >= 6 && h < 14 ? 0 : h >= 14 && h < 20 ? 1 : 2; slot[k].n++; slot[k].views += p.views || 0;
+    p.er = p.reach ? Math.round(((p.engagement ?? ((p.likes || 0) + (p.comments || 0) + (p.shares || 0) + (p.saves || 0))) / p.reach) * 1000) / 10 : null;
+  }
+  const kinds = new Map();
+  for (const p of posts) {
+    const k = p.product === 'REELS' ? 'Reels' : p.type === 'CAROUSEL_ALBUM' ? 'Carruseles' : p.type === 'VIDEO' ? 'Vídeos' : 'Fotos';
+    const x = kinds.get(k) || { kind: k, n: 0, views: 0, likes: 0 };
+    x.n++; x.views += p.views || 0; x.likes += p.likes || 0; kinds.set(k, x);
+  }
+
+  const stories = of('story').map((r) => ({ id: r.key, ...r.data, date: String(r.data?.ts || '').slice(0, 10) })).filter((s) => s.date && inRange(s.date));
+  const st = { n: stories.length, views: sumOf(stories, 'views'), replies: sumOf(stories, 'replies'), shares: sumOf(stories, 'shares') };
+  st.avg = st.n ? Math.round(st.views / st.n) : 0;
+
+  const acc = of('account').filter((r) => inRange(r.key)).sort((a, b) => a.key.localeCompare(b.key));
+  const last = acc[acc.length - 1]?.data || null, first = acc[0]?.data || null;
+  const account = last ? { followers: last.followers ?? null, following: last.following ?? null, media: last.media ?? null,
+    followersFrom: first?.followers ?? null, since: acc[0].key, until: acc[acc.length - 1].key,
+    delta: acc.length > 1 && last.followers != null && first.followers != null ? last.followers - first.followers : null } : null;
+
+  const aud = of('audience').filter((r) => inRange(r.key)).sort((a, b) => a.key.localeCompare(b.key)).pop();
+  let audience = null;
+  if (aud) {
+    const ga = aud.data.gender_age || {}, g = { F: 0, M: 0, U: 0 }, ages = Object.fromEntries(IG_AGES.map((a) => [a, 0]));
+    for (const [k, v] of Object.entries(ga)) { const [sex, age] = k.split('.'); if (sex in g) g[sex] += v; if (age in ages) ages[age] += v; }
+    const top = (o, n) => Object.entries(o || {}).sort((a, b) => b[1] - a[1]).slice(0, n).map(([name, v]) => ({ name, v }));
+    const tot = g.F + g.M + g.U;
+    const ga2 = Object.fromEntries(IG_AGES.map((a) => [a, { F: ga['F.' + a] || 0, M: ga['M.' + a] || 0, U: ga['U.' + a] || 0 }]));
+    audience = { genderAge: ga2, date: aud.key, total: tot, gender: g, ages: IG_AGES.map((a) => ({ age: a, v: ages[a] })), countries: top(aud.data.country, 6), cities: top(aud.data.city, 10),
+      pctMen: tot ? Math.round((g.M / tot) * 100) : null, pctWomen: tot ? Math.round((g.F / tot) * 100) : null };
+  }
+  return { days: days.map((r) => ({ date: r.key, ...r.data })), nDays: days.length, first: days[0]?.key || '', last: days[days.length - 1]?.key || '',
+    totals: t, byMonth: [...byMonth.values()], posts, byKind: [...kinds.values()].sort((a, b) => b.views - a.views), stories: st, storyList: stories.sort((a, b) => String(b.ts).localeCompare(String(a.ts))),
+    byWeekday: wd, bySlot: slot, followerSeries: acc.filter((r) => r.data.followers != null).map((r) => ({ date: r.key, v: r.data.followers })), account, audience };
+}
+
+/** Totales del periodo anterior de la misma duración (para «+12 % vs periodo anterior»). null si no hay datos o el periodo no está acotado. */
+export function igPrevTotals(rows, from, to) {
+  if (!from || !to) return null;
+  const a = new Date(from + 'T12:00:00'), b = new Date(to + 'T12:00:00'), n = Math.round((b - a) / 864e5) + 1;
+  const pt = new Date(a); pt.setDate(pt.getDate() - 1); const pf = new Date(pt); pf.setDate(pf.getDate() - (n - 1));
+  const g = igSummary(rows, todayISO(pf), todayISO(pt));
+  return g.nDays >= Math.min(7, n) ? g.totals : null;
+}
