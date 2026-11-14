@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, monthGrid, addMonths, formatRange, daysOf, numDays,
+  extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -381,7 +381,7 @@ function frame(title, body, { back, actions = '', rtab = null } = {}) {
     ? `<nav class="tabs">${RUNNER_TABS.map(([v, label, d]) =>
       `<a href="${runnerHref(v)}" class="${v === rtab ? 'on' : ''}">${icon(d)}<span>${label}</span></a>`).join('')}</nav>`
     : admin ? `<nav class="tabs">${ADMIN_TABS.map(([v, label, d]) =>
-      `<a href="#/${v}" class="${view === v || (!view && v === 'inscripciones') || (v === 'corredores' && ['contratos', 'computo', 'informe'].includes(view)) ? 'on' : ''}">${icon(d)}<span>${label}</span></a>`).join('')}</nav>` : '';
+      `<a href="#/${v}" class="${view === v || (!view && v === 'inscripciones') || (v === 'corredores' && ['contratos', 'computo', 'informe'].includes(view)) || (v === 'resumen' && view === 'instagram') ? 'on' : ''}">${icon(d)}<span>${label}</span></a>`).join('')}</nav>` : '';
   return `
     ${api.mode === 'demo' ? `<div class="demo-bar">Modo demostración: datos de prueba guardados solo en este móvil.</div>` : ''}
     <header class="top">
@@ -416,7 +416,7 @@ function render() {
     html = ({
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
       carreras: S.draft ? viewRaceEdit : viewRaces,
-      resumen: viewSummary, corredores: viewRunners, contratos: viewContracts, computo: viewSeasonCount, informe: viewSeasonReport, publicaciones: viewPublications, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
+      resumen: viewSummary, instagram: viewInstagram, corredores: viewRunners, contratos: viewContracts, computo: viewSeasonCount, informe: viewSeasonReport, publicaciones: viewPublications, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
       vista: () => (S.preview && S.runnerData ? runnerScreen(parseRoute().id || '') : viewRunners()),
       equipo: () => (S.preview ? viewTeam() : viewSummary()),
     }[view] || viewRegistrations)();
@@ -2151,6 +2151,7 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
       <ul>${s.missingPlace.map((m) => `<li><a href="#/carreras/${m.id}">${esc(m.name)}</a> (${formatRange(m.date, m.end_date, false)}): sin ${m.missing.join(' ni ')}</li>`).join('')}</ul></div>` : ''}</section>`;
 
   return `
+    ${admin ? resumenTabs('club') : ''}
     ${yearPicker(years)}
     ${chips}
     ${hero}
@@ -2164,6 +2165,130 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
     ${mod ? byMod : ''}
     ${places}
     ${admin ? `<button class="btn block" data-act="csv-year">Exportar ${S.year} a CSV (Excel)</button>` : ''}`;
+}
+
+// ======================================================================
+//  Estadísticas de Instagram (Resumen → Instagram)
+// ======================================================================
+
+const resumenTabs = (on) => `<div class="years subtabs no-print"><a class="chip${on === 'club' ? ' on' : ''}" href="#/resumen">🏁 Club</a><a class="chip${on === 'ig' ? ' on' : ''}" href="#/instagram">📸 Instagram</a></div>`;
+const nf = (n) => (n == null ? '—' : Number(n).toLocaleString('es-ES'));
+const IG_MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const igShort = (iso) => `${Number(iso.slice(8))} ${IG_MES[Number(iso.slice(5, 7)) - 1]} ${iso.slice(2, 4)}`;
+const igMonthName = (ym) => `${IG_MES[Number(ym.slice(5, 7)) - 1]} ${ym.slice(2, 4)}`;
+const IG_AGES_UI = ['18-24', '25-34', '35-44', '45-54', '55-64', '65+'];
+const IG_COUNTRY = { ES: 'España', FR: 'Francia', AD: 'Andorra', AR: 'Argentina', US: 'EE. UU.', GB: 'Reino Unido', PK: 'Pakistán', EC: 'Ecuador', DE: 'Alemania', PT: 'Portugal', IT: 'Italia' };
+
+/** Periodos que se pueden elegir: devuelve [desde, hasta] (AAAA-MM-DD; '' = sin límite). */
+function igRange(p) {
+  const today = todayISO(), d = new Date(today + 'T12:00:00');
+  if (p === '30') { const a = new Date(d); a.setDate(a.getDate() - 29); return [todayISO(a), today]; }
+  if (p === 'month') return [today.slice(0, 8) + '01', today];
+  if (p === 'year') return [`${S.year}-01-01`, `${S.year}-12-31`];
+  return ['', ''];
+}
+async function loadIg(force = false) {
+  if (S.ig && !force) return;
+  S.ig = { loading: true };
+  try { const rows = await api.listIg(); S.ig = rows ? { rows } : { missing: true }; }
+  catch (e) { S.ig = { failed: friendlyError(e) }; }
+  if (parseRoute().view === 'instagram') render();
+}
+
+function viewInstagram() {
+  if (!S.ig) loadIg();
+  const head = (inner) => frame('Instagram', `${resumenTabs('ig')}${inner}`);
+  if (!S.ig || S.ig.loading) return head('<p class="empty">Cargando…</p>');
+  if (S.ig.missing) return head('<p class="card warn">Aún no está activado: falta ejecutar en Supabase <code>supabase/cambios/2026-11-14-instagram.sql</code> (ver docs/instagram-captura.md).</p>');
+  if (S.ig.failed) return head(`<p class="card warn">${esc(S.ig.failed)}</p>`);
+  const period = S.igPeriod || 'all', tab = S.igTab || 'res', sort = S.igSort || 'views';
+  const [from, to] = igRange(period);
+  const g = igSummary(S.ig.rows, from, to), t = g.totals, prev = igPrevTotals(S.ig.rows, from, to);
+  const periods = [['all', 'Todo lo guardado'], ['30', 'Últimos 30 días'], ['month', 'Este mes'], ['year', `Año ${S.year}`]];
+  const label = g.nDays ? `${dateEs(g.first)} – ${dateEs(g.last)}` : 'sin datos en este periodo';
+  const periodBar = `<div class="years no-print">${periods.map(([k, l]) => `<button class="chip${k === period ? ' on' : ''}" data-act="ig-period" data-p="${k}">${l}</button>`).join('')}</div>`;
+  if (!g.nDays && !g.account && !g.audience && !g.posts.length) return head(`${periodBar}<p class="empty">No hay cifras guardadas en este periodo.</p>`);
+
+  const dlt = (cur, old) => (prev && old ? `${cur >= old ? '+' : '−'}${Math.round((Math.abs(cur - old) / old) * 100)} % vs periodo anterior` : '');
+  const kpi = (v, l, note = '') => `<div class="rp-kpi"><b>${v}</b><span>${l}</span>${note ? `<em class="rp-d">${note}</em>` : ''}</div>`;
+  const rep = (inner) => `<section class="card report ig-sec">${inner}</section>`;
+  const maxOf = (a) => Math.max(1, ...a);
+  const pct = (a, b) => (b ? `${Math.round((a / b) * 100)} %` : '—');
+  const bar = (name, v, max, suffix = '') => `<li class="ig-row"><span class="ig-name">${esc(name)}</span><span class="ig-track"><i style="width:${Math.max(2, (v / max) * 100)}%"></i></span><b>${nf(v)}${suffix}</b></li>`;
+  const kindName = (p) => (p.type === 'CAROUSEL_ALBUM' ? 'Carrusel' : p.product === 'REELS' ? 'Reel' : p.type === 'VIDEO' ? 'Vídeo' : 'Foto');
+  const acc = g.account, a = g.audience;
+
+  // ---------------- RESUMEN ----------------
+  const useDays = g.nDays <= 62;
+  const series = useDays ? g.days.map((d) => ({ name: d.date.slice(8) + '/' + d.date.slice(5, 7), v: d.views || 0 })) : g.byMonth.map((m) => ({ name: igMonthName(m.ym), v: m.views }));
+  const smax = maxOf(series.map((x) => x.v));
+  const chart = (ser, title, note = '') => `<h2>${title}</h2><div class="ig-bars${useDays ? ' dense' : ''}" role="img" aria-label="${esc(title)}">${ser.map((x, i) => `<div class="ig-col" title="${esc(x.name)}: ${nf(x.v)}"><i style="height:${Math.max(2, (x.v / smax) * 100)}%"></i>${!useDays || (i % 7 === 0 && ser.length - 1 - i > 3) || i === ser.length - 1 ? `<small>${esc(x.name)}</small>` : '<small></small>'}</div>`).join('')}</div>${note}`;
+  const hero = rep(`<h2>@hinacoclubciclistamonzon <small class="muted">· ${esc(label)}</small></h2><div class="rp-kpis">
+    ${acc ? kpi(nf(acc.followers), 'Seguidores', acc.delta != null ? `${acc.delta >= 0 ? '+' : '−'}${Math.abs(acc.delta)} desde ${igShort(acc.since)}` : `a ${igShort(acc.until)}`) : ''}
+    ${g.nDays ? kpi(nf(t.views), 'Visualizaciones', dlt(t.views, prev?.views)) : ''}${g.nDays && t.reachAvg ? kpi(nf(t.reachAvg), 'Alcance medio diario', 'personas distintas') : ''}
+    ${g.nDays ? kpi(nf(t.interactions), 'Interacciones', dlt(t.interactions, prev?.interactions)) : ''}${g.nDays ? kpi(nf(t.follows), 'Nuevos seguidores', dlt(t.follows, prev?.follows)) : ''}
+    ${t.taps ? kpi(nf(t.taps), 'Toques en el perfil') : ''}${g.nDays ? kpi(nf(Math.round(t.views / g.nDays)), 'Visualizaciones por día', 'media') : ''}</div>
+    ${acc?.media != null ? `<p class="rp-note" style="margin:0">${nf(acc.media)} publicaciones en total · siguiendo a ${nf(acc.following)}.</p>` : ''}`);
+  const evo = g.nDays ? rep(chart(series, `Visualizaciones ${useDays ? 'por día' : 'por mes'}`, g.nDays < 30 ? `<p class="rp-note">Solo hay ${g.nDays} día${g.nDays === 1 ? '' : 's'} guardado${g.nDays === 1 ? '' : 's'}: el histórico crece cada día que la captura se ejecuta.</p>` : '')) : '';
+  const split = t.pctNonFollowers != null ? rep(`<h2>¿Quién nos ve?</h2>
+    <div class="ig-split"><i style="width:${100 - t.pctNonFollowers}%"></i><i class="nf" style="width:${t.pctNonFollowers}%"></i></div>
+    <p class="ig-legend"><span><i class="dot a"></i>Seguidores ${nf(t.viewsF)} (${100 - t.pctNonFollowers} %)</span><span><i class="dot b"></i>No seguidores ${nf(t.viewsNF)} (${t.pctNonFollowers} %)</span></p>
+    <p class="rp-note">Las visualizaciones de no seguidores indican hasta dónde llega el club fuera de su círculo.</p>`) : '';
+  const eng = t.interactions || t.likes ? rep(`<h2>Interacciones</h2><div class="rp-kpis">
+    ${kpi(nf(t.likes), 'Me gusta')}${kpi(nf(t.comments), 'Comentarios')}${kpi(nf(t.shares), 'Compartidos')}${kpi(nf(t.saves), 'Guardados')}${t.reposts ? kpi(nf(t.reposts), 'Reposts') : ''}${t.taps ? kpi(nf(t.taps), 'Toques en enlaces') : ''}</div>`) : '';
+  const pv = g.posts.reduce((n, p) => n + (p.views || 0), 0), sv = g.stories.views;
+  const mix = [['Publicaciones', pv, g.posts.length], ['Historias', sv, g.stories.n]].filter((x) => x[1]);
+  const mixMax = maxOf(mix.map((x) => x[1]));
+  const byType = mix.length ? rep(`<h2>Visualizaciones por tipo de contenido</h2><ul class="ig-list tight">${mix.map(([n, v, c]) => bar(`${n} (${c})`, v, mixMax)).join('')}</ul>
+    <p class="rp-note">Las historias solo cuentan desde que se activó el guardado automático (Instagram las borra a las 24 h). Las visualizaciones por contenido pueden no sumar el total de la cuenta.</p>`) : '';
+  const resumen = `${hero}${evo}${split}${eng}${byType}`;
+
+  // ---------------- CONTENIDO ----------------
+  const SORTS = [['views', 'Visualizaciones'], ['reach', 'Alcance'], ['likes', 'Me gusta'], ['comments', 'Comentarios'], ['shares', 'Compartidos'], ['saves', 'Guardados'], ['visits', 'Visitas al perfil'], ['er', 'Interacción %']];
+  const ranked = [...g.posts].sort((x, y) => (y[sort] || 0) - (x[sort] || 0));
+  const maxPost = maxOf(ranked.map((p) => p[sort] || 0));
+  const shown = S.igAll ? ranked : ranked.slice(0, 10);
+  const posts = ranked.length ? rep(`<h2>Publicaciones (${ranked.length})</h2>
+    <div class="years no-print">${SORTS.map(([k, l]) => `<button class="chip small${k === sort ? ' on' : ''}" data-act="ig-sort" data-s="${k}">${l}</button>`).join('')}</div>
+    <ul class="ig-list">${shown.map((p, i) => `<li><span class="ig-rank">${i + 1}</span><div class="ig-post"><div><b>${esc(p.title || kindName(p))}</b></div><small>${dateEs(p.date)} · ${kindName(p)}${p.link ? ` · <a class="no-print" href="${esc(p.link)}" target="_blank" rel="noopener">Ver en Instagram ↗</a>` : ''}</small>
+      <span class="ig-track"><i style="width:${Math.max(2, ((p[sort] || 0) / maxPost) * 100)}%"></i></span>
+      <small>${nf(p.views)} visualizaciones · ${nf(p.reach)} personas · ${nf(p.likes)} ♥ · ${nf(p.comments)} 💬 · ${nf(p.shares)} ↗ · ${nf(p.saves)} 🔖 · ${nf(p.visits)} visitas al perfil${p.er != null ? ` · interacción ${p.er} %` : ''}</small></div></li>`).join('')}</ul>
+    ${ranked.length > 10 ? `<button class="btn block no-print" data-act="ig-all">${S.igAll ? 'Ver solo las 10 primeras' : `Ver las ${ranked.length}`}</button>` : ''}
+    <p class="rp-note">«Interacción %» = (me gusta + comentarios + compartidos + guardados) ÷ personas alcanzadas.</p>`) : '';
+  const kinds = g.byKind.length ? rep(`<h2>Por tipo de publicación</h2><div class="pills">${g.byKind.map((k) => `<span class="pill">${esc(k.kind)} <b>${k.n}</b> · ${nf(Math.round(k.views / k.n))} visualizaciones de media · ${nf(Math.round(k.likes / k.n))} ♥ de media</span>`).join('')}</div>`) : '';
+  const DAYS_ES = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+  const wdRows = g.byWeekday.filter((d) => d.n), wdMax = maxOf(wdRows.map((d) => d.views / d.n));
+  const when = g.posts.length >= 3 ? rep(`<h2>¿Cuándo funcionan mejor?</h2><p class="rp-note" style="margin:0 0 .5rem">Visualizaciones medias según cuándo se publicó (hora de Madrid; mañana 6–14 h, tarde 14–20 h, noche 20–6 h).</p>
+    <ul class="ig-list tight">${wdRows.map((d) => bar(`${DAYS_ES[d.d]} (${d.n})`, Math.round(d.views / d.n), wdMax)).join('')}</ul>
+    <ul class="ig-list tight" style="margin-top:.6rem">${g.bySlot.filter((x) => x.n).map((x) => bar(`${x.name} (${x.n})`, Math.round(x.views / x.n), maxOf(g.bySlot.filter((y) => y.n).map((y) => y.views / y.n)))).join('')}</ul>
+    ${g.posts.length < 10 ? '<p class="rp-note">Con pocas publicaciones es solo orientativo.</p>' : ''}`) : '';
+  const stories = g.stories.n ? rep(`<h2>Historias</h2><div class="rp-kpis">${kpi(nf(g.stories.n), 'Historias')}${kpi(nf(g.stories.views), 'Visualizaciones')}${kpi(nf(g.stories.avg), 'De media por historia')}${g.stories.replies ? kpi(nf(g.stories.replies), 'Respuestas') : ''}${g.stories.shares ? kpi(nf(g.stories.shares), 'Compartidos') : ''}</div>
+    <ul class="ig-list tight" style="margin-top:.6rem">${g.storyList.slice(0, S.igAll ? 200 : 8).map((x) => `<li class="ig-row"><span class="ig-name">${igShort(x.date)}</span><span class="ig-track"><i style="width:${Math.max(2, ((x.views || 0) / maxOf(g.storyList.map((y) => y.views || 0))) * 100)}%"></i></span><b>${nf(x.views)}</b></li>`).join('')}</ul>
+    <p class="rp-note">Instagram solo conserva las historias 24 horas: aquí cuentan las capturadas desde que se activó el guardado automático.</p>`) : '';
+  const contenido = `${posts || '<p class="empty">No hay publicaciones guardadas en este periodo.</p>'}${kinds}${when}${stories}`;
+
+  // ---------------- AUDIENCIA ----------------
+  const fol = g.followerSeries.length >= 2 ? rep(`<h2>Evolución de seguidores</h2><div class="ig-bars" role="img" aria-label="Seguidores">${(() => { const lo = Math.min(...g.followerSeries.map((x) => x.v)), hi = Math.max(...g.followerSeries.map((x) => x.v)); return g.followerSeries.map((x) => `<div class="ig-col" title="${esc(igShort(x.date))}: ${nf(x.v)}"><i style="height:${hi === lo ? 60 : 15 + ((x.v - lo) / (hi - lo)) * 85}%"></i><small>${g.followerSeries.length <= 8 ? esc(igShort(x.date)) : ''}</small></div>`).join(''); })()}</div>
+    <p class="rp-note">Un punto por cada día en que se ha guardado la cuenta (de ${nf(g.followerSeries[0].v)} a ${nf(g.followerSeries[g.followerSeries.length - 1].v)}).</p>`) : '';
+  const maxAge = a ? maxOf(a.ages.map((x) => x.v)) : 1;
+  const gen = a ? rep(`<h2>Audiencia</h2><p class="rp-note" style="margin:0 0 .6rem">Seguidores a ${dateEs(a.date)} (${nf(a.total)} con datos).</p>
+    <div class="rp-kpis">${kpi(`${a.pctMen} %`, 'Hombres', nf(a.gender.M))}${kpi(`${a.pctWomen} %`, 'Mujeres', nf(a.gender.F))}${a.gender.U ? kpi(`${pct(a.gender.U, a.total)}`, 'Sin indicar', nf(a.gender.U)) : ''}</div>
+    <h3 class="ig-h">Edad y género</h3><ul class="ig-list tight">${IG_AGES_UI.map((ag) => { const x = a.genderAge[ag], tot = x.F + x.M + x.U; return `<li class="ig-row wide"><span class="ig-name">${ag}</span><span class="ig-track gstack"><i class="m" style="width:${(x.M / maxAge) * 100}%"></i><i class="f" style="width:${(x.F / maxAge) * 100}%"></i><i class="u" style="width:${(x.U / maxAge) * 100}%"></i></span><b>${nf(tot)}</b></li>`; }).join('')}</ul>
+    <p class="ig-legend"><span><i class="dot a"></i>Hombres</span><span><i class="dot b"></i>Mujeres</span><span><i class="dot c"></i>Sin indicar</span></p>`) : '';
+  const geo = a ? rep(`<h2>Dónde viven</h2><h3 class="ig-h">Ciudades</h3><ul class="ig-list tight">${a.cities.map((x) => bar(x.name.split(',')[0], x.v, a.cities[0].v, ` <small>${pct(x.v, a.total)}</small>`)).join('')}</ul>
+    <h3 class="ig-h">Países</h3><ul class="ig-list tight">${a.countries.map((x) => bar(IG_COUNTRY[x.name] || x.name, x.v, a.countries[0].v)).join('')}</ul>`) : '';
+  const audiencia = `${fol}${gen}${geo}` || '<p class="empty">Sin datos de audiencia todavía.</p>';
+
+  const panels = { res: resumen, con: contenido, aud: audiencia };
+  const tabs = [['res', 'Resumen'], ['con', 'Contenido'], ['aud', 'Audiencia']];
+  return head(`
+    <div class="no-print">${periodBar}
+      <div class="years">${tabs.map(([k, l]) => `<button class="chip${k === tab ? ' on' : ''}" data-act="ig-tab" data-t="${k}">${l}</button>`).join('')}</div>
+      <div class="row-btns rp-actions"><button class="btn primary" data-act="print-report">🖨️ Imprimir o guardar PDF</button><button class="btn" data-act="ig-csv">📊 Excel</button></div>
+      <p class="hint">El PDF incluye las tres partes (Resumen, Contenido y Audiencia), listas para el dossier de memorias o para enseñar a un patrocinador. En el cuadro de imprimir elige «Guardar como PDF». Las cifras las guarda una tarea automática: nada de usuarios ni comentarios, solo números y el título de cada publicación.</p></div>
+    <div class="print-only ig-title"><b>Club Ciclista Monzón · Estadísticas de Instagram</b><span>${esc(label)}</span></div>
+    ${tabs.map(([k, l]) => `<div class="ig-panel${k === tab ? '' : ' off'}"><h2 class="print-only ig-part">${l}</h2>${panels[k]}</div>`).join('')}
+    <p class="rp-note">Fuente: Instagram (estadísticas de la cuenta profesional del club). Alcance = personas distintas que vieron el contenido; las visualizaciones cuentan también las repeticiones.</p>`);
 }
 
 function viewSummary() {
@@ -3235,6 +3360,19 @@ const actions = {
   async 'pub-story-manual'(el) { await setPostedKeys([el.dataset.key], true); toast('Marcada como publicada'); },
   async 'pub-orphans-del'() { await setPostedKeys(pubAudit(S.year).orphans.map((o) => o.key), false); toast('Marcas quitadas'); },
   'print-report'() { window.print(); },
+  'ig-period'(el) { S.igPeriod = el.dataset.p; render(); },
+  'ig-tab'(el) { S.igTab = el.dataset.t; render(); },
+  'ig-sort'(el) { S.igSort = el.dataset.s; render(); },
+  'ig-all'() { S.igAll = !S.igAll; render(); },
+  'ig-csv'() {
+    const [from, to] = igRange(S.igPeriod || 'all'), g = igSummary(S.ig?.rows || [], from, to), tag = `${from || g.first || 'todo'}_${to || g.last || ''}`.replace(/_$/, '');
+    const days = toCsv(g.days.map((d) => [d.date, d.views ?? '', d.reach ?? '', d.interactions ?? '', d.likes ?? '', d.comments ?? '', d.shares ?? '', d.saves ?? '', d.follows ?? '', d.views_f ?? '', d.views_nf ?? '']),
+      ['Fecha', 'Visualizaciones', 'Personas alcanzadas', 'Interacciones', 'Me gusta', 'Comentarios', 'Compartidos', 'Guardados', 'Nuevos seguidores', 'Visualizaciones de seguidores', 'Visualizaciones de no seguidores']);
+    const posts = toCsv(g.posts.map((p) => [p.date, p.title || '', p.type || '', p.link || '', p.views ?? '', p.reach ?? '', p.likes ?? '', p.comments ?? '', p.shares ?? '', p.saves ?? '', p.visits ?? '']),
+      ['Fecha', 'Título', 'Tipo', 'Enlace', 'Visualizaciones', 'Personas alcanzadas', 'Me gusta', 'Comentarios', 'Compartidos', 'Guardados', 'Visitas al perfil']);
+    download(`monzon-instagram-dias-${tag}.csv`, days, 'text/csv;charset=utf-8');
+    setTimeout(() => download(`monzon-instagram-publicaciones-${tag}.csv`, posts, 'text/csv;charset=utf-8'), 400);
+  },
   'rep-frozen'(el) { S.repFrozen = el.dataset.v === '1'; render(); },
   async 'rep-freeze'() {
     const had = !!S.data.settings?.[`cierre_${S.year}`];
