@@ -141,3 +141,36 @@ test('avituallamiento inteligente: reparte el total y no pone tomas en las bajad
   assert.ok(plan.every((f, i) => i === 0 || f.ms - plan[i - 1].ms >= 15 * 60000));
   assert.ok(plan[plan.length - 1].ms <= tl.total - 5 * 60000);
 });
+
+test('subidas: perfil real de 117 km (puerto tendido al ~1,9 % y cuatro repechos)', () => {
+  // altitudes leídas del perfil de una ruta de un usuario (km, m)
+  const K = [[0, 100], [5, 105], [10, 110], [15, 120], [16.7, 122], [17.7, 178], [19, 140], [20, 150], [25, 230], [28, 290], [30, 300], [35, 345],
+    [40, 400], [43, 450], [45, 520], [47, 600], [49, 700], [50, 720], [55, 722], [58, 700], [62, 640], [66.9, 580], [68.1, 646], [72, 560],
+    [80, 480], [81.7, 470], [83.4, 544], [85, 500], [87, 497], [88.8, 551], [93, 400], [100, 150], [110, 110], [117, 150]];
+  const f = (k) => { let i = 1; while (i < K.length - 1 && K[i][0] < k) i++; const [a, b] = [K[i - 1], K[i]]; return a[1] + (b[1] - a[1]) * ((k - a[0]) / (b[0] - a[0])) + 4 * Math.sin(k * 2.3); };
+  const c = R.findClimbs(perfil(117, f).points).map((x) => [Math.round(x.start / 1000), Math.round(x.gain)]);
+  const near = (km) => c.some(([s]) => Math.abs(s - km) <= 3);
+  assert.ok(c.some(([s, g]) => s >= 18 && s <= 30 && g > 400), `falta el puerto largo: ${JSON.stringify(c)}`);
+  for (const km of [17, 67, 82, 87]) assert.ok(near(km), `falta la subida del km ${km}: ${JSON.stringify(c)}`);
+});
+
+test('ritmo por potencia y peso, terreno y paradas por hora', () => {
+  const llano = perfil(30, () => 100);
+  const a = R.timeline(llano.points, { mode: 'power', pFlat: 200, rider: 72, bike: 8 });
+  const kmh = 30 / (a.moving / 3600000);
+  assert.ok(kmh > 29 && kmh < 35, `200 W en llano: ${kmh} km/h`);
+  const mtb = R.timeline(llano.points, { mode: 'power', pFlat: 200, rider: 72, bike: 8, terrain: 'mtb' });
+  assert.ok(mtb.moving > a.moving * 1.1);
+  const paradas = R.timeline(llano.points, { mode: 'power', pFlat: 200, stopsPerHour: 10 });
+  assert.ok(Math.abs(paradas.total / paradas.moving - 1.2) < 1e-9); // 10 min de cada hora parado: 60/50
+  const subida = perfil(10, (k) => 100 + k * 70); // 7 %
+  const c1 = R.timeline(subida.points, { mode: 'power', pFlat: 200, pClimb: 200 }).moving, c2 = R.timeline(subida.points, { mode: 'power', pFlat: 200, pClimb: 260 }).moving;
+  assert.ok(c2 < c1 * 0.85, 'más vatios en subida, menos tiempo');
+});
+
+test('filtros de subidas: todas, medianas y grandes, solo grandes', () => {
+  const c = [{ length: 600, avg: 0.04, gain: 24 }, { length: 1200, avg: 0.04, gain: 48 }, { length: 2400, avg: 0.043, gain: 103 }, { length: 5100, avg: 0.078, gain: 398 }];
+  assert.deepEqual(['todas', 'medianas', 'grandes'].map((k) => R.climbFilter(c, k).length), [4, 3, 2]);
+  assert.equal(R.climbCategory(c[3]), '2');
+  assert.equal(R.climbCategory({ length: 3100, avg: 0.074 }), '3');
+});
