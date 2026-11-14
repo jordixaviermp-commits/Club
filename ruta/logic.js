@@ -609,3 +609,71 @@ export function nearestD(points, lat, lon) {
   }
   return best;
 }
+
+// ---------- Altitud del modelo del terreno (Open-Meteo, Copernicus DEM 90 m) ----------
+/** Puntos donde pedir la altitud del terreno: uno cada `step` m (como mucho `max`). */
+export function demSamples(points, { step = 100, max = 1500 } = {}) {
+  const total = points[points.length - 1].d;
+  const st = Math.max(step, total / (max - 1));
+  const out = [];
+  for (let d = 0; d < total; d += st) out.push(pointAt(points, d));
+  out.push({ ...points[points.length - 1] });
+  return out.map((p) => ({ lat: p.lat, lon: p.lon, d: p.d }));
+}
+/** URLs de Open-Meteo para esas muestras, de 100 en 100 (lo que admite cada petición). */
+export function demUrls(samples) {
+  const urls = [];
+  for (let i = 0; i < samples.length; i += 100) {
+    const part = samples.slice(i, i + 100);
+    urls.push(`https://api.open-meteo.com/v1/elevation?latitude=${part.map((p) => p.lat.toFixed(5)).join(',')}&longitude=${part.map((p) => p.lon.toFixed(5)).join(',')}`);
+  }
+  return urls;
+}
+/** Altitud del terreno en cada punto del track, interpolando entre las muestras. */
+export function applyDem(points, samples, elevs) {
+  let j = 0;
+  return points.map((p) => {
+    while (j < samples.length - 2 && samples[j + 1].d < p.d) j++;
+    const a = samples[j], b = samples[j + 1] || a;
+    const f = b.d === a.d ? 0 : Math.max(0, Math.min(1, (p.d - a.d) / (b.d - a.d)));
+    return elevs[j] + ((elevs[j + 1] ?? elevs[j]) - elevs[j]) * f;
+  });
+}
+
+// ---------- Fuentes de agua (OpenStreetMap, Overpass) ----------
+/**
+ * Consulta de Overpass: fuentes de agua potable a menos de `radius` m de la ruta (la ruta va como
+ * una línea de hasta `max` puntos). Incluye fuentes, grifos y manantiales marcados como potables.
+ */
+export function fountainsQuery(points, { radius = 500, max = 300 } = {}) {
+  const total = points[points.length - 1].d;
+  const n = Math.min(max, Math.max(2, Math.ceil(total / 200)));
+  const line = [];
+  for (let k = 0; k < n; k++) { const p = pointAt(points, (k / (n - 1)) * total); line.push(`${p.lat.toFixed(5)},${p.lon.toFixed(5)}`); }
+  const a = `around:${radius},${line.join(',')}`;
+  return `[out:json][timeout:90];(
+node(${a})["amenity"="drinking_water"]["access"!="private"];
+node(${a})["amenity"="fountain"]["drinking_water"="yes"];
+node(${a})["man_made"="water_tap"]["drinking_water"!="no"];
+node(${a})["natural"="spring"]["drinking_water"="yes"];
+node(${a})["amenity"="water_point"];
+);out body;`;
+}
+/** Fuentes de la respuesta de Overpass que quedan a menos de `radius` m: con su km de ruta y lo que hay que desviarse. */
+export function parseFountains(json, points, { radius = 500 } = {}) {
+  const seen = new Set();
+  const out = [];
+  for (const el of json?.elements || []) {
+    if (el.type !== 'node' || seen.has(el.id)) continue;
+    seen.add(el.id);
+    const d = nearestD(points, el.lat, el.lon);
+    const p = pointAt(points, d);
+    const off = haversine(p.lat, p.lon, el.lat, el.lon);
+    if (off > radius) continue;
+    const t = el.tags || {};
+    const kind = t.natural === 'spring' ? 'Manantial' : t.man_made === 'water_tap' ? 'Grifo' : t.amenity === 'water_point' ? 'Punto de agua' : 'Fuente';
+    out.push({ id: el.id, lat: el.lat, lon: el.lon, d, off, name: t.name || t['name:es'] || t['name:ca'] || '', kind,
+      unsure: t.drinking_water === 'conditional' || t.seasonal === 'yes' || t.disused === 'yes' });
+  }
+  return out.sort((a, b) => a.d - b.d);
+}

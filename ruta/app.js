@@ -50,32 +50,35 @@ const wpType = (id) => WP_TYPES.find((t) => t[0] === id) || WP_TYPES[WP_TYPES.le
 // ---------- Estado ----------
 const S = {
   id: null, name: '', raw: null, reversed: false, track: null, climbs: [], samples: [], tl: null, etas: [], along: null,
+  eleSrc: 'file', dem: null, demLoading: false, demErr: '', fountains: null, fLoading: false, fErr: '',
   start: paramStart() || defaultStart(), stage: 'setup', range: null, climbView: 'medianas', profColor: 'subidas',
   pace: { mode: 'speed', kmh: 27, pFlat: 200, pClimb: 220, rider: 72, bike: 8, terrain: 'road', stopsPH: 0 },
   wx: null, wxKey: '', wxErr: '', wxLoading: false,
   view: 'completa', mode: 'viento', arrowsKm: 4, wps: [], addingWp: false,
   feeding: false, gph: 90, every: 30, feedOnMap: true, feedMode: 'smart', custom: null,
   carry: { bid: { n: 2, g: 0 }, gel: { n: 0, g: 25 }, bar: { n: 0, g: 30 } },
-  exp: { wps: true, climbs: false, tomas: false, times: false }, cursorD: null,
+  exp: { wps: true, climbs: false, tomas: false, times: false, fuentes: true }, cursorD: null,
   charts: ['viento', 'temp', 'lluvia', 'humedad', 'uv'], bgProfile: true, tCursor: null,
 };
 let map = null, mapLayer = null, arrowLayer = null, cursorMarker = null, fitted = false;
 
 function saveLast() {
   if (!S.id) return;
-  store.set(K_LAST, { id: S.id, start: S.start, pace: S.pace, stage: S.stage, range: S.range, climbView: S.climbView, profColor: S.profColor, reversed: S.reversed, wps: S.wps,
+  store.set(K_LAST, { id: S.id, start: S.start, pace: S.pace, eleSrc: S.eleSrc, stage: S.stage, range: S.range, climbView: S.climbView, profColor: S.profColor, reversed: S.reversed, wps: S.wps,
     gph: S.gph, every: S.every, feeding: S.feeding, view: S.view, mode: S.mode, charts: S.charts, bgProfile: S.bgProfile, feedMode: S.feedMode, custom: S.custom, carry: S.carry });
 }
-function saveRecent(id, name, pts) {
+function saveRecent(id, name, pts, dem = null) {
   let list = store.get(K_REC, []).filter((r) => r.id !== id);
-  list.unshift({ id, name, pts, at: Date.now() });
+  list.unshift({ id, name, pts, dem, at: Date.now() });
   list = list.slice(0, 8);
   while (list.length && !store.set(K_REC, list)) list.pop(); // si no cabe, se van quitando las más antiguas
 }
 
 // ---------- Cálculos ----------
 function build() {
-  const pts = (S.reversed ? [...S.raw].reverse() : S.raw).map(([lat, lon, ele]) => ({ lat, lon, ele }));
+  const useDem = S.eleSrc === 'dem' && S.dem && S.dem.length === S.raw.length;
+  const src = S.raw.map(([lat, lon, ele], i) => ({ lat, lon, ele: useDem ? S.dem[i] : ele }));
+  const pts = S.reversed ? src.reverse() : src;
   S.full = R.buildTrack(pts);
   // «planificar solo un tramo»: se queda con los puntos entre los dos tiradores del perfil
   if (S.range) {
@@ -128,6 +131,59 @@ async function fetchWeather() {
   S.wxLoading = false;
   retime(); update();
 }
+
+/** Altitud del modelo del terreno para el track (Open-Meteo, de 100 en 100 puntos). */
+async function fetchDem() {
+  if (S.demLoading) return;
+  S.demLoading = true; S.demErr = ''; update();
+  try {
+    let d = 0;
+    const pts = S.raw.map(([lat, lon], i) => { if (i) d += R.haversine(S.raw[i - 1][0], S.raw[i - 1][1], lat, lon); return { lat, lon, d }; });
+    const samples = R.demSamples(pts);
+    const elevs = [];
+    for (const url of R.demUrls(samples)) {
+      const res = await fetch(url);
+      const j = await res.json();
+      if (!res.ok || !Array.isArray(j.elevation)) throw new Error(j.reason || `Error ${res.status}`);
+      elevs.push(...j.elevation);
+    }
+    S.dem = R.applyDem(pts, samples, elevs).map((e) => Math.round(e * 10) / 10);
+    saveRecent(S.id, S.name, S.raw, S.dem);
+  } catch (e) {
+    S.demErr = `No se ha podido cargar la altitud del terreno (${e.message}).`;
+    if (S.track?.hasEle) S.eleSrc = 'file';
+  }
+  S.demLoading = false;
+  build(); update(); fetchWeather();
+}
+
+/** Fuentes de agua de OpenStreetMap a menos de 500 m (se guardan por ruta; «Buscar las más recientes» las vuelve a pedir). */
+const K_FONT = 'ruta-fuentes';
+async function fetchFountains(force = false) {
+  if (S.fLoading || !S.full) return;
+  const cache = store.get(K_FONT, {});
+  if (!force && cache[S.id]) { S.fountains = cache[S.id]; return; }
+  S.fLoading = true; S.fErr = ''; renderFountains();
+  const body = `data=${encodeURIComponent(R.fountainsQuery(S.full.points))}`;
+  let json = null, err = '';
+  for (const url of ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter']) {
+    try {
+      const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
+      if (!res.ok) throw new Error(`Error ${res.status}`);
+      json = await res.json(); break;
+    } catch (e) { err = e.message; }
+  }
+  S.fLoading = false;
+  if (!json) { S.fErr = `No se han podido buscar las fuentes (${err}). OpenStreetMap a veces va saturado: prueba en un rato.`; return renderFountains(); }
+  const elements = (json.elements || []).map((e) => ({ type: 'node', id: e.id, lat: e.lat, lon: e.lon, tags: e.tags }));
+  S.fountains = { at: Date.now(), elements };
+  const all = { ...cache, [S.id]: S.fountains };
+  const keys = Object.keys(all);
+  while (keys.length > 15) delete all[keys.shift()];
+  store.set(K_FONT, all);
+  update();
+}
+const fountains = () => (S.fountains ? R.parseFountains({ elements: S.fountains.elements }, S.track.points) : []);
 
 /** Salida y puesta del sol del día de salida (en el primer punto), si la previsión las trae. */
 function sunTimes(startMs = S.start) {
@@ -240,15 +296,19 @@ async function readFile(file) {
 function openRoute(name, points, settings = null) {
   const pts = Array.isArray(points[0]) ? points : R.decimate(points, 4000);
   const id = settings?.id || `r${Date.now().toString(36)}`;
-  Object.assign(S, { id, name, raw: pts, reversed: false, range: null, stage: 'setup', wps: [], feeding: false, custom: null, wx: null, wxKey: '', wxErr: '', cursorD: null, tCursor: null });
+  Object.assign(S, { id, name, raw: pts, dem: settings?.dem || null, eleSrc: 'file', demErr: '', fountains: null, fErr: '', reversed: false, range: null, stage: 'setup', wps: [], feeding: false, custom: null, wx: null, wxKey: '', wxErr: '', cursorD: null, tCursor: null });
   if (settings) {
-    for (const k of ['start', 'pace', 'stage', 'range', 'climbView', 'profColor', 'reversed', 'wps', 'gph', 'every', 'feeding', 'view', 'mode', 'charts', 'bgProfile', 'feedMode', 'custom', 'carry']) if (settings[k] !== undefined) S[k] = settings[k];
+    for (const k of ['start', 'pace', 'eleSrc', 'stage', 'range', 'climbView', 'profColor', 'reversed', 'wps', 'gph', 'every', 'feeding', 'view', 'mode', 'charts', 'bgProfile', 'feedMode', 'custom', 'carry']) if (settings[k] !== undefined) S[k] = settings[k];
     if (settings.flat && !settings.pace) S.pace = { ...S.pace, kmh: settings.flat }; // ajustes guardados por la versión anterior
     if (S.start < Date.now() - 3600000) { const d = new Date(S.start); const n = new Date(defaultStart()); n.setHours(d.getHours(), d.getMinutes()); S.start = n.getTime(); }
   }
   saveRecent(id, name, pts);
   fitted = false;
-  build(); render(); fetchWeather();
+  build();
+  // sin altitud en el archivo: se usa la del terreno
+  if (!S.track.hasEle) { S.eleSrc = 'dem'; if (!S.dem) fetchDem(); else build(); }
+  if (S.eleSrc === 'dem' && S.dem) build();
+  render(); fetchWeather();
 }
 function showRecent() {
   const rec = store.get(K_REC, []);
@@ -282,6 +342,19 @@ function ritmoHtml() {
 }
 const arriveHtml = () => `<p class="arrive">Llegada <mark>${hm(S.start + S.tl.total)}</mark></p>
   <p class="muted">${dur(S.tl.total)} · ${km(S.track.distance)} km · ${int(S.track.gain)} m+ · ${nf1.format(S.track.distance / S.tl.moving * 3600)} km/h sin viento</p>`;
+function eleHtml() {
+  const q = S.full?.quality || {};
+  const noisy = S.eleSrc === 'file' && q.noise >= 4;
+  const note = S.demLoading ? 'Cargando la altitud del terreno…'
+    : S.eleSrc === 'dem' ? 'Modelo del terreno Copernicus (90 m): uniforme para cualquier track, pero no ve puentes ni túneles (se corrigen solos los saltos de ida y vuelta).'
+    : !S.track.hasEle ? 'El archivo no trae altitud.'
+    : `La que trae el archivo${q.noise ? ` (ruido ±${nf1.format(q.noise)} m${q.repaired ? `, ${q.repaired} salto${q.repaired > 1 ? 's' : ''} de túnel o puente arreglado${q.repaired > 1 ? 's' : ''}` : ''})` : ''}.`;
+  return `<p class="lbl">Altitud</p>
+    <div class="seg"><button data-elesrc="file" class="${S.eleSrc === 'file' ? 'on' : ''}" ${S.track.hasEle ? '' : 'disabled'}>Del archivo</button><button data-elesrc="dem" class="${S.eleSrc === 'dem' ? 'on' : ''}">Del terreno</button></div>
+    <p class="hint">${note}</p>
+    ${noisy ? '<p class="warn">La altitud de este archivo tiene mucho ruido (suele pasar con el GPS del móvil o del reloj). Prueba con la del terreno: el desnivel y las subidas saldrán más fiables.</p>' : ''}
+    ${S.demErr ? `<p class="warn">${esc(S.demErr)}</p>` : ''}`;
+}
 function renderSetup() {
   document.getElementById('change').hidden = true;
   if (map) { map.remove(); map = null; }
@@ -293,6 +366,7 @@ function renderSetup() {
     <div class="chosen"><b>${esc(S.name)}</b> · ${km(t.distance)} km · ${int(t.gain)} m+${S.range ? ` <small class="muted">(solo un tramo)</small>` : ''}<br><button class="linkbtn" data-act="home">Elegir otra</button></div>
     <p class="hint">En el sentido del track. Si vas a hacerla al revés, dale la vuelta.</p>
     <button class="btn" data-act="reverse">Invertir sentido</button>
+    ${eleHtml()}
     <div class="step"><b>2</b><h2>Salida</h2></div>${salidaHtml()}
     <div class="step"><b>3</b><h2>Ritmo</h2></div>${ritmoHtml()}
     <div id="arrive">${arriveHtml()}</div>
@@ -318,10 +392,12 @@ function renderPlan() {
     <div id="profile"></div>
     <p class="hint">Arrastra los tiradores de los extremos del perfil para planificar solo un tramo.</p>
     <div id="climbs"></div>
+    <div id="fountains"></div>
     <div id="rest"></div>
     ${foot()}`;
   initMap();
   update();
+  fetchFountains();
 }
 
 function update() {
@@ -329,7 +405,7 @@ function update() {
   saveLast();
   if (BEST.open && dialog.open) renderBest();
   if (S.stage !== 'plan') return renderSetup();
-  renderTop(); renderSummary(); renderLegend(); drawMap(); renderProfile(); renderClimbs(); renderRest();
+  renderTop(); renderSummary(); renderLegend(); drawMap(); renderProfile(); renderClimbs(); renderFountains(); renderRest();
   document.querySelectorAll('#modes button').forEach((b) => b.classList.toggle('on', b.dataset.mode === S.mode));
 }
 
@@ -451,6 +527,10 @@ function drawMap() {
     L.marker([p.lat, p.lon], { icon: L.divIcon({ className: '', iconSize: [22, 22], html: `<div class="cnum toma">${i + 1}</div>` }) })
       .bindPopup(`<b>${esc(tomaLabel(f, i))}</b><br>${hm(S.start + f.ms)} · km ${km(f.d)} · ${f.grams} g`).addTo(mapLayer);
   });
+  fountains().forEach((f) => {
+    L.marker([f.lat, f.lon], { icon: L.divIcon({ className: '', iconSize: [22, 22], html: '<div class="cnum fuente">💧</div>' }) })
+      .bindPopup(`<b>${esc(f.name || f.kind)}</b><br>km ${km(f.d)} · ${hm(at(f.d))}<br>${f.off < 30 ? 'En la ruta' : `A ${int(f.off)} m de la ruta`}`).addTo(mapLayer);
+  });
   const s = P[0], e = P[P.length - 1];
   L.circleMarker([s.lat, s.lon], { radius: 7, color: '#fff', weight: 2, fillColor: '#16a34a', fillOpacity: 1 }).bindTooltip('Salida').addTo(mapLayer);
   L.circleMarker([e.lat, e.lon], { radius: 7, color: '#fff', weight: 2, fillColor: '#111', fillOpacity: 1 }).bindTooltip('Llegada').addTo(mapLayer);
@@ -510,6 +590,7 @@ function renderProfile() {
     strip += `<text x="${PAD.l - 5}" y="${base + 28}" text-anchor="end">${S.mode === 'temp' ? 'Temp.' : S.mode === 'rachas' ? 'Rachas' : 'Viento'}</text>`;
   }
   const feeds = S.feeding && S.feedOnMap ? feeding().map((f, i) => `<circle cx="${x(f.d)}" cy="${base - 8}" r="7" fill="#e6c229" stroke="#fff"/><text x="${x(f.d)}" y="${base - 4.5}" text-anchor="middle" style="fill:#111;font-size:9px;font-weight:700">${i + 1}</text>`).join('') : '';
+  const drops = fountains().map((f) => `<text x="${x(f.d)}" y="${base - 2}" text-anchor="middle" style="font-size:13px">💧</text>`).join('');
   let cur = '';
   if (S.cursorD !== null && S.cursorD <= total) {
     const cy = y(R.pointAt(P, S.cursorD).es);
@@ -522,7 +603,7 @@ function renderProfile() {
     <line x1="${x(d)}" x2="${x(d)}" y1="${PAD.t}" y2="${base}" stroke="var(--text)" stroke-width="2"/><rect x="${x(d) - 7}" y="${(PAD.t + base) / 2 - 22}" width="14" height="44" rx="7" fill="var(--card)" stroke="var(--text)" stroke-width="2"/></g>`;
   const dragLbl = DRAG.side && DRAG.d !== null ? `<text x="${x(DRAG.d)}" y="${PAD.t + 14}" text-anchor="${DRAG.side === 'a' ? 'start' : 'end'}" class="drag">km ${km(DRAG.d)}</text>` : '';
   document.getElementById('profile').innerHTML = `<svg class="profile" id="psvg" viewBox="0 0 ${PW} ${PH}" role="img" aria-label="Perfil de elevación">
-    ${yTicks.join('')}${fills}<polyline points="${outline}" fill="none" stroke="var(--prof-line)" stroke-width="1.6"/>${nums}${xTicks.join('')}${hl}<text x="${PW - PAD.r}" y="${base + 13}" text-anchor="end">km</text>${strip}${feeds}${cur}${dim}${handle('a', da)}${handle('b', db)}${dragLbl}</svg>
+    ${yTicks.join('')}${fills}<polyline points="${outline}" fill="none" stroke="var(--prof-line)" stroke-width="1.6"/>${nums}${xTicks.join('')}${hl}<text x="${PW - PAD.r}" y="${base + 13}" text-anchor="end">km</text>${strip}${feeds}${drops}${cur}${dim}${handle('a', da)}${handle('b', db)}${dragLbl}</svg>
     ${S.profColor === 'pendiente'
       ? '<div class="legend"><b>Pendiente</b><span><i style="background:var(--g1)"></i>&lt; 3 % y bajadas</span><span><i style="background:var(--g2)"></i>3-6 %</span><span><i style="background:var(--g3)"></i>6-9 %</span><span><i style="background:var(--g4)"></i>9-12 %</span><span><i style="background:var(--g5)"></i>&gt; 12 %</span></div>'
       : catLegend()}
@@ -622,6 +703,22 @@ function focusAt(d) {
     else cursorMarker.setLatLng([p.lat, p.lon]);
   }
   renderCharts();
+}
+
+function renderFountains() {
+  const el = document.getElementById('fountains');
+  if (!el) return;
+  const list = S.fountains ? fountains() : [];
+  const when = S.fountains ? new Date(S.fountains.at).toLocaleDateString('es-ES') : '';
+  el.innerHTML = `<h3>💧 Fuentes</h3>
+    ${S.fLoading ? '<p class="hint">Buscando fuentes de agua en OpenStreetMap… (puede tardar unos segundos por cada 30 km)</p>' : ''}
+    ${S.fErr ? `<p class="warn">${esc(S.fErr)}</p>` : ''}
+    ${S.fountains ? `<p>${list.length ? `<b>${list.length}</b> fuente${list.length > 1 ? 's' : ''}` : 'Ninguna fuente'} a menos de 500 m de la ruta <span class="muted">(datos de OpenStreetMap del ${when})</span>.
+      <button class="linkbtn" data-act="fuentes-reload">Buscar las más recientes</button></p>
+      ${list.length ? `<ul class="mini-list fuentes">${list.map((f) => `<li class="tappable"><button class="sv-item" data-act="fuente-go" data-d="${f.d}">
+        <b>km ${km(f.d)} · ${esc(f.name || f.kind)}</b><small class="muted">${hm(at(f.d))} · ${f.off < 30 ? 'en la ruta' : `a ${int(f.off)} m de la ruta`}${f.name ? ` · ${f.kind.toLowerCase()}` : ''}${f.unsure ? ' · puede no tener agua siempre' : ''}</small></button></li>`).join('')}</ul>
+        <p class="hint">Son las que alguien ha marcado como agua potable en OpenStreetMap: puede faltar alguna o estar cerrada. Si conoces una que no sale, se puede añadir en openstreetmap.org.</p>` : ''}`
+      : (!S.fLoading && !S.fErr ? '<p class="hint">Aún no se han buscado.</p>' : '')}`;
 }
 
 function renderClimbs() {
@@ -805,6 +902,7 @@ function renderRest() {
       <span class="stepper"><button class="icon-btn" data-act="carry" data-k="${k}" data-n="-1" ${S.carry[k].n ? '' : 'disabled'}>−</button><b>${S.carry[k].n}</b><button class="icon-btn" data-act="carry" data-k="${k}" data-n="1">+</button></span>
       <b class="tot">${S.carry[k].n * S.carry[k].g} g</b></div>`).join('')}
     <p class="${carried < grams ? 'bad' : ''}">Llevas ${int(carried)} g de los ${int(grams)} g de las tomas${carried < grams ? `: te faltan ${int(grams - carried)} g (rellena en ruta o lleva más)` : carried > grams + 30 ? `: te sobran ${int(carried - grams)} g` : ''}.</p>
+    ${fountains().length ? `<p class="hint">💧 Agua por el camino: ${fountains().slice(0, 8).map((f) => `km ${km(f.d)}`).join(', ')}${fountains().length > 8 ? '…' : ''} (ver «Fuentes» arriba).</p>` : ''}
     <details class="more"><summary>Cómo rellenar los bidones</summary><p class="hint">Si solo llevas agua, deja 0 g/ud. Si llevas bebida con hidratos, pon los gramos de cada bidón: los indica el bote (lo habitual es entre 30 y 60 g por bidón de 500-750 ml). Más concentrada cuesta más de digerir. Lo que lleven los bidones también cuenta para las tomas.</p></details>
     <p class="hint">Una guía: ajústala a lo que toleras en los entrenamientos.</p>
     <button class="linkbtn" data-act="feed-off">Quitar el avituallamiento</button>`
@@ -823,6 +921,7 @@ function renderRest() {
       <label class="check"><input type="checkbox" data-exp="wps" ${S.exp.wps ? 'checked' : ''}> Tus waypoints (${S.wps.length})</label>
       <label class="check"><input type="checkbox" data-exp="climbs" ${S.exp.climbs ? 'checked' : ''}> Inicio de cada subida (${S.climbs.length})</label>
       <label class="check"><input type="checkbox" data-exp="tomas" ${S.exp.tomas ? 'checked' : ''} ${S.feeding ? '' : 'disabled'}> Tus avisos de avituallamiento (${tomas.length})</label>
+      <label class="check"><input type="checkbox" data-exp="fuentes" ${S.exp.fuentes ? 'checked' : ''}> Fuentes de agua (${fountains().length})</label>
       <label class="check"><input type="checkbox" data-exp="times" ${S.exp.times ? 'checked' : ''}> Horas de paso previstas (para el «compañero virtual»)</label>
       <button class="btn primary" data-act="gpx">Descargar .gpx</button>
       <h3 style="margin-top:1rem">Pásasela a tu grupeta</h3>
@@ -839,6 +938,7 @@ function exportGPX() {
   if (S.exp.wps) S.wps.forEach((w) => { const p = pt(w.d); wps.push({ lat: p.lat, lon: p.lon, name: w.name, desc: `${wpType(w.type)[2]} · km ${km(w.d)}`, sym: wpType(w.type)[3] }); });
   if (S.exp.climbs) S.climbs.forEach((c, i) => { const p = pt(c.start); wps.push({ lat: p.lat, lon: p.lon, name: `Subida ${i + 1}`.slice(0, 15), desc: `${km(c.length)} km al ${pct(c.avg)}`, sym: 'Summit' }); });
   if (S.exp.tomas && S.feeding) feeding().forEach((f, i) => { const p = pt(f.d); wps.push({ lat: p.lat, lon: p.lon, name: tomaLabel(f, i), desc: `${hm(S.start + f.ms)} · ${f.grams} g`, sym: 'Food' }); });
+  if (S.exp.fuentes) fountains().forEach((f) => wps.push({ lat: f.lat, lon: f.lon, name: (f.name || f.kind).slice(0, 15), desc: `${f.kind} · km ${km(f.d)}`, sym: 'Drinking Water' }));
   const text = R.toGPX(name, P, wps, S.exp.times ? { startMs: S.start, t: S.tl.t } : {});
   const file = `${name.replace(/[^\p{L}\p{N} _-]+/gu, '').trim().replace(/\s+/g, '-') || 'ruta'}.gpx`;
   return { text, file };
@@ -903,6 +1003,8 @@ document.addEventListener('click', async (e) => {
   if (ter) { S.pace.terrain = ter.dataset.terrain; retime(); return update(); }
   const st = e.target.closest('[data-stops]');
   if (st) { S.pace.stopsPH = +st.dataset.stops; retime(); return update(); }
+  const es_ = e.target.closest('[data-elesrc]');
+  if (es_ && !es_.disabled) { S.eleSrc = es_.dataset.elesrc; if (S.eleSrc === 'dem' && !S.dem) return fetchDem(); build(); return update(); }
   const cv = e.target.closest('[data-climbview]');
   if (cv) { S.climbView = cv.dataset.climbview; return update(); }
   const pc = e.target.closest('[data-profcolor]');
@@ -925,7 +1027,7 @@ document.addEventListener('click', async (e) => {
     const id = act === 'resume' ? last?.id : b.dataset.id;
     const r = store.get(K_REC, []).find((x) => x.id === id);
     if (dialog.open) dialog.close();
-    if (r) openRoute(r.name, r.pts, act === 'resume' ? last : { id: r.id });
+    if (r) openRoute(r.name, r.pts, act === 'resume' ? { ...last, dem: r.dem } : { id: r.id, dem: r.dem });
   } else if (act === 'forget') { store.del(K_LAST); renderHome(); }
   else if (act === 'del-rec') { store.set(K_REC, store.get(K_REC, []).filter((x) => x.id !== b.dataset.id)); showRecent(); }
   else if (act === 'best') openBest();
@@ -935,6 +1037,8 @@ document.addEventListener('click', async (e) => {
   else if (act === 'go') { S.stage = 'plan'; saveLast(); render(); window.scrollTo(0, 0); }
   else if (act === 'home') { S.track = null; S.id = null; renderHome(); window.scrollTo(0, 0); }
   else if (act === 'range-off') { setRange(null); }
+  else if (act === 'fuentes-reload') fetchFountains(true);
+  else if (act === 'fuente-go') { focusAt(+b.dataset.d); document.getElementById('profile').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
   else if (act === 'climb-go') { focusAt(+b.dataset.d); document.getElementById('profile').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
   else if (act === 'shift') { S.start += +b.dataset.min * 60000; retime(); update(); fetchWeather(); }
   else if (act === 'reverse') { S.range = null; S.reversed = !S.reversed; S.wps = S.wps.map((w) => ({ ...w, d: S.track.distance - w.d })).sort((a, c) => a.d - c.d); fitted = true; build(); update(); fetchWeather(); toast(S.reversed ? 'Ruta en sentido contrario' : 'Ruta en su sentido original'); }

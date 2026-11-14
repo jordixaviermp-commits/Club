@@ -142,3 +142,8 @@ label.inline input { width: auto; flex: 1; min-width: 4rem; }
 .climbs-row .climb { flex: none; min-width: 168px; scroll-snap-align: start; font: inherit; color: inherit; text-align: left; cursor: pointer; }
 .climb .n { font-size: 1rem; }
 [hidden] { display: none !important; }
+.cnum.fuente { background: #1e88e5; font-size: 12px; }
+.fuentes .sv-item small { margin-top: .1rem; }
+.sv-item { all: unset; box-sizing: border-box; display: flex; flex-direction: column; width: 100%; cursor: pointer; }
+.sv-item b { font-size: .95rem; }
+.sv-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
