@@ -59,3 +59,23 @@ test('día/franja de publicación, desglose edad-género y comparación con el p
   assert.equal(igPrevTotals(many, '', ''), null);
   assert.equal(igPrevTotals(many, '2026-11-01', '2026-11-10'), null);   // antes no hay nada guardado
 });
+
+test('periodos de Insights: totales sumables, solapes y audiencia más reciente', async () => {
+  const { igPeriods } = await import('../js/logic.js');
+  const rows = [
+    { kind: 'period', key: '2026-10-15_2026-11-13', data: { views: 11736, net_follows: 3, viewers: 2666, v_story: 6900, v_feed: 4700, gender: { M: 56, F: 17 } } },
+    { kind: 'period', key: '2026-11-14_2026-12-13', data: { views: 5000, net_follows: 2, viewers: 1800, interactions: 100, ages: { '35-44': 30 } } },
+    { kind: 'period', key: '2026-12-01_2026-12-31', data: { views: 1 } },
+    { kind: 'period', key: 'mal', data: { views: 99 } },
+    { kind: 'day', key: '2026-11-01', data: { views: 5 } },
+  ];
+  const g = igPeriods(rows);
+  assert.equal(g.list.length, 3);
+  assert.equal(g.list[0].days, 30);
+  assert.equal(g.totals.views, 16737); assert.equal(g.totals.net_follows, 5); assert.equal(g.totals.interactions, 100);
+  assert.equal(g.totals.viewersMax, 2666); assert.equal(g.totals.viewersAvg, 2233);      // los espectadores no se suman
+  assert.equal(g.overlaps.length, 1);                                                    // 14/11–13/12 y 01/12–31/12 se pisan
+  assert.equal(g.audience.to, '2026-12-13'); assert.deepEqual(g.audience.ages, { '35-44': 30 });
+  assert.equal(igPeriods(rows, '2026-12-20', '').list.length, 1);
+  assert.equal(igPeriods([], '', '').list.length, 0);
+});

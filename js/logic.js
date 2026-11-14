@@ -970,3 +970,28 @@ export function igPrevTotals(rows, from, to) {
   const g = igSummary(rows, todayISO(pf), todayISO(pt));
   return g.nDays >= Math.min(7, n) ? g.totals : null;
 }
+
+/**
+ * Resúmenes por periodo de Insights (filas kind=period, key «AAAA-MM-DD_AAAA-MM-DD»), volcados por Claude desde una captura.
+ * Devuelve los periodos que tocan [from,to] ordenados, los totales (suma solo de lo que se puede sumar), los solapes y lo más reciente de audiencia y contenido.
+ */
+export function igPeriods(rows, from = '', to = '') {
+  const days = (a, b) => Math.round((Date.parse(b + 'T12:00:00Z') - Date.parse(a + 'T12:00:00Z')) / 864e5) + 1;
+  const list = (rows || []).filter((r) => r.kind === 'period').map((r) => {
+    const [a, b] = String(r.key).split('_');
+    return a && b && /^\d{4}-\d{2}-\d{2}$/.test(a) && /^\d{4}-\d{2}-\d{2}$/.test(b) ? { key: r.key, from: a, to: b, days: days(a, b), ...r.data } : null;
+  }).filter(Boolean).filter((p) => (!to || p.from <= to) && (!from || p.to >= from)).sort((x, y) => x.from.localeCompare(y.from));
+  const overlaps = [];
+  for (let i = 1; i < list.length; i++) if (list[i].from <= list[i - 1].to) overlaps.push([list[i - 1], list[i]]);
+  const ADD = ['views', 'interactions', 'net_follows', 'follows', 'unfollows', 'v_story', 'v_feed', 'v_reel', 'likes', 'comments', 'shares', 'saves', 'profile_visits', 'link_taps'];
+  const totals = { days: list.reduce((n, p) => n + p.days, 0) };
+  for (const k of ADD) { const have = list.filter((p) => typeof p[k] === 'number'); if (have.length) totals[k] = have.reduce((n, p) => n + p[k], 0); }
+  const viewers = list.map((p) => p.viewers ?? p.reach).filter((v) => typeof v === 'number');
+  if (viewers.length) { totals.viewersMax = Math.max(...viewers); totals.viewersAvg = Math.round(viewers.reduce((n, v) => n + v, 0) / viewers.length); }
+  const latest = (k) => [...list].reverse().find((p) => p[k] && Object.keys(p[k]).length);
+  const audP = ['ages', 'gender', 'cities', 'countries'].map(latest).filter(Boolean).sort((a, b) => b.to.localeCompare(a.to))[0] || null;
+  const seen = new Set(), posts = [];
+  for (const p of list) for (const x of p.posts || []) { const id = `${x.d || ''}|${x.t || ''}`; if (!seen.has(id)) { seen.add(id); posts.push({ ...x, period: p.key }); } }
+  posts.sort((a, b) => (b.v || 0) - (a.v || 0));
+  return { list, totals, overlaps, posts, audience: audP ? { period: audP.key, from: audP.from, to: audP.to, gender: audP.gender || null, ages: audP.ages || null, cities: audP.cities || null, countries: audP.countries || null } : null };
+}

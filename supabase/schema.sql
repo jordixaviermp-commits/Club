@@ -236,25 +236,21 @@ alter table public.social_posts enable row level security;  -- permisos: ver «S
 
 -- ---------- Estadísticas de Instagram (almacén privado; ver supabase/cambios/2026-11-14-instagram.sql) ----------
 -- Una fila por dato y día: day = cifras del día, media = una publicación, story = una historia,
--- account = seguidores y publicaciones, audience = edad/género/país/ciudad de los seguidores.
+-- account = seguidores y publicaciones, audience = edad/género/país/ciudad de los seguidores,
+-- period = resumen de un periodo tal como lo enseña Insights (key «AAAA-MM-DD_AAAA-MM-DD»), volcado por Claude desde una captura.
 create table if not exists public.ig_snapshots (
-  kind        text not null check (kind in ('day','media','story','account','audience')),
+  kind        text not null check (kind in ('day','media','story','account','audience','period')),
   key         text not null check (length(key) between 1 and 200),
   data        jsonb not null,
   captured_at timestamptz not null default now(),
   primary key (kind, key)
 );
 alter table public.ig_snapshots enable row level security;
+alter table public.ig_snapshots drop constraint if exists ig_snapshots_kind_check;
+alter table public.ig_snapshots add constraint ig_snapshots_kind_check check (kind in ('day','media','story','account','audience','period'));
 
--- Capturas de pantalla de Insights que sube la dirección (ver supabase/cambios/2026-11-14-instagram-capturas.sql).
-create table if not exists public.ig_capturas (
-  id         uuid primary key default gen_random_uuid(),
-  periodo    text not null check (length(periodo) between 1 and 80),
-  seccion    text not null default 'otras' check (seccion in ('resumen','contenido','audiencia','otras')),
-  nota       text check (nota is null or length(nota) <= 300),
-  imagen     text not null check (length(imagen) <= 3000000),
-  created_at timestamptz not null default now()
-);
+-- Las capturas de pantalla ya no se usan (las cifras las vuelca Claude desde las capturas que manda la dirección).
+drop table if exists public.ig_capturas;
 
 -- Clave de la tarea automática: nadie la lee desde la app, solo la función de abajo.
 create table if not exists public.ig_secret (token text primary key);
@@ -278,7 +274,7 @@ begin
   end if;
   insert into ig_snapshots (kind, key, data)
     select x->>'kind', left(x->>'key', 200), coalesce(x->'data', '{}'::jsonb) from jsonb_array_elements(p_rows) x
-     where x->>'kind' in ('day','media','story','account','audience') and coalesce(x->>'key', '') <> ''
+     where x->>'kind' in ('day','media','story','account','audience','period') and coalesce(x->>'key', '') <> ''
   on conflict (kind, key) do update set data = ig_snapshots.data || excluded.data, captured_at = now();
   get diagnostics n = row_count;
   return n;
@@ -330,16 +326,16 @@ $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['runners','registrations','registration_entries','races','results','settings','runner_documents','contract_templates','ig_snapshots','ig_capturas','circuit_podiums','announcements','change_log','announcement_replies','correction_requests','social_posts'] loop
+  foreach t in array array['runners','registrations','registration_entries','races','results','settings','runner_documents','contract_templates','ig_snapshots','circuit_podiums','announcements','change_log','announcement_replies','correction_requests','social_posts'] loop
     execute format('drop policy if exists admin_all on public.%I', t);
     execute format('create policy admin_all on public.%I for all to authenticated using (public.is_admin()) with check (public.is_admin())', t);
   end loop;
 end $$;
 
 revoke all on public.runners, public.registrations, public.registration_entries,
-              public.races, public.results, public.admins, public.settings, public.runner_documents, public.contract_templates, public.ig_snapshots, public.ig_capturas, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts from anon, public;
+              public.races, public.results, public.admins, public.settings, public.runner_documents, public.contract_templates, public.ig_snapshots, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts from anon, public;
 grant select, insert, update, delete on public.runners, public.registrations,
-              public.registration_entries, public.races, public.results, public.settings, public.runner_documents, public.contract_templates, public.ig_snapshots, public.ig_capturas, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts to authenticated;
+              public.registration_entries, public.races, public.results, public.settings, public.runner_documents, public.contract_templates, public.ig_snapshots, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts to authenticated;
 revoke all on public.admins from authenticated;
 
 -- ---------- Funciones de dirección (respetan la seguridad de arriba) ---
