@@ -1,6 +1,6 @@
 {
  "_nota": "Ligas y circuitos que se corren cada año y a los que suele ir gente del club. Se escribe a mano (no lo toca el lector de las federaciones). El campo «subtype» (opcional) rellena el formato. «url» es opcional. Para añadir otra liga, copia un bloque de carrera y cambia source/league/fechas. Comprobar siempre las fechas en la web de la liga. El campo «circuit» (opcional) marca la carrera como puntuable de un circuito con ese nombre: se usa para el podio en la general final (cláusula 9). Escríbelo igual en todas las pruebas de la liga.",
- "updated_at": "2026-11-13",
+ "updated_at": "2026-11-14",
  "races": [
   {
    "source": "LIGA",
@@ -40,6 +40,38 @@
    "discipline": "BTT",
    "kind": "Competición",
    "info": "6a Hivernal de Resistència BTT · Tot Vici en Bici, KPT y Metalbikers"
+  },
+  {
+   "source": "LIGA",
+   "league": "Copa Catalana Internacional BTT 2027",
+   "circuit": "Copa Catalana Internacional BTT",
+   "date": "2027-01-30",
+   "name": "Copa Catalana Internacional BTT – St. Fruitós de Bages",
+   "place": "St. Fruitós de Bages",
+   "province": "Barcelona",
+   "country": "España",
+   "modality": "BTT",
+   "subtype": "XCO",
+   "discipline": "BTT",
+   "kind": "Competición",
+   "info": "Copa Catalana Internacional BTT 2027 · Biking Point · C2 · 30 de enero",
+   "url": "https://copacatalanabtt.com/"
+  },
+  {
+   "source": "LIGA",
+   "league": "Copa Catalana Internacional BTT 2027",
+   "circuit": "Copa Catalana Internacional BTT",
+   "date": "2027-02-20",
+   "name": "Copa Catalana Internacional BTT – Banyoles",
+   "place": "Banyoles",
+   "province": "Girona",
+   "country": "España",
+   "modality": "BTT",
+   "subtype": "XCO",
+   "discipline": "BTT",
+   "kind": "Competición",
+   "info": "Copa Catalana Internacional BTT 2027 · Biking Point · HC · 20 y 21 de febrero · UCI Continental Series y Junior Series",
+   "url": "https://copacatalanabtt.com/"
   },
   {
    "source": "LIGA",
@@ -105,6 +137,22 @@
   },
   {
    "source": "LIGA",
+   "league": "Copa Catalana Internacional BTT 2027",
+   "circuit": "Copa Catalana Internacional BTT",
+   "date": "2027-04-04",
+   "name": "Copa Catalana Internacional BTT – Corró d'Amunt",
+   "place": "Corró d'Amunt",
+   "province": "Barcelona",
+   "country": "España",
+   "modality": "BTT",
+   "subtype": "XCO",
+   "discipline": "BTT",
+   "kind": "Competición",
+   "info": "Copa Catalana Internacional BTT 2027 · Biking Point · C3 · 4 de abril",
+   "url": "https://copacatalanabtt.com/"
+  },
+  {
+   "source": "LIGA",
    "league": "Xallenger BTT Terres de l'Ebre 2027",
    "date": "2027-04-11",
    "name": "5a Garnatxa Bike Race",
@@ -136,6 +184,22 @@
   },
   {
    "source": "LIGA",
+   "league": "Copa Catalana Internacional BTT 2027",
+   "circuit": "Copa Catalana Internacional BTT",
+   "date": "2027-04-24",
+   "name": "Copa Catalana Internacional BTT – Santa Susanna",
+   "place": "Santa Susanna",
+   "province": "Barcelona",
+   "country": "España",
+   "modality": "BTT",
+   "subtype": "XCO",
+   "discipline": "BTT",
+   "kind": "Competición",
+   "info": "Copa Catalana Internacional BTT 2027 · Biking Point · CRI y C1 · 24 y 25 de abril",
+   "url": "https://copacatalanabtt.com/"
+  },
+  {
+   "source": "LIGA",
    "league": "Open Maxxis Marathon by Bryton 2027",
    "circuit": "Open Maxxis Marathon",
    "date": "2027-05-02",
@@ -164,6 +228,22 @@
    "info": "Xallenger BTT Terres de l'Ebre 2027",
    "url": "https://www.xallengerbtt.net",
    "circuit": "Xallenger BTT Terres de l'Ebre"
+  },
+  {
+   "source": "LIGA",
+   "league": "Copa Catalana Internacional BTT 2027",
+   "circuit": "Copa Catalana Internacional BTT",
+   "date": "2027-05-29",
+   "name": "Copa Catalana Internacional BTT – Naturland",
+   "place": "Naturland",
+   "province": "",
+   "country": "Andorra",
+   "modality": "BTT",
+   "subtype": "XCO",
+   "discipline": "BTT",
+   "kind": "Competición",
+   "info": "Copa Catalana Internacional BTT 2027 · Biking Point · C1 · 29 de mayo",
+   "url": "https://copacatalanabtt.com/"
   },
   {
    "source": "LIGA",
@@ -226,6 +306,22 @@
    "info": "Xallenger BTT Terres de l'Ebre 2027",
    "url": "https://www.xallengerbtt.net",
    "circuit": "Xallenger BTT Terres de l'Ebre"
+  },
+  {
+   "source": "LIGA",
+   "league": "Copa Catalana Internacional BTT 2027",
+   "circuit": "Copa Catalana Internacional BTT",
+   "date": "2027-06-26",
+   "name": "Copa Catalana Internacional BTT – La Molina",
+   "place": "La Molina",
+   "province": "Girona",
+   "country": "España",
+   "modality": "BTT",
+   "subtype": "XCO",
+   "discipline": "BTT",
+   "kind": "Competición",
+   "info": "Copa Catalana Internacional BTT 2027 · Biking Point · C2 · 26 de junio",
+   "url": "https://copacatalanabtt.com/"
   },
   {
    "source": "LIGA",
