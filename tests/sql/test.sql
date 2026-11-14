@@ -550,4 +550,26 @@ select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a
 select pg_temp.check((select count(*) from ig_snapshots) = 2, 'instagram: la dirección lee las cifras');
 select pg_temp.expect_fail('select * from ig_secret', 'instagram: ni la dirección lee el token desde la app');
 reset role;
+-- token de la API de Instagram: solo con la cabecera de la captura; la dirección tampoco lo lee desde la app
+reset role;
+set role anon;
+select set_config('request.headers', '{}', false);
+select pg_temp.expect_fail($q$select ig_token_get()$q$, 'ig token: sin cabecera no lee');
+select pg_temp.expect_fail($q$select ig_token_set('abcdefghijklmnopqrstuvwxyz')$q$, 'ig token: sin cabecera no cambia');
+select set_config('request.headers', '{"x-ig-token":"falso"}', false);
+select pg_temp.expect_fail($q$select ig_token_get()$q$, 'ig token: cabecera falsa no lee');
+select set_config('request.headers', json_build_object('x-ig-token', :'igtok')::text, false);
+select pg_temp.check(ig_token_get() is null, 'ig token: antes de guardar ninguno devuelve vacío');
+select ig_token_set('IGAAtoken-largo-de-prueba-1234567890');
+select pg_temp.expect_fail($q$select ig_token_set('corto')$q$, 'ig token: rechaza uno demasiado corto');
+select pg_temp.check(ig_token_get() = 'IGAAtoken-largo-de-prueba-1234567890', 'ig token: lo guarda y lo lee');
+select ig_token_set('IGAAtoken-renovado-de-prueba-0987654321');
+select pg_temp.check(ig_token_get() = 'IGAAtoken-renovado-de-prueba-0987654321', 'ig token: se puede renovar');
+select pg_temp.expect_fail('select * from ig_token_store', 'ig token: anon no lee la tabla');
+select set_config('request.headers', '{}', false);
+reset role;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+select pg_temp.expect_fail('select * from ig_token_store', 'ig token: la dirección no lee la tabla desde la app');
+reset role;
 \echo TODAS LAS PRUEBAS SQL OK

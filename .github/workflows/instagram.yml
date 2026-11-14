@@ -1,0 +1,41 @@
+name: Instagram (captura de estadísticas)
+# Guarda a diario las cifras de Instagram del club en la base de datos (tabla privada ig_snapshots).
+# Puesta en marcha: docs/instagram-api.md. Se puede lanzar a mano en la pestaña «Actions» → «Run workflow».
+on:
+  schedule:
+    - cron: '37 6 * * *'     # 06:37 UTC = 07:37 o 08:37 en Madrid
+  workflow_dispatch:
+    inputs:
+      dias:
+        description: 'Días hacia atrás a guardar (1–90; Meta guarda 90)'
+        default: '3'
+      historico:
+        description: 'Guardar también TODAS las publicaciones de la cuenta (sí/no)'
+        default: 'no'
+      prueba:
+        description: 'Solo probar: no guarda nada (sí/no)'
+        default: 'no'
+permissions:
+  contents: read
+concurrency:
+  group: instagram
+  cancel-in-progress: false
+jobs:
+  captura:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Capturar
+        env:
+          IG_SAVE_TOKEN: ${{ secrets.IG_SAVE_TOKEN }}
+          DIAS: ${{ github.event.inputs.dias || '3' }}
+          HISTORICO: ${{ github.event.inputs.historico || 'no' }}
+          PRUEBA: ${{ github.event.inputs.prueba || 'no' }}
+        run: |
+          args="--dias $DIAS"
+          [ "$HISTORICO" = "sí" ] || [ "$HISTORICO" = "si" ] && args="$args --historico"
+          [ "$PRUEBA" = "sí" ] || [ "$PRUEBA" = "si" ] && args="$args --prueba"
+          node scripts/instagram-sync.mjs $args

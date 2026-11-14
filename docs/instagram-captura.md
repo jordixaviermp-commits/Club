@@ -60,4 +60,4 @@ Lo que no se pueda obtener por la API solo puede apuntarse a mano mirando Insigh
 
 - Solo da los últimos **30 días**: lo anterior a la primera captura (15/10/2026) no se puede recuperar con la prueba.
 - La captura debe ejecutarse **al menos una vez a la semana** (mejor a diario) para no perder días ni historias.
-- Alternativa sin Windsor: conectar la API de Instagram directamente (app de Meta, ficha de desarrollador). Permite más histórico y es gratis, pero requiere crear la app y renovar el token cada 60 días.
+- Alternativa sin Windsor (recomendada): la API de Instagram directa con una acción programada de GitHub, que además da más datos (visualizaciones por tipo de contenido, horas más activas…). Ver **docs/instagram-api.md**.

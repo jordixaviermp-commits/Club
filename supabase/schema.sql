@@ -274,6 +274,49 @@ end $$;
 revoke execute on function public.ig_save(jsonb) from public, anon;
 grant execute on function public.ig_save(jsonb) to anon, authenticated;
 
+-- Token de la API de Instagram (lo lee y renueva la captura automática; ver supabase/cambios/2026-11-14-instagram-api.sql).
+create table if not exists public.ig_token_store (
+  id         int primary key default 1 check (id = 1),
+  token      text not null,
+  updated_at timestamptz not null default now()
+);
+alter table public.ig_token_store enable row level security;
+revoke all on public.ig_token_store from anon, authenticated, public;
+
+-- Solo la captura automática (cabecera «x-ig-token», igual que ig_save) puede leer o cambiar el token de Instagram.
+create or replace function public.ig_token_get()
+returns text language plpgsql security definer set search_path = public as $$
+declare v_tok text; r text;
+begin
+  begin v_tok := coalesce(nullif(current_setting('request.headers', true), '')::jsonb ->> 'x-ig-token', '');
+  exception when others then v_tok := ''; end;
+  if v_tok = '' or not exists (select 1 from ig_secret where token = v_tok) then
+    raise exception 'token_no_valido' using errcode = '42501';
+  end if;
+  select token into r from ig_token_store where id = 1;
+  return r;
+end $$;
+
+create or replace function public.ig_token_set(p_token text)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_tok text;
+begin
+  begin v_tok := coalesce(nullif(current_setting('request.headers', true), '')::jsonb ->> 'x-ig-token', '');
+  exception when others then v_tok := ''; end;
+  if v_tok = '' or not exists (select 1 from ig_secret where token = v_tok) then
+    raise exception 'token_no_valido' using errcode = '42501';
+  end if;
+  if p_token is null or length(p_token) < 20 or length(p_token) > 2000 then raise exception 'datos_no_validos'; end if;
+  insert into ig_token_store (id, token) values (1, p_token)
+  on conflict (id) do update set token = excluded.token, updated_at = now();
+end $$;
+
+revoke execute on function public.ig_token_get() from public, anon;
+revoke execute on function public.ig_token_set(text) from public, anon;
+grant execute on function public.ig_token_get() to anon, authenticated;
+grant execute on function public.ig_token_set(text) to anon, authenticated;
+
+
 -- Historial de cambios: quién cambió qué y cuándo (carreras, inscripciones, resultados puestos por los corredores
 -- y pasos automáticos a resultados). Solo lo ve la dirección. Se rellena solo, con disparadores y funciones.
 create table if not exists public.change_log (
@@ -1206,7 +1249,7 @@ grant execute on function public.runner_view(text), public.runner_join(text, uui
                           public.runner_cancel_circuit(text, uuid), public.runner_news(text), public.runner_set_race_details(text, uuid, text, numeric), public.runner_complete_race(text, text, uuid, jsonb), public.auto_promote_registrations(),
                           public.runner_reply_news(text, uuid, text, int), public.runner_request_correction(text, text, uuid, int, text, text, text),
                           public.runner_corrections(text), public.runner_cancel_correction(text, uuid),
-                          public.social_view(text), public.social_mark(text, text, boolean), public.ig_save(jsonb), public.ping() to anon, authenticated;
+                          public.social_view(text), public.social_mark(text, text, boolean), public.ig_save(jsonb), public.ig_token_get(), public.ig_token_set(text), public.ping() to anon, authenticated;
 grant execute on function public.is_admin(), public.require_admin(),
                           public.save_registration(jsonb, jsonb), public.save_race(jsonb, jsonb),
                           public.promote_registration(uuid), public.delete_runner(uuid, boolean),
