@@ -1,5 +1,6 @@
 // Planificar ruta: interfaz. Las reglas están en logic.js; el tiempo viene de Open-Meteo y el mapa de OpenStreetMap.
 import * as R from './logic.js';
+import { buildCard } from './card.js';
 
 const main = document.getElementById('main');
 const dialog = document.getElementById('dialog');
@@ -925,9 +926,10 @@ function renderRest() {
       <label class="check"><input type="checkbox" data-exp="times" ${S.exp.times ? 'checked' : ''}> Horas de paso previstas (para el «compañero virtual»)</label>
       <button class="btn primary" data-act="gpx">Descargar .gpx</button>
       <h3 style="margin-top:1rem">Pásasela a tu grupeta</h3>
-      <p class="hint">Un mensaje con la salida, los kilómetros, el desnivel y el tiempo previsto.</p>
-      <button class="btn wa" data-act="whatsapp">Compartir por WhatsApp</button>
-      <button class="btn" data-act="share">Compartir con el .gpx</button>
+      <p class="hint">Una ficha en imagen con el mapa del viento, el perfil con las subidas y el tiempo, lista para el grupo de WhatsApp.</p>
+      <button class="btn wa" data-act="card">🖼️ Crear la ficha para compartir</button>
+      <label class="check"><input type="checkbox" data-exp="cardgpx" ${S.exp.cardgpx ? 'checked' : ''}> Adjuntar también el .gpx</label>
+      <button class="linkbtn" data-act="whatsapp">Enviar solo el texto por WhatsApp</button>
     </div>`;
 }
 
@@ -960,6 +962,60 @@ function shareText() {
     lines.push(`🌡️ ${int(Math.min(...a.map((w) => w.temp)))}-${int(Math.max(...a.map((w) => w.temp)))} °C · 💨 máx. ${int(Math.max(...a.map((w) => w.wind)))} km/h · 🌧️ ${int(Math.max(...a.map((w) => w.rainProb ?? 0)))} %`);
   }
   return lines.join('\n');
+}
+
+// ---------- Ficha para compartir ----------
+const CARD = { blob: null, url: '' };
+async function openCard() {
+  dialog.innerHTML = '<div class="dlg"><h3>Ficha para compartir <button class="linkbtn" data-act="close">✕</button></h3><p class="hint">Preparando la imagen…</p></div>';
+  if (!dialog.open) dialog.showModal();
+  const t = S.track, end = S.start + S.tl.total;
+  const lines = [
+    `${dayName(S.start)} ${new Date(S.start).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}. Salida a las ${hm(S.start)}, llegada hacia las ${hm(end)}.`,
+    `${km(t.distance)} km y ${int(t.gain)} m de desnivel, unas ${dur(S.tl.total)}.`,
+  ];
+  if (S.along) {
+    const a = S.along.filter((w) => w.wind !== undefined);
+    if (a.length) {
+      const head = Math.round((a.filter((w) => w.rel.kind === 'cara').length / a.length) * 100), rain = Math.max(...a.map((w) => w.rainProb ?? 0));
+      lines.push(`${int(Math.min(...a.map((w) => w.temp)))} a ${int(Math.max(...a.map((w) => w.temp)))} °C · viento hasta ${int(Math.max(...a.map((w) => w.wind)))} km/h${head ? `, ${head} % de cara` : ''} · ${rain < 10 ? 'sin lluvia prevista' : `lluvia hasta ${int(rain)} %`}`);
+    }
+  }
+  const h = hardest();
+  try {
+    const { blob, tiles } = await buildCard({
+      name: S.name, club: 'Club Ciclista Monzón', logo: '../icons/logo.png', start: S.start, track: t, tl: S.tl, samples: S.samples, along: S.along, lines,
+      climbs: shown().map((c) => ({ start: c.start, end: c.end, top: c.top, n: climbNo(c), color: catColor(c) })),
+      hard: h ? `Subida más dura: ${km(h.length)} km al ${pct(h.avg)}` : '',
+      footer: S.along ? `Previsión de Open-Meteo del ${new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}` : '',
+    });
+    if (CARD.url) URL.revokeObjectURL(CARD.url);
+    CARD.blob = blob; CARD.url = URL.createObjectURL(blob);
+    if (!dialog.open) return;
+    dialog.innerHTML = `<div class="dlg cardlg"><h3>Ficha para compartir <button class="linkbtn" data-act="close">✕</button></h3>
+      ${tiles ? '' : '<p class="hint">No se ha podido cargar el fondo del mapa (sin conexión con OpenStreetMap): la ruta sale sobre fondo liso.</p>'}
+      <div class="cardprev"><img src="${CARD.url}" alt="Ficha de la ruta: mapa con el viento, perfil y tiempo"></div>
+      <button class="btn wa block" data-act="card-share">Compartir${S.exp.cardgpx ? ' con el .gpx' : ''}</button>
+      <button class="btn block" data-act="card-save">Descargar la imagen</button></div>`;
+  } catch (e) {
+    dialog.innerHTML = `<div class="dlg"><h3>Ficha para compartir <button class="linkbtn" data-act="close">✕</button></h3><p class="warn">No se ha podido crear la imagen (${esc(e.message)}).</p></div>`;
+  }
+}
+const cardName = () => `${S.name.replace(/[^\p{L}\p{N} _-]+/gu, '').trim().replace(/\s+/g, '-') || 'ruta'}.png`;
+function saveBlob(name, blob) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+async function shareCard() {
+  if (!CARD.blob) return;
+  const files = [new File([CARD.blob], cardName(), { type: 'image/png' })];
+  if (S.exp.cardgpx) { const { text, file } = exportGPX(); files.push(new File([text], file, { type: 'application/gpx+xml' })); }
+  try {
+    if (navigator.canShare?.({ files })) await navigator.share({ title: S.name, text: shareText(), files });
+    else if (navigator.canShare?.({ files: files.slice(0, 1) })) { await navigator.share({ title: S.name, text: shareText(), files: files.slice(0, 1) }); if (S.exp.cardgpx) toast('Este móvil no deja adjuntar el .gpx: descárgalo y adjúntalo a mano'); }
+    else { saveBlob(cardName(), CARD.blob); toast('Este navegador no comparte imágenes: la he descargado para que la adjuntes'); }
+  } catch (err) { if (err.name !== 'AbortError') { saveBlob(cardName(), CARD.blob); toast('No se ha podido compartir: imagen descargada'); } }
 }
 
 function wpDialog(d) {
@@ -1060,15 +1116,9 @@ document.addEventListener('click', async (e) => {
     if (v > 0 && v <= 200) { S.gph = v; update(); }
   } else if (act === 'gpx') { const { text, file } = exportGPX(); download(file, text); }
   else if (act === 'whatsapp') window.open(`https://wa.me/?text=${encodeURIComponent(shareText())}`, '_blank', 'noopener');
-  else if (act === 'share') {
-    const { text, file } = exportGPX();
-    const f = new File([text], file, { type: 'application/gpx+xml' });
-    try {
-      if (navigator.canShare?.({ files: [f] })) await navigator.share({ title: S.name, text: shareText(), files: [f] });
-      else if (navigator.share) await navigator.share({ title: S.name, text: shareText() });
-      else { await navigator.clipboard.writeText(shareText()); toast('Resumen copiado'); }
-    } catch (err) { if (err.name !== 'AbortError') toast('No se ha podido compartir', true); }
-  }
+  else if (act === 'card') openCard();
+  else if (act === 'card-share') shareCard();
+  else if (act === 'card-save') { if (CARD.blob) saveBlob(cardName(), CARD.blob); }
 });
 
 document.addEventListener('change', (e) => {
