@@ -232,6 +232,48 @@ create table if not exists public.social_posts (
 );
 alter table public.social_posts enable row level security;  -- permisos: ver «Seguridad» más abajo
 
+-- ---------- Estadísticas de Instagram (almacén privado; ver supabase/cambios/2026-11-14-instagram.sql) ----------
+-- Una fila por dato y día: day = cifras del día, media = una publicación, story = una historia,
+-- account = seguidores y publicaciones, audience = edad/género/país/ciudad de los seguidores.
+create table if not exists public.ig_snapshots (
+  kind        text not null check (kind in ('day','media','story','account','audience')),
+  key         text not null check (length(key) between 1 and 200),
+  data        jsonb not null,
+  captured_at timestamptz not null default now(),
+  primary key (kind, key)
+);
+alter table public.ig_snapshots enable row level security;
+
+-- Clave de la tarea automática: nadie la lee desde la app, solo la función de abajo.
+create table if not exists public.ig_secret (token text primary key);
+alter table public.ig_secret enable row level security;
+revoke all on public.ig_secret from anon, authenticated, public;
+insert into public.ig_secret (token)
+  select replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '') where not exists (select 1 from public.ig_secret);
+
+-- La tarea automática guarda filas con la cabecera «x-ig-token». Fusiona campos (no pisa con vacíos), máx. 600 filas.
+create or replace function public.ig_save(p_rows jsonb)
+returns int language plpgsql security definer set search_path = public as $$
+declare v_tok text; n int;
+begin
+  begin v_tok := coalesce(nullif(current_setting('request.headers', true), '')::jsonb ->> 'x-ig-token', '');
+  exception when others then v_tok := ''; end;
+  if v_tok = '' or not exists (select 1 from ig_secret where token = v_tok) then
+    raise exception 'token_no_valido' using errcode = '42501';
+  end if;
+  if jsonb_typeof(p_rows) <> 'array' or jsonb_array_length(p_rows) > 600 or length(p_rows::text) > 2000000 then
+    raise exception 'datos_no_validos';
+  end if;
+  insert into ig_snapshots (kind, key, data)
+    select x->>'kind', left(x->>'key', 200), coalesce(x->'data', '{}'::jsonb) from jsonb_array_elements(p_rows) x
+     where x->>'kind' in ('day','media','story','account','audience') and coalesce(x->>'key', '') <> ''
+  on conflict (kind, key) do update set data = ig_snapshots.data || excluded.data, captured_at = now();
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke execute on function public.ig_save(jsonb) from public, anon;
+grant execute on function public.ig_save(jsonb) to anon, authenticated;
+
 -- Historial de cambios: quién cambió qué y cuándo (carreras, inscripciones, resultados puestos por los corredores
 -- y pasos automáticos a resultados). Solo lo ve la dirección. Se rellena solo, con disparadores y funciones.
 create table if not exists public.change_log (
@@ -276,16 +318,16 @@ $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['runners','registrations','registration_entries','races','results','settings','runner_documents','contract_templates','circuit_podiums','announcements','change_log','announcement_replies','correction_requests','social_posts'] loop
+  foreach t in array array['runners','registrations','registration_entries','races','results','settings','runner_documents','contract_templates','ig_snapshots','circuit_podiums','announcements','change_log','announcement_replies','correction_requests','social_posts'] loop
     execute format('drop policy if exists admin_all on public.%I', t);
     execute format('create policy admin_all on public.%I for all to authenticated using (public.is_admin()) with check (public.is_admin())', t);
   end loop;
 end $$;
 
 revoke all on public.runners, public.registrations, public.registration_entries,
-              public.races, public.results, public.admins, public.settings, public.runner_documents, public.contract_templates, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts from anon, public;
+              public.races, public.results, public.admins, public.settings, public.runner_documents, public.contract_templates, public.ig_snapshots, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts from anon, public;
 grant select, insert, update, delete on public.runners, public.registrations,
-              public.registration_entries, public.races, public.results, public.settings, public.runner_documents, public.contract_templates, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts to authenticated;
+              public.registration_entries, public.races, public.results, public.settings, public.runner_documents, public.contract_templates, public.ig_snapshots, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts to authenticated;
 revoke all on public.admins from authenticated;
 
 -- ---------- Funciones de dirección (respetan la seguridad de arriba) ---
@@ -1164,7 +1206,7 @@ grant execute on function public.runner_view(text), public.runner_join(text, uui
                           public.runner_cancel_circuit(text, uuid), public.runner_news(text), public.runner_set_race_details(text, uuid, text, numeric), public.runner_complete_race(text, text, uuid, jsonb), public.auto_promote_registrations(),
                           public.runner_reply_news(text, uuid, text, int), public.runner_request_correction(text, text, uuid, int, text, text, text),
                           public.runner_corrections(text), public.runner_cancel_correction(text, uuid),
-                          public.social_view(text), public.social_mark(text, text, boolean), public.ping() to anon, authenticated;
+                          public.social_view(text), public.social_mark(text, text, boolean), public.ig_save(jsonb), public.ping() to anon, authenticated;
 grant execute on function public.is_admin(), public.require_admin(),
                           public.save_registration(jsonb, jsonb), public.save_race(jsonb, jsonb),
                           public.promote_registration(uuid), public.delete_runner(uuid, boolean),

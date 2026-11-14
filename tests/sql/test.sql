@@ -525,4 +525,29 @@ select pg_temp.expect_fail($q$select runner_contract_template('XXXXXXXXXXXX')$q$
 select pg_temp.expect_fail($q$select upload_contract_template('nuevo', 'x', 'x.pdf', 'application/pdf', 'aGk=')$q$, 'tipo: anon no sube');
 select pg_temp.expect_fail('select * from contract_templates', 'tipo: anon no lee la tabla');
 reset role;
+-- estadísticas de Instagram: la tarea automática guarda con su token; nadie más
+reset role;
+select token as igtok from ig_secret \gset
+set role anon;
+select set_config('request.jwt.claim.sub', '', false);
+select set_config('request.headers', '{}', false);
+select pg_temp.expect_fail($q$select ig_save('[{"kind":"day","key":"2026-11-13","data":{"views":10}}]')$q$, 'instagram: sin token no guarda');
+select set_config('request.headers', '{"x-ig-token":"falso"}', false);
+select pg_temp.expect_fail($q$select ig_save('[{"kind":"day","key":"2026-11-13","data":{"views":10}}]')$q$, 'instagram: token falso no guarda');
+select set_config('request.headers', json_build_object('x-ig-token', :'igtok')::text, false);
+select ig_save('[{"kind":"day","key":"2026-11-13","data":{"views":10,"reach":4}},{"kind":"media","key":"m1","data":{"views":50}},{"kind":"otro","key":"x","data":{}}]') as igguardadas \gset
+select pg_temp.check(:igguardadas = 2, 'instagram: guarda las filas válidas y descarta tipos desconocidos');
+select ig_save('[{"kind":"day","key":"2026-11-13","data":{"views":12}}]');
+select pg_temp.expect_fail('select * from ig_snapshots', 'instagram: anon no lee las cifras');
+select pg_temp.expect_fail('select * from ig_secret', 'instagram: anon no lee el token');
+select pg_temp.expect_fail($q$select ig_save('{"kind":"day"}')$q$, 'instagram: tiene que ser una lista');
+select set_config('request.headers', '{}', false);
+reset role;
+select pg_temp.check((select (data->>'views')::int from ig_snapshots where kind = 'day' and key = '2026-11-13') = 12
+                 and (select (data->>'reach')::int from ig_snapshots where kind = 'day' and key = '2026-11-13') = 4, 'instagram: al repetir se actualiza y conserva lo que no venía');
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+select pg_temp.check((select count(*) from ig_snapshots) = 2, 'instagram: la dirección lee las cifras');
+select pg_temp.expect_fail('select * from ig_secret', 'instagram: ni la dirección lee el token desde la app');
+reset role;
 \echo TODAS LAS PRUEBAS SQL OK
