@@ -164,6 +164,17 @@ export function supabaseApi(url, key) {
     async socialView(code) { return ok(await sb.rpc('social_view', { p_code: code })); },
     async socialMark(code, key, posted) { ok(await sb.rpc('social_mark', { p_code: code, p_key: key, p_posted: !!posted })); },
     async listPosts() { try { return ok(await sb.from('social_posts').select('key,posted_at,posted_by').limit(1000)); } catch { return null; } },
+    /** Estadísticas de Instagram guardadas por la captura automática (solo dirección). null = falta ejecutar el SQL. */
+    async listIg() {
+      try {
+        const out = [];
+        for (let from = 0; ; from += 1000) {
+          const rows = ok(await sb.from('ig_snapshots').select('kind,key,data,captured_at').range(from, from + 999));
+          out.push(...rows);
+          if (rows.length < 1000) return out;
+        }
+      } catch { return null; }
+    },
     async setPosted(keys, value) {
       if (!keys.length) return;
       if (value) ok(await sb.from('social_posts').upsert(keys.map((key) => ({ key })), { onConflict: 'key', ignoreDuplicates: true }));
@@ -442,6 +453,7 @@ export function demoApi(storage = globalThis.localStorage) {
       save();
     },
     async listPosts() { requireAdmin(); return clone(load().social_posts || []); },
+    async listIg() { requireAdmin(); return clone(load().ig_snapshots || []); },
     async setPosted(keys, value) {
       requireAdmin(); const d = load(); const set = new Set(keys);
       d.social_posts = (d.social_posts || []).filter((x) => !set.has(x.key));

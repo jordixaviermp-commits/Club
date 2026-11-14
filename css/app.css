@@ -810,3 +810,34 @@ dialog:has(.gsearch) { width: min(94vw, 560px); max-height: 88vh; padding: .8rem
 
 /* Nada puede ensanchar la página: si algo se pasara, se recorta en vez de mover el menú de abajo */
 html, body { max-width: 100%; overflow-x: clip; }
+
+/* Estadísticas de Instagram */
+.print-only { display: none; }
+.ig-sec h2 small { font-weight: 400; font-size: .8rem; }
+.ig-bars { display: flex; align-items: flex-end; gap: 3px; height: 150px; padding-top: .5rem; }
+.ig-col { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; position: relative; }
+.ig-col i { display: block; background: var(--brand-cyan); border-radius: 3px 3px 0 0; min-height: 2px; }
+.ig-col small { font-size: .6rem; color: var(--muted, #667); text-align: center; height: 1.1rem; line-height: 1.1rem; white-space: nowrap; overflow: visible; }
+.ig-bars.dense .ig-col small { transform: translateX(0); }
+.ig-split { display: flex; height: 18px; border-radius: 9px; overflow: hidden; background: var(--line); }
+.ig-split i { display: block; background: var(--accent); } .ig-split i.nf { background: var(--brand-cyan); }
+.ig-legend { display: flex; flex-wrap: wrap; gap: .3rem .9rem; font-size: .85rem; margin: .5rem 0 0; }
+.ig-legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: .3rem; background: var(--accent); } .ig-legend .dot.b { background: var(--brand-cyan); }
+.ig-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .7rem; }
+.ig-list.tight { gap: .35rem; }
+.ig-list > li:not(.ig-row) { display: flex; gap: .6rem; align-items: flex-start; }
+.ig-rank { flex: none; width: 1.6rem; height: 1.6rem; border-radius: 50%; background: var(--accent-2); color: var(--accent); font-weight: 700; display: grid; place-items: center; font-size: .8rem; }
+.ig-post { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .2rem; font-size: .9rem; }
+.ig-post small { color: var(--muted, #667); }
+.ig-track { display: block; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; flex: 1; }
+.ig-track i { display: block; height: 100%; background: var(--brand-cyan); border-radius: 4px; }
+.ig-row { display: grid; grid-template-columns: 6.5rem 1fr 3rem; gap: .5rem; align-items: center; font-size: .88rem; }
+.ig-row b { text-align: right; font-variant-numeric: tabular-nums; }
+.ig-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ig-h { font-size: .85rem; margin: .8rem 0 .4rem; color: var(--muted, #667); }
+.ig-title { flex-direction: column; margin-bottom: .6rem; font-size: 1.1rem; }
+@media print {
+  .print-only { display: flex !important; }
+  .ig-sec { break-inside: avoid; }
+  .ig-col i, .ig-track i, .ig-split i { print-color-adjust: exact; }
+}
