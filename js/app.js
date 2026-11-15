@@ -1004,7 +1004,7 @@ function chronicleCard(d) {
   const plural = (n, a, b) => (n === 1 ? a : b);
   const li = (x, isDone) => `<li class="chro-row"><span class="chro-name"><b>${esc(x.name)}</b><small class="muted">${esc(formatDate(x.date, false))}${x.place ? ' · ' + esc(x.place) : ''}</small></span>${S.preview ? '' : `<button class="btn small${isDone ? ' ghost' : ' primary'}" data-act="chro-toggle" data-key="${esc(x.key)}" data-done="${isDone ? 0 : 1}">${isDone ? 'Deshacer' : '✓ Ya la pasé'}</button>`}</li>`;
   return `<section class="card chro-card${c.pending.length ? ' has-pend' : ''}">
-    <div class="chro-top"><h3>✍️ Crónicas ${year}</h3>
+    <div class="chro-top"><h3>✍️ Crónicas${year === new Date().getFullYear() ? '' : ` <small class="muted">${year}</small>`}</h3>
       <div class="chro-pills"><span class="chro-pill pend${c.pending.length ? '' : ' zero'}"><b>${c.pending.length}</b> ${plural(c.pending.length, 'pendiente', 'pendientes')}</span><span class="chro-pill ok"><b>${c.done.length}</b> ${plural(c.done.length, 'pasada', 'pasadas')}</span></div></div>
     <details class="chro-det" data-open-key="chro"${S.open?.chro ? ' open' : ''}>
       <summary>${c.pending.length ? 'Ver las que me faltan y marcarlas' : 'Ver mis crónicas pasadas'}</summary>
