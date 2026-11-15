@@ -911,7 +911,7 @@ function viewRunnerNew() {
 }
 
 /** «Mis carreras»: sus carreras con resultados por temporada y las apuntadas pendientes de resultado. */
-function myRacesCard(d) {
+function myRacesCard(d, afterSummary = () => '') {
   const results = d.my_results;
   if (!results) return ''; // base de datos aún sin actualizar
   const today = d.today || todayISO();
@@ -951,6 +951,8 @@ function myRacesCard(d) {
       return pod.some(Boolean) ? `<p class="podium-strip">🏅 Podios ${S.myYear}: ${pod[0] ? `🥇 ${pod[0]} ` : ''}${pod[1] ? `🥈 ${pod[1]} ` : ''}${pod[2] ? `🥉 ${pod[2]}` : ''}</p>` : ''; })()}
     ${pending.length && !S.preview ? '<p class="hint alert-hint">👉 Tienes carreras ya corridas sin resultado: tócalas y pon tu puesto.</p>' : ''}
   </section>
+
+  ${afterSummary()}
 
   <section class="card season-block next-block" id="sec-next">
     <h2>📅 Mis próximas inscripciones <small>(${upcoming.length})</small></h2>
@@ -1238,8 +1240,7 @@ function viewRunnerMine() {
     ${previewBanner()}
     <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
     <a class="btn block ruta-link" href="ruta/"><span>🗺️ Planificar ruta <span class="new-tag">NUEVO</span></span><small class="muted">Sube tu track y mira viento, tiempo y subidas</small></a>
-    ${myRacesCard(d)}
-    ${chronicleCard(d)}
+    ${myRacesCard(d, () => chronicleCard(d))}
     <a class="btn block" href="${runnerHref('contrato')}">📄 Mi contrato y mi bonificación</a>
     ${installHint()}
     ${S.preview ? '' : `<p class="center"><button class="link muted" data-act="r-forget">No soy ${esc(me.name)}</button></p>`}
