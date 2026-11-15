@@ -4,7 +4,7 @@ permissions:
   contents: read
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # fijo: en ubuntu-latest ya no existe el paquete postgresql-16 que usan las pruebas SQL
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
