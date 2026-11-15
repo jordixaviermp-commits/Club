@@ -1390,15 +1390,17 @@ function viewFed() {
     && (fedFilter.modality === 'all' || r.modality === fedFilter.modality)
     && (fedFilter.leisure || r.kind !== 'Ocio'));
   const mods = MODALITIES.filter((m) => f.races.some((r) => r.modality === m));
+  const perMonth = new Map();
+  for (const r of list) perMonth.set(r.date.slice(0, 7), (perMonth.get(r.date.slice(0, 7)) || 0) + 1);
   let month = '';
   const items = list.map((r, i) => {
     const ym = r.date.slice(0, 7);
-    const head = ym !== month ? `<h2 class="section">${MONTH_NAMES[Number(ym.slice(5)) - 1][0].toUpperCase() + MONTH_NAMES[Number(ym.slice(5)) - 1].slice(1)} ${ym.slice(0, 4)}</h2>` : '';
+    const head = ym !== month ? `<h2 class="section fed-month">${MONTH_NAMES[Number(ym.slice(5)) - 1][0].toUpperCase() + MONTH_NAMES[Number(ym.slice(5)) - 1].slice(1)} ${ym.slice(0, 4)}<small> · ${perMonth.get(ym)} carrera${perMonth.get(ym) === 1 ? '' : 's'}</small></h2>` : '';
     month = ym;
     return `${head}<article class="card race fed ${modClass(r.modality)}">
       <div class="race-head"><div><h3>${esc(r.name)}</h3>
         <p class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div>
-        ${modTag(r.modality)}</div>
+        ${r.modality === 'Otra' ? '' : modTag(r.modality)}</div>
       <p class="fed-meta"><span class="src src-${esc(r.source)}">${esc(r.source === 'LIGA' ? 'Liga' : FED_NAMES[r.source] || r.source)}</span>
         ${esc(r.source === 'LIGA' ? '' : r.discipline || '')}${r.kind === 'Ocio' ? ' · ocio' : ''}${r.info ? `${r.source === 'LIGA' ? '' : ' · '}<span class="muted">${esc(r.info)}</span>` : ''}</p>
       <div class="row">
@@ -1409,19 +1411,19 @@ function viewFed() {
   const updated = f.updated_at ? new Date(f.updated_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
   return frame('Federaciones', `
     ${runner ? previewBanner() : ''}
-    <div class="years" role="tablist">${[['all', 'Todas'], ['FCC', 'Catalana'], ['FAC', 'Aragonesa'], ['LIGA', 'Ligas']].map(([v, l]) =>
-      `<button class="chip${fedFilter.source === v ? ' on' : ''}" data-act="fed-source" data-v="${v}">${l}</button>`).join('')}</div>
-    <div class="grid2 fed-filters">
-      <label>Modalidad<select data-fed="modality">${opt('all', 'Todas', fedFilter.modality)}${mods.map((m) => opt(m, m, fedFilter.modality)).join('')}</select></label>
-      <label class="check"><input type="checkbox" data-fed="leisure" ${fedFilter.leisure ? 'checked' : ''}> Incluir ocio y marchas</label>
+    <div class="years fed-tabs" role="tablist">${[['all', 'Todas'], ['FCC', 'Catalana'], ['FAC', 'Aragonesa'], ['LIGA', 'Ligas']].map(([v, l]) =>
+      `<button class="chip${fedFilter.source === v ? ' on' : ''}" role="tab" aria-selected="${fedFilter.source === v}" data-act="fed-source" data-v="${v}">${l}</button>`).join('')}</div>
+    <div class="fed-row2">
+      <label class="fed-mod"><select data-fed="modality" aria-label="Modalidad">${opt('all', 'Modalidad', fedFilter.modality)}${mods.map((m) => opt(m, m, fedFilter.modality)).join('')}</select></label>
+      <button type="button" class="chip fed-chip${fedFilter.leisure ? ' on' : ''}" data-act="fed-leisure" aria-pressed="${fedFilter.leisure}" title="Incluir también las marchas y pruebas de ocio">Incluir marchas</button>
     </div>
-    <p class="hint">${list.length} carrera${list.length === 1 ? '' : 's'}. ${runner
-      ? 'Si ya está en el club, pulsa «Apuntarme». Si no, «Añadir y apuntarme» la crea con los datos ya rellenados.'
-      : 'Pulsa «Crear inscripción» para añadirla con nombre, fecha y lugar ya rellenados.'}</p>
     ${items || '<p class="empty">No hay carreras con estos filtros.</p>'}
     ${f.errors?.length ? `<p class="card warn">Aviso de la última lectura: ${esc(f.errors.join(' · '))}</p>` : ''}
+    <p class="hint">${runner
+      ? 'Si ya está en el club, pulsa «Apuntarme». Si no, «Añadir y apuntarme» la crea con los datos ya rellenados.'
+      : 'Pulsa «Crear inscripción» para añadirla con nombre, fecha y lugar ya rellenados.'}</p>
     <p class="hint center">Datos de las webs de las federaciones${updated ? `, leídos el ${updated}` : ''}. Comprueba siempre los detalles en su web.</p>
-    ${fedLinks()}`, opts);
+    ${fedLinks()}`, { ...opts, actions: `<span class="fed-total" title="${list.length} carrera${list.length === 1 ? '' : 's'} con estos filtros" aria-label="${list.length} carreras">${list.length}</span>` });
 }
 
 function draftRegistration(id) {
@@ -3312,6 +3314,7 @@ const actions = {
   year(el) { S.year = Number(el.dataset.y); render(); },
   'my-year'(el) { S.myYear = Number(el.dataset.y); S.myOpen = true; render(); },
   'fed-source'(el) { fedFilter.source = el.dataset.v; render(); },
+  'fed-leisure'() { fedFilter.leisure = !fedFilter.leisure; render(); },
   'fed-create'(el) {
     const r = S.fed.races[Number(el.dataset.i)];
     S.prefill = { name: r.name, date: r.date, place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY,

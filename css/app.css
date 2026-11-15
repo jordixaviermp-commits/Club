@@ -927,3 +927,14 @@ nav.tabs a { position: relative; }
 .net-cro > summary::after { content: '▾'; margin-left: auto; color: var(--muted, #667); }
 .net-cro[open] > summary::after { content: '▴'; }
 .net-people { list-style: none; margin: .5rem 0; padding: 0; display: flex; flex-direction: column; gap: .15rem; }
+
+/* Federaciones: filtros en dos filas compactas, contador en el mes y en la cabecera */
+.fed-tabs { margin: 0 0 .35rem; padding-bottom: 0; gap: .3rem; }
+.fed-tabs .chip { min-height: 34px; padding: .2rem .75rem; font-size: .86rem; }
+.fed-row2 { display: flex; align-items: center; gap: .5rem; margin: 0 0 .2rem; }
+.fed-mod { flex: 0 1 auto; margin: 0; }
+.fed-mod select { appearance: none; -webkit-appearance: none; width: auto; min-height: 34px; padding: .2rem 1.7rem .2rem .8rem; font-size: .86rem; font-weight: 600; border-radius: 999px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238893a0' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right .55rem center; background-size: 14px; }
+.fed-chip { margin-left: auto; min-height: 34px; padding: .2rem .85rem; font-size: .86rem; }
+.fed-month { margin: .5rem 0 .35rem; font-size: 1.05rem; }
+.fed-month small { font-size: .78rem; font-weight: 500; color: var(--muted, #667); }
+.fed-total { margin-left: auto; padding: .1rem .55rem; border-radius: 999px; background: var(--accent-2); color: var(--accent); font-size: .78rem; font-weight: 700; }
