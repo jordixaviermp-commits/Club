@@ -1056,8 +1056,9 @@ export function socialBoard(races, registrations, posted, today, log = null, { b
       for (const x of kind === 'race' ? (g.results || []) : (g.entries || [])) if (x.runner_id && !part.has(x.runner_id)) part.set(x.runner_id, x.runner_name || chron.nameOf?.(x.runner_id) || '?');
       if (part.size) {
         const ok = chron.done.get(pk) || new Set(), missing = [...part].filter(([id]) => !ok.has(id)).map(([, n]) => n);
-        pieces.push(!missing.length ? { k: 'cro', st: 'ok', text: `Crónicas ✓ (${part.size}/${part.size})` }
-          : { k: 'cro', st: lastDays > 7 ? 'late' : 'curso', text: `Crónicas: ${part.size - missing.length}/${part.size} · faltan ${missing.slice(0, 4).join(', ')}${missing.length > 4 ? ` y ${missing.length - 4} más` : ''}` });
+        const people = [...part].map(([id, name]) => ({ id, name, done: ok.has(id) })).sort((a, b) => a.name.localeCompare(b.name, 'es'));
+        pieces.push(!missing.length ? { k: 'cro', st: 'ok', text: `Crónicas ✓ (${part.size}/${part.size})`, key: pk, people }
+          : { k: 'cro', st: lastDays > 7 ? 'late' : 'curso', text: `Crónicas: ${part.size - missing.length}/${part.size} · faltan ${missing.slice(0, 4).join(', ')}${missing.length > 4 ? ` y ${missing.length - 4} más` : ''}`, key: pk, people });
       }
     }
     if (!pieces.length) continue;

@@ -921,3 +921,9 @@ nav.tabs a { position: relative; }
 .chro-nudge { display: block; margin: 0 0 .6rem; padding: .5rem .7rem; border: 1px solid #e0a030; border-radius: 12px; background: color-mix(in srgb, #e0a030 10%, var(--card)); color: var(--text); text-decoration: none; font-size: .9rem; }
 .chro-nudge small { color: var(--muted, #667); }
 .chro-row .btn.small { min-height: 34px; padding: .2rem .65rem; font-size: .8rem; flex: none; }
+
+.net-cro > summary { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .5rem; cursor: pointer; list-style: none; }
+.net-cro > summary::-webkit-details-marker { display: none; }
+.net-cro > summary::after { content: '▾'; margin-left: auto; color: var(--muted, #667); }
+.net-cro[open] > summary::after { content: '▴'; }
+.net-people { list-style: none; margin: .5rem 0; padding: 0; display: flex; flex-direction: column; gap: .15rem; }
