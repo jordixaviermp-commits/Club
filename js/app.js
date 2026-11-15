@@ -1646,6 +1646,18 @@ function viewWeek() {
     `, { back: '#/redes' });
 }
 
+/** Dirección: marca o desmarca la crónica de uno o varios corredores en una carrera (clave «AAAA-MM-DD|nombre»). */
+async function setChronicleFor(runnerIds, key, done) {
+  const ok = await run(async () => {
+    for (const id of runnerIds) await api.setChronicle(id, key, done);
+    const list = (S.data.chronicles || []).filter((x) => !(runnerIds.includes(x.runner_id) && x.race_key === key));
+    if (done) for (const id of runnerIds) list.push({ runner_id: id, race_key: key });
+    S.data.chronicles = list; return true;
+  }, done ? '✓ Crónica marcada' : 'Crónica desmarcada');
+  render();
+  return ok;
+}
+
 /** Estado de la historia previa (la publica la tarea automática 2 días antes) de una inscripción o carrera. */
 const pubStory = (g) => (Array.isArray(g.entries) && !g.entries.length ? null : storyState(g, S.stories?.byKey ? S.stories : null, postedSet().has(postKey(g)), todayISO()));
 const shortDate = (iso) => formatDate(iso, false);
@@ -1735,6 +1747,13 @@ function viewNetworks() {
   const warn = S.data.socialPosts === null ? '<p class="warn card">Falta ejecutar en Supabase <code>supabase/cambios/2026-11-12-redes.sql</code>: sin él las marcas solo se guardan en este móvil.</p>' : '';
   const posted = postedSet();
   const piece = (it, x) => {
+    if (x.k === 'cro') {   // crónicas: desplegable con una casilla por corredor (la dirección marca si lo pasó y no lo marcó él)
+      const ok = `net-cro:${x.key}`, missing = x.people.filter((q) => !q.done).map((q) => q.id);
+      return `<li class="net-piece ${x.st}"><details class="net-cro" data-open-key="${esc(ok)}"${S.open?.[ok] ? ' open' : ''}><summary><span class="net-k" title="${NET_LABEL.cro}">${NET_ICON.cro}</span><span class="net-tx">${esc(x.text)}</span><span class="net-glyph" aria-hidden="true">${NET_GLYPH[x.st]}</span></summary>
+        <ul class="net-people">${x.people.map((q) => `<li><label class="check"><input type="checkbox" data-act-change="chro-admin" data-runner="${esc(q.id)}" data-key="${esc(x.key)}" ${q.done ? 'checked' : ''}> ${esc(q.name)}</label></li>`).join('')}</ul>
+        ${missing.length ? `<button class="btn small" data-act="chro-admin-all" data-ids="${esc(missing.join(','))}" data-key="${esc(x.key)}">✓ Todos la pasaron</button>` : ''}
+        <p class="hint">Marca a quien ya la pasó aunque no lo haya marcado en su perfil.</p></details></li>`;
+    }
     const isRes = x.k === 'res', canMark = x.key && (x.k === 'aviso' || isRes);
     const act = x.k === 'story' ? (x.st === 'pend' ? `<button class="btn small" data-act="pub-story-manual" data-key="${esc(x.key)}">Marcar a mano</button>` : '')
       : canMark && (x.st !== 'curso' || x.k === 'aviso' && posted.has(x.key)) ? `<label class="check post-check"><input type="checkbox" data-act-change="post" data-key="${esc(x.key)}" ${posted.has(x.key) ? 'checked' : ''}> Publicado</label>` : '';
@@ -3497,6 +3516,7 @@ const actions = {
   'net-filter'(el) { S.netFilter = el.dataset.f; S.netMore = false; render(); },
   'net-range'(el) { S.netAll = el.dataset.w === '1'; S.netMore = false; render(); },
   'net-more'() { S.netMore = true; render(); },
+  async 'chro-admin-all'(el) { await setChronicleFor(el.dataset.ids.split(','), el.dataset.key, true); },
   'ig-tab'(el) { S.igTab = el.dataset.t; render(); },
   async 'ig-per-del'(el) {
     if (!await confirmAction('Quitar periodo', 'Se borra este resumen de periodo (no toca el resto de datos).', 'Quitar')) return;
@@ -3996,6 +4016,7 @@ $app.addEventListener('change', async (ev) => {
     return;
   }
   if (t.dataset.actChange === 'post') { setPostedKeys([t.dataset.key], t.checked); return; }
+  if (t.dataset.actChange === 'chro-admin') { setChronicleFor([t.dataset.runner], t.dataset.key, t.checked); return; }
   if (t.dataset.actChange === 'suspended' && S.draft) { S.draft.suspended = t.checked; render(); return; }
   if (t.dataset.actChange === 'multi') {
     S.draft.multi = t.checked;

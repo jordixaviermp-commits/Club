@@ -64,6 +64,8 @@ test('panel de redes: crónicas de una carrera (quién falta)', () => {
   const mk = (done) => socialBoard([r], [], new Set(), TODAY, null, { chron: { done: new Map([[postKeyOf(r), new Set(done)]]) } });
   const it = (b) => b.items.find((x) => x.id === 'cr');
   assert.match(piece(it(mk(['p1'])), 'cro').text, /1\/2 · faltan Joan/); assert.equal(piece(it(mk(['p1'])), 'cro').st, 'curso');   // terminó hace 4 días
+  assert.deepEqual(piece(it(mk(['p1'])), 'cro').people, [{ id: 'p2', name: 'Joan', done: false }, { id: 'p1', name: 'Pere', done: true }]);   // para marcarlas desde la dirección
+  assert.equal(piece(it(mk(['p1'])), 'cro').key, postKeyOf(r));
   assert.equal(piece(it(mk(['p1', 'p2'])), 'cro').st, 'ok');
   const old = race('co', 'Antigua', '2026-11-01', { results: [{ runner_id: 'p1', runner_name: 'Pere' }] });
   assert.equal(piece(socialBoard([old], [], new Set(), TODAY, null, { chron: { done: new Map() } }).items[0], 'cro').st, 'late');   // más de 7 días sin crónica

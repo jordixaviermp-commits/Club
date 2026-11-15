@@ -149,6 +149,11 @@ export function supabaseApi(url, key) {
     /** Crónicas ya pasadas por el corredor (claves «AAAA-MM-DD|nombre»). null = falta el SQL. */
     async runnerChronicles(code) { try { return ok(await sb.rpc('runner_chronicles', { p_code: code })); } catch { return null; } },
     async runnerSetChronicle(code, key, done) { ok(await sb.rpc('runner_chronicle_set', { p_code: code, p_key: key, p_done: !!done })); },
+    /** Dirección: marca o desmarca la crónica de un corredor (por si la pasó y no la marcó en su perfil). */
+    async setChronicle(runnerId, key, done) {
+      if (done) ok(await sb.from('chronicles').upsert({ runner_id: runnerId, race_key: key }, { onConflict: 'runner_id,race_key', ignoreDuplicates: true }));
+      else ok(await sb.from('chronicles').delete().eq('runner_id', runnerId).eq('race_key', key));
+    },
     async runnerNews(code) { return ok(await sb.rpc('runner_news', { p_code: code })); },
     async runnerDocuments(code) { return ok(await sb.rpc('runner_documents_list', { p_code: code })); },
     async runnerGetDocument(code, id) { return ok(await sb.rpc('runner_get_document', { p_code: code, p_id: id })); },
@@ -637,6 +642,11 @@ export function demoApi(storage = globalThis.localStorage) {
       d.races = d.races.filter((x) => x.id !== id);
       d.results = d.results.filter((x) => x.race_id !== id);
       logc(me.name, 'delete', `borró la carrera ${r.name} (${r.date})`); save();
+    },
+    async setChronicle(runnerId, key, done) {
+      requireAdmin(); const d = load(); d.chronicles = (d.chronicles || []).filter((x) => !(x.runner_id === runnerId && x.race_key === key));
+      if (done) d.chronicles.push({ runner_id: runnerId, race_key: key, done_at: new Date().toISOString() });
+      save();
     },
     async runnerChronicles(code) { const me = byCode(code); return clone((load().chronicles || []).filter((x) => x.runner_id === me.id).map((x) => x.race_key)); },
     async runnerSetChronicle(code, key, done) {
