@@ -1008,7 +1008,7 @@ export function igPeriods(rows, from = '', to = '') {
  * `status` de la carrera: 'pend' (hay algo por hacer), 'curso' (programado o a la espera) o 'hecho'.
  * `posted`: Set de claves marcadas como publicadas; `log`: parseStoryLog (o null).
  */
-export function socialBoard(races, registrations, posted, today, log = null, { back = 45, ahead = 30 } = {}) {
+export function socialBoard(races, registrations, posted, today, log = null, { back = 45, ahead = 30, chron = null } = {}) {
   const dayDiff = (a, b) => Math.round((Date.parse(a + 'T12:00:00Z') - Date.parse(b + 'T12:00:00Z')) / 86400000);
   const last = (g) => g.end_date || g.date;
   const short = (iso) => formatDate(iso, false);
@@ -1050,6 +1050,16 @@ export function socialBoard(races, registrations, posted, today, log = null, { b
         else pieces.push({ k: 'res', st: 'pend', text: 'Resultados: nadie ha puesto su puesto, no hay nada que publicar', days: lastDays });
       }
     }
+    // crónicas: quién de los que corrieron ya la pasó (solo si ya existe el SQL y la carrera ya se corrió)
+    if (chron && past && !g.suspended) {
+      const part = new Map();
+      for (const x of kind === 'race' ? (g.results || []) : (g.entries || [])) if (x.runner_id && !part.has(x.runner_id)) part.set(x.runner_id, x.runner_name || chron.nameOf?.(x.runner_id) || '?');
+      if (part.size) {
+        const ok = chron.done.get(pk) || new Set(), missing = [...part].filter(([id]) => !ok.has(id)).map(([, n]) => n);
+        pieces.push(!missing.length ? { k: 'cro', st: 'ok', text: `Crónicas ✓ (${part.size}/${part.size})` }
+          : { k: 'cro', st: lastDays > 7 ? 'late' : 'curso', text: `Crónicas: ${part.size - missing.length}/${part.size} · faltan ${missing.slice(0, 4).join(', ')}${missing.length > 4 ? ` y ${missing.length - 4} más` : ''}` });
+      }
+    }
     if (!pieces.length) continue;
     const bad = pieces.some((x) => x.st === 'pend' || x.st === 'late'), run = pieces.some((x) => x.st === 'curso');
     items.push({ id: g.id, kind, g, name: g.name, date: g.date, end_date: g.end_date || null, place: g.place || '', modality: g.modality, suspended: !!g.suspended, pieces,
@@ -1061,4 +1071,24 @@ export function socialBoard(races, registrations, posted, today, log = null, { b
   for (const it of items) counts[it.status]++;
   const nextStory = items.flatMap((it) => it.pieces.filter((x) => x.k === 'story' && x.st === 'curso').map((x) => ({ item: it, ...x }))).sort((a, b) => a.date.localeCompare(b.date))[0] || null;
   return { items, counts, nextStory };
+}
+
+// ======================================================================
+//  Crónicas de carrera (contrato: crónica, resultados y fotos de cada carrera)
+// ======================================================================
+
+/**
+ * Crónicas de un corredor: las carreras en las que ha participado (con resultado, o ya corridas estando inscrito) y cuáles ya pasó.
+ * `d`: datos del corredor ({ me, my_results, registrations }); `done`: Set de claves «AAAA-MM-DD|nombre» pasadas; `year`: temporada (o null = todas).
+ */
+export function chronicleStatus(d, done, today, year = null) {
+  const last = (g) => g.end_date || g.date;
+  const seen = new Map();
+  for (const r of d.my_results || []) seen.set(postKeyOf(r), { key: postKeyOf(r), id: r.race_id, kind: 'race', name: r.name, date: r.date, end_date: r.end_date || null, place: r.place || '' });
+  for (const g of d.registrations || []) {
+    if (g.suspended || last(g) >= today || !(g.entries || []).some((e) => e.runner_id === d.me?.id) || seen.has(postKeyOf(g))) continue;
+    seen.set(postKeyOf(g), { key: postKeyOf(g), id: g.id, kind: 'reg', name: g.name, date: g.date, end_date: g.end_date || null, place: g.place || '' });
+  }
+  const all = [...seen.values()].filter((x) => year == null || yearOf(x.date) === year).sort((a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name, 'es'));
+  return { pending: all.filter((x) => !done.has(x.key)), done: all.filter((x) => done.has(x.key)), total: all.length };
 }
