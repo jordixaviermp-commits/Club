@@ -249,6 +249,15 @@ alter table public.ig_snapshots enable row level security;
 alter table public.ig_snapshots drop constraint if exists ig_snapshots_kind_check;
 alter table public.ig_snapshots add constraint ig_snapshots_kind_check check (kind in ('day','media','story','account','audience','period'));
 
+-- ---------- Crónicas de carrera (ver supabase/cambios/2026-11-15-cronicas.sql) ----------
+create table if not exists public.chronicles (
+  runner_id uuid not null references public.runners(id) on delete cascade,
+  race_key  text not null check (length(race_key) between 3 and 200),   -- «AAAA-MM-DD|nombre normalizado»: no cambia cuando la inscripción pasa a resultados
+  done_at   timestamptz not null default now(),
+  primary key (runner_id, race_key)
+);
+alter table public.chronicles enable row level security;
+
 -- Las capturas de pantalla ya no se usan (las cifras las vuelca Claude desde las capturas que manda la dirección).
 drop table if exists public.ig_capturas;
 
@@ -326,16 +335,16 @@ $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['runners','registrations','registration_entries','races','results','settings','runner_documents','contract_templates','ig_snapshots','circuit_podiums','announcements','change_log','announcement_replies','correction_requests','social_posts'] loop
+  foreach t in array array['runners','registrations','registration_entries','races','results','settings','runner_documents','contract_templates','ig_snapshots','chronicles','circuit_podiums','announcements','change_log','announcement_replies','correction_requests','social_posts'] loop
     execute format('drop policy if exists admin_all on public.%I', t);
     execute format('create policy admin_all on public.%I for all to authenticated using (public.is_admin()) with check (public.is_admin())', t);
   end loop;
 end $$;
 
 revoke all on public.runners, public.registrations, public.registration_entries,
-              public.races, public.results, public.admins, public.settings, public.runner_documents, public.contract_templates, public.ig_snapshots, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts from anon, public;
+              public.races, public.results, public.admins, public.settings, public.runner_documents, public.contract_templates, public.ig_snapshots, public.chronicles, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts from anon, public;
 grant select, insert, update, delete on public.runners, public.registrations,
-              public.registration_entries, public.races, public.results, public.settings, public.runner_documents, public.contract_templates, public.ig_snapshots, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts to authenticated;
+              public.registration_entries, public.races, public.results, public.settings, public.runner_documents, public.contract_templates, public.ig_snapshots, public.chronicles, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts to authenticated;
 revoke all on public.admins from authenticated;
 
 -- ---------- Funciones de dirección (respetan la seguridad de arriba) ---
@@ -1267,6 +1276,33 @@ language sql stable as $$ select 'ok'::text $$;
 
 -- ---------- Permisos de ejecución -----------------------------------------
 
+-- Crónicas de carrera: el corredor lee y marca las suyas.
+-- El corredor (con su enlace personal) lee sus crónicas pasadas…
+create or replace function public.runner_chronicles(p_code text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare v_runner uuid;
+begin
+  select id into v_runner from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  return coalesce((select jsonb_agg(race_key order by race_key) from chronicles where runner_id = v_runner), '[]'::jsonb);
+end $$;
+
+-- …y marca o desmarca una carrera suya.
+create or replace function public.runner_chronicle_set(p_code text, p_key text, p_done boolean)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_runner uuid;
+begin
+  select id into v_runner from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  if p_key is null or length(p_key) not between 3 and 200 then raise exception 'datos_no_validos'; end if;
+  if coalesce(p_done, true) then
+    insert into chronicles (runner_id, race_key) values (v_runner, p_key) on conflict do nothing;
+  else
+    delete from chronicles where runner_id = v_runner and race_key = p_key;
+  end if;
+end $$;
+
+
 revoke execute on all functions in schema public from public, anon;
 grant execute on function public.runner_view(text), public.runner_join(text, uuid, text),
                           public.runner_create_registration(text, jsonb, text),
@@ -1274,7 +1310,7 @@ grant execute on function public.runner_view(text), public.runner_join(text, uui
                           public.runner_update_race(text, uuid, jsonb), public.runner_delete_race(text, uuid),
                           public.runner_report_result(text, text, uuid, int, text, text, int),
                           public.runner_documents_list(text), public.runner_get_document(text, uuid), public.runner_contract_template(text), public.runner_get_contract_template(text),
-                          public.runner_team(text),
+                          public.runner_team(text), public.runner_chronicles(text), public.runner_chronicle_set(text, text, boolean),
                           public.runner_leave(text, uuid), public.runner_join_race(text, uuid, text),
                           public.runner_set_race_type(text, uuid, text, text), public.runner_propose_circuit(text, text, int, int, text),
                           public.runner_cancel_circuit(text, uuid), public.runner_news(text), public.runner_set_race_details(text, uuid, text, numeric), public.runner_complete_race(text, text, uuid, jsonb), public.auto_promote_registrations(),

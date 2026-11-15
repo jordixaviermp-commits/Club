@@ -3,8 +3,8 @@
 //  - Demostración, guardada solo en este navegador, para probar la app sin montar nada.
 import { newCode, todayISO, pastLimit, numDays, yearOf, SUBTYPES, parseKm } from './logic.js';
 
-const TABLES = ['runners', 'registrations', 'registration_entries', 'races', 'results', 'settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests', 'social_posts'];
-const OPTIONAL = new Set(['settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests', 'social_posts']); // tablas que pueden faltar si aún no se ha ejecutado su SQL
+const TABLES = ['runners', 'registrations', 'registration_entries', 'races', 'results', 'settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests', 'social_posts', 'chronicles'];
+const OPTIONAL = new Set(['settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests', 'social_posts', 'chronicles']); // tablas que pueden faltar si aún no se ha ejecutado su SQL
 
 /** Mensajes de error comprensibles. */
 export function friendlyError(e) {
@@ -55,6 +55,7 @@ function nest(data) {
     announcementReplies: data.announcement_replies || null,
     corrections: data.correction_requests || null,
     socialPosts: data.social_posts || null,       // null = falta el SQL de redes
+    chronicles: data.chronicles || null,          // null = falta el SQL de crónicas
   };
 }
 
@@ -145,6 +146,9 @@ export function supabaseApi(url, key) {
 
     async runnerView(code) { return ok(await sb.rpc('runner_view', { p_code: code })); },
     async runnerTeam(code) { return ok(await sb.rpc('runner_team', { p_code: code })); },
+    /** Crónicas ya pasadas por el corredor (claves «AAAA-MM-DD|nombre»). null = falta el SQL. */
+    async runnerChronicles(code) { try { return ok(await sb.rpc('runner_chronicles', { p_code: code })); } catch { return null; } },
+    async runnerSetChronicle(code, key, done) { ok(await sb.rpc('runner_chronicle_set', { p_code: code, p_key: key, p_done: !!done })); },
     async runnerNews(code) { return ok(await sb.rpc('runner_news', { p_code: code })); },
     async runnerDocuments(code) { return ok(await sb.rpc('runner_documents_list', { p_code: code })); },
     async runnerGetDocument(code, id) { return ok(await sb.rpc('runner_get_document', { p_code: code, p_id: id })); },
@@ -304,7 +308,7 @@ export function demoApi(storage = globalThis.localStorage) {
     async signOut() { admin = false; try { storage.removeItem(DEMO_KEY + '-admin'); } catch { /* nada */ } },
     async resetDemo() { mem = demoSeed(); save(); },
 
-    async loadAll() { requireAdmin(); autoPromote(); return clone(nest({ circuit_podiums: [], announcements: [], announcement_replies: [], correction_requests: [], social_posts: [], ...load() })); },
+    async loadAll() { requireAdmin(); autoPromote(); return clone(nest({ circuit_podiums: [], announcements: [], announcement_replies: [], correction_requests: [], social_posts: [], chronicles: [], ...load() })); },
     async autoPromote() { requireAdmin(); return autoPromote(); },
     async listChanges() { requireAdmin(); return clone([...(load().change_log || [])].sort((a, b) => b.at.localeCompare(a.at))); },
     async runnerComplete(code, kind, id, data) {
@@ -633,6 +637,12 @@ export function demoApi(storage = globalThis.localStorage) {
       d.races = d.races.filter((x) => x.id !== id);
       d.results = d.results.filter((x) => x.race_id !== id);
       logc(me.name, 'delete', `borró la carrera ${r.name} (${r.date})`); save();
+    },
+    async runnerChronicles(code) { const me = byCode(code); return clone((load().chronicles || []).filter((x) => x.runner_id === me.id).map((x) => x.race_key)); },
+    async runnerSetChronicle(code, key, done) {
+      const me = byCode(code), d = load(); d.chronicles = (d.chronicles || []).filter((x) => !(x.runner_id === me.id && x.race_key === key));
+      if (done) d.chronicles.push({ runner_id: me.id, race_key: key, done_at: new Date().toISOString() });
+      save();
     },
     async runnerTeam(code) {
       byCode(code); const d = load();

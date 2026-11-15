@@ -593,4 +593,28 @@ set role anon;
 select runner_delete_race('BBBBBBBBBB', :'rcreada');
 reset role;
 select pg_temp.check(not exists (select 1 from races where id = :'rcreada'), 'borra su carrera si solo está él');
+-- crónicas de carrera: el corredor marca las suyas con su enlace; la dirección las lee; el resto, nada
+reset role;
+select code as crcode from runners order by name limit 1 \gset
+select id as crid from runners where code = :'crcode' \gset
+select code as crcode2 from runners where code <> :'crcode' limit 1 \gset
+set role anon;
+select set_config('request.headers', '{}', false);
+select pg_temp.check(runner_chronicles(:'crcode') = '[]'::jsonb, 'crónicas: al principio ninguna');
+select runner_chronicle_set(:'crcode', '2026-11-08|vii btt', true);
+select runner_chronicle_set(:'crcode', '2026-11-08|vii btt', true);
+select runner_chronicle_set(:'crcode', '2026-10-25|salida', true);
+select pg_temp.check(jsonb_array_length(runner_chronicles(:'crcode')) = 2, 'crónicas: marcar dos veces la misma no duplica');
+select pg_temp.check(runner_chronicles(:'crcode2') = '[]'::jsonb, 'crónicas: cada corredor ve solo las suyas');
+select runner_chronicle_set(:'crcode', '2026-10-25|salida', false);
+select pg_temp.check(runner_chronicles(:'crcode') = '["2026-11-08|vii btt"]'::jsonb, 'crónicas: se puede desmarcar');
+select pg_temp.expect_fail($q$select runner_chronicles('codigo-falso')$q$, 'crónicas: enlace falso no lee');
+select pg_temp.expect_fail($q$select runner_chronicle_set('codigo-falso', 'abc|def', true)$q$, 'crónicas: enlace falso no marca');
+select pg_temp.expect_fail($q$select runner_chronicle_set('$$ || :'crcode' || $$', 'x', true)$q$, 'crónicas: clave demasiado corta');
+select pg_temp.expect_fail('select * from chronicles', 'crónicas: anon no lee la tabla');
+reset role;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+select pg_temp.check((select count(*) from chronicles) = 1, 'crónicas: la dirección las lee');
+reset role;
 \echo TODAS LAS PRUEBAS SQL OK

@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, monthGrid, addMonths, formatRange, daysOf, numDays,
+  extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -234,8 +234,12 @@ async function onRoute() {
   window.scrollTo(0, 0);
 }
 
+/** Crónicas que el corredor ya pasó (Set de claves). null = falta el SQL; undefined = aún sin cargar. */
+async function loadChron() {
+  try { const keys = await api.runnerChronicles(S.code || S.previewCode); S.chron = Array.isArray(keys) ? new Set(keys) : null; } catch { S.chron = null; }
+}
 async function loadRunner() {
-  try { S.runnerData = await api.runnerView(S.code); await loadNews(); await loadCorrections(); }
+  try { S.runnerData = await api.runnerView(S.code); await loadNews(); await loadCorrections(); await loadChron(); }
   catch (e) {
     S.runnerData = null;
     if (/enlace_no_valido/.test(String(e?.message))) { store.del(CODE_KEY); S.code = null; }
@@ -984,6 +988,30 @@ function myRacesCard(d) {
   </section>`;
 }
 
+
+/** Aviso del contrato al apuntarse a una carrera ya corrida (mensaje automático) y al pasar la crónica. */
+const CHRONICLE_RULE = 'Según tu contrato, de cada carrera en la que participas debes hacer la <b>crónica</b>, <b>pasar los resultados</b> y <b>enviar fotos</b>.';
+const chronicleReminder = (name) => choose('✍️ Recuerda tu crónica', `${name ? `<b>${esc(name)}</b><br>` : ''}${CHRONICLE_RULE}<br>Cuando lo hayas enviado, márcala como pasada en <b>Mi temporada</b>.`, [{ label: 'Entendido', value: true, kind: 'primary' }]);
+
+/** Crónicas del corredor: pendientes y pasadas, pequeña y con un desplegable para marcarlas. */
+function chronicleCard(d) {
+  if (!(S.chron instanceof Set)) return '';
+  const year = S.myYear || new Date().getFullYear();
+  const c = chronicleStatus(d, S.chron, d.today || todayISO(), year);
+  if (!c.total) return '';
+  const plural = (n, a, b) => (n === 1 ? a : b);
+  const li = (x, isDone) => `<li class="chro-row"><span class="chro-name"><b>${esc(x.name)}</b><small class="muted">${esc(formatDate(x.date, false))}${x.place ? ' · ' + esc(x.place) : ''}</small></span>${S.preview ? '' : `<button class="btn small${isDone ? ' ghost' : ' primary'}" data-act="chro-toggle" data-key="${esc(x.key)}" data-done="${isDone ? 0 : 1}">${isDone ? 'Deshacer' : '✓ Ya la pasé'}</button>`}</li>`;
+  return `<section class="card chro-card${c.pending.length ? ' has-pend' : ''}">
+    <div class="chro-top"><h3>✍️ Crónicas ${year}</h3>
+      <div class="chro-pills"><span class="chro-pill pend${c.pending.length ? '' : ' zero'}"><b>${c.pending.length}</b> ${plural(c.pending.length, 'pendiente', 'pendientes')}</span><span class="chro-pill ok"><b>${c.done.length}</b> ${plural(c.done.length, 'pasada', 'pasadas')}</span></div></div>
+    <details class="chro-det" data-open-key="chro"${S.open?.chro ? ' open' : ''}>
+      <summary>${c.pending.length ? 'Ver las que me faltan y marcarlas' : 'Ver mis crónicas pasadas'}</summary>
+      <p class="hint">${CHRONICLE_RULE} Cuando lo hayas enviado, márcala.</p>
+      ${c.pending.length ? `<ul class="chro-list">${c.pending.map((x) => li(x, false)).join('')}</ul>${c.pending.length > 1 && !S.preview ? '<button class="btn small ghost" data-act="chro-all">✓ Marcar todas como pasadas</button>' : ''}` : '<p class="empty small">No te falta ninguna. 🎉</p>'}
+      ${c.done.length ? `<details class="chro-done"><summary>Pasadas (${c.done.length})</summary><ul class="chro-list">${c.done.map((x) => li(x, true)).join('')}</ul></details>` : ''}
+    </details></section>`;
+}
+
 function runnerBonusCard(d) {
   const b = d.bonus;
   if (!b) return '';
@@ -1074,10 +1102,11 @@ function runnerRegCard(g) {
       ${g.entries.length ? `<ul class="people">${g.entries.map((e) =>
         `<li class="${e.runner_id === me.id ? 'me' : ''}">${esc(e.name)}${e.category ? ` <small>${esc(e.category)}</small>` : ''}</li>`).join('')}</ul>` : ''}
       ${!open || g.suspended ? '' : mine
-        ? `<div class="row joined"><span>✓ Estás inscrito${mine.category ? ' en ' + esc(mine.category) : ''}</span>
-           <a class="btn ghost small" href="ruta/?fecha=${esc(g.date)}" aria-label="Planificar la ruta de esta carrera: viento, tiempo y subidas">🗺️ Planificar</a>
-           <button class="btn ghost small" data-act="r-ics" data-id="${g.id}" aria-label="Añadir al calendario del móvil">📅 Calendario</button>
-           <button class="btn ghost small" data-act="r-leave" data-id="${g.id}">Borrarme</button></div>`
+        ? `<div class="joined-box"><p class="joined-msg">✓ Estás inscrito${mine.category ? ' en ' + esc(mine.category) : ''}</p>
+           <div class="joined-acts">
+             <a class="btn ghost small" href="ruta/?fecha=${esc(g.date)}" aria-label="Planificar la ruta de esta carrera: viento, tiempo y subidas">🗺️ Planificar</a>
+             <button class="btn ghost small" data-act="r-ics" data-id="${g.id}" aria-label="Añadir al calendario del móvil">📅 Calendario</button>
+             <button class="btn ghost small" data-act="r-leave" data-id="${g.id}">Borrarme</button></div></div>`
         : `<div class="row join-row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">Apuntarme</button></div>`}
     </article>`;
@@ -1128,6 +1157,8 @@ function viewRunnerHome() {
       ${S.fd?.has ? `<button type="button" class="icon-btn fbtn${S.fd.active ? ' on' : ''}" data-act="r-filters" aria-label="Filtros${S.fd.active ? ' (activos)' : ''}" title="Filtros">${icon(ICON_FILTER)}${S.fd.active ? '<i class="fdot"></i>' : ''}</button>` : ''}
       <button class="btn primary add-btn mini" data-act="r-new" aria-label="Añadir una carrera que no está" title="Añadir una carrera que no está">＋ Nueva</button>
     </div>
+    ${(() => { const n = S.chron instanceof Set ? chronicleStatus(d, S.chron, d.today || todayISO(), new Date().getFullYear()).pending.length : 0;
+      return n && !S.preview ? `<a class="chro-nudge" href="${runnerHref('mi')}">✍️ Tienes <b>${n}</b> crónica${n === 1 ? '' : 's'} pendiente${n === 1 ? '' : 's'} <small>(crónica, resultados y fotos, como dice tu contrato)</small></a>` : ''; })()}
     <div id="pulse-box">${normalize(S.q.runner || '').length >= 2 ? '' : teamPulse(d)}</div>
     <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
     ${body}`,
@@ -1208,6 +1239,7 @@ function viewRunnerMine() {
     <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
     <a class="btn block ruta-link" href="ruta/"><span>🗺️ Planificar ruta <span class="new-tag">NUEVO</span></span><small class="muted">Sube tu track y mira viento, tiempo y subidas</small></a>
     ${myRacesCard(d)}
+    ${chronicleCard(d)}
     <a class="btn block" href="${runnerHref('contrato')}">📄 Mi contrato y mi bonificación</a>
     ${installHint()}
     ${S.preview ? '' : `<p class="center"><button class="link muted" data-act="r-forget">No soy ${esc(me.name)}</button></p>`}
@@ -1689,8 +1721,8 @@ function viewPublications() {
 //  Redes (dirección): panel de lo pendiente, en curso y hecho
 // ======================================================================
 
-const NET_ICON = { story: '📸', aviso: '📝', res: '🖼️' };
-const NET_LABEL = { story: 'Historia previa', aviso: 'Aviso', res: 'Resultados' };
+const NET_ICON = { story: '📸', aviso: '📝', res: '🖼️', cro: '✍️' };
+const NET_LABEL = { story: 'Historia previa', aviso: 'Aviso', res: 'Resultados', cro: 'Crónicas de los corredores' };
 const NET_GLYPH = { ok: '✓', curso: '⏳', pend: '❗', late: '⚠️', na: '' };
 
 function viewNetworks() {
@@ -1906,7 +1938,13 @@ const pubAudit = (year = new Date().getFullYear()) => socialAudit(year, S.data.r
 const pubDue = () => { const a = pubAudit(); return a.resPending.filter((x) => x.days >= 3).length + a.anomalies; };
 const alertCount = () => { const a = adminAlerts(); return a.circuits.length + a.backup.length + a.corrections.length; };   // lo de redes está en la pestaña Redes
 /** Estado de las publicaciones de cada carrera (panel de Redes) y cuántas tienen algo pendiente. */
-const netBoard = (opts) => socialBoard(S.data.races, S.data.registrations, postedSet(), todayISO(), S.stories?.byKey ? S.stories : null, opts);
+const chronOpts = () => {
+  if (!Array.isArray(S.data.chronicles)) return null;   // falta el SQL de crónicas
+  const done = new Map();
+  for (const x of S.data.chronicles) (done.get(x.race_key) || done.set(x.race_key, new Set()).get(x.race_key)).add(x.runner_id);
+  return { done, nameOf: (id) => runnerById(id)?.name };
+};
+const netBoard = (opts) => socialBoard(S.data.races, S.data.registrations, postedSet(), todayISO(), S.stories?.byKey ? S.stories : null, { chron: chronOpts(), ...(opts || {}) });
 const socialPending = () => { try { return netBoard().counts.pend; } catch { return 0; } };
 
 function viewAlerts() {
@@ -3200,15 +3238,27 @@ const actions = {
       const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id);
       cat = await askCategory(g?.name); if (!cat) return;
     }
+    const gname = S.runnerData.registrations.find((x) => x.id === el.dataset.id)?.name;
     const ok = await run(async () => { await api.runnerJoin(S.code, el.dataset.id, cat); await loadRunner(); return true; }, '¡Apuntado!');
-    if (ok && isPastReg(el.dataset.id)) return go(resultHref(el.dataset.id));
+    if (ok && isPastReg(el.dataset.id)) { await chronicleReminder(gname); return go(resultHref(el.dataset.id)); }
     render();
   },
   // «La hice y no salgo»: añadirse a una carrera que ya está en resultados y poner el puesto
   async 'r-join-race'(el) {
     const ok = await run(async () => { await api.runnerJoinRace(S.code, el.dataset.id, S.rdraft?.category || S.runnerData.me.category || null); await loadRunner(); return true; }, 'Añadido: ahora pon tu resultado');
     if (!ok) return;
-    S.rdraft = null; S.team = null; go(resultHref(el.dataset.id));
+    S.rdraft = null; S.team = null; await chronicleReminder(S.runnerData.my_results?.find((x) => x.race_id === el.dataset.id)?.name); go(resultHref(el.dataset.id));
+  },
+  async 'chro-toggle'(el) {
+    const done = el.dataset.done === '1';
+    await run(async () => { await api.runnerSetChronicle(S.code, el.dataset.key, done); await loadChron(); }, done ? '✓ Crónica pasada' : 'Crónica pendiente otra vez');
+    render();
+  },
+  async 'chro-all'() {
+    const c = chronicleStatus(S.runnerData, S.chron, S.runnerData.today || todayISO(), S.myYear || new Date().getFullYear());
+    if (!c.pending.length || !await confirmAction('Marcar todas', `Vas a marcar <b>${c.pending.length}</b> crónicas como pasadas. ¿Las has enviado todas?`, 'Sí, todas pasadas', 'primary')) return;
+    await run(async () => { for (const x of c.pending) await api.runnerSetChronicle(S.code, x.key, true); await loadChron(); }, 'Crónicas marcadas');
+    render();
   },
   async 'r-leave'(el) {
     if (!await confirmAction('Borrar inscripción', '¿Seguro que quieres borrarte de esta carrera?', 'Sí, borrarme')) return;
@@ -3350,7 +3400,7 @@ const actions = {
       const view = await run(() => api.runnerView(r.code));
       if (!view) return;
       S.preview = { name: r.name, sqlOk: Array.isArray(view.my_results) }; S.previewCode = r.code;
-      S.runnerData = view; S.myOpen = true; await loadNews();
+      S.runnerData = view; S.myOpen = true; await loadNews(); await loadChron();
       go('#/vista');
     } else if (choice === 'open') {
       await api.signOut(); S.session = null; S.data = null; go('#/c/' + r.code);
@@ -3847,7 +3897,7 @@ document.addEventListener('visibilitychange', async () => {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
+const RUNNER_ACTIONS = new Set(['chro-toggle', 'chro-all', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
 // los enlaces de la ventana emergente (p. ej. las carreras de un compañero) cierran la ventana al navegar
 document.getElementById('dialog').addEventListener('click', (ev) => { if (ev.target.closest('a[href^="#/"]')) ev.currentTarget.close(); });
 $app.addEventListener('click', (ev) => {

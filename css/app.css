@@ -896,3 +896,28 @@ nav.tabs a { position: relative; }
 .net-tab em { position: absolute; top: 4px; right: 6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #d93025; color: #fff; font-size: .7rem; font-style: normal; font-weight: 700; line-height: 18px; text-align: center; }
 .enc-det > summary { cursor: pointer; font-weight: 600; } .enc-det[open] > summary { margin-bottom: .5rem; }
 .net-sub { margin: .7rem 0 .3rem; }
+
+/* Planificar / Calendario / Borrarme: el estado en una línea y tres botones iguales debajo */
+.joined-box { margin-top: .5rem; }
+.joined-msg { margin: 0 0 .4rem; font-weight: 700; color: var(--accent); }
+.joined-acts { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; }
+.joined-acts .btn { width: 100%; min-height: 42px; padding: .3rem .25rem; font-size: clamp(.72rem, 3.3vw, .86rem); line-height: 1.15; white-space: normal; text-align: center; display: inline-flex; align-items: center; justify-content: center; }
+
+/* Crónicas del corredor (Mi temporada): pequeña, menos protagonista que «Mis carreras» */
+.chro-card { padding: .6rem .8rem; }
+.chro-card.has-pend { border-color: #e0a030; background: color-mix(in srgb, #e0a030 8%, var(--card)); }
+.chro-top { display: flex; align-items: center; justify-content: space-between; gap: .5rem; flex-wrap: wrap; }
+.chro-top h3 { margin: 0; font-size: .98rem; }
+.chro-pills { display: flex; gap: .35rem; }
+.chro-pill { font-size: .78rem; padding: .15rem .55rem; border-radius: 999px; border: 1px solid var(--line); background: var(--card); white-space: nowrap; }
+.chro-pill b { font-size: .95rem; }
+.chro-pill.pend { border-color: #e0a030; color: #b86e00; } .chro-pill.pend.zero { border-color: var(--line); color: var(--muted, #667); }
+.chro-pill.ok { border-color: #1b7f3b; color: #1b7f3b; }
+.chro-det { margin-top: .35rem; } .chro-det > summary { cursor: pointer; font-size: .86rem; color: var(--accent); font-weight: 600; }
+.chro-list { list-style: none; margin: .4rem 0; padding: 0; display: flex; flex-direction: column; gap: .35rem; }
+.chro-row { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .35rem .5rem; border-radius: 9px; background: color-mix(in srgb, var(--line) 30%, transparent); }
+.chro-name { display: flex; flex-direction: column; min-width: 0; font-size: .88rem; } .chro-name small { font-size: .74rem; }
+.chro-done { margin-top: .4rem; } .chro-done > summary { cursor: pointer; font-size: .82rem; color: var(--muted, #667); }
+.chro-nudge { display: block; margin: 0 0 .6rem; padding: .5rem .7rem; border: 1px solid #e0a030; border-radius: 12px; background: color-mix(in srgb, #e0a030 10%, var(--card)); color: var(--text); text-decoration: none; font-size: .9rem; }
+.chro-nudge small { color: var(--muted, #667); }
+.chro-row .btn.small { min-height: 34px; padding: .2rem .65rem; font-size: .8rem; flex: none; }
