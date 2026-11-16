@@ -1,63 +1,11 @@
 {
- "updated_at": "2026-11-11T11:31:17.254Z",
+ "updated_at": "2026-11-16T05:44:37.450Z",
  "sources": {
   "FCC": "https://www.ciclisme.cat/calendari/tot",
   "FAC": "https://aragonciclismo.com/es/smartweb/seccion/seccion/aragon/CALENDARIO_GLOBAL"
  },
  "errors": [],
  "races": [
-  {
-   "source": "FCC",
-   "date": "2026-11-14",
-   "name": "Dark Cross Copa Espanya C1",
-   "place": "Les Franqueses del Vallès",
-   "province": "Barcelona",
-   "country": "España",
-   "modality": "Ciclocross",
-   "discipline": "Ciclocròs · CX",
-   "kind": "Competición",
-   "info": "Copa Catalana Ciclocròs",
-   "url": "https://www.ciclisme.cat/cursa/ciclocros/dark-cross-copa-espanya-c1"
-  },
-  {
-   "source": "FCC",
-   "date": "2026-11-14",
-   "name": "EC Mataró Skoda Mogadealer Pista Hivern",
-   "place": "Mataró",
-   "province": "Barcelona",
-   "country": "España",
-   "modality": "Pista",
-   "discipline": "Pista · Pistard",
-   "kind": "Competición",
-   "info": "",
-   "url": "https://www.ciclisme.cat/cursa/pista/ec-mataro-skoda-mogadealer-pista-hivern"
-  },
-  {
-   "source": "FCC",
-   "date": "2026-11-14",
-   "name": "Movember Gravel Valles Oriental - Mgvo",
-   "place": "Les Franqueses del Vallès",
-   "province": "Barcelona",
-   "country": "España",
-   "modality": "Gravel",
-   "discipline": "Trobades · Trobades Gravel",
-   "kind": "Ocio",
-   "info": "",
-   "url": "https://www.ciclisme.cat/cursa/trobades/movember-gravel-valles-oriental-mgvo"
-  },
-  {
-   "source": "FCC",
-   "date": "2026-11-14",
-   "name": "Open Escolar BTT CAMBRILS",
-   "place": "Cambrils",
-   "province": "Tarragona",
-   "country": "España",
-   "modality": "BTT",
-   "discipline": "BTT · Promoció",
-   "kind": "Ocio",
-   "info": "",
-   "url": "https://www.ciclisme.cat/cursa/btt/open-escolar-btt-cambrils"
-  },
   {
    "source": "FAC",
    "date": "2026-11-15",
@@ -70,58 +18,6 @@
    "kind": "Competición",
    "info": "VALDEJALON CLUB BMX · ALEVIN, ALEVIN FEM, CADET...",
    "url": "https://aragonciclismo.com/index.php/smartweb/inscripciones/prueba/34698-CAMPEONATO-DE-ARAGON-BMX-2026"
-  },
-  {
-   "source": "FCC",
-   "date": "2026-11-15",
-   "name": "Copa Tarragona Trial Perafort",
-   "place": "Perafort",
-   "province": "Tarragona",
-   "country": "España",
-   "modality": "Otra",
-   "discipline": "Trial · Competició",
-   "kind": "Competición",
-   "info": "Copa Tarragona Trial",
-   "url": "https://www.ciclisme.cat/cursa/trial/copa-tarragona-trial-perafort-1"
-  },
-  {
-   "source": "FCC",
-   "date": "2026-11-15",
-   "name": "Gran Fons Montsantbike",
-   "place": "Ulldemolins",
-   "province": "Tarragona",
-   "country": "España",
-   "modality": "Otra",
-   "discipline": "Pedalades · Marxes BTT",
-   "kind": "Ocio",
-   "info": "",
-   "url": "https://www.ciclisme.cat/cursa/pedalades/gran-fons-montsantbike-0"
-  },
-  {
-   "source": "FCC",
-   "date": "2026-11-15",
-   "name": "Gran Premi Kh-7 Ciclocross",
-   "place": "Les Franqueses del Vallès",
-   "province": "Barcelona",
-   "country": "España",
-   "modality": "Ciclocross",
-   "discipline": "Ciclocròs · CX",
-   "kind": "Competición",
-   "info": "Copa Catalana Ciclocròs",
-   "url": "https://www.ciclisme.cat/cursa/ciclocros/gran-premi-kh-7-ciclocross"
-  },
-  {
-   "source": "FCC",
-   "date": "2026-11-15",
-   "name": "GRAN PREMI KH-7 CICLOCROSS - Promoció",
-   "place": "Les Franqueses del Vallès",
-   "province": "Barcelona",
-   "country": "España",
-   "modality": "Ciclocross",
-   "discipline": "Ciclocròs · Promoció",
-   "kind": "Competición",
-   "info": "Copa Catalana Ciclocròs",
-   "url": "https://www.ciclisme.cat/cursa/ciclocros/gran-premi-kh-7-ciclocross-promocio"
   },
   {
    "source": "FCC",
@@ -148,6 +44,19 @@
    "kind": "Competición",
    "info": "",
    "url": "https://www.ciclisme.cat/cursa/bmx/dirt-btt-santi-moreno-race-weekend-sant-andreu-de-la-barca"
+  },
+  {
+   "source": "FCC",
+   "date": "2026-11-21",
+   "name": "Fem Ports #1 Mare de Déu del Mont",
+   "place": "Cabanelles",
+   "province": "Girona",
+   "country": "España",
+   "modality": "Otra",
+   "discipline": "Trobades · Trobades Carretera",
+   "kind": "Ocio",
+   "info": "FEM PORTS #",
+   "url": "https://www.ciclisme.cat/cursa/trobades/fem-ports-1-mare-de-deu-del-mont"
   },
   {
    "source": "FCC",
@@ -460,6 +369,19 @@
    "kind": "Competición",
    "info": "COPA ARAGONESA CX · TURIASO C.C. · ALEVIN, ALEVIN FEM, INFAN...",
    "url": "https://aragonciclismo.com/index.php/smartweb/inscripciones/prueba/36468-IV-CICLOCROSS-INTERNACIONAL-CIUDAD-DE-TARAZONA-ESCUELAS-"
+  },
+  {
+   "source": "FCC",
+   "date": "2026-12-19",
+   "name": "Lliga Catalana Hivern Pc Baix Ebre Tortosa",
+   "place": "Tarragona",
+   "province": "",
+   "country": "España",
+   "modality": "Pista",
+   "discipline": "Pista · Pistard",
+   "kind": "Competición",
+   "info": "",
+   "url": "https://www.ciclisme.cat/cursa/pista/lliga-catalana-hivern-pc-baix-ebre-tortosa-0"
   },
   {
    "source": "FCC",
