@@ -1304,9 +1304,9 @@ function viewRunnerHome() {
     ${previewBanner()}
     <div class="toolbar">
       ${searchBox('runner', 'Buscar…')}
+      <button class="btn primary add-btn" data-act="r-new" aria-label="Añadir una carrera que no está" title="Añadir una carrera que no está">＋</button>
       ${S.fd?.has ? `<button type="button" class="icon-btn fbtn${S.fd.active ? ' on' : ''}" data-act="r-filters" aria-label="Filtros${S.fd.active ? ' (activos)' : ''}" title="Filtros">${icon(ICON_FILTER)}${S.fd.active ? '<i class="fdot"></i>' : ''}</button>` : ''}
       <button type="button" class="icon-btn fbtn view-btn${S.regView === 'cal' ? ' on' : ''}" data-act="reg-view" aria-label="${S.regView === 'cal' ? 'Ver como lista' : 'Ver calendario'}" title="${S.regView === 'cal' ? 'Ver como lista' : 'Ver calendario'}">${icon(S.regView === 'cal' ? ICON_LIST : ICON_CAL)}</button>
-      <button class="btn primary add-btn" data-act="r-new" aria-label="Añadir una carrera que no está" title="Añadir una carrera que no está">＋</button>
     </div>
     ${S.regView === 'cal' || S.preview ? '' : rutaCard()}
     <div id="pulse-box">${S.regView === 'cal' || normalize(S.q.runner || '').length >= 2 ? '' : teamPulse(d)}</div>
