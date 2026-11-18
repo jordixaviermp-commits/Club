@@ -1354,3 +1354,12 @@ nav.tabs a:not(.on) svg { padding: 3px 16px; box-sizing: content-box; }
 .mini-list li.mrow.tappable > .mrow-go { position: relative; z-index: 0; pointer-events: none; }
 .mini-list li.mrow.tappable:active { background: var(--accent-2); }
 .mini-list li.mrow.hero.tappable:active { background: color-mix(in srgb, var(--brand-cyan) 24%, var(--card)); }
+
+/* ---- El título de cada carrera, siempre en MAYÚSCULAS y bien visible, en toda la app ---- */
+.race-head h3, .mrow-name, .rname, .chro-name b, .mini-list li.mini:not(.mate-row) .mini-main > b, .mini-list li.mini:not(.mate-row) > div > b {
+  text-transform: uppercase; font-weight: 800; letter-spacing: .015em; color: var(--text); }
+.race-head h3 { font-size: 1.12rem; line-height: 1.2; }
+.mini-list li.mrow .mrow-name { font-size: 1.05rem; line-height: 1.2; }
+.mini-list li.mini:not(.mate-row) .mini-main > b { font-size: 1rem; }
+.pod-l2 .rname { font-size: .92rem; }
+.next-hero .mrow-name { font-size: 1.25rem; }
