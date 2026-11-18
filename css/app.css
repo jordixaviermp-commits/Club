@@ -998,3 +998,7 @@ nav.tabs a { position: relative; }
 .tiles .tile .t-n { font-size: 1.7rem; }
 .tiles .tile .t-l { font-size: .82rem; }
 .tiles .tile .t-ico { width: 18px; height: 18px; }
+.chro-t { white-space: nowrap; }
+.chro-tag { white-space: nowrap; flex: none; }
+.chro-tag.pend { color: color-mix(in srgb, #9a6b00 70%, var(--text)); }
+.chro-tag.ok { color: color-mix(in srgb, #1b7f3b 70%, var(--text)); }
