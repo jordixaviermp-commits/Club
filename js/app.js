@@ -931,6 +931,8 @@ const ICO = {
   users: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
   calplus: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM12 14v4M10 16h4',
   check: 'M20 6L9 17l-5-5',
+  medal: 'M7.2 15L2.7 7.1a2 2 0 0 1 .1-2.2L4.4 2.8A2 2 0 0 1 6 2h12a2 2 0 0 1 1.6.8l1.6 2.1a2 2 0 0 1 .1 2.2L16.8 15M12 22a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM12 15.5v3',
+  bars: 'M12 20V10M18 20V4M6 20v-4',
   euro: 'M4 10h12M4 14h9M19 6a7.7 7.7 0 0 0-5.2-2A7.9 7.9 0 0 0 6 12c0 4.4 3.5 8 7.8 8 2 0 3.8-.8 5.2-2',
   chevd: 'M6 9l6 6 6-6',
   list: 'M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01',
@@ -2183,6 +2185,59 @@ function viewRaceEdit() {
 //  Resumen anual
 // ======================================================================
 
+/** Resumen del equipo en la pantalla Equipo del corredor: filtros simples, cifras grandes, líderes con icono, modalidades, mes + formatos y clasificación compacta. */
+function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods, places, maxOf }) {
+  const T = s.totals;
+  const filters = `<div class="eq-filters"><label class="year-pick"><select data-year-sel aria-label="Temporada">${years.map((y) => `<option value="${y}"${y === S.year ? ' selected' : ''}>${y}</option>`).join('')}</select>${ico('chevd')}</label>
+    <div class="eq-chips"><button class="chip${mod ? '' : ' on'}" data-act="sum-mod" data-m="all">Todos</button>${all.byModality.map((m) =>
+      `<button class="chip${mod === m.modality ? ' on' : ''}" data-act="sum-mod" data-m="${esc(m.modality)}">${esc(m.modality)}</button>`).join('')}</div></div>`;
+  const big = (n, label) => `<div><b>${n}</b><span>${label}</span></div>`;
+  const mini = (icon, v, l) => `<div>${ico(icon)}<span><b>${v}</b><small>${l}</small></span></div>`;
+  const hero = `<section class="sum-hero eq-hero ${cls}">
+    <p class="sum-hero-t">${ico('flag')}${mod ? esc(mod) : 'Todo el equipo'} · Temporada ${S.year}</p>
+    <div class="sum-big">${big(T.races, 'Carreras')}${big(T.runners, 'Corredores')}${big(T.podiums, 'Podios')}${big(T.wins, 'Victorias')}</div>
+    <div class="eq-mini">${mini('ruler', T.km ? kmText(T.km) : '—', 'totales')}${mini('clock', T.timed ? formatTime(T.time, true) : '—', 'en carrera')}${mini('users', T.participations, 'particip.')}${mini('bars', T.podiums ? `${Math.round((T.podiums / Math.max(1, T.participations)) * 100)} %` : '—', 'podios')}</div>
+  </section>`;
+  const lead = (icon, label, score, unit) => {
+    const top = Math.max(0, ...people.map(score));
+    if (!top) return '';
+    return `<div class="lead"><span class="lead-i">${ico(icon)}</span><small>${label}</small><b>${names(people.filter((r) => score(r) === top), 2)}</b><em>${top} ${top === 1 ? unit : unit + 's'}</em></div>`;
+  };
+  const leaders = [lead('flag', 'Más carreras', (r) => r.races, 'carrera'), lead('trophy', 'Más podios', (r) => r.p1 + r.p2 + r.p3, 'podio'), lead('medal', 'Más victorias', (r) => r.p1, 'victoria')].join('');
+  const byMod = `<section class="card eq-mod"><h2>Por modalidad</h2>
+    ${all.byModality.map((m) => `<button type="button" class="modrow2 ${modClass(m.modality)}${mod === m.modality ? ' sel' : ''}" data-act="sum-mod" data-m="${esc(m.modality)}">
+      <i class="stripe"></i><span class="mr-main"><b>${esc(m.modality)}</b><small>${m.runners} corredor${m.runners === 1 ? '' : 'es'} · ${m.participations} participaci${m.participations === 1 ? 'ón' : 'ones'}</small></span>
+      <span class="mr-n">${m.races} carrera${m.races === 1 ? '' : 's'}</span></button>`).join('')}</section>`;
+  // carreras por mes + formatos más comunes
+  const maxMonth = maxOf(s.byMonth.map((m) => m.total));
+  const MES = ['E', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+  const fmts = s.bySubtype.slice(0, 6);
+  const months = `<section class="card eq-months"><h2>Carreras por mes</h2>
+    <div class="mchart" role="img" aria-label="Carreras de cada mes">${s.byMonth.map((m) => `<div class="mc${m.total ? '' : ' none'}"><div class="mc-area"><em>${m.total || ''}</em>
+      <div class="mc-stack" style="height:${m.total ? (m.total / maxMonth) * 100 : 0}%">${MODALITIES.filter((x) => m.mods[x]).map((x) =>
+        `<span class="${modClass(x)}" style="flex:${m.mods[x]}" title="${esc(x)}: ${m.mods[x]}"></span>`).join('')}</div></div><b>${MES[m.month]}</b></div>`).join('')}</div>
+    ${fmts.length ? `<h3>Formatos más comunes</h3><div class="pills">${fmts.map((x) => `<span class="pill">${esc(x.subtype)}</span>`).join('')}</div>` : ''}</section>`;
+  // clasificación: cuatro primeros y el resto desplegado
+  const active = people.filter((r) => r.races > 0), idle = people.filter((r) => !r.races && r.current);
+  const maxR = maxOf(active.map((r) => r.races));
+  const hue = (k) => [...String(k)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7);
+  const ini = (n) => (n || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+  const row = (r, i) => `<li class="${me && r.key === me ? 'me-row' : ''}${r.current ? ' tappable' : ''}"${r.current ? ` data-act="mate-open" data-id="${esc(r.key)}"` : ''}>
+      <span class="avatar" style="--h:${hue(r.key)}">${esc(ini(r.name))}</span>
+      <div class="rk"><div class="rk-h"><b>${i + 1}. ${esc(r.name)}</b>${r.km ? `<small class="muted">${kmText(r.km)}</small>` : ''}</div>
+        <div class="bar seg" style="width:${(r.races / maxR) * 100}%">${MODALITIES.filter((x) => r.mods[x]).map((x) => `<span class="${modClass(x)}" style="flex:${r.mods[x]}" title="${esc(x)}: ${r.mods[x]}"></span>`).join('')}</div></div>
+      <span class="rk-n n${Math.min(i + 1, 3)}">${r.races}</span></li>`;
+  const rest = active.slice(4);
+  const rank = `<section class="card eq-rank"><h2>Clasificación de corredores${mod ? ` · ${esc(mod)}` : ''}</h2>
+    ${active.length ? `<ol class="rank rank2">${active.slice(0, 4).map(row).join('')}</ol>
+      ${rest.length || idle.length ? `<details class="rank-more"><summary>+ ${rest.length + idle.length} corredores más</summary>
+        ${rest.length ? `<ol class="rank rank2" start="5">${rest.map((r, i) => row(r, i + 4)).join('')}</ol>` : ''}
+        ${idle.length ? `<p class="muted small">Sin carreras todavía: ${names(idle, 40)}.</p>` : ''}</details>` : ''}`
+      : '<p class="muted">Todavía no hay carreras este año.</p>'}</section>`;
+  return `<div class="eq">${filters}${hero}${leaders ? `<div class="leads eq-leads">${leaders}</div>` : ''}${mod ? '' : byMod}
+    <div class="eq-two">${months}${rank}</div>${cats}${pods}${mod ? byMod : ''}${places}</div>`;
+}
+
 /**
  * Contenido del resumen anual. `admin`: enlaces a las carreras, avisos de datos que faltan y CSV.
  * `me`: id del corredor que mira (se resalta su fila).
@@ -2292,6 +2347,7 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
     ${admin && s.missingPlace.length ? `<div class="warn"><b>Faltan datos en ${s.missingPlace.length} carrera${s.missingPlace.length === 1 ? '' : 's'}:</b>
       <ul>${s.missingPlace.map((m) => `<li><a href="#/carreras/${m.id}">${esc(m.name)}</a> (${formatRange(m.date, m.end_date, false)}): sin ${m.missing.join(' ni ')}</li>`).join('')}</ul></div>` : ''}</section>`;
 
+  if (!admin) return summaryRunner({ years, all, s, mod, cls, me, people, names, byModBlock: null, cats, pods, places, maxOf });
   return `
     ${admin ? resumenTabs('club') : ''}
     ${yearPicker(years)}
@@ -2482,7 +2538,7 @@ function viewTeam() {
   const t = S.team;
   if (!t) return frame('Resumen del equipo', `${previewBanner()}<p class="empty">Cargando…</p>`, { rtab: 'equipo' });
   if (t.failed) return frame('Resumen del equipo', `${previewBanner()}<p class="card warn">${esc(t.failed)}</p>`, { rtab: 'equipo' });
-  return frame('Resumen del equipo', `${previewBanner()}<p class="hint">Así va el equipo de competición del CC Monzón. 💪</p>
+  return frame('Resumen del equipo', `${previewBanner()}<h2 class="eq-title">Resumen del equipo ${ico('bars')}</h2>
     ${summaryBody(t.races, t.runners, { me: S.runnerData?.me?.id })}`, { rtab: 'equipo' });
 }
 
@@ -4083,6 +4139,7 @@ $app.addEventListener('input', (ev) => {
 
 $app.addEventListener('change', async (ev) => {
   const t = ev.target;
+  if (t.dataset.yearSel !== undefined) { S.year = Number(t.value); render(); return; }
   if (t.dataset.filter) { actions[{ mod: 'mod-filter', sub: 'sub-filter', who: 'who-filter' }[t.dataset.filter]]({ dataset: { m: t.value, s: t.value, w: t.value } }); return; }
   if (t.dataset.f === 'modality' && S.draft) { // cambia la modalidad: el formato depende de ella
     S.draft.modality = t.value; if (!SUBTYPES[t.value]?.includes(S.draft.subtype)) S.draft.subtype = ''; render(); return;
