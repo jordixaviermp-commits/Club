@@ -436,9 +436,9 @@ select pg_temp.expect_fail($q$select runner_cancel_correction('CCCCCCCCCC', '$q$
 -- encargado de redes
 reset role;
 insert into settings (key, value) values ('social', '{"code":"SOCIALCODE12345"}') on conflict (key) do update set value = excluded.value;
-insert into registrations (id, name, date) values ('20000000-0000-0000-0000-0000000000a1', 'Redes Proxima', current_date + 5);
-insert into registration_entries (registration_id, runner_id) values ('20000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-000000000004'), ('20000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-000000000003');
-update registration_entries set category = 'M40' where registration_id = '20000000-0000-0000-0000-0000000000a1' and runner_id = '10000000-0000-0000-0000-000000000004';
+insert into registrations (id, name, date) values ('20000000-0000-0000-0000-00000000f001', 'Redes Proxima', current_date + 5);
+insert into registration_entries (registration_id, runner_id) values ('20000000-0000-0000-0000-00000000f001', '10000000-0000-0000-0000-000000000004'), ('20000000-0000-0000-0000-00000000f001', '10000000-0000-0000-0000-000000000003');
+update registration_entries set category = 'M40' where registration_id = '20000000-0000-0000-0000-00000000f001' and runner_id = '10000000-0000-0000-0000-000000000004';
 insert into registrations (id, name, date, suspended) values ('20000000-0000-0000-0000-0000000000a2', 'Redes Suspendida', current_date + 5, true);
 insert into registration_entries (registration_id, runner_id) values ('20000000-0000-0000-0000-0000000000a2', '10000000-0000-0000-0000-000000000004');
 insert into registrations (id, name, date) values ('20000000-0000-0000-0000-0000000000a3', 'Redes Sin Inscritos', current_date + 6);
@@ -616,5 +616,28 @@ reset role;
 set role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
 select pg_temp.check((select count(*) from chronicles) = 1, 'crónicas: la dirección las lee');
+reset role;
+
+-- ===== Pago de la inscripción =====
+reset role;
+insert into registrations (id, name, date) values ('20000000-0000-0000-0000-00000000f0a9', 'Prueba de pago', current_date + 30);
+create function pg_temp.ent(p_code text, p_id text) returns jsonb language sql as $f$
+  select e from jsonb_array_elements(runner_view(p_code)->'registrations') g, jsonb_array_elements(g->'entries') e
+   where g->>'id' = '20000000-0000-0000-0000-00000000f0a9' and e->>'runner_id' = p_id $f$;
+set role anon;
+select set_config('request.headers', '{}', false);
+select runner_join(:'crcode', '20000000-0000-0000-0000-00000000f0a9', 'Élite');
+select pg_temp.check((pg_temp.ent(:'crcode2', :'crid')->>'paid')::boolean = false, 'pago: al apuntarse aún no está pagada');
+select runner_set_paid(:'crcode', '20000000-0000-0000-0000-00000000f0a9', true, 25.5);
+select pg_temp.check((pg_temp.ent(:'crcode2', :'crid')->>'paid')::boolean, 'pago: los compañeros ven que está pagada');
+select pg_temp.check(pg_temp.ent(:'crcode2', :'crid')->'paid_amount' = 'null'::jsonb, 'pago: el importe no se ve a los compañeros');
+select pg_temp.check((pg_temp.ent(:'crcode', :'crid')->>'paid_amount')::numeric = 25.5, 'pago: el importe lo ve su dueño');
+select runner_join(:'crcode', '20000000-0000-0000-0000-00000000f0a9', 'M40');
+select pg_temp.check((pg_temp.ent(:'crcode2', :'crid')->>'paid')::boolean, 'pago: cambiar de categoría no borra el pago');
+select runner_set_paid(:'crcode', '20000000-0000-0000-0000-00000000f0a9', false, null);
+select pg_temp.check(not (pg_temp.ent(:'crcode2', :'crid')->>'paid')::boolean, 'pago: se puede desmarcar');
+select pg_temp.expect_fail($q$select runner_set_paid('codigo-falso', '20000000-0000-0000-0000-00000000f0a9', true, null)$q$, 'pago: enlace falso no marca');
+select pg_temp.expect_fail($q$select runner_set_paid('$q$ || :'crcode' || $q$', '20000000-0000-0000-0000-00000000f0a9', true, -5)$q$, 'pago: importe negativo rechazado');
+select pg_temp.expect_fail($q$select runner_set_paid('$q$ || :'crcode2' || $q$', '20000000-0000-0000-0000-00000000f0a9', true, null)$q$, 'pago: sin estar inscrito no se puede marcar');
 reset role;
 \echo TODAS LAS PRUEBAS SQL OK
