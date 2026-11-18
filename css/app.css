@@ -1340,3 +1340,8 @@ nav.tabs a:not(.on) svg { padding: 3px 16px; box-sizing: content-box; }
 .desp[open] > summary { margin-bottom: .6rem; }
 .desp > .hint { margin-top: 0; font-size: .85rem; }
 .desp-t { font-size: 1.05rem; } .desp-t small { white-space: nowrap; }
+/* Próxima cita: fuera del desplegable, acentuada y con toda la información */
+.next-hero { margin: 1.1rem 0 .8rem; }
+.next-hero li.mrow.hero { margin: 0; padding: 1rem .9rem .8rem; border: 3px solid var(--brand-cyan); box-shadow: 0 4px 14px color-mix(in srgb, var(--brand-cyan) 30%, transparent); background: color-mix(in srgb, var(--brand-cyan) 14%, var(--card)); }
+.next-hero .mrow-name { font-size: 1.2rem; } .next-hero .mrow-date { font-size: .95rem; }
+.next-hero .hero-badge { font-size: .78rem; padding: .2rem .85rem; }
