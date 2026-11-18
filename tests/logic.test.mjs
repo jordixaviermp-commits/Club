@@ -476,6 +476,13 @@ test('historia previa automática: registro, estado y anomalía', async () => {
   assert.equal(a.done, 1);                                                                              // la historia de Open BTT cuenta como hecha
 });
 
+test('Ultradistancia: es una disciplina de Carretera y se deduce del nombre', () => {
+  assert.ok(SUBTYPES.Carretera.includes('Ultradistancia'));
+  assert.equal(guessSubtype('Transpirenaica Ultradistancia', 'Carretera'), 'Ultradistancia');
+  assert.equal(guessSubtype('Ultra Cycling Bajo Aragón', 'Carretera'), 'Ultradistancia');
+  assert.equal(guessSubtype('Open Ultra Graus', 'BTT'), 'UXCM');
+});
+
 test('Rally: es un formato de BTT y se deduce del nombre', () => {
   assert.ok(SUBTYPES.BTT.includes('Rally'));
   assert.equal(guessSubtype('Rally de Montserrat', 'BTT'), 'Rally');

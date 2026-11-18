@@ -1243,7 +1243,7 @@ html, body { overscroll-behavior-y: contain; }
 /* ---- Color propio para cada disciplina (modalidad + formato) ---- */
 :is([class^="d-"], [class*=" d-"]) { --dc: #6b7280; }
 .d-btt-xco { --dc: #f08c00; } .d-btt-xcm { --dc: #c2410c; } .d-btt-uxcm { --dc: #7f1d1d; } .d-btt-rally { --dc: #e6b800; } .d-btt-otra { --dc: #a16207; } .d-btt-sin { --dc: #d6a36a; }
-.d-carretera-criterium { --dc: #1f6fd1; } .d-carretera-ciclodeportiva { --dc: #06b6d4; } .d-carretera-master { --dc: #4338ca; } .d-carretera-contrarreloj { --dc: #7aa7ff; } .d-carretera-otra { --dc: #475569; } .d-carretera-sin { --dc: #93a8c7; }
+.d-carretera-criterium { --dc: #1f6fd1; } .d-carretera-ciclodeportiva { --dc: #06b6d4; } .d-carretera-master { --dc: #4338ca; } .d-carretera-contrarreloj { --dc: #7aa7ff; } .d-carretera-ultradistancia { --dc: #65a30d; } .d-carretera-otra { --dc: #475569; } .d-carretera-sin { --dc: #93a8c7; }
 .d-gravel-sin { --dc: #0f9d8a; } .d-ciclocross-sin { --dc: #8e44ad; } .d-pista-sin { --dc: #d6336c; } .d-otra-sin { --dc: #6b7280; }
 .mc-stack > span:is([class^="d-"], [class*=" d-"]) { background: var(--dc); }
 .fmt-pills .pill:is([class^="d-"], [class*=" d-"]) { background: color-mix(in srgb, var(--dc) 15%, var(--card)); border-color: color-mix(in srgb, var(--dc) 55%, transparent); }
