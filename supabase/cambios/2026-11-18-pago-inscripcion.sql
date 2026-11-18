@@ -2,6 +2,8 @@
 --  Cambio del 18/11/2026: el corredor marca que ha pagado su inscripción
 --  (con el importe, opcional). Los compañeros ven solo «pagada»; el importe
 --  es privado. Se puede ejecutar más de una vez.
+--  NOTA: si ya has ejecutado «2026-11-18-pago-fecha.sql», NO ejecutes este (es
+--  la versión anterior); el de «pago-fecha» lo incluye todo.
 -- =====================================================================
 alter table public.registration_entries add column if not exists paid_at timestamptz;
 alter table public.registration_entries add column if not exists paid_amount numeric(8,2);

@@ -632,6 +632,11 @@ select runner_set_paid(:'crcode', '20000000-0000-0000-0000-00000000f0a9', true, 
 select pg_temp.check((pg_temp.ent(:'crcode2', :'crid')->>'paid')::boolean, 'pago: los compañeros ven que está pagada');
 select pg_temp.check(pg_temp.ent(:'crcode2', :'crid')->'paid_amount' = 'null'::jsonb, 'pago: el importe no se ve a los compañeros');
 select pg_temp.check((pg_temp.ent(:'crcode', :'crid')->>'paid_amount')::numeric = 25.5, 'pago: el importe lo ve su dueño');
+select runner_set_paid(:'crcode', '20000000-0000-0000-0000-00000000f0a9', true, 10, current_date - 3);
+select pg_temp.check((pg_temp.ent(:'crcode', :'crid')->>'paid_on')::date = current_date - 3, 'pago: el día del pago lo ve su dueño');
+select pg_temp.check(pg_temp.ent(:'crcode', :'crid')->>'joined_on' is not null, 'pago: el día de la inscripción lo ve su dueño');
+select pg_temp.check(pg_temp.ent(:'crcode2', :'crid')->'paid_on' = 'null'::jsonb and pg_temp.ent(:'crcode2', :'crid')->'joined_on' = 'null'::jsonb, 'pago: los compañeros no ven ni el día del pago ni el de inscripción');
+select pg_temp.expect_fail($q$select runner_set_paid('$q$ || :'crcode' || $q$', '20000000-0000-0000-0000-00000000f0a9', true, null, '2001-01-01')$q$, 'pago: fecha absurda rechazada');
 select runner_join(:'crcode', '20000000-0000-0000-0000-00000000f0a9', 'M40');
 select pg_temp.check((pg_temp.ent(:'crcode2', :'crid')->>'paid')::boolean, 'pago: cambiar de categoría no borra el pago');
 select runner_set_paid(:'crcode', '20000000-0000-0000-0000-00000000f0a9', false, null);
