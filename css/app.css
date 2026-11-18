@@ -1462,3 +1462,26 @@ nav.tabs a:not(.on) svg { padding: 3px 16px; box-sizing: content-box; }
 .search.has-marquee:focus-within .ph-marquee, .search.has-marquee input:not(:placeholder-shown) ~ .ph-marquee { display: none; }
 @media (prefers-reduced-motion: reduce) { .ph-marquee > span { animation: none; padding-left: 0; text-overflow: ellipsis; overflow: hidden; max-width: 100%; } }
 .ph-marquee, .ph-marquee > span { font-weight: 400; }
+.link-btn { width: 40px; height: 40px; border-radius: 50% !important; border: 1.5px solid var(--accent) !important; color: var(--accent); display: grid; place-items: center; padding: 0; }
+.link-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.more-det { margin-top: .8rem; } .more-det .stack { margin-top: .6rem; }
+
+/* ---- Temporada (dirección) y memoria para sponsors ---- */
+.tp-card h2 { margin-top: 0; font-size: 1.1rem; } .tp-card h3 { font-size: .95rem; margin: .2rem 0 .4rem; }
+.tp-disc { list-style: none; margin: 0; padding: 0; display: grid; gap: .4rem; }
+.tp-disc li { display: grid; grid-template-columns: auto minmax(0, 1.3fr) minmax(0, 1fr); gap: .15rem .6rem; align-items: center; padding: .5rem .6rem; border-radius: 12px; background: color-mix(in srgb, var(--dc) 9%, var(--card)); border-left: 5px solid var(--dc); }
+.tp-dot { display: none; }
+.tp-disc li > b { grid-column: 1 / 3; font-size: 1rem; }
+.tp-track { grid-column: 3; grid-row: 1; height: 8px; border-radius: 5px; background: var(--line); overflow: hidden; } .tp-track i { display: block; height: 100%; background: var(--dc); }
+.tp-n { font-size: .82rem; color: var(--muted); white-space: nowrap; } .tp-n b { color: var(--text); font-size: .95rem; }
+.tp-disc li { grid-template-columns: 1fr auto auto auto auto; } .tp-disc li > b { grid-column: auto; } .tp-track { grid-column: 1 / -1; grid-row: 2; }
+.tp-two { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; } @media (max-width: 520px) { .tp-two { grid-template-columns: 1fr; } }
+.tp-table { width: 100%; border-collapse: collapse; font-size: .88rem; } .tp-table th, .tp-table td { padding: .3rem .4rem; border-bottom: 1px solid var(--line); text-align: center; } .tp-table th.l, .tp-table td.l, .tp-table td:first-child { text-align: left; }
+.tp-table th { font-size: .78rem; color: var(--muted); font-weight: 700; } .tp-table td.num, .tp-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.tp-scroll { overflow-x: auto; margin: 0 -.2rem; } .tp-runners { min-width: 430px; }
+.tp-sort { background: none; border: 0; font: inherit; font-weight: 700; color: var(--muted); padding: 0; cursor: pointer; } .tp-sort.on { color: var(--accent); }
+.tp-chips { display: flex; flex-wrap: wrap; gap: .3rem; } .tp-chip { padding: .15rem .6rem; border-radius: 999px; background: var(--accent-2); font-size: .85rem; } .tp-chip b { margin-left: .2rem; }
+.tp-months { margin: .2rem 0; }
+.memoria .mem-sec { margin: 0 0 1.1rem; } .memoria .mem-sec h2 { font-size: 1.15rem; border-left: 5px solid var(--accent); padding-left: .55rem; margin: 0 0 .6rem; }
+@media print { .memoria .mem-sec { break-inside: avoid; } .tp-disc li { break-inside: avoid; } }
+.tp-disc li > b { min-width: 0; font-size: .95rem; }
