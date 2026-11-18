@@ -1381,7 +1381,6 @@ function viewRunnerMine() {
     ${previewBanner()}
     <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
     ${myRacesCard(d, () => chronicleCard(d))}
-    <a class="btn block" href="${runnerHref('contrato')}">📄 Mi contrato y mi bonificación</a>
     ${installHint()}
     ${S.preview ? '' : `<p class="center"><button class="link muted" data-act="r-forget">No soy ${esc(me.name)}</button></p>`}
     ${themeLine()}${versionLine()}`,
