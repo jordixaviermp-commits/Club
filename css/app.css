@@ -1267,3 +1267,29 @@ html, body { overscroll-behavior-y: contain; }
 .eq-mod .modrow2.sel:is([class*=" d-"]) { background: color-mix(in srgb, var(--dc) 22%, var(--card)); }
 .modrow2 .mr-n b { color: color-mix(in srgb, var(--dc, var(--mc)) 70%, var(--text)); }
 .rank2 .bar.seg > span:is([class^="d-"], [class*=" d-"]) { background: var(--dc); }
+
+/* ---- Equipo: podios por categoría y disciplina, cada uno dicho con todas las letras ---- */
+.eq-pods { --hc: #d19a00; padding: .9rem; } .eq-pods h2 { border-left: 5px solid var(--hc); padding-left: .55rem; margin: 0 0 .7rem; font-size: 1.15rem; } .eq-pods h3 { font-size: 1rem; margin: 1rem 0 .4rem; }
+.eq-pods .pod-tot { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .7rem; }
+.pod-sw { display: flex; width: 100%; } .pod-sw button { flex: 1; justify-content: center; }
+.eq-pods .hint { margin: .5rem 0; font-size: .85rem; }
+.pg-list { list-style: none; margin: 0; padding: 0; }
+.pg-row { display: flex; align-items: center; gap: .6rem; padding: .5rem .6rem; border-radius: 10px; margin-bottom: .3rem; background: var(--bg); }
+.pg-row:is([class*=" d-"]) { background: color-mix(in srgb, var(--dc) 10%, var(--card)); border-left: 5px solid var(--dc); }
+.pg-row b { flex: 1; min-width: 0; font-size: .98rem; }
+.pg-m { display: inline-flex; gap: .3rem; }
+.pm { display: inline-flex; align-items: center; gap: .25rem; padding: .1rem .5rem .1rem .3rem; border-radius: 999px; font-size: .85rem; font-weight: 700; background: color-mix(in srgb, var(--pc) 22%, var(--card)); }
+.pm.m1 { --pc: #f2c230; } .pm.m2 { --pc: #aab4bd; } .pm.m3 { --pc: #d99a5b; }
+.pm .medal { width: 1em; height: 1em; }
+.pg-n { min-width: 1.8rem; text-align: center; font-weight: 800; font-size: 1.05rem; }
+.pod-items { list-style: none; margin: 0; padding: 0; }
+.pod-item { display: flex; gap: .7rem; padding: .6rem .2rem; border-top: 1px solid var(--line); } .pod-item:first-child { border-top: 0; }
+.pod-item > .medal { width: 2rem; height: 2rem; flex: none; margin-top: .1rem; }
+.pod-main { display: flex; flex-direction: column; gap: .2rem; min-width: 0; }
+.pod-l1 { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .5rem; } .pod-l1 b { font-size: 1rem; }
+.pod-pos { padding: .1rem .6rem; border-radius: 999px; font-size: .85rem; font-weight: 800; background: color-mix(in srgb, var(--pc) 28%, var(--card)); }
+.pod-pos.m1, .pod-item.m1 { --pc: #f2c230; } .pod-pos.m2, .pod-item.m2 { --pc: #aab4bd; } .pod-pos.m3, .pod-item.m3 { --pc: #d99a5b; }
+.pod-l2 { font-size: .9rem; }
+.pod-l3 { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; } .pod-l3 .tag { font-size: .75rem; }
+.tag.t-type { background: var(--accent-2); color: var(--text); }
+.eq-pods .pod-more summary { cursor: pointer; text-align: center; padding: .5rem 0; font-weight: 600; font-size: .9rem; }
