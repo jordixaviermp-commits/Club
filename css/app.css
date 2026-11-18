@@ -1316,3 +1316,27 @@ nav.tabs a.on::before { content: ""; position: absolute; top: -1px; left: 18%; r
 nav.tabs a.on svg { box-sizing: content-box; padding: 3px 16px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 16%, transparent); stroke-width: 2.2; }
 nav.tabs a:not(.on) { opacity: .85; }
 nav.tabs a:not(.on) svg { padding: 3px 16px; box-sizing: content-box; }
+
+/* ---- Lo que se puede tocar o editar se ve como botón: flecha en círculo, «Editar» con borde ---- */
+.mrow-go, .mini-list li.mrow > .edit-ico { width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid var(--line); background: var(--card); box-shadow: 0 1px 2px rgba(0, 0, 0, .08); }
+.mrow-go .ico { width: 18px; height: 18px; }
+.mini-list li.mrow > .edit-ico { display: grid; place-items: center; border-color: var(--accent); color: var(--accent); padding: 0; } .mini-list li.mrow > .edit-ico .ico { width: 17px; height: 17px; }
+.mini-list li.mrow { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+.mini-list li.mrow > .pos { align-self: center; text-align: right; }
+.edit-btn { display: inline-flex; align-items: center; gap: .35rem; padding: .3rem .85rem; border-radius: 999px; border: 1.5px solid var(--accent); color: var(--accent); background: var(--card); font-weight: 700; font-size: .85rem; text-decoration: none; white-space: nowrap; }
+.edit-btn .ico { width: 15px; height: 15px; }
+.edit-row { display: flex; align-items: center; justify-content: space-between; gap: .6rem; margin-top: .55rem; padding-top: .5rem; border-top: 1px dashed var(--line); font-size: .85rem; }
+.edit-cta { display: flex; align-items: center; justify-content: center; gap: .35rem; margin-top: .6rem; padding: .4rem .8rem; border-radius: 999px; border: 1.5px solid var(--accent); color: var(--accent); font-weight: 700; font-size: .88rem; background: color-mix(in srgb, var(--accent) 7%, var(--card)); }
+.edit-cta .ico { width: 15px; height: 15px; }
+/* desplegables de Mi temporada */
+.desp > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: .3rem .6rem; padding: .15rem 0; }
+.desp > summary::-webkit-details-marker { display: none; }
+.desp-t { font-size: 1.15rem; font-weight: 800; } .desp-t small { font-weight: 500; color: var(--muted); font-size: .9rem; }
+.desp-chev { width: 26px; height: 26px; padding: 3px; border-radius: 50%; border: 1.5px solid var(--line); transition: transform .15s; }
+.desp[open] > summary .desp-chev { transform: rotate(180deg); }
+.desp-sub { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: .35rem; }
+.desp-sub span { display: inline-flex; align-items: center; gap: .3rem; padding: .15rem .65rem; border-radius: 999px; font-size: .82rem; font-weight: 700; }
+.desp-sub .ok { background: color-mix(in srgb, #1b7f3b 16%, var(--card)); color: color-mix(in srgb, #1b7f3b 70%, var(--text)); } .desp-sub .wait { background: color-mix(in srgb, #e0a030 22%, var(--card)); color: color-mix(in srgb, #9a6b00 60%, var(--text)); } .desp-sub .ico { width: 14px; height: 14px; }
+.desp[open] > summary { margin-bottom: .6rem; }
+.desp > .hint { margin-top: 0; font-size: .85rem; }
+.desp-t { font-size: 1.05rem; } .desp-t small { white-space: nowrap; }
