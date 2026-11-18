@@ -100,9 +100,16 @@ const typeTag = (x) => {
   return chips.length ? `<p class="type-line">${chips.join('')}</p>` : '';
 };
 /** Campos «Disciplina» (según la modalidad: obligatoria en BTT y Carretera) y «Distancia» de los formularios. `attr` = data-f (dirección) o data-rf (corredor). */
-const detailInputs = (d, attr) => `${SUBTYPES[d.modality] ? `<label class="disc-field">Disciplina de ${esc(d.modality)}<select ${attr}="subtype" required><option value="">Elige: ${SUBTYPES[d.modality].filter((x) => x !== 'Otra').slice(0, 3).join(', ')}…</option>${SUBTYPES[d.modality].map((x) => opt(x, x, d.subtype)).join('')}</select>
-      <small class="hint">Así el resumen y los gráficos del equipo reparten las carreras por disciplina.</small></label>` : ''}
-    <label>Distancia (km)<input type="number" inputmode="decimal" step="0.1" min="0.1" max="1000" ${attr}="km" value="${esc(d.km ?? '')}" placeholder="85"></label>`;
+/** Sección numerada de un formulario (cabecera de color con icono) para que se encuentre cada cosa de un vistazo. */
+const fsec = (n, icon, title, body, color = '#1f6fd1') => `<section class="fsec" style="--sc:${color}"><h3 class="fsec-h"><span class="fsec-n">${n}</span>${ico(icon)}<span>${title}</span></h3><div class="fsec-b">${body}</div></section>`;
+/** Fichas para elegir una opción (en vez de un desplegable): un toque y queda marcada. Son «radio» ocultos, así que todo lo demás funciona igual. */
+const radioChips = (attr, field, options, cur, { required = false, extra = '' } = {}) => `<div class="chips-pick" role="radiogroup">${options.map(([v, l, cls = '', extra = '']) =>
+  `<label class="cpick ${cls}"><input type="radio" name="${attr.replace('data-', '')}-${field}" ${attr}="${field}" value="${esc(v)}"${v === (cur ?? '') ? ' checked' : ''}${required ? ' required' : ''}${extra}><span>${l}</span></label>`).join('')}</div>`;
+const modalityChips = (d, attr) => radioChips(attr, 'modality', MODALITIES.map((m) => [m, `${MOD_ICON[m] || '🏁'} ${esc(m)}`, modClass(m)]), d.modality);
+const RACE_TYPE_SHORT = { suelta: 'Carrera normal', campeonato: 'Campeonato', circuito: 'De un circuito (Copa, Open…)' };
+const detailInputs = (d, attr) => `${SUBTYPES[d.modality] ? `<div class="disc-field"><span class="flabel">Disciplina de ${esc(d.modality)} <b class="req">obligatoria</b></span>${radioChips(attr, 'subtype', SUBTYPES[d.modality].map((x) => [x, esc(x)]), d.subtype, { required: true })}
+      <small class="hint">Así el resumen y los gráficos del equipo reparten las carreras por disciplina.</small></div>` : ''}
+    <label class="flabel-l">Distancia (km)<input type="number" inputmode="decimal" step="0.1" min="0.1" max="1000" ${attr}="km" value="${esc(d.km ?? '')}" placeholder="85"></label>`;
 /** Nombres de circuitos ya usados (para sugerirlos y no escribirlos de dos maneras). */
 function circuitNames() {
   const src = S.data && !S.preview ? [...S.data.races, ...S.data.registrations, ...(S.data.circuitPodiums || [])]
@@ -114,7 +121,7 @@ function circuitNames() {
 const circuitList = () => `<datalist id="dl-circuit">${circuitNames().map((c) => `<option value="${esc(c)}">`).join('')}</datalist>`;
 /** Campos «Tipo de carrera» de los formularios. `attr` = data-f (dirección) o data-rf (corredor). */
 const typeFields = (d, attr) => `
-    <label>Tipo de carrera<select ${attr}="race_type" data-retype>${RACE_TYPES.map((t) => opt(t.id, t.label, d.race_type || 'suelta')).join('')}</select></label>
+    <div class="disc-field"><span class="flabel">Tipo de carrera</span>${radioChips(attr, 'race_type', RACE_TYPES.map((t) => [t.id, esc(RACE_TYPE_SHORT[t.id] || t.label)]), d.race_type || 'suelta', { extra: ' data-retype' })}</div>
     ${d.race_type === 'circuito' ? `<label>Nombre del circuito<input ${attr}="circuit" list="dl-circuit" value="${esc(d.circuit || '')}" placeholder="Copa Aragón XCM" maxlength="120" required autocomplete="off"></label>${circuitList()}
       <p class="hint">Escríbelo igual en todas sus pruebas. El podio en la <b>general final</b> de la liga da el <b>plus de bonificación</b> (carreras extra para la bonificación, no para el mínimo).</p>` : ''}
     ${d.race_type === 'campeonato' ? '<p class="hint">Los podios de esta carrera se guardarán como podios de campeonato.</p>' : ''}`;
@@ -893,26 +900,24 @@ function viewRunnerNew() {
   const others = isRace ? d.others || 0 : reg ? reg.entries.filter((e) => e.runner_id !== S.runnerData.me.id).length : 0;
   if (!S.fed && !editing) loadFed().then(() => updateSearch('rname'));
   return frame(editing ? 'Editar mi carrera' : 'Añadir carrera', `
-    <form class="card stack" data-form="r-create">
-      <p class="hint">${editing ? `Puedes corregir los datos de esta carrera porque la añadiste tú${isRace ? ' (aunque ya esté en resultados)' : ''}. Tu puesto lo cambias en «Cambiar mi resultado»; el de los demás lo pone cada uno.`
-        : 'Escribe el nombre: si ya existe en el club o en el calendario de las federaciones te saldrá aquí debajo, para no duplicarla.<br>¿Se te olvidó apuntar una carrera que ya hiciste? Añádela igual con su fecha (desde el 1 de enero del año pasado) y luego pon tu resultado.'}</p>
-      <label>Nombre de la carrera<input data-rf="name" value="${esc(d.name)}" required minlength="3" maxlength="120" autocomplete="off"></label>
-      <div id="dup-list">${editing ? '' : dupSuggestions(d.name, S.runnerData.registrations, true)}</div>
-      <div class="grid2">
-        <label>${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-rf="date" value="${esc(d.date)}" min="${pastLimit()}"${isRace ? ` max="${todayISO()}"` : ''} required></label>
-        <label>Modalidad<select data-rf="modality">${MODALITIES.map((m) => opt(m, m, d.modality)).join('')}</select></label>
-      </div>
-      ${detailInputs(d, 'data-rf')}
-      ${S.runnerData.circuits ? typeFields(d, 'data-rf') : ''}
-      <label class="check"><input type="checkbox" data-rf-multi ${d.multi ? 'checked' : ''}> Carrera de varios días (por etapas)</label>
-      ${d.multi ? `<label>Último día<input type="date" data-rf="end_date" value="${esc(d.end_date)}" min="${esc(d.date || pastLimit())}" required></label>` : ''}
-      <label>Lugar<input data-rf="place" value="${esc(d.place)}" maxlength="120"></label>
-      <div class="grid2">
-        <label>Provincia<input data-rf="province" list="dl-prov" value="${esc(d.province)}" autocomplete="off"></label>
-        ${editing ? `<label>País<input data-rf="country" list="dl-country" value="${esc(d.country || '')}" maxlength="60"></label>` : `<label>Tu categoría${catSelect('data-rf="category" required', d.category, 'Elige tu categoría')}</label>`}
-      </div>
-      ${editing ? `<label>Notas<textarea data-rf="notes" rows="2" maxlength="500">${esc(d.notes || '')}</textarea></label>` : ''}
-      <button class="btn primary">${editing ? 'Guardar cambios' : 'Añadir y apuntarme'}</button>
+    <form class="stack rform" data-form="r-create">
+      <details class="rform-help"><summary>${ico('info')}<span>${editing ? 'Qué puedes cambiar aquí' : 'Cómo se añade una carrera'}</span></summary>
+        <p class="hint">${editing ? `Puedes corregir los datos de esta carrera porque la añadiste tú${isRace ? ' (aunque ya esté en resultados)' : ''}. Tu puesto lo cambias en «Cambiar mi resultado»; el de los demás lo pone cada uno.`
+          : 'Escribe el nombre: si ya existe en el club o en el calendario de las federaciones te saldrá aquí debajo, para no duplicarla.<br>¿Se te olvidó apuntar una carrera que ya hiciste? Añádela igual con su fecha (desde el 1 de enero del año pasado) y luego pon tu resultado.'}</p></details>
+      ${fsec(1, 'flag', 'Qué carrera es', `<label class="flabel-l">Nombre de la carrera<input data-rf="name" value="${esc(d.name)}" required minlength="3" maxlength="120" autocomplete="off"></label>
+        <div id="dup-list">${editing ? '' : dupSuggestions(d.name, S.runnerData.registrations, true)}</div>`, '#1f6fd1')}
+      ${fsec(2, 'cal', 'Cuándo y dónde', `<label class="flabel-l">${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-rf="date" value="${esc(d.date)}" min="${pastLimit()}"${isRace ? ` max="${todayISO()}"` : ''} required></label>
+        <label class="check"><input type="checkbox" data-rf-multi ${d.multi ? 'checked' : ''}> Carrera de varios días (por etapas)</label>
+        ${d.multi ? `<label class="flabel-l">Último día<input type="date" data-rf="end_date" value="${esc(d.end_date)}" min="${esc(d.date || pastLimit())}" required></label>` : ''}
+        <label class="flabel-l">Lugar<input data-rf="place" value="${esc(d.place)}" maxlength="120" placeholder="Ciudad o pueblo"></label>
+        <div class="grid2"><label class="flabel-l">Provincia<input data-rf="province" list="dl-prov" value="${esc(d.province)}" autocomplete="off"></label>
+          ${editing ? `<label class="flabel-l">País<input data-rf="country" list="dl-country" value="${esc(d.country || '')}" maxlength="60"></label>` : '<span></span>'}</div>`, '#0f9d8a')}
+      ${fsec(3, 'bars', 'Qué tipo de carrera es', `<div class="disc-field"><span class="flabel">Modalidad</span>${modalityChips(d, 'data-rf')}</div>
+        ${detailInputs(d, 'data-rf')}
+        ${S.runnerData.circuits ? typeFields(d, 'data-rf') : ''}`, '#e07800')}
+      ${fsec(4, 'users', editing ? 'Notas' : 'Tú', editing ? `<label class="flabel-l">Notas<textarea data-rf="notes" rows="2" maxlength="500">${esc(d.notes || '')}</textarea></label>`
+        : `<label class="flabel-l">Tu categoría${catSelect('data-rf="category" required', d.category, 'Elige tu categoría')}</label>`, '#8e44ad')}
+      <button class="btn primary big-save">${editing ? 'Guardar cambios' : 'Añadir y apuntarme'}</button>
       <p class="hint">La dirección del club podrá corregirla o borrarla si hace falta.</p>
     </form>
     ${editing ? (others
@@ -1576,20 +1581,16 @@ function draftRegistration(id) {
 
 function raceFields(d) {
   return `
-    <label>Nombre<input data-f="name" value="${esc(d.name)}" required></label>
-    <div class="grid2">
-      <label>${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-f="date" value="${esc(d.date)}" required></label>
-      <label>Modalidad<select data-f="modality">${MODALITIES.map((m) => opt(m, m, d.modality)).join('')}</select></label>
-    </div>
-    ${detailInputs(d, 'data-f')}
-    ${typeFields(d, 'data-f')}
-    <label class="check"><input type="checkbox" data-act-change="multi" ${d.multi ? 'checked' : ''}> Carrera de varios días (por etapas)</label>
-    ${d.multi ? `<label>Último día<input type="date" data-f="end_date" value="${esc(d.end_date || '')}" min="${esc(d.date || '')}" required></label>` : ''}
-    <label>Lugar<input data-f="place" value="${esc(d.place || '')}"></label>
-    <div class="grid2">
-      <label>Provincia<input data-f="province" list="dl-prov" value="${esc(d.province || '')}" autocomplete="off"></label>
-      <label>País<input data-f="country" list="dl-country" value="${esc(d.country || '')}"></label>
-    </div>`;
+    ${fsec(1, 'flag', 'Qué carrera es', `<label class="flabel-l">Nombre<input data-f="name" value="${esc(d.name)}" required></label>`, '#1f6fd1')}
+    ${fsec(2, 'cal', 'Cuándo y dónde', `<label class="flabel-l">${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-f="date" value="${esc(d.date)}" required></label>
+      <label class="check"><input type="checkbox" data-act-change="multi" ${d.multi ? 'checked' : ''}> Carrera de varios días (por etapas)</label>
+      ${d.multi ? `<label class="flabel-l">Último día<input type="date" data-f="end_date" value="${esc(d.end_date || '')}" min="${esc(d.date || '')}" required></label>` : ''}
+      <label class="flabel-l">Lugar<input data-f="place" value="${esc(d.place || '')}"></label>
+      <div class="grid2"><label class="flabel-l">Provincia<input data-f="province" list="dl-prov" value="${esc(d.province || '')}" autocomplete="off"></label>
+        <label class="flabel-l">País<input data-f="country" list="dl-country" value="${esc(d.country || '')}"></label></div>`, '#0f9d8a')}
+    ${fsec(3, 'bars', 'Qué tipo de carrera es', `<div class="disc-field"><span class="flabel">Modalidad</span>${modalityChips(d, 'data-f')}</div>
+      ${detailInputs(d, 'data-f')}
+      ${typeFields(d, 'data-f')}`, '#e07800')}`;
 }
 
 function addRunnerSelect(d) {
@@ -4238,7 +4239,7 @@ $app.addEventListener('input', (ev) => {
     S.rdraft[t.dataset.rf] = t.value;
     if (t.dataset.rf === 'name' && !S.rdraft.subtype) {
       const g = guessSubtype(t.value, S.rdraft.modality);
-      if (g) { S.rdraft.subtype = g; const sel = $app.querySelector('select[data-rf="subtype"]'); if (sel) sel.value = g; }
+      if (g) { S.rdraft.subtype = g; const sel = [...$app.querySelectorAll('input[data-rf="subtype"]')].find((x) => x.value === g); if (sel) sel.checked = true; }
     }
     if (t.dataset.rf === 'name') updateSearch('rname');
     return;
@@ -4246,7 +4247,7 @@ $app.addEventListener('input', (ev) => {
   if (!S.draft) return;
   if (t.dataset.f === 'name' && !S.draft.subtype) { // el nombre da pistas del formato (XCM, Critérium…)
     const g = guessSubtype(t.value, S.draft.modality);
-    if (g) { S.draft.subtype = g; const sel = $app.querySelector('select[data-f="subtype"]'); if (sel) sel.value = g; }
+    if (g) { S.draft.subtype = g; const sel = [...$app.querySelectorAll('input[data-f="subtype"]')].find((x) => x.value === g); if (sel) sel.checked = true; }
   }
   if (S.draft.kind === 'reg' && !S.draft.id && t.dataset.f === 'name') {
     S.draft.name = t.value;
