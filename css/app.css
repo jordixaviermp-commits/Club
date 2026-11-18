@@ -1408,3 +1408,34 @@ nav.tabs a:not(.on) svg { padding: 3px 16px; box-sizing: content-box; }
 .eq-leads .l-ruler { --lc: #0f9d8a; } .eq-leads .l-route { --lc: #7c3aed; } .eq-leads .l-timer { --lc: #e11d48; } .eq-leads .l-layers { --lc: #0ea5e9; } .eq-leads .l-calcheck { --lc: #16a34a; }
 .leads-hint { margin: .1rem 0 0; font-size: .74rem; color: var(--muted); text-align: right; }
 .eq-leads .lead { justify-content: center; min-height: 170px; }
+
+/* ---- Calendario: más color, más compacto y más claro ---- */
+.cal { padding: .7rem .7rem .6rem; border: 2px solid color-mix(in srgb, var(--accent) 30%, var(--line)); }
+.cal-head { display: grid; grid-template-columns: 38px 1fr 38px; align-items: center; gap: .4rem; margin-bottom: .55rem; padding: .35rem; border-radius: 14px; background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 22%, var(--card)), color-mix(in srgb, var(--brand-cyan) 18%, var(--card))); }
+.cal-nav { width: 38px; height: 38px; border-radius: 50% !important; border: 1.5px solid var(--line) !important; background: var(--card); font-size: 1.5rem; display: grid; place-items: center; padding: 0; }
+.cal-title { text-align: center; } .cal-title h2 { margin: 0; font-size: 1.15rem; text-transform: uppercase; letter-spacing: .05em; }
+.cal-sub { font-size: .82rem; color: var(--muted); } .cal-sub b { color: var(--text); } .cal-sub .cal-mine { color: var(--accent); }
+.cal-grid { gap: 3px; }
+.cal-dow { font-size: .7rem; letter-spacing: .04em; padding: .15rem 0; }
+.cal-cell { aspect-ratio: auto; height: 40px; min-height: 0; border-radius: 9px; font-size: .92rem; }
+.cal-cell:is([class*=" d-"]) { --mc: var(--dc); }
+.cal-cell.has { border-width: 0; background: color-mix(in srgb, var(--mc, var(--muted)) 24%, var(--card)); }
+.cal-cell.has.multi-mod { --mc: var(--muted); background: linear-gradient(135deg, color-mix(in srgb, #1f6fd1 25%, var(--card)), color-mix(in srgb, #e07800 25%, var(--card))); border: 0; }
+.cal-cell.has.mine { background: var(--mc, var(--text)); color: #fff; text-shadow: 0 1px 1px rgba(0, 0, 0, .35); box-shadow: 0 2px 6px color-mix(in srgb, var(--mc, #000) 45%, transparent); }
+.cal-cell.has.mine.multi-mod { background: linear-gradient(135deg, #1f6fd1, #e07800); }
+.cal-cell.mine::after { content: ""; }
+.cal-cell.has.mine .dots i { background: #fff; opacity: .9; }
+.cal-cell .dots { bottom: 3px; } .cal-cell .dots i { width: 6px; height: 6px; background: var(--dc, var(--mc)); }
+.cal-cell.today { border: 2px solid var(--text); } .cal-cell.today:not(.has) { background: color-mix(in srgb, var(--text) 8%, var(--card)); }
+.cal-cell.sel { outline: 3px solid var(--brand-cyan); outline-offset: 1px; }
+.cal-cell.has.past-only { opacity: .6; background: transparent; border: 2px dashed var(--mc, var(--muted)); box-shadow: none; color: var(--text); text-shadow: none; }
+.cal-cell.has.past-only .dots i { background: var(--dc, var(--mc)); }
+.cal-cell .cnt { top: -5px; right: -4px; min-width: 16px; height: 16px; line-height: 16px; font-size: .62rem; }
+.cal-legend { display: flex; flex-wrap: wrap; gap: .3rem .5rem; margin-top: .6rem; }
+.cal-legend span { display: inline-flex; align-items: center; gap: .3rem; padding: .1rem .55rem; border-radius: 999px; font-size: .76rem; font-weight: 700; background: color-mix(in srgb, var(--dc) 15%, var(--card)); border: 1px solid color-mix(in srgb, var(--dc) 55%, transparent); }
+.cal-legend i { width: .6rem; height: .6rem; border-radius: 50%; background: var(--dc); }
+.cal-key { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .45rem; margin: .5rem 0 0; font-size: .74rem; color: var(--muted); }
+.cal-key span { display: inline-block; width: 14px; height: 14px; border-radius: 4px; margin-left: .3rem; }
+.k-mine { background: var(--accent); } .k-club { background: color-mix(in srgb, var(--accent) 24%, var(--card)); } .k-past { border: 2px dashed var(--muted); }
+.cal-months { margin-top: .55rem; } .cal-months .chip { border-radius: 999px; }
+.cal-months .chip.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }

@@ -674,38 +674,43 @@ function calendarView(regs, card, isMine = () => false, { done = [], doneCard = 
   const shownUp = shown.filter((it) => !it.past).sort((a, b) => a.g.date.localeCompare(b.g.date));
   const shownPast = shown.filter((it) => it.past).sort((a, b) => b.g.date.localeCompare(a.g.date));
   const months = [...new Set(items.flatMap((it) => daysOf(it.g.date, it.g.end_date).map((d) => d.slice(0, 7))))].sort();
+  const discOf = (it) => discClass(it.g.modality, it.g.subtype);
   const cell = (d) => {
     if (!d) return '<span class="cal-cell empty"></span>';
     const list = byDay.get(d) || [];
     const up = list.filter((it) => !it.past);
     const people = list.reduce((n, it) => n + it.people, 0);
-    const mods = new Set(list.map((it) => it.g.modality));
+    const discs = new Set(list.map(discOf));
     const pst = isPosted && list.length ? (list.every((it) => isPosted(it.g)) ? 'posted' : list.some((it) => isPosted(it.g)) ? 'part-posted' : '') : '';
     const cls = ['cal-cell', pst, list.length ? 'has' : '', list.length && !up.length ? 'past-only' : '', d === today ? 'today' : '',
       d === S.calDay ? 'sel' : '', d < today ? 'past' : '', list.some((it) => isMine(it.g)) ? 'mine' : '',
-      list.some((it) => it.g.end_date) ? 'stage' : '', list.length ? (mods.size === 1 ? modClass(list[0].g.modality) : 'multi-mod') : '']
+      list.some((it) => it.g.end_date) ? 'stage' : '', list.length ? (discs.size === 1 ? discOf(list[0]) : 'multi-mod') : '']
       .filter(Boolean).join(' ');
     const label = `${Number(d.slice(8))} de ${MONTH_NAMES[m - 1]}${list.length ? `: ${list.map((it) => `${it.g.name} (${modText(it.g)}${it.past ? ', ya disputada' : ''}, ${it.people} del club)`).join(', ')}` : ''}`;
     return list.length
       ? `<button class="${cls}" data-act="cal-day" data-d="${d}" aria-label="${esc(label)}"><b>${Number(d.slice(8))}</b>
           ${people ? `<i class="cnt">${people}</i>` : ''}
-          <span class="dots">${list.slice(0, 4).map((it) => `<i class="${modClass(it.g.modality)}"></i>`).join('')}</span></button>`
+          <span class="dots">${list.slice(0, 4).map((it) => `<i class="${discOf(it)}"></i>`).join('')}</span></button>`
       : `<span class="${cls}" aria-label="${esc(label)}"><b>${Number(d.slice(8))}</b></span>`;
   };
+  const monthItems = items.filter((it) => touches(it.g, ym));
+  const mineN = monthItems.filter((it) => isMine(it.g)).length;
+  const monthDiscs = [...new Map(monthItems.map((it) => [discOf(it), it.g])).entries()];
   const cardOf = (it) => (it.done ? (doneCard ? doneCard(it.g) : '') : card(it.g));
   return `
     <section class="card cal">
       <div class="cal-head">
-        <button class="icon-btn" data-act="cal-month" data-n="-1" aria-label="Mes anterior">‹</button>
-        <h2>${MONTH_NAMES[m - 1][0].toUpperCase() + MONTH_NAMES[m - 1].slice(1)} ${y}</h2>
-        <button class="icon-btn" data-act="cal-month" data-n="1" aria-label="Mes siguiente">›</button>
+        <button class="icon-btn cal-nav" data-act="cal-month" data-n="-1" aria-label="Mes anterior">‹</button>
+        <div class="cal-title"><h2>${MONTH_NAMES[m - 1][0].toUpperCase() + MONTH_NAMES[m - 1].slice(1)} ${y}</h2>
+          <span class="cal-sub"><b>${monthItems.length}</b> carrera${monthItems.length === 1 ? '' : 's'}${mineN ? ` · <b class="cal-mine">${mineN} mía${mineN === 1 ? '' : 's'}</b>` : ''}</span></div>
+        <button class="icon-btn cal-nav" data-act="cal-month" data-n="1" aria-label="Mes siguiente">›</button>
       </div>
       <div class="cal-grid" role="grid">
         ${['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d) => `<span class="cal-dow">${d}</span>`).join('')}
         ${monthGrid(ym).flat().map(cell).join('')}
       </div>
-      ${modLegend([...new Set(items.map((it) => it.g.modality))])}
-      <div class="state-legend"><span><i class="sl-up"></i>Próxima (inscripción)</span><span><i class="sl-past"></i>Ya disputada</span><span><b class="sl-cnt">3</b> del club</span>${isPosted ? '<span><b class="sl-ok">✓</b> publicada</span><span><b class="sl-half">½</b> alguna sin publicar</span>' : ''}</div>
+      ${monthDiscs.length ? `<div class="cal-legend">${monthDiscs.map(([k, g]) => `<span class="${discClass(g.modality, g.subtype)}"><i></i>${esc(discLabel(g.modality, g.subtype))}</span>`).join('')}</div>` : ''}
+      <p class="cal-key"><span class="k-mine"></span> Mi inscripción <span class="k-club"></span> Del club <span class="k-past"></span> Ya disputada${isPosted ? ' · ✓ publicada · ½ alguna sin publicar' : ''}</p>
       ${months.length ? `<div class="cal-months">${months.map((mm) => {
         const [yy, mo] = mm.split('-').map(Number);
         const n = items.filter((it) => touches(it.g, mm)).length;
@@ -1308,11 +1313,13 @@ function viewRunnerHome() {
       ${S.fd?.has ? `<button type="button" class="icon-btn fbtn${S.fd.active ? ' on' : ''}" data-act="r-filters" aria-label="Filtros${S.fd.active ? ' (activos)' : ''}" title="Filtros">${icon(ICON_FILTER)}${S.fd.active ? '<i class="fdot"></i>' : ''}</button>` : ''}
       <button class="btn primary add-btn mini" data-act="r-new" aria-label="Añadir una carrera que no está" title="Añadir una carrera que no está">＋ Nueva</button>
     </div>
-    ${S.preview ? '' : rutaCard()}
-    <div id="pulse-box">${normalize(S.q.runner || '').length >= 2 ? '' : teamPulse(d)}</div>
+    ${S.regView === 'cal' ? `<div class="view-row">${viewSwitch()}</div>` : ''}
+    ${S.regView === 'cal' || S.preview ? '' : rutaCard()}
+    <div id="pulse-box">${S.regView === 'cal' || normalize(S.q.runner || '').length >= 2 ? '' : teamPulse(d)}</div>
     <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
-    <div class="view-row">${viewSwitch()}</div>
-    ${body}`,
+    ${S.regView === 'cal' ? '' : `<div class="view-row">${viewSwitch()}</div>`}
+    ${body}
+    ${S.regView === 'cal' && !S.preview ? rutaCard() : ''}`,
   { rtab: '', noSearch: true });
 }
 
