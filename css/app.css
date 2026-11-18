@@ -1309,3 +1309,10 @@ html, body { overscroll-behavior-y: contain; }
 button.part-chip { cursor: pointer; } .part-chip.sel { background: color-mix(in srgb, var(--dc) 34%, var(--card)); border-width: 2px; }
 .part-chip i { width: .6rem; height: .6rem; border-radius: 50%; background: var(--dc); flex: none; } .part-chip b { font-weight: 800; }
 .part-note { margin: .5rem 0 0; font-size: .74rem; color: var(--muted); }
+
+/* ---- Barra inferior: la pestaña activa se nota de un vistazo (barra arriba, icono en pastilla, texto más fuerte) ---- */
+nav.tabs a.on { color: var(--accent); font-weight: 800; }
+nav.tabs a.on::before { content: ""; position: absolute; top: -1px; left: 18%; right: 18%; height: 4px; border-radius: 0 0 4px 4px; background: var(--accent); }
+nav.tabs a.on svg { box-sizing: content-box; padding: 3px 16px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 16%, transparent); stroke-width: 2.2; }
+nav.tabs a:not(.on) { opacity: .85; }
+nav.tabs a:not(.on) svg { padding: 3px 16px; box-sizing: content-box; }
