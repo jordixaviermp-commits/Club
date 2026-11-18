@@ -1197,3 +1197,8 @@ html, body { overscroll-behavior-y: contain; }
 .file-row .btn { flex: none; min-height: 36px; padding: .25rem .9rem; }
 .bb-labels span { white-space: nowrap; } .bb-labels span.last { transform: translateX(-60%); }
 .bbig { margin-bottom: 1.2rem; } .bb-labels { height: 2.2rem; } .bn-n span { font-size: .8rem; }
+.bn-line { margin: .2rem 0 0; font-size: 1.05rem; } .bn-line b { font-size: 1.5rem; font-variant-numeric: tabular-nums; vertical-align: -.05em; } .bn-line .amt { color: color-mix(in srgb, #1b7f3b 75%, var(--text)); }
+.bn-line .sep { margin: 0 .5rem; color: var(--muted); }
+.bn-support { margin: .2rem 0 0; font-size: .95rem; color: var(--muted); } .bn-support b { color: var(--text); }
+.bbig { margin-top: 2.1rem; }
+.bn-line { font-size: 1rem; } .bn-line b { font-size: 1.35rem; } .bn-line .sep { margin: 0 .35rem; } .bn-line .nw { white-space: nowrap; }

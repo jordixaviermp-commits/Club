@@ -1112,10 +1112,7 @@ function runnerBonusCard(d) {
     </div></details>`;
   return `<section class="card bonus-card"><div class="bn-head"><h2>Tu bonificación ${b.year}</h2>${minChip}</div>
     ${chips ? `<div class="bn-chips">${chips}</div>` : ''}
-    <div class="bn-big">
-      <div class="bn-n"><b>${st.count}</b><span>${plural(st.count, 'carrera hecha', 'carreras hechas')}</span></div>
-      <div class="bn-n tier${st.tier ? '' : ' none'}"><b>${st.tier ? euros(st.amount) : '—'}</b><span>${st.tier ? 'Tramo de bonificación' : 'Aún sin tramo'}</span></div>
-    </div>
+    <p class="bn-line"><b>${st.count}</b> ${plural(st.count, 'carrera hecha', 'carreras hechas')}<span class="sep">·</span>${st.tier ? `<span class="nw">tramo <b class="amt">${euros(st.amount)}</b></span>` : '<span class="muted nw">aún sin tramo</span>'}</p>
     ${support ? `<p class="bn-support">${support}</p>` : ''}
     ${st.reachesMinimum ? '' : penaltyAlert(st, cfg, b.year)}
     ${bonusBarBig(st, cfg, b.planned || 0)}
