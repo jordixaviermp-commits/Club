@@ -2317,8 +2317,35 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
         ${rest.length ? `<ol class="rank rank2" start="5">${rest.map((r, i) => row(r, i + 4)).join('')}</ol>` : ''}
         ${idle.length ? `<p class="muted small">Sin carreras todavía: ${names(idle, 40)}.</p>` : ''}</details>` : ''}`
       : '<p class="muted">Todavía no hay carreras este año.</p>'}</section>`;
+  // --- podios: por categoría y por disciplina, y cada podio dicho con todas las letras («1º de M40 · BTT · XCO · general final»)
+  const pl = s.podiumList;
+  const medalsOf = (list) => [1, 2, 3].map((k) => list.filter((x) => x.position === k).length);
+  const mchips = (m) => m.map((n, i) => (n ? `<span class="pm m${i + 1}"><i class="medal m${i + 1}"></i>${n}</span>` : '')).join('');
+  const groupBy = (keyFn) => { const g = new Map(); for (const x of pl) { const k = keyFn(x); (g.get(k) || g.set(k, []).get(k)).push(x); } return [...g].map(([k, list]) => ({ k, list, m: medalsOf(list) })).sort((x, y) => y.list.length - x.list.length || y.m[0] - x.m[0] || y.m[1] - x.m[1]); };
+  const view = S.podView === 'disc' ? 'disc' : 'cat';
+  const rowsCat = groupBy((x) => x.category || 'Sin categoría');
+  const rowsDisc = groupBy((x) => disciplineKey(x.modality, x.subtype));
+  const grpRow = (label, m, total, cls = '') => `<li class="pg-row ${cls}"><b>${label}</b><span class="pg-m">${mchips(m)}</span><span class="pg-n">${total}</span></li>`;
+  const medalNames = ['1º', '2º', '3º'];
+  const typeLabel = (x) => (x.type === 'etapa' ? `Etapa${x.stage ? `: ${esc(x.stage)}` : ''}` : x.type === 'general' ? 'General final' : x.type === 'campeonato' ? 'Campeonato' : 'Carrera suelta');
+  const items = [...pl].sort((x, y) => y.date.localeCompare(x.date) || x.position - y.position);
+  const podItem = (x) => `<li class="pod-item m${x.position}">
+      <i class="medal m${x.position}"></i>
+      <div class="pod-main"><div class="pod-l1"><b>${esc(x.runner)}</b><span class="pod-pos m${x.position}">${medalNames[x.position - 1]} ${x.category ? `de ${esc(x.category)}` : 'sin categoría'}</span></div>
+        <div class="pod-l2">${esc(x.race)} <span class="muted">· ${esc(formatDate(x.date, false))}</span></div>
+        <div class="pod-l3">${modTag(x.modality, x.subtype)}<span class="tag t-type">${typeLabel(x)}</span></div></div></li>`;
+  const SHOWN = 5;
+  const podRunner = `<section class="card eq-pods"><h2>Podios${mod ? ` · ${esc(modLabel)}` : ' del año'}</h2>
+    ${pl.length ? `<div class="pod-tot">${[1, 2, 3].map((k) => { const n = pl.filter((x) => x.position === k).length; return n ? `<span class="pod-pill m${k}"><i class="medal m${k}"></i>${n} ${['Oro', 'Plata', 'Bronce'][k - 1]}${n === 1 ? '' : 's'}</span>` : ''; }).join('')}</div>
+      <div class="seg-sw pod-sw" role="group" aria-label="Ver los podios por"><button type="button" class="${view === 'cat' ? 'on' : ''}" data-act="pod-view" data-v="cat">Por categoría</button><button type="button" class="${view === 'disc' ? 'on' : ''}" data-act="pod-view" data-v="disc">Por disciplina</button></div>
+      <p class="hint">${view === 'cat' ? 'El puesto es el de su <b>categoría</b>: un 1º de M40 es el primero entre los M40.' : 'Podios de cada disciplina, sumando todas las categorías.'}</p>
+      <ul class="pg-list">${view === 'cat' ? rowsCat.map((g) => grpRow(esc(g.k), g.m, g.list.length)).join('')
+        : rowsDisc.map((g) => { const [dm, ds] = g.k.split('|'); return grpRow(esc(ds ? `${dm} · ${ds}` : dm), g.m, g.list.length, discClass(dm, ds)); }).join('')}</ul>
+      <h3>Últimos podios</h3><ul class="pod-items">${items.slice(0, SHOWN).map(podItem).join('')}</ul>
+      ${items.length > SHOWN ? `<details class="pod-more"><summary>Ver los ${items.length - SHOWN} anteriores</summary><ul class="pod-items">${items.slice(SHOWN).map(podItem).join('')}</ul></details>` : ''}`
+      : '<p class="muted">Sin podios este año.</p>'}</section>`;
   return `<div class="eq">${filters}${hero}${leaders ? `<div class="leads eq-leads">${leaders}</div>` : ''}
-    ${months}${rank}${byMod}${cats}${pods}${places}</div>`;
+    ${months}${rank}${byMod}${cats}${podRunner}${places}</div>`;
 }
 
 /**
@@ -3778,6 +3805,7 @@ const actions = {
     await run(async () => { await api.saveSetting(`cierre_${S.year}`, seasonModel(S.year)); await reload(); }, 'Cierre guardado'); render();
   },
   'sum-mod'(el) { S.sumMod = el.dataset.m; render(); },
+  'pod-view'(el) { S.podView = el.dataset.v; render(); },
   'race-mod'(el) { S.raceMod = el.dataset.m; render(); },
   'race-todo'() { S.raceTodo = !S.raceTodo; render(); },
   'race-repeat'() {
