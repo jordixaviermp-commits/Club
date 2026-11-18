@@ -251,7 +251,13 @@ async function onRoute() {
 
 /** Crónicas que el corredor ya pasó (Set de claves). null = falta el SQL; undefined = aún sin cargar. */
 async function loadChron() {
-  try { const keys = await api.runnerChronicles(S.code || S.previewCode); S.chron = Array.isArray(keys) ? new Set(keys) : null; } catch { S.chron = null; }
+  const code = S.code || S.previewCode;
+  try {
+    const team = await api.runnerChroniclesTeam(code);   // las pasadas por cualquiera: basta con que la pase uno
+    if (Array.isArray(team)) { S.chron = new Set(team.map((x) => x.key)); S.chronBy = new Map(team.map((x) => [x.key, x])); return; }
+  } catch { /* sin el SQL nuevo: se sigue con las propias */ }
+  S.chronBy = null;
+  try { const keys = await api.runnerChronicles(code); S.chron = Array.isArray(keys) ? new Set(keys) : null; } catch { S.chron = null; }
 }
 async function loadRunner() {
   try { S.runnerData = await api.runnerView(S.code); await loadNews(); await loadCorrections(); await loadChron(); }
@@ -290,6 +296,8 @@ const adminScreens = () => [
   ['📊', 'Resumen de la temporada', '#/resumen', 'resumen estadistica categorias podios km modalidad temporada'],
   ['👥', 'Corredores (plantilla)', '#/corredores', 'corredores plantilla categoria enlaces renovar anadir ropa pedido filtros'],
   ['📄', 'Contratos por tipo', '#/contratos', 'contratos contrato nuevo renovacion licencia pdf subir antiguos'],
+  ['📈', 'Temporada (panel de fin de año)', '#/temporada', 'temporada fin de ano disciplinas podios records corredores comparar anterior exportar excel'],
+  ['📘', 'Memoria para sponsors', '#/memoria', 'memoria sponsors patrocinadores informe imprimir pdf temporada resumen'],
   ['📊', 'Cómputo de la temporada', '#/computo', 'computo fin temporada descargar csv excel control cerrar'],
   ['🖨️', 'Informe de temporada', '#/informe', 'informe imprimir pdf bono saldo penalizacion cierre hojas corredor'],
   ['💶', 'Bonos', '#/bonos', 'bonos bonificacion minimo penalizacion tramos plus circuito condiciones'],
@@ -401,7 +409,7 @@ function frame(title, body, { back, actions = '', rtab = null, noSearch = false 
     ? `<nav class="tabs">${RUNNER_TABS.map(([v, label, d]) =>
       `<a href="${runnerHref(v)}" class="${v === rtab ? 'on' : ''}">${icon(d)}<span>${label}</span></a>`).join('')}</nav>`
     : admin ? `<nav class="tabs">${ADMIN_TABS.map(([v, label, d]) =>
-      `<a href="#/${v}" class="${view === v || (!view && v === 'inscripciones') || (v === 'corredores' && ['contratos', 'computo', 'informe'].includes(view)) || (v === 'resumen' && ['instagram', 'datos'].includes(view)) || (v === 'redes' && ['semana', 'publicaciones'].includes(view)) ? 'on' : ''}">${icon(d)}${v === 'redes' && S.data && socialPending() ? `<b class="tab-n">${socialPending()}</b>` : ''}<span>${label}</span></a>`).join('')}</nav>` : '';
+      `<a href="#/${v}" class="${view === v || (!view && v === 'inscripciones') || (v === 'corredores' && ['contratos', 'computo', 'informe'].includes(view)) || (v === 'resumen' && ['instagram', 'datos', 'temporada', 'memoria'].includes(view)) || (v === 'redes' && ['semana', 'publicaciones'].includes(view)) ? 'on' : ''}">${icon(d)}${v === 'redes' && S.data && socialPending() ? `<b class="tab-n">${socialPending()}</b>` : ''}<span>${label}</span></a>`).join('')}</nav>` : '';
   return `
     ${api.mode === 'demo' ? `<div class="demo-bar">Modo demostración: datos de prueba guardados solo en este móvil.</div>` : ''}
     <header class="top">
@@ -436,7 +444,7 @@ function render() {
     html = ({
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
       carreras: S.draft ? viewRaceEdit : viewRaces,
-      resumen: viewSummary, instagram: viewInstagram, redes: viewNetworks, corredores: viewRunners, contratos: viewContracts, computo: viewSeasonCount, informe: viewSeasonReport, publicaciones: viewPublications, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
+      resumen: viewSummary, temporada: viewSeasonDash, memoria: viewMemoria, instagram: viewInstagram, redes: viewNetworks, corredores: viewRunners, contratos: viewContracts, computo: viewSeasonCount, informe: viewSeasonReport, publicaciones: viewPublications, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
       vista: () => (S.preview && S.runnerData ? runnerScreen(parseRoute().id || '') : viewRunners()),
       equipo: () => (S.preview ? viewTeam() : viewSummary()),
     }[view] || viewRegistrations)();
@@ -944,6 +952,7 @@ const ICO = {
   users: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
   calplus: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM12 14v4M10 16h4',
   check: 'M20 6L9 17l-5-5',
+  share: 'M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13',
   layers: 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
   calcheck: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM9 16l2 2 4-4',
   timer: 'M10 2h4M12 14l3-3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z',
@@ -1082,7 +1091,7 @@ function myRacesCard(d, afterSummary = () => '') {
 
 
 /** Aviso del contrato al apuntarse a una carrera ya corrida (mensaje automático) y al pasar la crónica. */
-const CHRONICLE_RULE = 'Según tu contrato, de cada carrera en la que participas debes hacer la <b>crónica</b>, <b>pasar los resultados</b> y <b>enviar fotos</b>.';
+const CHRONICLE_RULE = 'Según el contrato, de cada carrera hay que hacer la <b>crónica</b>, <b>pasar los resultados</b> y <b>enviar fotos</b>. <b>Basta con que la pase uno</b> de los que corristeis: si ya la ha pasado un compañero, no tienes que hacerla.';
 const chronicleReminder = (name) => choose('✍️ Recuerda tu crónica', `${name ? `<b>${esc(name)}</b><br>` : ''}${CHRONICLE_RULE}<br>Cuando lo hayas enviado, márcala como pasada en <b>Mi temporada</b>.`, [{ label: 'Entendido', value: true, kind: 'primary' }]);
 
 /** Crónicas del corredor: pendientes y pasadas, pequeña y con un desplegable para marcarlas. */
@@ -1092,7 +1101,8 @@ function chronicleCard(d) {
   const c = chronicleStatus(d, S.chron, d.today || todayISO(), year);
   if (!c.total) return '';
   const plural = (n, a, b) => (n === 1 ? a : b);
-  const li = (x, isDone) => `<li class="chro-row"><span class="chro-name"><b>${esc(x.name)}</b><small class="muted">${esc(formatDate(x.date, false))}${x.place ? ' · ' + esc(x.place) : ''}</small></span>${S.preview ? '' : `<button class="btn small${isDone ? ' ghost' : ' primary'}" data-act="chro-toggle" data-key="${esc(x.key)}" data-done="${isDone ? 0 : 1}">${isDone ? 'Deshacer' : '✓ Ya la pasé'}</button>`}</li>`;
+  const li = (x, isDone) => { const by = S.chronBy?.get(x.key), other = isDone && by && !by.mine;
+    return `<li class="chro-row"><span class="chro-name"><b>${esc(x.name)}</b><small class="muted">${esc(formatDate(x.date, false))}${x.place ? ' · ' + esc(x.place) : ''}${other ? ` · la pasó ${esc(by.by)}` : ''}</small></span>${S.preview || other ? '' : `<button class="btn small${isDone ? ' ghost' : ' primary'}" data-act="chro-toggle" data-key="${esc(x.key)}" data-done="${isDone ? 0 : 1}">${isDone ? 'Deshacer' : '✓ Ya la pasé'}</button>`}</li>`; };
   const pend = c.pending.length;
   return `<section class="card chro-card${pend ? ' has-pend' : ''}"><details class="chro-det" data-open-key="chro"${S.open?.chro ? ' open' : ''}>
     <summary><span class="chro-ic">${ico('book')}</span><b class="chro-t">Crónicas${year === new Date().getFullYear() ? '' : ` <small class="muted">${year}</small>`}</b>
@@ -1900,7 +1910,7 @@ function viewNetworks() {
       return `<li class="net-piece ${x.st}"><details class="net-cro" data-open-key="${esc(ok)}"${S.open?.[ok] ? ' open' : ''}><summary><span class="net-k" title="${NET_LABEL.cro}">${NET_ICON.cro}</span><span class="net-tx">${esc(x.text)}</span><span class="net-glyph" aria-hidden="true">${NET_GLYPH[x.st]}</span></summary>
         <ul class="net-people">${x.people.map((q) => `<li><label class="check"><input type="checkbox" data-act-change="chro-admin" data-runner="${esc(q.id)}" data-key="${esc(x.key)}" ${q.done ? 'checked' : ''}> ${esc(q.name)}</label></li>`).join('')}</ul>
         ${missing.length ? `<button class="btn small" data-act="chro-admin-all" data-ids="${esc(missing.join(','))}" data-key="${esc(x.key)}">✓ Todos la pasaron</button>` : ''}
-        <p class="hint">Marca a quien ya la pasó aunque no lo haya marcado en su perfil.</p></details></li>`;
+        <p class="hint">Basta con que la pase uno: en cuanto alguien la marca, la crónica queda hecha para todos. Marca a quien ya la pasó aunque no lo haya marcado en su perfil.</p></details></li>`;
     }
     const isRes = x.k === 'res', canMark = x.key && (x.k === 'aviso' || isRes);
     const act = x.k === 'story' ? (x.st === 'pend' ? `<button class="btn small" data-act="pub-story-manual" data-key="${esc(x.key)}">Marcar a mano</button>` : '')
@@ -2526,7 +2536,7 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
 //  Estadísticas de Instagram (Resumen → Instagram)
 // ======================================================================
 
-const resumenTabs = (on) => `<div class="years subtabs no-print"><a class="chip${on === 'club' ? ' on' : ''}" href="#/resumen">🏁 Club</a><a class="chip${on === 'ig' ? ' on' : ''}" href="#/instagram">📸 Instagram</a></div>`;
+const resumenTabs = (on) => `<div class="years subtabs no-print"><a class="chip${on === 'club' ? ' on' : ''}" href="#/resumen">🏁 Club</a><a class="chip${on === 'temp' ? ' on' : ''}" href="#/temporada">📈 Temporada</a><a class="chip${on === 'ig' ? ' on' : ''}" href="#/instagram">📸 Instagram</a></div>`;
 const nf = (n) => (n == null ? '—' : Number(n).toLocaleString('de-DE'));   // 5.200 (el «es-ES» no pone el punto en 4 cifras)
 const IG_MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const igShort = (iso) => `${Number(iso.slice(8))} ${IG_MES[Number(iso.slice(5, 7)) - 1]} ${iso.slice(2, 4)}`;
@@ -2547,7 +2557,7 @@ async function loadIg(force = false) {
   S.ig = { loading: true };
   try { const rows = await api.listIg(); S.ig = rows ? { rows } : { missing: true }; }
   catch (e) { S.ig = { failed: friendlyError(e) }; }
-  if (parseRoute().view === 'instagram') render();
+  if (['instagram', 'memoria'].includes(parseRoute().view)) render();
 }
 
 function viewInstagram() {
@@ -2683,6 +2693,134 @@ function viewInstagram() {
     <div class="print-only ig-title"><b>Club Ciclista Monzón · Estadísticas de Instagram</b><span>${esc(label)}</span></div>
     ${tabs.map(([k, l]) => `<div class="ig-panel${k === tab ? '' : ' off'}"><h2 class="print-only ig-part">${l}</h2>${panels[k]}</div>`).join('')}
     <p class="rp-note">Fuente: Instagram (estadísticas de la cuenta profesional del club). Alcance = personas distintas que vieron el contenido; las visualizaciones cuentan también las repeticiones.</p>`);
+}
+
+// ======================================================================
+//  Temporada: panel de fin de año (dirección) y memoria para sponsors
+// ======================================================================
+
+/** Cifras de una temporada ya calculadas, con la anterior para comparar. */
+function seasonPack(year) {
+  const s = yearSummary(year, S.data.races, S.data.runners);
+  const prev = yearSummary(year - 1, S.data.races, S.data.runners);
+  const hasPrev = prev.totals.races > 0;
+  return { s, prev, hasPrev, year };
+}
+/** «▲ +4 vs 2025» (verde si sube, rojo si baja); vacío si no hay año anterior con datos. */
+const seasonDelta = (pk, cur, old, fmt = (n) => n) => (!pk.hasPrev ? '' : `<em class="rp-d ${cur > old ? 'up' : cur < old ? 'down' : ''}">${cur > old ? '▲ +' : cur < old ? '▼ −' : '= '}${cur === old ? '' : fmt(Math.abs(cur - old))} vs ${pk.year - 1}</em>`);
+const seasonKpis = (pk) => {
+  const t = pk.s.totals, o = pk.prev.totals, k = (v, l, d = '') => `<div class="rp-kpi"><b>${v}</b><span>${l}</span>${d}</div>`;
+  return `<div class="rp-kpis">
+    ${k(t.races, 'carreras', seasonDelta(pk, t.races, o.races))}
+    ${k(t.runners, 'corredores', seasonDelta(pk, t.runners, o.runners))}
+    ${k(t.participations, 'participaciones', seasonDelta(pk, t.participations, o.participations))}
+    ${k(t.podiums, 'podios', seasonDelta(pk, t.podiums, o.podiums))}
+    ${k(t.wins, 'victorias', seasonDelta(pk, t.wins, o.wins))}
+    ${k(t.km ? kmText(Math.round(t.km)) : '—', 'km recorridos', seasonDelta(pk, Math.round(t.km), Math.round(o.km), (n) => kmText(n)))}
+    ${k(t.timed ? formatTime(t.time, true) : '—', 'tiempo en carrera')}</div>`;
+};
+const disciplineName = (x) => (x.subtype ? `${x.modality} · ${x.subtype}` : x.modality);
+/** Disciplinas del año: una fila con color, carreras, participaciones, corredores y podios. */
+const seasonDisciplines = (pk) => {
+  const list = pk.s.disciplines, mx = Math.max(1, ...list.map((x) => x.races));
+  return `<ul class="tp-disc">${list.map((x) => `<li class="${discClass(x.modality, x.subtype)}"><i class="tp-dot"></i><b>${esc(disciplineName(x))}</b>
+    <span class="tp-track"><i style="width:${(x.races / mx) * 100}%"></i></span>
+    <span class="tp-n"><b>${x.races}</b> carr.</span><span class="tp-n">${x.participations} part.</span><span class="tp-n">${x.runners} corr.</span><span class="tp-n tp-pod">🏆 ${x.podiums}${x.wins ? ` · 🥇 ${x.wins}` : ''}</span></li>`).join('') || '<li class="muted">Sin carreras este año.</li>'}</ul>`;
+};
+/** Podios por categoría y por disciplina (tablas cortas con medallas). */
+const seasonPodiums = (pk) => {
+  const pl = pk.s.podiumList, medalsOf = (l) => [1, 2, 3].map((k) => l.filter((x) => x.position === k).length);
+  const group = (keyFn) => { const g = new Map(); for (const x of pl) { const k = keyFn(x); (g.get(k) || g.set(k, []).get(k)).push(x); } return [...g].map(([k, list]) => ({ k, list, m: medalsOf(list) })).sort((a, b) => b.list.length - a.list.length || b.m[0] - a.m[0]); };
+  const tbl = (rows, lab) => `<table class="tp-table"><thead><tr><th>${lab}</th><th>🥇</th><th>🥈</th><th>🥉</th><th>Total</th></tr></thead><tbody>${rows.map((g) => `<tr><td>${g.label}</td><td>${g.m[0]}</td><td>${g.m[1]}</td><td>${g.m[2]}</td><td><b>${g.list.length}</b></td></tr>`).join('') || '<tr><td colspan="5" class="muted">Sin podios</td></tr>'}</tbody></table>`;
+  const cat = group((x) => x.category || 'Sin categoría').map((g) => ({ ...g, label: esc(g.k) }));
+  const disc = group((x) => disciplineKey(x.modality, x.subtype)).map((g) => { const [m, sub] = g.k.split('|'); return { ...g, label: esc(sub ? `${m} · ${sub}` : m) }; });
+  return `<div class="tp-two"><div><h3>Por categoría</h3>${tbl(cat, 'Categoría')}</div><div><h3>Por disciplina</h3>${tbl(disc, 'Disciplina')}</div></div>
+    <p class="hint">El puesto es el de la categoría del corredor (un 1º de M40 es el primero entre los M40).</p>`;
+};
+/** Récords del equipo (quién lidera cada cosa). */
+const seasonRecords = (pk) => {
+  const s = pk.s, people = s.perRunner, who = (score) => { const top = Math.max(0, ...people.map(score)); return top ? { top, names: people.filter((r) => score(r) === top).map((r) => r.name) } : null; };
+  const row = (label, w, fmt) => (w ? `<tr><td>${label}</td><td><b>${esc(w.names.slice(0, 3).join(', '))}${w.names.length > 3 ? ` y ${w.names.length - 3} más` : ''}</b></td><td>${fmt(w.top)}</td></tr>` : '');
+  const L = s.longest;
+  return `<table class="tp-table"><tbody>
+    ${row('Más carreras', who((r) => r.races), (n) => `${n}`)}${row('Más podios', who((r) => r.p1 + r.p2 + r.p3), (n) => `${n}`)}${row('Más victorias', who((r) => r.p1), (n) => `${n}`)}
+    ${L ? `<tr><td>Carrera más larga</td><td><b>${esc(L.race)}</b></td><td>${esc(kmText(L.km))}</td></tr>` : ''}
+    ${row('Más kilómetros', who((r) => r.km), (n) => kmText(n))}${row('Más tiempo en carrera', who((r) => r.time), (n) => formatTime(n, true))}
+    ${row('Más versátil (disciplinas distintas)', who((r) => Object.keys(r.discs || {}).length), (n) => `${n}`)}${row('Más constante (meses con carrera)', who((r) => r.months?.size || 0), (n) => `${n}`)}
+    </tbody></table>`;
+};
+/** Dónde se ha competido: provincias y países. */
+const seasonReach = (pk) => {
+  const pr = pk.s.provinces.slice(0, 10), co = pk.s.countries.slice(0, 6);
+  const chips = (rows) => rows.map((c) => `<span class="tp-chip">${esc(c.name)} <b>${c.races}</b></span>`).join('') || '<span class="muted">—</span>';
+  return `<div class="tp-two"><div><h3>Provincias (${pk.s.provinces.length})</h3><div class="tp-chips">${chips(pr)}</div></div><div><h3>Países (${pk.s.countries.length})</h3><div class="tp-chips">${chips(co)}</div></div></div>`;
+};
+/** Carreras por mes, con el color de cada disciplina. */
+const seasonMonths = (pk) => {
+  const s = pk.s, mx = Math.max(1, ...s.byMonth.map((m) => m.total)), MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  const order = (k) => s.disciplines.findIndex((d) => d.key === k);
+  return `<div class="mchart tp-months" role="img" aria-label="Carreras por mes">${s.byMonth.map((m) => `<div class="mc${m.total ? '' : ' none'}"><div class="mc-area"><em>${m.total || ''}</em>
+    <div class="mc-stack" style="height:${m.total ? (m.total / mx) * 100 : 0}%">${Object.entries(m.discs).sort(([x], [y]) => order(y) - order(x)).map(([k, n]) => { const [dm, ds] = k.split('|');
+      return `<span class="${discClass(dm, ds)}" style="flex:${n}" title="${esc(discLabel(dm, ds))}: ${n}"></span>`; }).join('')}</div></div><b>${MES[m.month]}</b></div>`).join('')}</div>`;
+};
+/** Filas de la tabla de corredores del año (con las columnas de cada disciplina para el Excel). */
+function seasonRunnerRows(pk) {
+  return pk.s.perRunner.filter((r) => r.races > 0).map((r) => {
+    const rn = S.data.runners.find((x) => x.id === r.key);
+    return { ...r, cat: rn?.category || '', contract: rn?.contract ? contractLabel(rn.contract) : '', nd: Object.keys(r.discs || {}).length, nm: r.months?.size || 0, pod: r.p1 + r.p2 + r.p3 };
+  });
+}
+const TP_COLS = [['name', 'Corredor', 'text'], ['races', 'Carr.'], ['km', 'Km'], ['time', 'Tiempo'], ['nd', 'Disc.'], ['p1', '🥇'], ['p2', '🥈'], ['p3', '🥉'], ['nm', 'Meses']];
+function viewSeasonDash() {
+  const years = availableYears(S.data.races);
+  if (!years.includes(S.year)) S.year = years[0];
+  const pk = seasonPack(S.year), sort = S.tsort || { k: 'races', dir: -1 };
+  const rows = seasonRunnerRows(pk).sort((a, b) => (sort.k === 'name' ? a.name.localeCompare(b.name, 'es') * -sort.dir : (b[sort.k] - a[sort.k]) * -sort.dir || a.name.localeCompare(b.name, 'es')));
+  const th = ([k, l, t]) => `<th class="${t === 'text' ? 'l' : 'num'}"><button type="button" class="tp-sort${sort.k === k ? ' on' : ''}" data-act="tp-sort" data-k="${k}">${l}${sort.k === k ? (sort.dir === 1 ? ' ▲' : ' ▼') : ''}</button></th>`;
+  return frame(`Temporada ${S.year}`, `${resumenTabs('temp')}${yearPicker(years)}
+    <section class="card tp-card"><h2>📈 Cifras del año</h2>${seasonKpis(pk)}</section>
+    <section class="card tp-card"><h2>🏷️ Por disciplina</h2>${seasonDisciplines(pk)}</section>
+    <section class="card tp-card"><h2>🏆 Podios</h2>${seasonPodiums(pk)}</section>
+    <section class="card tp-card"><h2>⭐ Récords del equipo</h2>${seasonRecords(pk)}</section>
+    <section class="card tp-card"><h2>📅 Carreras por mes</h2>${seasonMonths(pk)}</section>
+    <section class="card tp-card"><h2>🗺️ Dónde se ha competido</h2>${seasonReach(pk)}</section>
+    <section class="card tp-card"><h2>👥 Corredores</h2><div class="tp-scroll"><table class="tp-table tp-runners"><thead><tr>${TP_COLS.map(th).join('')}</tr></thead>
+      <tbody>${rows.map((r) => `<tr><td class="l"><a href="#/corredor/${esc(r.key)}"><b>${esc(r.name)}</b></a>${r.cat ? ` <small class="muted">${esc(r.cat)}</small>` : ''}</td><td class="num">${r.races}</td><td class="num">${r.km ? esc(kmText(r.km)) : '—'}</td><td class="num">${r.timed ? formatTime(r.time, true) : '—'}</td><td class="num">${r.nd}</td><td class="num">${r.p1 || '·'}</td><td class="num">${r.p2 || '·'}</td><td class="num">${r.p3 || '·'}</td><td class="num">${r.nm}</td></tr>`).join('') || '<tr><td colspan="9" class="muted">Sin carreras este año.</td></tr>'}</tbody></table></div></section>
+    <section class="card tp-card"><h2>📥 Exportar y memoria</h2>
+      <a class="btn primary block" href="#/memoria">📘 Memoria para sponsors (imprimir o PDF)</a>
+      <p class="hint">Una página limpia, sin datos internos (sin bonos ni contratos), con las cifras del año, las disciplinas, los podios, los récords, el alcance y las redes.</p>
+      <div class="row-btns"><button class="btn" data-act="tp-csv-runners">📊 Corredores (Excel)</button><button class="btn" data-act="tp-csv-disc">📊 Disciplinas (Excel)</button></div>
+      <p class="hint">El de corredores lleva una columna por disciplina. Para el cómputo con bonos y el informe interno está <a href="#/computo">Cómputo de la temporada</a>.</p></section>`);
+}
+function viewMemoria() {
+  const years = availableYears(S.data.races);
+  if (!years.includes(S.year)) S.year = years[0];
+  if (!S.ig) loadIg();
+  const pk = seasonPack(S.year);
+  const igOk = S.ig?.rows;
+  const g = igOk ? igSummary(S.ig.rows, `${S.year}-01-01`, `${S.year}-12-31`) : null, acc = g?.account, t = g?.totals;
+  const nf2 = (n) => (n == null ? '—' : Number(n).toLocaleString('de-DE'));
+  const redes = g && (g.nDays || acc) ? `<section class="mem-sec"><h2>Presencia en redes</h2><div class="rp-kpis">
+      ${acc ? `<div class="rp-kpi"><b>${nf2(acc.followers)}</b><span>seguidores en Instagram</span></div>` : ''}
+      ${g.nDays ? `<div class="rp-kpi"><b>${nf2(t.views)}</b><span>visualizaciones</span></div><div class="rp-kpi"><b>${nf2(t.interactions)}</b><span>interacciones</span></div>` : ''}
+      ${g.nDays && t.reachAvg ? `<div class="rp-kpi"><b>${nf2(t.reachAvg)}</b><span>alcance medio diario</span></div>` : ''}</div>
+      <p class="rp-note">@hinacoclubciclistamonzon · ${g.nDays ? `${g.nDays} días de datos guardados en ${S.year}` : `datos a ${acc ? igShort(acc.until) : ''}`}.</p></section>` : '';
+  const top = pk.s.perRunner.filter((r) => r.races > 0).slice(0, 10);
+  return frame('Memoria de la temporada', `
+    <div class="no-print">${yearPicker(years)}<div class="row-btns rp-actions"><button class="btn primary" data-act="print-report">🖨️ Imprimir o guardar PDF</button><a class="btn" href="#/temporada">‹ Volver a Temporada</a></div>
+      <p class="hint">En el cuadro de imprimir elige «Guardar como PDF». No incluye bonos, contratos ni datos personales: es para enseñar a sponsors.</p></div>
+    <article class="report memoria">
+      <header class="rp-head"><img src="icons/logo.png" alt=""><div><h2>Club Ciclista Monzón · Memoria ${S.year}</h2><p>Resumen de la temporada del equipo de competición</p></div></header>
+      <section class="mem-sec"><h2>La temporada en cifras</h2>${seasonKpis(pk)}</section>
+      <section class="mem-sec"><h2>Carreras por mes</h2>${seasonMonths(pk)}</section>
+      <section class="mem-sec"><h2>Disciplinas</h2>${seasonDisciplines(pk)}</section>
+      <section class="mem-sec"><h2>Podios</h2>${seasonPodiums(pk)}</section>
+      <section class="mem-sec"><h2>Récords del equipo</h2>${seasonRecords(pk)}</section>
+      <section class="mem-sec"><h2>Dónde hemos competido</h2>${seasonReach(pk)}</section>
+      ${top.length ? `<section class="mem-sec"><h2>Los que más han corrido</h2><table class="tp-table"><tbody>${top.map((r, i) => `<tr><td>${i + 1}</td><td><b>${esc(r.name)}</b></td><td>${r.races} carreras</td><td>${r.km ? esc(kmText(r.km)) : ''}</td><td>${r.p1 ? `🥇${r.p1} ` : ''}${r.p2 ? `🥈${r.p2} ` : ''}${r.p3 ? `🥉${r.p3}` : ''}</td></tr>`).join('')}</tbody></table></section>` : ''}
+      ${redes}
+      <footer class="rp-note">Datos del club a ${dateEs(todayISO())}.</footer>
+    </article>`, { back: '#/temporada' });
 }
 
 function viewSummary() {
@@ -3002,7 +3140,8 @@ function viewRunnerCard(id) {
       <label>Categoría${catSelect(`data-runner-cat="${r.id}"`, r.category || '')}</label>
       <label>Contrato${contractSelect(`data-runner-contract="${r.id}"`, r.contract || '')}</label>
       <p class="muted small">${tot} carrera${tot === 1 ? '' : 's'} en total${r.created_at ? ` · en el club desde ${formatDate(String(r.created_at).slice(0, 10), false)}` : ''}</p>
-      <div class="row"><button class="btn primary" data-act="runner-menu" data-id="${r.id}">Enlace y opciones ⋯</button></div>
+      <div class="row"><button class="btn primary" data-act="runner-menu" data-id="${r.id}">${ico('share')} Enlace</button>
+        <button class="btn" data-act="runner-do" data-a="preview" data-id="${r.id}">Ver su pantalla</button></div>
     </section>
     ${yearPicker(years)}
     ${row ? `<section class="card bonus-card"><h2>Bono ${S.year}</h2>
@@ -3024,7 +3163,11 @@ function viewRunnerCard(id) {
       ${S.docs === null ? '<p class="muted">Aún no están activados los documentos.</p>'
         : docs.length ? `<ul class="mini-list">${docs.map((x) => `<li><div><b>${docIcon(x.mime)} ${esc(x.title)}</b><small class="muted">Temporada ${x.year} · ${fmtSize(x.size)}</small></div>
           <button class="btn small" data-act="doc-open" data-id="${x.id}">Ver</button></li>`).join('')}</ul>` : '<p class="empty small">Todavía no hay documentos.</p>'}
-      <a class="btn small" href="#/docs/${r.id}">Subir o borrar documentos</a></section>`, { back: '#/corredores' });
+      <a class="btn small" href="#/docs/${r.id}">Subir o borrar documentos</a></section>
+    <details class="card more-det"><summary><b>Más opciones</b> <span class="muted">· cambiar nombre, descargar sus datos, borrar</span></summary>
+      <div class="stack"><button class="btn" data-act="runner-do" data-a="rename" data-id="${r.id}">Cambiar nombre</button>
+        <button class="btn" data-act="runner-do" data-a="export" data-id="${r.id}">Descargar sus datos</button>
+        <button class="btn danger ghost" data-act="runner-do" data-a="delete" data-id="${r.id}">Borrar corredor</button></div></details>`, { back: '#/corredores' });
 }
 
 /** Una línea, arriba de Corredores, que abre la hoja con las respuestas del pedido de ropa. El enlace se guarda en los ajustes, que solo ve la dirección. */
@@ -3342,7 +3485,7 @@ function runnersListHtml() {
         <small class="muted">${total} carrera${total === 1 ? '' : 's'} en total${noContract ? ' · <b class="warn-txt">⚠️ sin tipo de contrato</b>' : ''}</small></div>
       ${b ? `<div class="rr-bono"><div class="rp-bar ${b.reachesMinimum ? (b.tier ? 'ok' : 'mid') : 'low'}"><i style="width:${pct}%"></i></div>
         <small><b>${b.bonusCount}</b> en ${year} · ${b.reachesMinimum ? (b.tier ? `✅ bono ${euros(b.amount)}` : '✅ mínimo') : `<span class="bad-txt">⚠️ faltan ${b.missingToMinimum}</span>`}</small></div>` : ''}
-      <button class="icon-btn" data-act="runner-menu" data-id="${r.id}" aria-label="Opciones de ${esc(r.name)}">⋯</button>
+      <button class="icon-btn link-btn" data-act="runner-menu" data-id="${r.id}" aria-label="Enviar o copiar el enlace de ${esc(r.name)}" title="Enlace personal">${ico('share')}</button>
       <div class="roster-sel">
         ${catSelect(`data-runner-cat="${r.id}" aria-label="Categoría habitual de ${esc(r.name)}"`, r.category || '')}
         <span class="sel-wrap${noContract ? ' needs' : ''}">${contractSelect(`data-runner-contract="${r.id}" aria-label="Tipo de contrato de ${esc(r.name)}"`, r.contract || '')}</span>
@@ -3466,6 +3609,51 @@ async function setMyDetails(id, d) {
 async function setMyRaceType(id, d) {
   if (!S.runnerData?.circuits) return; // base de datos sin el cambio de circuitos
   try { await api.runnerSetType(S.code, id, d.race_type || 'suelta', d.race_type === 'circuito' ? cleanName(d.circuit) : null); } catch (e) { console.warn(e); }
+}
+
+/** Acciones sobre un corredor (enlace, vista previa, cambiar nombre, descargar datos, borrar). */
+async function runnerDo(choice, r) {
+  const link = linkFor(r.code);
+  if (choice === 'wa') {
+    const msg = `Hola ${r.name}! Este es tu enlace personal para ver las carreras del Club Ciclista Monzón y apuntarte:\n${link}\n\nEs solo tuyo: no lo reenvíes. Consejo: ábrelo y añádelo a la pantalla de inicio.`;
+    window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+  } else if (choice === 'copy') {
+    try { await navigator.clipboard.writeText(link); toast('Enlace copiado'); } catch { prompt('Copia el enlace:', link); }
+  } else if (choice === 'docs') {
+    go('#/docs/' + r.id);
+  } else if (choice === 'preview') {
+    const view = await run(() => api.runnerView(r.code));
+    if (!view) return;
+    S.preview = { name: r.name, sqlOk: Array.isArray(view.my_results) }; S.previewCode = r.code;
+    S.runnerData = view; S.myOpen = true; await loadNews(); await loadChron();
+    go('#/vista');
+  } else if (choice === 'open') {
+    await api.signOut(); S.session = null; S.data = null; go('#/c/' + r.code);
+  } else if (choice === 'rename') {
+    const name = cleanName(prompt('Nuevo nombre:', r.name) || '');
+    if (!name || name === r.name) return;
+    if (S.data.runners.some((x) => x.id !== r.id && normalize(x.name) === normalize(name))) return toast('Ya hay un corredor con ese nombre.', true);
+    await run(async () => { await api.updateRunner(r.id, { name }); await reload(); }, 'Nombre cambiado'); render();
+  } else if (choice === 'regen') {
+    if (!await confirmAction('Enlace nuevo', `El enlace actual de ${esc(r.name)} dejará de funcionar. Tendrás que enviarle el nuevo.`, 'Crear enlace nuevo')) return;
+    await run(async () => { await api.regenerateCode(r.id); await reload(); }, 'Enlace nuevo creado: envíaselo'); render();
+  } else if (choice === 'export') {
+    const races = S.data.races.filter((x) => x.results.some((y) => y.runner_id === r.id));
+    const data = { corredor: { nombre: r.name, categoria: r.category, contrato: r.contract ? contractLabel(r.contract) : null, alta: r.created_at },
+      resultados: races.map((x) => { const y = x.results.find((z) => z.runner_id === r.id);
+        return { fecha: x.date, carrera: x.name, lugar: x.place, provincia: x.province, pais: x.country, modalidad: x.modality, categoria: y.category, puesto: y.position, tipo_podio: isPodium(y.position) ? podiumLabel(y.podium_type) : null,
+          ...(x.stages?.length ? { etapas: x.stages.map((_, i) => ({ etapa: stageName(x, i), puesto: y.stage_positions?.[i] ?? null })) } : {}) }; }),
+      inscripciones: S.data.registrations.filter((g) => g.entries.some((e) => e.runner_id === r.id)).map((g) => ({ fecha: g.date, carrera: g.name })) };
+    download(`datos-${normalize(r.name).replace(/\W+/g, '-')}.json`, JSON.stringify(data, null, 2), 'application/json');
+  } else if (choice === 'delete') {
+    const how = await choose(`Borrar a ${r.name}`, 'Sale de la plantilla y de las inscripciones abiertas. ¿Qué hacemos con sus resultados de carreras pasadas?', [
+      { label: 'Mantener su nombre en el historial', value: 'keep', kind: 'primary' },
+      { label: 'Borrar también su nombre del historial (lo pide el corredor)', value: 'anon', kind: 'danger' },
+    ]);
+    if (!how) return;
+    await run(async () => { await api.deleteRunner(r.id, how === 'anon'); await reload(); }, 'Corredor borrado'); render();
+  }
+
 }
 
 const actions = {
@@ -3695,61 +3883,19 @@ const actions = {
     if (await run(async () => { await api.deleteRace(S.draft.id); await reload(); return true; }, 'Carrera borrada')) go(editBack('#/carreras'));
   },
 
+  // Menú del icono de enlace: solo lo que tiene que ver con el enlace personal
   async 'runner-menu'(el) {
     const r = runnerById(el.dataset.id);
     const link = linkFor(r.code);
-    const choice = await choose(r.name, `Enlace personal: <code class="break">${esc(link)}</code>`, [
-      { label: 'Enviar enlace por WhatsApp', value: 'wa', kind: 'primary' },
+    const choice = await choose(`Enlace de ${r.name}`, `<code class="break">${esc(link)}</code>`, [
+      { label: 'Enviar por WhatsApp', value: 'wa', kind: 'primary' },
       { label: 'Copiar enlace', value: 'copy' },
-      { label: '📄 Contrato y documentos', value: 'docs' },
-      { label: 'Ver su pantalla (vista previa)', value: 'preview' },
-      ...(api.mode === 'demo' ? [{ label: 'Abrir su pantalla (demo)', value: 'open' }] : []),
-      { label: 'Cambiar nombre', value: 'rename' },
-      { label: 'Crear enlace nuevo (anula el anterior)', value: 'regen' },
-      { label: 'Descargar sus datos', value: 'export' },
-      { label: 'Borrar corredor', value: 'delete', kind: 'danger ghost' },
+      { label: 'Crear enlace nuevo (anula el anterior)', value: 'regen', kind: 'ghost' },
     ]);
-    if (!choice) return;
-    if (choice === 'wa') {
-      const msg = `Hola ${r.name}! Este es tu enlace personal para ver las carreras del Club Ciclista Monzón y apuntarte:\n${link}\n\nEs solo tuyo: no lo reenvíes. Consejo: ábrelo y añádelo a la pantalla de inicio.`;
-      window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
-    } else if (choice === 'copy') {
-      try { await navigator.clipboard.writeText(link); toast('Enlace copiado'); } catch { prompt('Copia el enlace:', link); }
-    } else if (choice === 'docs') {
-      go('#/docs/' + r.id);
-    } else if (choice === 'preview') {
-      const view = await run(() => api.runnerView(r.code));
-      if (!view) return;
-      S.preview = { name: r.name, sqlOk: Array.isArray(view.my_results) }; S.previewCode = r.code;
-      S.runnerData = view; S.myOpen = true; await loadNews(); await loadChron();
-      go('#/vista');
-    } else if (choice === 'open') {
-      await api.signOut(); S.session = null; S.data = null; go('#/c/' + r.code);
-    } else if (choice === 'rename') {
-      const name = cleanName(prompt('Nuevo nombre:', r.name) || '');
-      if (!name || name === r.name) return;
-      if (S.data.runners.some((x) => x.id !== r.id && normalize(x.name) === normalize(name))) return toast('Ya hay un corredor con ese nombre.', true);
-      await run(async () => { await api.updateRunner(r.id, { name }); await reload(); }, 'Nombre cambiado'); render();
-    } else if (choice === 'regen') {
-      if (!await confirmAction('Enlace nuevo', `El enlace actual de ${esc(r.name)} dejará de funcionar. Tendrás que enviarle el nuevo.`, 'Crear enlace nuevo')) return;
-      await run(async () => { await api.regenerateCode(r.id); await reload(); }, 'Enlace nuevo creado: envíaselo'); render();
-    } else if (choice === 'export') {
-      const races = S.data.races.filter((x) => x.results.some((y) => y.runner_id === r.id));
-      const data = { corredor: { nombre: r.name, categoria: r.category, contrato: r.contract ? contractLabel(r.contract) : null, alta: r.created_at },
-        resultados: races.map((x) => { const y = x.results.find((z) => z.runner_id === r.id);
-          return { fecha: x.date, carrera: x.name, lugar: x.place, provincia: x.province, pais: x.country, modalidad: x.modality, categoria: y.category, puesto: y.position, tipo_podio: isPodium(y.position) ? podiumLabel(y.podium_type) : null,
-            ...(x.stages?.length ? { etapas: x.stages.map((_, i) => ({ etapa: stageName(x, i), puesto: y.stage_positions?.[i] ?? null })) } : {}) }; }),
-        inscripciones: S.data.registrations.filter((g) => g.entries.some((e) => e.runner_id === r.id)).map((g) => ({ fecha: g.date, carrera: g.name })) };
-      download(`datos-${normalize(r.name).replace(/\W+/g, '-')}.json`, JSON.stringify(data, null, 2), 'application/json');
-    } else if (choice === 'delete') {
-      const how = await choose(`Borrar a ${r.name}`, 'Sale de la plantilla y de las inscripciones abiertas. ¿Qué hacemos con sus resultados de carreras pasadas?', [
-        { label: 'Mantener su nombre en el historial', value: 'keep', kind: 'primary' },
-        { label: 'Borrar también su nombre del historial (lo pide el corredor)', value: 'anon', kind: 'danger' },
-      ]);
-      if (!how) return;
-      await run(async () => { await api.deleteRunner(r.id, how === 'anon'); await reload(); }, 'Corredor borrado'); render();
-    }
+    if (choice) await runnerDo(choice, r);
   },
+  // Resto de acciones sobre un corredor, desde su ficha
+  async 'runner-do'(el) { const r = runnerById(el.dataset.id); if (r) await runnerDo(el.dataset.a, r); },
 
   async 'all-links'() {
     const text = [...S.data.runners].sort(byName).map((r) => `${r.name}: ${linkFor(r.code)}`).join('\n');
@@ -3849,6 +3995,16 @@ const actions = {
   },
   'sum-mod'(el) { S.sumMod = el.dataset.m; render(); },
   'pod-view'(el) { S.podView = el.dataset.v; render(); },
+  'tp-sort'(el) { const k = el.dataset.k, cur = S.tsort || { k: 'races', dir: -1 }; S.tsort = { k, dir: cur.k === k ? -cur.dir : (k === 'name' ? 1 : -1) }; render(); },
+  'tp-csv-runners'() {
+    const pk = seasonPack(S.year), rows = seasonRunnerRows(pk), ds = pk.s.disciplines;
+    const head = ['Corredor', 'Categoría', 'Carreras', 'Km', 'Tiempo (h)', 'Disciplinas distintas', 'Meses con carrera', 'Oros', 'Platas', 'Bronces', 'Podios', ...ds.map((d) => disciplineName(d))];
+    download(`monzon-corredores-${S.year}.csv`, toCsv(rows.sort((a, b) => b.races - a.races).map((r) => [r.name, r.cat, r.races, r.km || 0, Math.round((r.time || 0) / 36) / 100, r.nd, r.nm, r.p1, r.p2, r.p3, r.pod, ...ds.map((d) => r.discs[d.key] || 0)]), head), 'text/csv;charset=utf-8');
+  },
+  'tp-csv-disc'() {
+    const pk = seasonPack(S.year);
+    download(`monzon-disciplinas-${S.year}.csv`, toCsv(pk.s.disciplines.map((d) => [d.modality, d.subtype || '', d.races, d.participations, d.runners, d.podiums, d.wins]), ['Modalidad', 'Disciplina', 'Carreras', 'Participaciones', 'Corredores', 'Podios', 'Victorias']), 'text/csv;charset=utf-8');
+  },
   'part-view'(el) { S.partView = el.dataset.v; render(); },
   'race-mod'(el) { S.raceMod = el.dataset.m; render(); },
   'race-todo'() { S.raceTodo = !S.raceTodo; render(); },
