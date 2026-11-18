@@ -1039,12 +1039,12 @@ function myRacesCard(d, afterSummary = () => '') {
   ${pending.length ? `<section class="card chro-card pend-card has-pend" id="sec-pend"><details class="chro-det" data-open-key="pend"${S.open?.pend ? ' open' : ''}>
     <summary><span class="chro-ic">${ico('flag')}</span><b class="chro-t">Sin resultado</b>
       <span class="chro-tag pend">${pending.length} ${pending.length === 1 ? 'pendiente' : 'pendientes'}${ico('go')}</span></summary>
-    <p class="hint">Pon tu puesto: en cuanto lo pongas <b>ya cuenta para el bono</b>. Si no fuiste, ábrela y pulsa «No fui: borrarme».</p>
+    <p class="hint">Pon tu puesto: en cuanto lo pongas <b>ya cuenta para el bono</b>. Si no fuiste, pulsa «No fui: borrarme».</p>
     <ul class="mini-list">${pending.map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`,
       edit: editMine(g),
       below: g.my_result
         ? `<span class="badge-sent">${g.my_result.position}º${g.my_result.time_seconds ? ' · ' + formatTime(g.my_result.time_seconds) : ''} · ya cuenta</span>`
-        : (S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>`) })).join('')}</ul>
+        : (S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a><button type="button" class="btn ghost small" data-act="r-leave" data-id="${g.id}">No fui: borrarme</button>`) })).join('')}</ul>
   </details></section>` : ''}
 
   ${afterSummary()}
