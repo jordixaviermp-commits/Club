@@ -383,6 +383,7 @@ select runner_reply_news('DDDDDDDDDD', '40000000-0000-0000-0000-000000000001', '
 select runner_reply_news('CCCCCCCCCC', '40000000-0000-0000-0000-000000000001', 'no', 5);
 select pg_temp.check((select (n->>'yes_count')::int from jsonb_array_elements(runner_news('CCCCCCCCCC')) n where n->>'id' = '40000000-0000-0000-0000-000000000001') = 3, 'rsvp: cuenta él y sus 2 acompañantes');
 select pg_temp.check((select (n->>'no_count')::int from jsonb_array_elements(runner_news('DDDDDDDDDD')) n where n->>'id' = '40000000-0000-0000-0000-000000000001') = 1 and (select (n->>'my_guests')::int from jsonb_array_elements(runner_news('CCCCCCCCCC')) n where n->>'id' = '40000000-0000-0000-0000-000000000001') = 0, 'rsvp: un «no» no lleva acompañantes');
+select pg_temp.check((select jsonb_array_length(n->'yes_list') = 1 and (n->'yes_list'->0->>'guests')::int = 2 and (n->'yes_list'->0->>'name') is not null from jsonb_array_elements(runner_news('CCCCCCCCCC')) n where n->>'id' = '40000000-0000-0000-0000-000000000001'), 'rsvp: se ve quién asiste (nombre y acompañantes) y no los que dijeron que no');
 select runner_reply_news('DDDDDDDDDD', '40000000-0000-0000-0000-000000000001', 'no', 0);
 select pg_temp.check((select (n->>'yes_count')::int from jsonb_array_elements(runner_news('DDDDDDDDDD')) n where n->>'id' = '40000000-0000-0000-0000-000000000001') = 0, 'rsvp: puede cambiar su respuesta');
 select pg_temp.expect_fail($q$select runner_reply_news('DDDDDDDDDD', '40000000-0000-0000-0000-000000000002', 'si', 0)$q$, 'rsvp: una noticia que no lo pide no se responde');

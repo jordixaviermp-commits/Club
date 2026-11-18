@@ -1095,7 +1095,11 @@ begin
                                                        'my_answer', (select a.answer from announcement_replies a where a.announcement_id = n.id and a.runner_id = v_runner),
                                                        'my_guests', (select a.guests from announcement_replies a where a.announcement_id = n.id and a.runner_id = v_runner),
                                                        'yes_count', (select coalesce(count(*) + sum(a.guests), 0) from announcement_replies a where a.announcement_id = n.id and a.answer = 'si'),
-                                                       'no_count', (select count(*) from announcement_replies a where a.announcement_id = n.id and a.answer = 'no'))
+                                                       'no_count', (select count(*) from announcement_replies a where a.announcement_id = n.id and a.answer = 'no'),
+                                                       -- quién asiste (solo nombre y acompañantes), para verlo desplegado
+                                                       'yes_list', (select coalesce(jsonb_agg(jsonb_build_object('name', rn.name, 'guests', a.guests) order by rn.name), '[]'::jsonb)
+                                                                      from announcement_replies a join runners rn on rn.id = a.runner_id
+                                                                     where a.announcement_id = n.id and a.answer = 'si'))
                                     order by n.created_at desc)
                      from (select * from announcements where expires_at is null or expires_at >= current_date
                             order by created_at desc limit 30) n), '[]'::jsonb);
