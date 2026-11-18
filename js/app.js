@@ -97,10 +97,10 @@ const typeTag = (x) => {
   if (x.km) chips.push(`<span class="tag t-km">${ico('ruler', 't-i')}${kmText(x.km)}</span>`);
   return chips.length ? `<p class="type-line">${chips.join('')}</p>` : '';
 };
-/** Campos «Formato» (según la modalidad) y «Distancia» de los formularios. `attr` = data-f (dirección) o data-rf (corredor). */
-const detailInputs = (d, attr) => `<div class="grid2">
-    ${SUBTYPES[d.modality] ? `<label>Formato<select ${attr}="subtype"><option value="">Sin indicar</option>${SUBTYPES[d.modality].map((x) => opt(x, x, d.subtype)).join('')}</select></label>` : '<span></span>'}
-    <label>Distancia (km)<input type="number" inputmode="decimal" step="0.1" min="0.1" max="1000" ${attr}="km" value="${esc(d.km ?? '')}" placeholder="85"></label></div>`;
+/** Campos «Disciplina» (según la modalidad: obligatoria en BTT y Carretera) y «Distancia» de los formularios. `attr` = data-f (dirección) o data-rf (corredor). */
+const detailInputs = (d, attr) => `${SUBTYPES[d.modality] ? `<label class="disc-field">Disciplina de ${esc(d.modality)}<select ${attr}="subtype" required><option value="">Elige: ${SUBTYPES[d.modality].filter((x) => x !== 'Otra').slice(0, 3).join(', ')}…</option>${SUBTYPES[d.modality].map((x) => opt(x, x, d.subtype)).join('')}</select>
+      <small class="hint">Así el resumen y los gráficos del equipo reparten las carreras por disciplina.</small></label>` : ''}
+    <label>Distancia (km)<input type="number" inputmode="decimal" step="0.1" min="0.1" max="1000" ${attr}="km" value="${esc(d.km ?? '')}" placeholder="85"></label>`;
 /** Nombres de circuitos ya usados (para sugerirlos y no escribirlos de dos maneras). */
 function circuitNames() {
   const src = S.data && !S.preview ? [...S.data.races, ...S.data.registrations, ...(S.data.circuitPodiums || [])]
@@ -4205,10 +4205,10 @@ $app.addEventListener('change', async (ev) => {
   if (t.dataset.yearSel !== undefined) { S.year = Number(t.value); render(); return; }
   if (t.dataset.filter) { actions[{ mod: 'mod-filter', sub: 'sub-filter', who: 'who-filter' }[t.dataset.filter]]({ dataset: { m: t.value, s: t.value, w: t.value } }); return; }
   if (t.dataset.f === 'modality' && S.draft) { // cambia la modalidad: el formato depende de ella
-    S.draft.modality = t.value; if (!SUBTYPES[t.value]?.includes(S.draft.subtype)) S.draft.subtype = ''; render(); return;
+    S.draft.modality = t.value; if (!SUBTYPES[t.value]?.includes(S.draft.subtype)) S.draft.subtype = guessSubtype(S.draft.name, t.value); render(); return;
   }
   if (t.dataset.rf === 'modality' && S.rdraft) {
-    S.rdraft.modality = t.value; if (!SUBTYPES[t.value]?.includes(S.rdraft.subtype)) S.rdraft.subtype = ''; render(); return;
+    S.rdraft.modality = t.value; if (!SUBTYPES[t.value]?.includes(S.rdraft.subtype)) S.rdraft.subtype = guessSubtype(S.rdraft.name, t.value); render(); return;
   }
   if ('retype' in t.dataset) { // cambia el tipo de carrera: mostrar u ocultar el nombre del circuito
     const d = t.dataset.rf ? S.rdraft : S.draft;
