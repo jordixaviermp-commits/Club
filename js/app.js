@@ -120,7 +120,7 @@ const runnerById = (id) => S.data?.runners.find((r) => r.id === id);
 const linkFor = (code) => `${location.origin}${location.pathname}#/c/${code}`;
 /** Fecha de una carrera: un día, o «sáb 12 – lun 14 jun 2027 · 3 días» si es por etapas. */
 const when = (x) => x.end_date && x.end_date > x.date ? `${formatRange(x.date, x.end_date)} · ${numDays(x.date, x.end_date)} días` : formatDate(x.date);
-const place = (x) => [x.place, x.province, x.country && x.country !== DEFAULT_COUNTRY ? x.country : ''].filter(Boolean).join(' · ');
+const place = (x) => [...new Set([x.place, x.province, x.country && x.country !== DEFAULT_COUNTRY ? x.country : ''].filter(Boolean))].join(' · ');
 
 // ---------- utilidades de interfaz ----------
 
@@ -259,11 +259,11 @@ const ADMIN_TABS = [
 const icon = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
 // Menú de pie de página de los corredores (y de la vista previa de la dirección).
 const RUNNER_TABS = [
-  ['', 'Carreras', 'M8 2v3M16 2v3M3 9h18M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z'],
-  ['federaciones', 'Federaciones', 'M5 21V4M5 4h11l-2 4 2 4H5'],
-  ['mi', 'Mi temporada', 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1'],
-  ['contrato', 'Contrato', 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M9 13h6M9 17h6'],
-  ['equipo', 'Equipo', 'M4 20V10M10 20V4M16 20v-7M22 20H2'],
+  ['', 'Carreras', 'M6 19a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM9 16h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15'],
+  ['federaciones', 'Federaciones', 'M16 10h2M16 14h2M6.17 15a3 3 0 0 1 5.66 0M9 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z'],
+  ['mi', 'Mi temporada', 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM12 17.2a1.7 1.7 0 1 0 0-3.4 1.7 1.7 0 0 0 0 3.4zM8.8 21a3.2 3.2 0 0 1 6.4 0'],
+  ['contrato', 'Contrato', 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8'],
+  ['equipo', 'Equipo', 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75'],
 ];
 const runnerBase = () => (S.session?.isAdmin && S.preview ? '#/vista' : '#');
 const runnerHref = (sub) => (sub ? `${runnerBase()}/${sub}` : `${runnerBase()}/`);
@@ -910,6 +910,34 @@ function viewRunnerNew() {
       : '<button class="btn danger ghost block" data-act="r-delete-mine">🗑️ Borrar esta carrera</button>') : ''}`, { back: isRace ? runnerHref('mi') : runnerHref('') });
 }
 
+
+/** Iconos de línea (estilo Lucide) de Mi temporada: sustituyen a los emojis grandes. */
+const ICO = {
+  cal: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
+  ok: 'M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.78 4.78 4 4 0 0 1-6.74 0 4 4 0 0 1-4.78-4.78 4 4 0 0 1 0-6.74zM9 12l2 2 4-4',
+  flag: 'M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zM4 22v-7',
+  ban: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 8v4M12 16h.01',
+  go: 'M9 18l6-6-6-6',
+  pen: 'M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z',
+  trophy: 'M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22M18 2H6v7a6 6 0 0 0 12 0V2z',
+  book: 'M4 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM2 6h4M2 10h4M2 14h4M2 18h4M9 7h7M9 11h5',
+  route: 'M6 19a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM9 16h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15',
+  info: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 16v-4M12 8h.01',
+};
+const ico = (k, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${ICO[k]}"/></svg>`;
+/** Medalla de podio dibujada (sin emoji): círculo oro / plata / bronce con el puesto. */
+const medalBadge = (p) => `<i class="medal m${p}" aria-label="Puesto ${p}">${p}</i>`;
+/** Fila de carrera de Mi temporada: nombre y etiqueta («en 2 días · M40»), fecha en negrita · lugar y modalidad; flecha › a la derecha. */
+const mrow = (g, { pill = '', edit = '', below = '', end = '', href = '', hero = false } = {}) => `<li class="mrow ${modClass(g.modality)}${hero ? ' hero' : ''}${href ? ' tappable' : ''}">
+  ${hero ? '<span class="hero-badge">Próxima cita</span>' : ''}
+  ${href ? `<a class="mrow-main" href="${href}">` : '<div class="mrow-main">'}
+    <span class="mrow-l1"><b class="mrow-name">${esc(g.name)}</b>${pill ? `<span class="pill-next">${pill}</span>` : ''}</span>
+    <span class="mrow-l2"><b class="mrow-date">${esc(when(g))}</b>${place(g) ? `<span class="mrow-place">${esc(place(g))}</span>` : ''}${modTag(g.modality)}${g.km ? `<small class="muted">${kmText(g.km)}</small>` : ''}</span>
+  ${href ? '</a>' : '</div>'}
+  ${edit}
+  ${end || (href ? `<span class="mrow-go" aria-hidden="true">${ico('go')}</span>` : '')}
+  ${below ? `<div class="mrow-below">${below}</div>` : ''}</li>`;
+
 /** «Mis carreras»: sus carreras con resultados por temporada y las apuntadas pendientes de resultado. */
 function myRacesCard(d, afterSummary = () => '') {
   const results = d.my_results;
@@ -925,48 +953,47 @@ function myRacesCard(d, afterSummary = () => '') {
   const days = list.reduce((n, r) => n + numDays(r.date, r.end_date), 0);
   const row = (r) => {
     const stagePods = (r.stage_positions || []).slice(0, (r.stages || []).length).map((p, i) => ({ p, n: stageName(r, i) })).filter((x) => isPodium(x.p));
-    const pos = r.position ? `${isPodium(r.position) ? medal(r.position) + ' ' : ''}${r.position}º${r.category ? ` ${esc(r.category)}` : ''}${r.time_seconds ? `<br><small class="muted">⏱️ ${formatTime(r.time_seconds)}</small>` : ''}${r.self_reported ? '<br><small class="self-res">📝 puesto por ti</small>' : ''}`
+    const pos = r.position ? `${isPodium(r.position) ? medalBadge(r.position) : `${r.position}º`}${r.category ? ` <small>${esc(r.category)}</small>` : ''}${r.time_seconds ? `<br><small class="muted">${formatTime(r.time_seconds)}</small>` : ''}${r.self_reported ? '<br><small class="self-res">puesto por ti</small>' : ''}`
       : (S.preview ? '<span class="muted">sin puesto</span>' : `<a class="btn primary small" href="#/resultado/race_${r.race_id}">Poner mi puesto</a>`);
-    return `<li class="mini tappable ${modClass(r.modality)}"><a class="mini-main" href="${runnerHref('carrera')}/race_${r.race_id}"><b>${esc(r.name)}</b>
-      <small class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''} · ${esc(r.modality)}${r.km ? ` · ${kmText(r.km)}` : ''}</small>
-      ${stagePods.length ? `<small>${stagePods.map((x) => `${medal(x.p)} ${esc(x.n)}`).join(' · ')}</small>` : ''}</a>
-      <span class="pos">${pos}${r.mine_created && !S.preview ? `<br><a class="btn small edit-mine" href="#/editar/race_${r.race_id}" aria-label="Editar o borrar ${esc(r.name)}">✏️ Editar</a>` : ''}</span></li>`;
+    return mrow(r, { href: `${runnerHref('carrera')}/race_${r.race_id}`,
+      end: `<span class="pos">${pos}${r.mine_created && !S.preview ? `<br><a class="btn small edit-mine" href="#/editar/race_${r.race_id}" aria-label="Editar o borrar ${esc(r.name)}">✏️ Editar</a>` : ''}</span>`,
+      below: stagePods.length ? `<small>${stagePods.map((x) => `${medalBadge(x.p)} ${esc(x.n)}`).join(' · ')}</small>` : '' });
   };
   const myCat = (g) => g.entries.find((e) => e.runner_id === d.me.id)?.category;
-  const editMine = (g) => (g.mine_created && !S.preview ? `<a class="btn small edit-mine" href="#/editar/${g.id}" aria-label="Editar o borrar ${esc(g.name)}">✏️</a>` : '');
+  const editMine = (g) => (g.mine_created && !S.preview ? `<a class="edit-ico" href="#/editar/${g.id}" aria-label="Editar o borrar ${esc(g.name)}">${ico('pen')}</a>` : '');
   const dleft = (g) => { const n = Math.round((new Date(g.date + 'T12:00:00Z') - new Date(today + 'T12:00:00Z')) / 864e5);
     return n === 0 ? 'hoy' : n === 1 ? 'mañana' : `en ${n} días`; };
   return `
-  <section class="card sum-card"><h2>🧭 Mis carreras ${S.myYear}</h2>
+  <section class="card sum-card"><div class="sum-head"><h2>Mis carreras ${S.myYear}</h2>${ico('trophy', 'sum-trophy')}</div>
     <div class="tiles">
-      <a href="#" class="tile t-next" data-act="goto-sec" data-to="sec-next"><span class="t-i">📅</span><b>${upcoming.length}</b><span class="t-l">Próximas</span><small>inscrito</small></a>
-      <a href="#" class="tile t-done" data-act="goto-sec" data-to="sec-done"><span class="t-i">✅</span><b>${list.length}</b><span class="t-l">Hechas</span><small>${days !== list.length ? `${days} días de competición` : 'con resultado'}</small></a>
-      <a href="#" class="tile t-pend${pending.length ? ' alert' : ''}" data-act="goto-sec" data-to="sec-pend"><span class="t-i">🏁</span><b>${pending.length}</b><span class="t-l">Pendientes</span><small>${pending.length ? 'falta tu resultado' : 'de resultado'}</small></a>
-      <a href="#" class="tile t-canc" data-act="goto-sec" data-to="sec-canc"><span class="t-i">⛔</span><b>${cancelled.length}</b><span class="t-l">Anuladas</span><small>suspendidas</small></a>
+      <a href="#" class="tile t-next" data-act="goto-sec" data-to="sec-next"><span class="t-n">${upcoming.length}</span><span class="t-l">Próximas</span>${ico('cal', 't-ico')}<small>inscrito</small></a>
+      <a href="#" class="tile t-done" data-act="goto-sec" data-to="sec-done"><span class="t-n">${list.length}</span><span class="t-l">Hechas</span>${ico('ok', 't-ico')}<small>${days !== list.length ? `${days} días de competición` : 'con resultado'}</small></a>
+      <a href="#" class="tile t-pend${pending.length ? ' alert' : ''}" data-act="goto-sec" data-to="sec-pend"><span class="t-n">${pending.length}</span><span class="t-l">Pendientes</span>${ico('flag', 't-ico')}<small>${pending.length ? 'falta tu resultado' : 'de resultado'}</small></a>
+      <a href="#" class="tile t-canc" data-act="goto-sec" data-to="sec-canc"><span class="t-n">${cancelled.length}</span><span class="t-l">Anuladas</span>${ico('ban', 't-ico')}<small>suspendidas</small></a>
     </div>
     ${(() => { const tot = list.length + pending.length + upcoming.length + cancelled.length;
-      return tot ? `<div class="bar seg sum-bar" role="img" aria-label="Reparto de tus carreras">${[['seg-done', list.length], ['seg-pend', pending.length], ['seg-next', upcoming.length], ['seg-canc', cancelled.length]].filter(([, n]) => n).map(([c, n]) => `<span class="${c}" style="flex:${n}"></span>`).join('')}</div>
-        <div class="sum-legend"><span class="seg-done">✅ hechas</span><span class="seg-pend">🏁 pendientes</span><span class="seg-next">📅 próximas</span><span class="seg-canc">⛔ anuladas</span></div>` : ''; })()}
-    ${(() => { const pod = [1, 2, 3].map((k) => list.filter((x) => x.position === k).length);
-      return pod.some(Boolean) ? `<p class="podium-strip">🏅 Podios ${S.myYear}: ${pod[0] ? `🥇 ${pod[0]} ` : ''}${pod[1] ? `🥈 ${pod[1]} ` : ''}${pod[2] ? `🥉 ${pod[2]}` : ''}</p>` : ''; })()}
-    ${pending.length && !S.preview ? '<p class="hint alert-hint">👉 Tienes carreras ya corridas sin resultado: tócalas y pon tu puesto.</p>' : ''}
+      return tot ? `<div class="bar seg sum-bar" role="img" aria-label="Reparto de tus carreras">${[['seg-done', list.length], ['seg-pend', pending.length], ['seg-next', upcoming.length], ['seg-canc', cancelled.length]].filter(([, n]) => n).map(([c, n]) => `<span class="${c}" style="flex:${n}"></span>`).join('')}</div>` : ''; })()}
+    ${(() => { const pod = [1, 2, 3].map((k) => list.filter((x) => x.position === k).length), NAMES = [['Oro', 'Oros'], ['Plata', 'Platas'], ['Bronce', 'Bronces']];
+      return pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}">${medalBadge(i + 1)}${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : ''; })()}
+    ${pending.length && !S.preview ? '<p class="hint alert-hint">Tienes carreras ya corridas sin resultado: tócalas y pon tu puesto.</p>' : ''}
   </section>
 
   ${afterSummary()}
 
   <section class="card season-block next-block" id="sec-next">
-    <h2>📅 Mis próximas inscripciones <small>(${upcoming.length})</small></h2>
-    <p class="hint">Carreras a las que estás apuntado y que aún no se han corrido. <b>Toca una para abrirla</b>: ves quién va, puedes borrarte y, si la añadiste tú, editarla.</p>
-    ${upcoming.length ? `<ul class="mini-list">${upcoming.map((g) => miniRow(g, `<span class="badge-next">${dleft(g)}${myCat(g) ? ` · ${esc(myCat(g))}` : ''}</span>${editMine(g)}`, `${runnerHref('carrera')}/${g.id}`)).join('')}</ul>`
+    <h2 class="sec-h">Mis próximas inscripciones <small>(${upcoming.length})</small><button type="button" class="info-btn" data-act="info-next" aria-label="Qué es esto">${ico('info')}</button></h2>
+    ${upcoming.length ? `<ul class="mini-list">${upcoming.map((g, i) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, hero: i === 0, pill: `${dleft(g)}${myCat(g) ? ` · ${esc(myCat(g))}` : ''}`, edit: editMine(g) })).join('')}</ul>`
       : '<p class="empty small">No estás apuntado a ninguna. Búscalas en la pestaña Carreras.</p>'}
   </section>
 
   ${pending.length ? `<section class="card season-block pend-block" id="sec-pend">
-    <h2>🏁 Ya corridas, pendientes de resultado <small>(${pending.length})</small></h2>
-    <p class="hint">Estabas apuntado y ya se han disputado. Pon tu resultado (lo puedes cambiar después): <b>en cuanto lo pongas ya te cuenta para el bono</b>, y a los 3 días de acabar la carrera pasa sola a resultados. Si no fuiste, toca la carrera y pulsa «No fui: borrarme».</p>
-    <ul class="mini-list">${pending.map((g) => miniRow(g, (g.my_result
-      ? `<span class="badge-sent">📝 ${g.my_result.position}º${g.my_result.time_seconds ? " · ⏱️ " + formatTime(g.my_result.time_seconds) : ""} · ya cuenta</span>`
-      : (S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>`)) + editMine(g), `${runnerHref('carrera')}/${g.id}`)).join('')}</ul>
+    <h2 class="sec-h">Ya corridas, pendientes de resultado <small>(${pending.length})</small></h2>
+    <p class="hint">Pon tu puesto: en cuanto lo pongas <b>ya cuenta para el bono</b>. Si no fuiste, ábrela y pulsa «No fui: borrarme».</p>
+    <ul class="mini-list">${pending.map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`,
+      edit: editMine(g),
+      below: g.my_result
+        ? `<span class="badge-sent">${g.my_result.position}º${g.my_result.time_seconds ? ' · ' + formatTime(g.my_result.time_seconds) : ''} · ya cuenta</span>`
+        : (S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>`) })).join('')}</ul>
   </section>` : ''}
 
   ${(() => { const todo = results.filter((x) => missingFields(x).length);
@@ -975,18 +1002,17 @@ function myRacesCard(d, afterSummary = () => '') {
       <ul class="mini-list">${todo.slice(0, 20).map((x) => miniRow(x, `<span class="badge-pend">${missingFields(x).map((k) => FIELD_LABELS[k]).join(', ')}</span>`, `${runnerHref('carrera')}/race_${x.race_id}`)).join('')}</ul></details>` : ''; })()}
 
   ${cancelled.length ? `<section class="card season-block canc-block" id="sec-canc">
-    <h2>⛔ Anuladas <small>(${cancelled.length})</small></h2>
-    <p class="hint">Carreras que se suspendieron. Cuentan para el mínimo de carreras, pero no para la bonificación.</p>
-    <ul class="mini-list">${cancelled.map((g) => miniRow(g, '<span class="badge-pend">⛔ anulada</span>', `${runnerHref('carrera')}/${g.id}`)).join('')}</ul>
+    <h2 class="sec-h">Anuladas <small>(${cancelled.length})</small></h2>
+    <p class="hint">Suspendidas: cuentan para el mínimo de carreras, no para el bono.</p>
+    <ul class="mini-list">${cancelled.map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, below: '<span class="badge-pend">anulada</span>' })).join('')}</ul>
   </section>` : ''}
 
   <section class="card season-block done-block" id="sec-done">
-    <h2>✅ Carreras hechas ${S.myYear} <small>(${list.length}${days !== list.length ? ` · ${days} días para el bono` : ''})</small></h2>
+    <h2 class="sec-h">Carreras hechas ${S.myYear} <small>(${list.length}${days !== list.length ? ` · ${days} días para el bono` : ''})</small></h2>
     ${years.length > 1 ? `<div class="years">${years.map((y) => `<button class="chip${y === S.myYear ? ' on' : ''}" data-act="my-year" data-y="${y}">${y}</button>`).join('')}</div>` : ''}
     ${list.length ? `<ul class="mini-list">${list.map(row).join('')}</ul>`
       : `<p class="empty small">Todavía no hay carreras tuyas con resultado en ${S.myYear}.</p>`}
-    ${list.some((r) => r.mine_created) && !S.preview ? '<p class="hint">✏️ Las que añadiste tú las puedes editar (todos sus datos) o borrar.</p>' : ''}
-    <p class="hint">Si falta alguna carrera o un puesto, díselo a la dirección del club.</p>
+    <p class="hint">Si falta alguna carrera o un puesto, díselo a la dirección del club.${list.some((r) => r.mine_created) && !S.preview ? ' Las que añadiste tú las puedes editar o borrar.' : ''}</p>
   </section>`;
 }
 
@@ -1003,15 +1029,14 @@ function chronicleCard(d) {
   if (!c.total) return '';
   const plural = (n, a, b) => (n === 1 ? a : b);
   const li = (x, isDone) => `<li class="chro-row"><span class="chro-name"><b>${esc(x.name)}</b><small class="muted">${esc(formatDate(x.date, false))}${x.place ? ' · ' + esc(x.place) : ''}</small></span>${S.preview ? '' : `<button class="btn small${isDone ? ' ghost' : ' primary'}" data-act="chro-toggle" data-key="${esc(x.key)}" data-done="${isDone ? 0 : 1}">${isDone ? 'Deshacer' : '✓ Ya la pasé'}</button>`}</li>`;
-  return `<section class="card chro-card${c.pending.length ? ' has-pend' : ''}">
-    <div class="chro-top"><h3>✍️ Crónicas${year === new Date().getFullYear() ? '' : ` <small class="muted">${year}</small>`}</h3>
-      <div class="chro-pills"><span class="chro-pill pend${c.pending.length ? '' : ' zero'}"><b>${c.pending.length}</b> ${plural(c.pending.length, 'pendiente', 'pendientes')}</span><span class="chro-pill ok"><b>${c.done.length}</b> ${plural(c.done.length, 'pasada', 'pasadas')}</span></div></div>
-    <details class="chro-det" data-open-key="chro"${S.open?.chro ? ' open' : ''}>
-      <summary>${c.pending.length ? 'Ver las que me faltan y marcarlas' : 'Ver mis crónicas pasadas'}</summary>
-      <p class="hint">${CHRONICLE_RULE} Cuando lo hayas enviado, márcala.</p>
-      ${c.pending.length ? `<ul class="chro-list">${c.pending.map((x) => li(x, false)).join('')}</ul>${c.pending.length > 1 && !S.preview ? '<button class="btn small ghost" data-act="chro-all">✓ Marcar todas como pasadas</button>' : ''}` : '<p class="empty small">No te falta ninguna. 🎉</p>'}
-      ${c.done.length ? `<details class="chro-done"><summary>Pasadas (${c.done.length})</summary><ul class="chro-list">${c.done.map((x) => li(x, true)).join('')}</ul></details>` : ''}
-    </details></section>`;
+  const pend = c.pending.length;
+  return `<section class="card chro-card${pend ? ' has-pend' : ''}"><details class="chro-det" data-open-key="chro"${S.open?.chro ? ' open' : ''}>
+    <summary><span class="chro-ic">${ico('book')}</span><b class="chro-t">Crónicas${year === new Date().getFullYear() ? '' : ` <small class="muted">${year}</small>`}</b>
+      <span class="chro-tag ${pend ? 'pend' : 'ok'}">${pend ? `${pend} ${plural(pend, 'pendiente', 'pendientes')}` : `${c.done.length} ${plural(c.done.length, 'pasada', 'pasadas')}`}${ico('go')}</span></summary>
+    <p class="hint">${CHRONICLE_RULE} Cuando lo hayas enviado, márcala.</p>
+    ${pend ? `<ul class="chro-list">${c.pending.map((x) => li(x, false)).join('')}</ul>${pend > 1 && !S.preview ? '<button class="btn small ghost" data-act="chro-all">✓ Marcar todas como pasadas</button>' : ''}` : '<p class="empty small">No te falta ninguna. 🎉</p>'}
+    ${c.done.length ? `<details class="chro-done"${pend ? '' : ' open'}><summary>Pasadas (${c.done.length})</summary><ul class="chro-list">${c.done.map((x) => li(x, true)).join('')}</ul></details>` : ''}
+  </details></section>`;
 }
 
 function runnerBonusCard(d) {
@@ -1239,8 +1264,7 @@ function viewRunnerMine() {
   return frame(runnerTitle(), `
     ${previewBanner()}
     <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
-    <a class="btn block ruta-link" href="ruta/"><span>🗺️ Planificar ruta <span class="new-tag">NUEVO</span></span><small class="muted">Sube tu track y mira viento, tiempo y subidas</small></a>
-    ${myRacesCard(d, () => chronicleCard(d))}
+    ${myRacesCard(d, () => `<a class="card ruta-card" href="ruta/">${ico('route', 'ruta-ic')}<span class="ruta-txt"><b>Planificar ruta <span class="new-tag">NUEVO</span></b><small class="muted">Sube tu track y mira viento, tiempo y subidas</small></span><span class="mrow-go" aria-hidden="true">${ico('go')}</span></a>${chronicleCard(d)}`)}
     <a class="btn block" href="${runnerHref('contrato')}">📄 Mi contrato y mi bonificación</a>
     ${installHint()}
     ${S.preview ? '' : `<p class="center"><button class="link muted" data-act="r-forget">No soy ${esc(me.name)}</button></p>`}
@@ -3519,6 +3543,7 @@ const actions = {
   'net-filter'(el) { S.netFilter = el.dataset.f; S.netMore = false; render(); },
   'net-range'(el) { S.netAll = el.dataset.w === '1'; S.netMore = false; render(); },
   'net-more'() { S.netMore = true; render(); },
+  async 'info-next'() { await choose('Mis próximas inscripciones', 'Carreras a las que estás apuntado y que aún no se han corrido. <b>Toca una</b> para abrirla: ves quién va, puedes borrarte y, si la añadiste tú, editarla.', [{ label: 'Entendido', value: true, kind: 'primary' }]); },
   async 'chro-admin-all'(el) { await setChronicleFor(el.dataset.ids.split(','), el.dataset.key, true); },
   'ig-tab'(el) { S.igTab = el.dataset.t; render(); },
   async 'ig-per-del'(el) {
