@@ -2268,13 +2268,14 @@ function viewRaceEdit() {
 /** Resumen del equipo en la pantalla Equipo del corredor: filtros simples, cifras grandes, líderes con icono, modalidades, mes + formatos y clasificación compacta. */
 function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods, places, maxOf }) {
   const T = s.totals;
+  const modLabel = !mod ? '' : mod.includes('|') ? mod.split('|').filter(Boolean).join(' · ') : mod;
   const filters = `<div class="eq-filters"><label class="year-pick"><select data-year-sel aria-label="Temporada">${years.map((y) => `<option value="${y}"${y === S.year ? ' selected' : ''}>${y}</option>`).join('')}</select>${ico('chevd')}</label>
     <div class="eq-chips"><button class="chip${mod ? '' : ' on'}" data-act="sum-mod" data-m="all">Todos</button>${all.byModality.map((m) =>
-      `<button class="chip${mod === m.modality ? ' on' : ''}" data-act="sum-mod" data-m="${esc(m.modality)}">${esc(m.modality)}</button>`).join('')}</div></div>`;
+      `<button class="chip${mod === m.modality ? ' on' : ''}" data-act="sum-mod" data-m="${esc(m.modality)}">${esc(m.modality)}</button>`).join('')}${mod && mod.includes('|') ? `<button class="chip on" data-act="sum-mod" data-m="all" title="Quitar el filtro">${esc(modLabel)} ✕</button>` : ''}</div></div>`;
   const big = (n, label, c) => `<div class="b-${c}"><b>${n}</b><span>${label}</span></div>`;
   const mini = (icon, v, l, c) => `<div class="m-${c}"><i>${ico(icon)}</i><b>${v}</b><small>${l}</small></div>`;
   const hero = `<section class="sum-hero eq-hero ${cls}">
-    <p class="sum-hero-t">${ico('flag')}${mod ? esc(mod) : 'Todo el equipo'} · Temporada ${S.year}</p>
+    <p class="sum-hero-t">${ico('flag')}${mod ? esc(modLabel) : 'Todo el equipo'} · Temporada ${S.year}</p>
     <div class="sum-big">${big(T.races, 'Carreras', 'r')}${big(T.runners, 'Corredores', 'c')}${big(T.podiums, 'Podios', 'p')}${big(T.wins, 'Victorias', 'w')}</div>
     <div class="eq-mini">${mini('ruler', T.km ? kmText(T.km) : '—', 'totales', 'km')}${mini('clock', T.timed ? formatTime(T.time, true) : '—', 'en carrera', 'tm')}${mini('users', T.participations, 'particip.', 'pt')}${mini('bars', T.podiums ? `${Math.round((T.podiums / Math.max(1, T.participations)) * 100)} %` : '—', 'podios', 'pc')}</div>
   </section>`;
@@ -2284,11 +2285,11 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
     return `<div class="lead l-${icon}"><span class="lead-i">${ico(icon)}</span><small>${label}</small><b>${names(people.filter((r) => score(r) === top), 2)}</b><em>${top} ${top === 1 ? unit : unit + 's'}</em></div>`;
   };
   const leaders = [lead('flag', 'Más carreras', (r) => r.races, 'carrera'), lead('trophy', 'Más podios', (r) => r.p1 + r.p2 + r.p3, 'podio'), lead('medal', 'Más victorias', (r) => r.p1, 'victoria')].join('');
-  const byMod = `<section class="card eq-mod"><h2>Por modalidad</h2>
-    ${all.byModality.map((m) => `<button type="button" class="modrow2 ${modClass(m.modality)}${mod === m.modality ? ' sel' : ''}" data-act="sum-mod" data-m="${esc(m.modality)}">
-      <i class="stripe"></i><span class="mr-main"><b>${esc(m.modality)}</b><small>${m.runners} corredor${m.runners === 1 ? '' : 'es'} · ${m.participations} participaci${m.participations === 1 ? 'ón' : 'ones'}</small>
-        <span class="mr-chips"><span class="mchip-s">${ico('trophy')}${m.podiums}</span><span class="mchip-s w">${ico('medal')}${m.wins}</span></span></span>
-      <span class="mr-n"><b>${m.races}</b>carrera${m.races === 1 ? '' : 's'}</span></button>`).join('')}</section>`;
+  const byMod = `<section class="card eq-mod"><h2>Por disciplina</h2>
+    ${all.disciplines.map((x) => `<button type="button" class="modrow2 ${discClass(x.modality, x.subtype)}${mod === x.key ? ' sel' : ''}" data-act="sum-mod" data-m="${esc(x.key)}">
+      <i class="stripe"></i><span class="mr-main"><b>${esc(x.subtype ? `${x.modality} · ${x.subtype}` : x.modality)}</b><small>${x.runners} corredor${x.runners === 1 ? '' : 'es'} · ${x.participations} participaci${x.participations === 1 ? 'ón' : 'ones'}</small>
+        <span class="mr-chips"><span class="mchip-s">${ico('trophy')}${x.podiums}</span><span class="mchip-s w">${ico('medal')}${x.wins}</span></span></span>
+      <span class="mr-n"><b>${x.races}</b>carrera${x.races === 1 ? '' : 's'}</span></button>`).join('')}</section>`;
   // carreras por mes + formatos más comunes
   const maxMonth = maxOf(s.byMonth.map((m) => m.total));
   const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -2307,10 +2308,10 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
   const row = (r, i) => `<li class="${me && r.key === me ? 'me-row' : ''}${r.current ? ' tappable' : ''}"${r.current ? ` data-act="mate-open" data-id="${esc(r.key)}"` : ''}>
       <span class="avatar" style="--h:${hue(r.key)}">${esc(ini(r.name))}</span>
       <div class="rk"><div class="rk-h"><b>${i + 1}. ${esc(r.name)}</b>${r.km ? `<small class="muted">${kmText(r.km)}</small>` : ''}</div>
-        <div class="bar seg" style="width:${(r.races / maxR) * 100}%">${MODALITIES.filter((x) => r.mods[x]).map((x) => `<span class="${modClass(x)}" style="flex:${r.mods[x]}" title="${esc(x)}: ${r.mods[x]}"></span>`).join('')}</div></div>
+        <div class="bar seg" style="width:${(r.races / maxR) * 100}%">${all.disciplines.filter((d) => r.discs?.[d.key]).map((d) => `<span class="${discClass(d.modality, d.subtype)}" style="flex:${r.discs[d.key]}" title="${esc(discLabel(d.modality, d.subtype))}: ${r.discs[d.key]}"></span>`).join('')}</div></div>
       <span class="rk-n n${Math.min(i + 1, 3)}">${r.races}</span></li>`;
   const rest = active.slice(4);
-  const rank = `<section class="card eq-rank"><h2>Clasificación de corredores${mod ? ` · ${esc(mod)}` : ''}</h2>
+  const rank = `<section class="card eq-rank"><h2>Clasificación de corredores${mod ? ` · ${esc(modLabel)}` : ''}</h2>
     ${active.length ? `<ol class="rank rank2">${active.slice(0, 4).map(row).join('')}</ol>
       ${rest.length || idle.length ? `<details class="rank-more"><summary>+ ${rest.length + idle.length} corredores más</summary>
         ${rest.length ? `<ol class="rank rank2" start="5">${rest.map((r, i) => row(r, i + 4)).join('')}</ol>` : ''}
@@ -2328,10 +2329,13 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
   const years = availableYears(races);
   if (!years.includes(S.year)) S.year = years[0];
   const all = yearSummary(S.year, races, runners);          // todas las modalidades (para los selectores)
-  if (S.sumMod && S.sumMod !== 'all' && !all.byModality.some((m) => m.modality === S.sumMod)) S.sumMod = 'all';
+  // el filtro puede ser una modalidad («BTT») o, en la pantalla del corredor, una disciplina («BTT|XCO»)
+  if (S.sumMod && S.sumMod !== 'all' && !all.byModality.some((m) => m.modality === S.sumMod)
+    && !(!admin && S.sumMod.includes('|') && all.disciplines.some((d) => d.key === S.sumMod))) S.sumMod = 'all';
   const mod = S.sumMod && S.sumMod !== 'all' ? S.sumMod : null;
-  const s = mod ? yearSummary(S.year, races.filter((r) => r.modality === mod), runners) : all;  // lo que se ve, filtrado
-  const cls = mod ? modClass(mod) : '';
+  const isDisc = !!mod && mod.includes('|');
+  const s = mod ? yearSummary(S.year, races.filter((r) => (isDisc ? disciplineKey(r.modality, r.subtype) === mod : r.modality === mod)), runners) : all;  // lo que se ve, filtrado
+  const cls = mod && !isDisc ? modClass(mod) : '';
   const raceLink = (id, name) => admin ? `<a href="#/carreras/${id}">${esc(name)}</a>` : `<b>${esc(name)}</b>`;
   const names = (rows, n = 3) => rows.length <= n ? rows.map((r) => esc(r.name)).join(', ') : `${rows.slice(0, n).map((r) => esc(r.name)).join(', ')} y ${rows.length - n} más`;
   const maxOf = (arr) => Math.max(1, ...arr);
@@ -2429,7 +2433,7 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
     ${admin && s.missingPlace.length ? `<div class="warn"><b>Faltan datos en ${s.missingPlace.length} carrera${s.missingPlace.length === 1 ? '' : 's'}:</b>
       <ul>${s.missingPlace.map((m) => `<li><a href="#/carreras/${m.id}">${esc(m.name)}</a> (${formatRange(m.date, m.end_date, false)}): sin ${m.missing.join(' ni ')}</li>`).join('')}</ul></div>` : ''}</section>`;
 
-  if (!admin) return summaryRunner({ years, all, s, mod, cls, me, people, names, byModBlock: null, cats, pods, places, maxOf });
+  if (!admin) return summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods, places, maxOf });
   return `
     ${admin ? resumenTabs('club') : ''}
     ${yearPicker(years)}

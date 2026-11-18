@@ -230,7 +230,11 @@ export function yearSummary(year, races, runners) {
     const e = byDiscipline.get(dk) || { key: dk, modality: r.modality, subtype: r.subtype || '', races: 0 };
     e.races++; byDiscipline.set(dk, e);
   }
-  const disciplines = [...byDiscipline.values()].sort((a, b) => b.races - a.races || byText(a.key, b.key));
+  const disciplines = [...byDiscipline.values()].map((d) => {
+    const mine = (x) => disciplineKey(x.race.modality, x.race.subtype) === d.key;
+    return { ...d, participations: parts.filter(mine).length, podiums: podiums.filter(mine).length, wins: podiums.filter((p) => mine(p) && p.position === 1).length,
+      runners: new Set(parts.filter(mine).map((p) => personKey(p.res))).size };
+  }).sort((a, b) => b.races - a.races || byText(a.key, b.key));
 
   const countBy = (keyFn) => {
     const m = new Map();
@@ -244,15 +248,16 @@ export function yearSummary(year, races, runners) {
 
   // Participaciones por corredor: toda la plantilla (también con 0) y quien ya no está pero corrió ese año.
   const rows = new Map();
-  for (const rn of runners) rows.set(rn.id, { key: rn.id, name: rn.name, current: true, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {}, km: 0, time: 0, timed: 0 });
+  for (const rn of runners) rows.set(rn.id, { key: rn.id, name: rn.name, current: true, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {}, discs: {}, km: 0, time: 0, timed: 0 });
   for (const { race, res } of parts) {
     const k = personKey(res);
-    if (!rows.has(k)) rows.set(k, { key: k, name: res.runner_name, current: false, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {}, km: 0, time: 0, timed: 0 });
+    if (!rows.has(k)) rows.set(k, { key: k, name: res.runner_name, current: false, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {}, discs: {}, km: 0, time: 0, timed: 0 });
     const row = rows.get(k);
     row.races++;
     row.km = Math.round((row.km + (Number(race.km) || 0)) * 10) / 10;
     if (Number(res.time_seconds) > 0) { row.time += Number(res.time_seconds); row.timed++; }
     row.mods[race.modality] = (row.mods[race.modality] || 0) + 1;
+    { const dk = disciplineKey(race.modality, race.subtype); row.discs[dk] = (row.discs[dk] || 0) + 1; }
     if (race.modality === 'Carretera') row.road++;
     if (race.modality === 'BTT') row.btt++;
   }
