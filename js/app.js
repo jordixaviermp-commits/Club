@@ -85,10 +85,10 @@ function newsBell() {
 /** Etiqueta del tipo de carrera (campeonato o circuito). */
 const typeTag = (x) => {
   const chips = [];
-  if (x.race_type === 'campeonato') chips.push('<span class="tag t-champ">🏆 Campeonato</span>');
-  else if (x.race_type === 'circuito') chips.push(`<span class="tag t-circ">🔗 ${esc(x.circuit || 'Circuito')}</span>`);
+  if (x.race_type === 'campeonato') chips.push(`<span class="tag t-champ">${ico('trophy', 't-i')}Campeonato</span>`);
+  else if (x.race_type === 'circuito') chips.push(`<span class="tag t-circ">${ico('link', 't-i')}${esc(x.circuit || 'Circuito')}</span>`);
   if (x.subtype) chips.push(`<span class="tag t-sub">${esc(x.subtype)}</span>`);
-  if (x.km) chips.push(`<span class="tag t-km">📏 ${kmText(x.km)}</span>`);
+  if (x.km) chips.push(`<span class="tag t-km">${ico('ruler', 't-i')}${kmText(x.km)}</span>`);
   return chips.length ? `<p class="type-line">${chips.join('')}</p>` : '';
 };
 /** Campos «Formato» (según la modalidad) y «Distancia» de los formularios. `attr` = data-f (dirección) o data-rf (corredor). */
@@ -379,7 +379,7 @@ const ICON_SEARCH = 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3';
 const searchButton = () => `<button type="button" class="icon-btn" data-act="gsearch" aria-label="Buscar en toda la app" title="Buscar">${icon(ICON_SEARCH)}</button>`;
 const accidentButton = () => `<a class="icon-btn sos" href="#/accidente" aria-label="En caso de accidente: teléfono y datos del seguro" title="Accidente">${icon(ICON_AID)}</a>`;
 
-function frame(title, body, { back, actions = '', rtab = null } = {}) {
+function frame(title, body, { back, actions = '', rtab = null, noSearch = false } = {}) {
   const { view } = parseRoute();
   const admin = S.session?.isAdmin;
   const tabs = rtab !== null
@@ -391,7 +391,7 @@ function frame(title, body, { back, actions = '', rtab = null } = {}) {
     ${api.mode === 'demo' ? `<div class="demo-bar">Modo demostración: datos de prueba guardados solo en este móvil.</div>` : ''}
     <header class="top">
       ${back ? `<a class="back" href="${back}" aria-label="Volver">‹</a>` : '<img class="logo" src="icons/logo.png" alt="">'}
-      <h1>${esc(title)}</h1>${actions}${(admin && rtab === null && !back && S.data) || rtab !== null ? searchButton() + accidentButton() : ''}${admin && rtab === null && !back && S.data ? bellButton() : ''}${rtab !== null ? newsBell() : ''}
+      <h1>${esc(title)}</h1>${actions}${(admin && rtab === null && !back && S.data) || rtab !== null ? (noSearch ? '' : searchButton()) + accidentButton() : ''}${admin && rtab === null && !back && S.data ? bellButton() : ''}${rtab !== null ? newsBell() : ''}
     </header>
     <main>${body}</main>
     ${tabs}`;
@@ -631,6 +631,8 @@ function monthList(list, card) {
 const ICON_CAL = 'M8 2v3M16 2v3M3 9h18M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z';
 const ICON_BELL = 'M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0';
 const ICON_LIST = 'M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01';
+/** Interruptor «Lista | Calendario» (va encima de las carreras, ya no en la cabecera). */
+const viewSwitch = () => `<div class="seg-sw" role="group" aria-label="Cómo ver las carreras"><button type="button" class="${S.regView === 'cal' ? '' : 'on'}" data-act="reg-view" data-v="list">${ico('list')}Lista</button><button type="button" class="${S.regView === 'cal' ? 'on' : ''}" data-act="reg-view" data-v="cal">${ico('cal')}Calendario</button></div>`;
 const viewToggle = () => S.regView === 'cal'
   ? `<button class="icon-btn" data-act="reg-view" aria-label="Ver como lista" title="Ver como lista">${icon(ICON_LIST)}</button>`
   : `<button class="icon-btn" data-act="reg-view" aria-label="Ver calendario" title="Ver calendario">${icon(ICON_CAL)}</button>`;
@@ -923,6 +925,14 @@ const ICO = {
   book: 'M4 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM2 6h4M2 10h4M2 14h4M2 18h4M9 7h7M9 11h5',
   route: 'M6 19a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM9 16h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15',
   info: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 16v-4M12 8h.01',
+  clock: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2',
+  link: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71',
+  ruler: 'M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0zM14.5 12.5l2-2M11.5 9.5l2-2M8.5 6.5l2-2M17.5 15.5l2-2',
+  users: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
+  calplus: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM12 14v4M10 16h4',
+  check: 'M20 6L9 17l-5-5',
+  chevd: 'M6 9l6 6 6-6',
+  list: 'M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01',
 };
 const ico = (k, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${ICO[k]}"/></svg>`;
 /** Medalla de podio dibujada (sin emoji): círculo oro / plata / bronce con el puesto. */
@@ -1112,28 +1122,28 @@ function runnerRegCard(g) {
   const d = S.runnerData, me = d.me, today = d.today || todayISO();
     const mine = g.entries.find((e) => e.runner_id === me.id);
     const open = g.date >= today;
+    const soon = open && !g.suspended && daysTo(g.date) <= 14;
+    const edit = g.mine_created && !S.preview ? `<a class="edit-ico" href="#/editar/${g.id}" aria-label="Añadida por ti: editar o borrar la carrera" title="Añadida por ti: editar o borrar la carrera">${ico('pen')}</a>` : '';
+    const mates = g.entries.length ? `<div class="club-row"><span class="count">${ico('users')}${g.entries.length} del club</span><ul class="people">${g.entries.map((e) =>
+      `<li class="${e.runner_id === me.id ? 'me' : ''}">${esc(e.name)}${e.category ? ` <small>${esc(e.category)}</small>` : ''}</li>`).join('')}</ul></div>` : '';
     return `<article class="card race ${open ? '' : 'past-reg '}${modClass(g.modality)}">
       <div class="race-head"><div><h3>${esc(g.name)}</h3>
-        <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p>${open && !g.suspended && daysTo(g.date) <= 14 ? `<span class="soon${daysTo(g.date) <= 7 ? ' now' : ''}">${daysTo(g.date) === 0 ? '🔥 ' : '⏳ '}${daysToText(daysTo(g.date))}</span>` : ''}</div>
-        ${modTag(g.modality)}</div>${typeTag(g)}
-      ${g.suspended ? '<p class="state-tag">⛔ Suspendida: cuenta para el mínimo de carreras, no para el bono</p>' : ''}
-      ${open || g.suspended ? '' : `<p class="state-tag">🏁 Ya disputada · pendiente de resultados</p>
-        ${mine && !S.preview ? (g.my_result ? `<p class="mine-created">📝 Tu resultado: ${g.my_result.position}º (enviado) · <a href="#/resultado/reg_${g.id}">✏️ Cambiar mi resultado</a></p>`
+        <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}${soon ? ` <span class="soon${daysTo(g.date) <= 7 ? ' now' : ''}">${ico('clock', 't-i')}${daysToText(daysTo(g.date))}</span>` : ''}</p></div>
+        <div class="race-side">${modTag(g.modality)}${edit}</div></div>${typeTag(g)}
+      ${g.suspended ? `<p class="state-tag">${ico('ban', 't-i')}Suspendida: cuenta para el mínimo de carreras, no para el bono</p>` : ''}
+      ${open || g.suspended ? '' : `<p class="state-tag">${ico('flag', 't-i')}Ya disputada · pendiente de resultados</p>
+        ${mine && !S.preview ? (g.my_result ? `<p class="mine-created">Tu resultado: ${g.my_result.position}º (enviado) · <a href="#/resultado/reg_${g.id}">${ico('pen', 't-i')}Cambiar</a></p>`
           : `<p class="row"><a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>
              <button class="btn ghost small" data-act="r-leave" data-id="${g.id}">No fui: borrarme</button></p>`) : ''}
         ${!mine && g.date >= pastLimit() ? `<div class="row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">La hice: apuntarme</button></div>` : ''}`}
-      ${g.mine_created && !S.preview ? `<p class="mine-created">Añadida por ti · <a href="#/editar/${g.id}">✏️ Editar o borrar</a></p>` : ''}
       ${g.notes ? `<p class="notes">${esc(g.notes)}</p>` : ''}
-      <p class="count">👥 ${g.entries.length} del club</p>
-      ${g.entries.length ? `<ul class="people">${g.entries.map((e) =>
-        `<li class="${e.runner_id === me.id ? 'me' : ''}">${esc(e.name)}${e.category ? ` <small>${esc(e.category)}</small>` : ''}</li>`).join('')}</ul>` : ''}
+      ${mates}
       ${!open || g.suspended ? '' : mine
-        ? `<div class="joined-box"><p class="joined-msg">✓ Estás inscrito${mine.category ? ' en ' + esc(mine.category) : ''}</p>
-           <div class="joined-acts">
-             <a class="btn ghost small" href="ruta/?fecha=${esc(g.date)}" aria-label="Planificar la ruta de esta carrera: viento, tiempo y subidas">🗺️ Planificar</a>
-             <button class="btn ghost small" data-act="r-ics" data-id="${g.id}" aria-label="Añadir al calendario del móvil">📅 Calendario</button>
-             <button class="btn ghost small" data-act="r-leave" data-id="${g.id}">Borrarme</button></div></div>`
+        ? `<div class="joined-acts">
+             <button class="btn joined-btn" data-act="r-joined" data-id="${g.id}" aria-label="Estás inscrito${mine.category ? ' en ' + esc(mine.category) : ''}: cambiar categoría o borrarme">${ico('check')}<span>Inscrito${mine.category ? ' (' + esc(mine.category) + ')' : ''}</span>${ico('chevd', 'jb-more')}</button>
+             <a class="btn ghost small" href="ruta/?fecha=${esc(g.date)}" aria-label="Planificar la ruta de esta carrera: viento, tiempo y subidas">${ico('route')}Planificar</a>
+             <button class="btn ghost small" data-act="r-ics" data-id="${g.id}" aria-label="Añadir al calendario del móvil">${ico('calplus')}Calendario</button></div>`
         : `<div class="row join-row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">Apuntarme</button></div>`}
     </article>`;
@@ -1155,11 +1165,14 @@ function teamPulse(d) {
   const cols = [...byMonth].sort(([a], [b]) => a.localeCompare(b)).slice(0, 7);
   const mx = Math.max(1, ...cols.map(([, m]) => m.total));
   const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-  return `<section class="card pulse"><h3>🚴 El equipo ya está apuntado</h3>
-    <p class="pulse-sum"><b>${parts}</b> inscripci${parts === 1 ? 'ón' : 'ones'} en <b>${up.length}</b> carrera${up.length === 1 ? '' : 's'} próxima${up.length === 1 ? '' : 's'} · <b>${people}</b> corredor${people === 1 ? '' : 'es'}${mine ? ` · tú estás en <b>${mine}</b>` : ''}</p>
+  const mods = MODALITIES.filter((x) => cols.some(([, m]) => m.mods[x]));
+  return `<section class="card pulse"><h3>${ico('users')}El equipo ya está apuntado</h3>
+    <div class="pulse-nums"><div class="pn"><b>${up.length}</b><span>carrera${up.length === 1 ? '' : 's'} próxima${up.length === 1 ? '' : 's'}<small>${parts} inscripci${parts === 1 ? 'ón' : 'ones'} · ${people} corredor${people === 1 ? '' : 'es'}</small></span></div>
+      ${mine ? `<div class="pn me"><b>${mine}</b><span><i>Tú estás en</i><small>${mine === 1 ? 'carrera' : 'carreras'}</small></span></div>` : ''}</div>
     <div class="months pulse-months" role="group" aria-label="Inscripciones del equipo por mes">${cols.map(([ym, m]) => `<button type="button" class="mcol pulse-col" data-act="pulse-month" data-m="${ym}" aria-label="${MES[Number(ym.slice(5)) - 1]}: ${m.total} inscripciones en ${m.races} carreras">
       <em>${m.total}</em><div class="mstack" style="height:${(m.total / mx) * 100}%">${MODALITIES.filter((x) => m.mods[x]).map((x) => `<span class="${modClass(x)}" style="flex:${m.mods[x]}" title="${esc(x)}: ${m.mods[x]}"></span>`).join('')}</div>
-      <b>${MES[Number(ym.slice(5)) - 1]}</b></button>`).join('')}</div></section>`;
+      <b>${MES[Number(ym.slice(5)) - 1]}</b></button>`).join('')}</div>
+    <p class="pulse-legend">${mods.map((x) => `<span class="${modClass(x)}"><i></i>${esc(x)}</span>`).join('')}</p></section>`;
 }
 
 /** Tarjeta «Planificar ruta» (herramienta ruta/): va en Carreras, justo bajo el buscador. */
@@ -1190,8 +1203,9 @@ function viewRunnerHome() {
     ${S.preview ? '' : rutaCard()}
     <div id="pulse-box">${normalize(S.q.runner || '').length >= 2 ? '' : teamPulse(d)}</div>
     <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
+    <div class="view-row">${viewSwitch()}</div>
     ${body}`,
-  { rtab: '', actions: `${viewToggle()}${S.preview ? '' : '<button class="icon-btn" data-act="r-refresh" aria-label="Actualizar">↻</button>'}` });
+  { rtab: '', noSearch: true });
 }
 
 const FIELD_LABELS = { province: 'provincia', km: 'distancia', subtype: 'formato' };
@@ -2823,12 +2837,12 @@ function askLink(title, text, current) {
 }
 
 /** Ventana para elegir la categoría con la que se apunta alguien (obligatoria). Devuelve la categoría o null si cancela. */
-function askCategory(name) {
+function askCategory(name, okLabel = 'Apuntarme', current = '') {
   return new Promise((resolve) => {
     const dlg = document.getElementById('dialog');
     dlg.innerHTML = `<form method="dialog" class="dlg"><h2>¿En qué categoría?</h2><p>${esc(name || '')}</p>
-      <label>Tu categoría${catSelect('name="cat" required', '', 'Elige tu categoría')}</label>
-      <div class="dlg-actions"><button value="ok" class="btn primary">Apuntarme</button><button value="" class="btn ghost" formnovalidate>Cancelar</button></div></form>`;
+      <label>Tu categoría${catSelect('name="cat" required', current, 'Elige tu categoría')}</label>
+      <div class="dlg-actions"><button value="ok" class="btn primary">${esc(okLabel)}</button><button value="" class="btn ghost" formnovalidate>Cancelar</button></div></form>`;
     dlg.onclose = () => resolve(dlg.returnValue === 'ok' ? dlg.querySelector('select[name="cat"]').value || null : null);
     dlg.returnValue = '';
     dlg.showModal();
@@ -3313,6 +3327,20 @@ const actions = {
     await run(async () => { await api.runnerLeave(S.code, el.dataset.id); await loadRunner(); }, 'Te has borrado');
     render();
   },
+  // Botón verde «✓ Inscrito (M40)»: cambiar la categoría o borrarse
+  async 'r-joined'(el) {
+    const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id); if (!g) return;
+    const mine = g.entries.find((e) => e.runner_id === S.runnerData.me.id);
+    const pick = await choose(g.name, `Estás inscrito${mine?.category ? ' en <b>' + esc(mine.category) + '</b>' : ''}.`, [
+      { label: 'Cambiar mi categoría', value: 'cat', kind: 'primary' },
+      { label: 'Borrarme de esta carrera', value: 'leave', kind: 'danger' }]);
+    if (pick === 'leave') return actions['r-leave'](el);
+    if (pick !== 'cat') return;
+    const cat = await askCategory(g.name, 'Guardar', mine?.category || '');
+    if (!cat || cat === mine?.category) return;
+    await run(async () => { await api.runnerJoin(S.code, g.id, cat); await loadRunner(); }, 'Categoría cambiada');
+    render();
+  },
   async 'r-refresh'() { await run(loadRunner, 'Actualizado'); render(); },
   async 'r-forget'() {
     if (!await confirmAction('Salir', 'Se olvidará tu enlace en este móvil. Para volver a entrar necesitarás abrirlo de nuevo.', 'Salir')) return;
@@ -3357,8 +3385,8 @@ const actions = {
     else if (c === 'week') go('#/semana');
     else if (c?.startsWith('link')) window.open(FED_CALENDARS[Number(c.slice(4))].url, '_blank', 'noopener,noreferrer');
   },
-  'reg-view'() {
-    S.regView = S.regView === 'cal' ? 'list' : 'cal'; S.calDay = null; store.set(VIEW_KEY, S.regView);
+  'reg-view'(el) {
+    S.regView = el?.dataset?.v || (S.regView === 'cal' ? 'list' : 'cal'); S.calDay = null; store.set(VIEW_KEY, S.regView);
     if (S.regView === 'cal' && S.runnerData && !S.team && (S.code || S.previewCode)) loadTeam();
     render();
   },
@@ -3948,7 +3976,7 @@ document.addEventListener('visibilitychange', async () => {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['chro-toggle', 'chro-all', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
+const RUNNER_ACTIONS = new Set(['chro-toggle', 'chro-all', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
 // los enlaces de la ventana emergente (p. ej. las carreras de un compañero) cierran la ventana al navegar
 document.getElementById('dialog').addEventListener('click', (ev) => { if (ev.target.closest('a[href^="#/"]')) ev.currentTarget.close(); });
 $app.addEventListener('click', (ev) => {
@@ -4095,3 +4123,14 @@ window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); S.in
   await onRoute();
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
+
+// Deslizar hacia abajo para actualizar (en el móvil del corredor, estando arriba del todo)
+{
+  let y0 = null;
+  document.addEventListener('touchstart', (ev) => { y0 = window.scrollY <= 0 && !document.getElementById('dialog')?.open && ev.touches.length === 1 ? ev.touches[0].clientY : null; }, { passive: true });
+  document.addEventListener('touchend', (ev) => {
+    const y = y0; y0 = null;
+    if (y === null || !S.runnerData || S.preview || S.session?.isAdmin || window.scrollY > 0) return;
+    if (ev.changedTouches[0].clientY - y > 110) actions['r-refresh']();
+  }, { passive: true });
+}
