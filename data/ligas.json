@@ -43,6 +43,19 @@
   },
   {
    "source": "LIGA",
+   "league": "La Invernal Motorland 2027",
+   "date": "2027-01-23",
+   "name": "La Invernal Motorland",
+   "place": "Alcañiz (Motorland Aragón)",
+   "province": "Teruel",
+   "country": "España",
+   "modality": "Carretera",
+   "discipline": "Carretera",
+   "kind": "Competición",
+   "info": "La Invernal · Motorland Aragón · 23 y 24 de enero · Ciclismo, carrera a pie y patinaje en circuito · Inscripciones muy pronto"
+  },
+  {
+   "source": "LIGA",
    "league": "Copa Catalana Internacional BTT 2027",
    "circuit": "Copa Catalana Internacional BTT",
    "date": "2027-01-30",

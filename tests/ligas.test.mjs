@@ -73,3 +73,10 @@ test('Marathon Cup BTT 2027: 3 pruebas de XCM que se encuentran por liga, pueblo
   assert.ok(mc.every((r) => r.subtype === 'XCM' && r.circuit === 'Marathon Cup BTT'));
   assert.equal(mc.find((r) => r.place === 'Naturland').country, 'Andorra');
 });
+
+test('La Invernal Motorland 2027: sale al buscar por nombre o circuito', () => {
+  const names = (q) => searchRaces(q, data.races).map((r) => r.name);
+  assert.ok(names('invernal').includes('La Invernal Motorland'));
+  assert.ok(names('motorland').includes('La Invernal Motorland'));
+  assert.equal(data.races.find((r) => r.name === 'La Invernal Motorland').date, '2027-01-23');
+});
