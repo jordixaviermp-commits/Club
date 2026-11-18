@@ -1345,3 +1345,21 @@ nav.tabs a:not(.on) svg { padding: 3px 16px; box-sizing: content-box; }
 .next-hero li.mrow.hero { margin: 0; padding: 1rem .9rem .8rem; border: 3px solid var(--brand-cyan); box-shadow: 0 4px 14px color-mix(in srgb, var(--brand-cyan) 30%, transparent); background: color-mix(in srgb, var(--brand-cyan) 14%, var(--card)); }
 .next-hero .mrow-name { font-size: 1.2rem; } .next-hero .mrow-date { font-size: .95rem; }
 .next-hero .hero-badge { font-size: .78rem; padding: .2rem .85rem; }
+
+/* Toda la fila de carrera se abre al tocarla (también la flecha, el nombre y los huecos); el lápiz y los botones siguen funcionando aparte */
+.mini-list li.mrow.tappable { position: relative; cursor: pointer; }
+.mini-list li.mrow.tappable > .mrow-main::after { content: ""; position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
+.mini-list li.mrow.tappable a:not(.mrow-main), .mini-list li.mrow.tappable button { position: relative; z-index: 2; }
+.hero-badge { pointer-events: none; z-index: 3; }
+.mini-list li.mrow.tappable > .mrow-go { position: relative; z-index: 0; pointer-events: none; }
+.mini-list li.mrow.tappable:active { background: var(--accent-2); }
+.mini-list li.mrow.hero.tappable:active { background: color-mix(in srgb, var(--brand-cyan) 24%, var(--card)); }
+
+/* ---- El título de cada carrera, siempre en MAYÚSCULAS y bien visible, en toda la app ---- */
+.race-head h3, .mrow-name, .rname, .chro-name b, .mini-list li.mini:not(.mate-row) .mini-main > b, .mini-list li.mini:not(.mate-row) > div > b {
+  text-transform: uppercase; font-weight: 800; letter-spacing: .015em; color: var(--text); }
+.race-head h3 { font-size: 1.12rem; line-height: 1.2; }
+.mini-list li.mrow .mrow-name { font-size: 1.05rem; line-height: 1.2; }
+.mini-list li.mini:not(.mate-row) .mini-main > b { font-size: 1rem; }
+.pod-l2 .rname { font-size: .92rem; }
+.next-hero .mrow-name { font-size: 1.25rem; }

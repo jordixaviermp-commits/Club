@@ -868,7 +868,7 @@ function viewRunnerReport(key) {
   const cat = kind === 'reg' ? race.entries.find((e) => e.runner_id === d.me.id)?.category : race.category;
   return frame(cur ? 'Cambiar mi resultado' : 'Mi resultado', `${previewBanner()}
     <form class="card stack" data-form="r-report" data-kind="${kind}" data-id="${id}">
-      <div><h3>${esc(race.name)}</h3><p class="muted">${when(race)}${place(race) ? ' · ' + esc(place(race)) : ''} · ${esc(modText(race))}</p></div>
+      <div><h3 class="rname">${esc(race.name)}</h3><p class="muted">${when(race)}${place(race) ? ' · ' + esc(place(race)) : ''} · ${esc(modText(race))}</p></div>
       <div class="grid2">
         <label>Tu puesto<input type="number" name="position" inputmode="numeric" min="1" max="999" required autofocus value="${esc(cur?.position ?? '')}"></label>
         <label>Categoría${catSelect('name="category"', cat || d.me.category || '', 'Categoría')}</label>
@@ -2354,7 +2354,7 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
   const podItem = (x) => `<li class="pod-item m${x.position}">
       <i class="medal m${x.position}"></i>
       <div class="pod-main"><div class="pod-l1"><b>${esc(x.runner)}</b><span class="pod-pos m${x.position}">${medalNames[x.position - 1]} ${x.category ? `de ${esc(x.category)}` : 'sin categoría'}</span></div>
-        <div class="pod-l2">${esc(x.race)} <span class="muted">· ${esc(formatDate(x.date, false))}</span></div>
+        <div class="pod-l2"><b class="rname">${esc(x.race)}</b> <span class="muted">· ${esc(formatDate(x.date, false))}</span></div>
         <div class="pod-l3">${modTag(x.modality, x.subtype)}<span class="tag t-type">${typeLabel(x)}</span></div></div></li>`;
   const SHOWN = 5;
   const podRunner = `<section class="card eq-pods"><h2>Podios${mod ? ` · ${esc(modLabel)}` : ' del año'}</h2>
@@ -2385,7 +2385,7 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
   const isDisc = !!mod && mod.includes('|');
   const s = mod ? yearSummary(S.year, races.filter((r) => (isDisc ? disciplineKey(r.modality, r.subtype) === mod : r.modality === mod)), runners) : all;  // lo que se ve, filtrado
   const cls = mod && !isDisc ? modClass(mod) : '';
-  const raceLink = (id, name) => admin ? `<a href="#/carreras/${id}">${esc(name)}</a>` : `<b>${esc(name)}</b>`;
+  const raceLink = (id, name) => admin ? `<a class="rname" href="#/carreras/${id}">${esc(name)}</a>` : `<b class="rname">${esc(name)}</b>`;
   const names = (rows, n = 3) => rows.length <= n ? rows.map((r) => esc(r.name)).join(', ') : `${rows.slice(0, n).map((r) => esc(r.name)).join(', ')} y ${rows.length - n} más`;
   const maxOf = (arr) => Math.max(1, ...arr);
 
@@ -3034,7 +3034,7 @@ function askLink(title, text, current) {
 function askPaid(name, mine) {
   return new Promise((resolve) => {
     const dlg = document.getElementById('dialog');
-    dlg.innerHTML = `<form method="dialog" class="dlg"><h2>Pago de la inscripción</h2><p>${esc(name || '')}</p>
+    dlg.innerHTML = `<form method="dialog" class="dlg"><h2>Pago de la inscripción</h2><p><b>${esc((name || '').toLocaleUpperCase('es'))}</b></p>
       <p class="hint">Anota que ya la has pagado en la web de la carrera. Tus compañeros verán que la tienes pagada; <b>el importe y el día solo los ves tú</b>.</p>
       <label>Importe pagado (opcional)<input name="amount" type="number" inputmode="decimal" step="0.01" min="0" max="10000" placeholder="Ej.: 25" value="${mine?.paid_amount ?? ''}"></label>
       <label>Día del pago<input name="date" type="date" max="${todayISO()}" value="${mine?.paid_on || todayISO()}"></label>
@@ -3054,7 +3054,7 @@ function askPaid(name, mine) {
 function askCategory(name, okLabel = 'Apuntarme', current = '') {
   return new Promise((resolve) => {
     const dlg = document.getElementById('dialog');
-    dlg.innerHTML = `<form method="dialog" class="dlg"><h2>¿En qué categoría?</h2><p>${esc(name || '')}</p>
+    dlg.innerHTML = `<form method="dialog" class="dlg"><h2>¿En qué categoría?</h2><p><b>${esc((name || '').toLocaleUpperCase('es'))}</b></p>
       <label>Tu categoría${catSelect('name="cat" required', current, 'Elige tu categoría')}</label>
       <div class="dlg-actions"><button value="ok" class="btn primary">${esc(okLabel)}</button><button value="" class="btn ghost" formnovalidate>Cancelar</button></div></form>`;
     dlg.onclose = () => resolve(dlg.returnValue === 'ok' ? dlg.querySelector('select[name="cat"]').value || null : null);
@@ -3554,7 +3554,7 @@ const actions = {
   async 'r-joined'(el) {
     const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id); if (!g) return;
     const mine = g.entries.find((e) => e.runner_id === S.runnerData.me.id);
-    const pick = await choose(g.name, `Estás inscrito${mine?.category ? ' en <b>' + esc(mine.category) + '</b>' : ''}.`, [
+    const pick = await choose(g.name.toLocaleUpperCase('es'), `Estás inscrito${mine?.category ? ' en <b>' + esc(mine.category) + '</b>' : ''}.`, [
       { label: 'Cambiar mi categoría', value: 'cat', kind: 'primary' },
       { label: 'Borrarme de esta carrera', value: 'leave', kind: 'danger' }]);
     if (pick === 'leave') return actions['r-leave'](el);
