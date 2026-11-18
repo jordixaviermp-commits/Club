@@ -721,9 +721,10 @@ function calendarView(regs, card, isMine = () => false, { done = [], doneCard = 
 //  Buscador «lupa»: encontrar una carrera antes de crearla (para no duplicar)
 // ======================================================================
 
-const searchBox = (scope, placeholder) => `<label class="search">
+const searchBox = (scope, placeholder, { marquee = '' } = {}) => `<label class="search${marquee ? ' has-marquee' : ''}">
   <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-  <input type="search" data-search="${scope}" value="${esc(S.q[scope] || '')}" placeholder="${esc(placeholder)}" autocomplete="off" enterkeyhint="search"></label>`;
+  <input type="search" data-search="${scope}" value="${esc(S.q[scope] || '')}" placeholder="${marquee ? ' ' : esc(placeholder)}" aria-label="${esc(marquee || placeholder)}" autocomplete="off" enterkeyhint="search">
+  ${marquee ? `<span class="ph-marquee" aria-hidden="true"><span>${esc(marquee)}</span></span>` : ''}</label>`;
 
 /** Carreras de las federaciones que aún no están en el club, parecidas a lo buscado. */
 function fedMatches(q, existing, limit = 5) {
@@ -1303,16 +1304,15 @@ function viewRunnerHome() {
   return frame(runnerTitle(), `
     ${previewBanner()}
     <div class="toolbar">
-      ${searchBox('runner', 'Buscar…')}
+      ${searchBox('runner', 'Buscar…', { marquee: 'Buscar carrera, corredor, lugar…' })}
       <button class="btn primary add-btn" data-act="r-new" aria-label="Añadir una carrera que no está" title="Añadir una carrera que no está">＋</button>
       ${S.fd?.has ? `<button type="button" class="icon-btn fbtn${S.fd.active ? ' on' : ''}" data-act="r-filters" aria-label="Filtros${S.fd.active ? ' (activos)' : ''}" title="Filtros">${icon(ICON_FILTER)}${S.fd.active ? '<i class="fdot"></i>' : ''}</button>` : ''}
+      ${S.preview ? '' : `<a class="icon-btn fbtn ruta-btn" href="ruta/" aria-label="Planificar ruta: sube tu track y mira viento, tiempo y subidas" title="Planificar ruta">${ico('route')}</a>`}
       <button type="button" class="icon-btn fbtn view-btn${S.regView === 'cal' ? ' on' : ''}" data-act="reg-view" aria-label="${S.regView === 'cal' ? 'Ver como lista' : 'Ver calendario'}" title="${S.regView === 'cal' ? 'Ver como lista' : 'Ver calendario'}">${icon(S.regView === 'cal' ? ICON_LIST : ICON_CAL)}</button>
     </div>
-    ${S.regView === 'cal' || S.preview ? '' : rutaCard()}
     <div id="pulse-box">${S.regView === 'cal' || normalize(S.q.runner || '').length >= 2 ? '' : teamPulse(d)}</div>
     <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
-    ${body}
-    ${S.regView === 'cal' && !S.preview ? rutaCard() : ''}`,
+    ${body}`,
   { rtab: '', noSearch: true });
 }
 

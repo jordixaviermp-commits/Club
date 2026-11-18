@@ -1446,3 +1446,19 @@ nav.tabs a:not(.on) svg { padding: 3px 16px; box-sizing: content-box; }
 .cal-legend::-webkit-scrollbar { display: none; }
 .cal-legend span { flex: none; padding: 0; border: 0; background: none; font-size: .72rem; font-weight: 600; color: var(--muted); gap: .25rem; }
 .cal-legend i { width: .5rem; height: .5rem; }
+
+/* ---- Barra de Carreras: buscador más pequeño con mensaje corredizo y botón del planificador de ruta ---- */
+.toolbar:has(.ruta-btn) { gap: .4rem; }
+.toolbar:has(.ruta-btn) .fbtn, .toolbar:has(.ruta-btn) .add-btn { width: 44px; height: 44px; min-height: 44px; flex: none; }
+.toolbar:has(.ruta-btn) .search { min-height: 44px; padding: 0 .5rem; gap: .35rem; min-width: 0; }
+.toolbar:has(.ruta-btn) .search input { padding: .45rem 0; min-width: 0; width: 100%; font-size: .95rem; }
+.toolbar:has(.ruta-btn) .search svg { width: 19px; height: 19px; }
+.ruta-btn { display: grid; place-items: center; text-decoration: none; border-color: color-mix(in srgb, var(--accent) 45%, var(--line)) !important; }
+.ruta-btn svg { width: 22px; height: 22px; }
+.search.has-marquee { position: relative; }
+.ph-marquee { position: absolute; left: 1.95rem; right: .4rem; top: 0; bottom: 0; overflow: hidden; pointer-events: none; display: flex; align-items: center; color: var(--muted); font-size: .95rem; }
+.ph-marquee > span { display: inline-block; white-space: nowrap; padding-left: 100%; animation: ph-slide 9s linear infinite; }
+@keyframes ph-slide { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+.search.has-marquee:focus-within .ph-marquee, .search.has-marquee input:not(:placeholder-shown) ~ .ph-marquee { display: none; }
+@media (prefers-reduced-motion: reduce) { .ph-marquee > span { animation: none; padding-left: 0; text-overflow: ellipsis; overflow: hidden; max-width: 100%; } }
+.ph-marquee, .ph-marquee > span { font-weight: 400; }
