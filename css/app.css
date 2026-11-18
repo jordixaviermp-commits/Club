@@ -1237,3 +1237,5 @@ html, body { overscroll-behavior-y: contain; }
 .fmt-pills .pill b { display: inline-grid; place-items: center; min-width: 1.5rem; height: 1.5rem; padding: 0 .3rem; border-radius: 999px; background: var(--mc); color: #fff; font-size: .8rem; }
 .tag b { font-weight: 800; }
 .tag b, .mini-list li .tag b, .mrow-l2 .tag b { font-size: inherit; font-weight: 800; }
+.pod-pill .medal { width: 1.1em; height: 1.1em; }
+.sum-card .tiles { margin-bottom: .2rem; }

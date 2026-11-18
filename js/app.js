@@ -991,10 +991,8 @@ function myRacesCard(d, afterSummary = () => '') {
       <a href="#" class="tile t-pend${pending.length ? ' alert' : ''}" data-act="goto-sec" data-to="sec-pend"><span class="t-n">${pending.length}</span><span class="t-l">Pendientes</span>${ico('flag', 't-ico')}<small>${pending.length ? 'falta tu resultado' : 'de resultado'}</small></a>
       <a href="#" class="tile t-canc" data-act="goto-sec" data-to="sec-canc"><span class="t-n">${cancelled.length}</span><span class="t-l">Anuladas</span>${ico('ban', 't-ico')}<small>suspendidas</small></a>
     </div>
-    ${(() => { const tot = list.length + pending.length + upcoming.length + cancelled.length;
-      return tot ? `<div class="bar seg sum-bar" role="img" aria-label="Reparto de tus carreras">${[['seg-done', list.length], ['seg-pend', pending.length], ['seg-next', upcoming.length], ['seg-canc', cancelled.length]].filter(([, n]) => n).map(([c, n]) => `<span class="${c}" style="flex:${n}"></span>`).join('')}</div>` : ''; })()}
     ${(() => { const pod = [1, 2, 3].map((k) => list.filter((x) => x.position === k).length), NAMES = [['Oro', 'Oros'], ['Plata', 'Platas'], ['Bronce', 'Bronces']];
-      return pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}">${medalBadge(i + 1)}${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : ''; })()}
+      return pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}"><i class="medal m${i + 1}"></i>${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : ''; })()}
   </section>
 
   ${pending.length ? `<section class="card chro-card pend-card has-pend" id="sec-pend"><details class="chro-det" data-open-key="pend"${S.open?.pend ? ' open' : ''}>
