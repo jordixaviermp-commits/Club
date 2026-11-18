@@ -1,6 +1,6 @@
 {
  "_nota": "Ligas y circuitos que se corren cada año y a los que suele ir gente del club. Se escribe a mano (no lo toca el lector de las federaciones). El campo «subtype» (opcional) rellena el formato. «url» es opcional. Para añadir otra liga, copia un bloque de carrera y cambia source/league/fechas. Comprobar siempre las fechas en la web de la liga. El campo «circuit» (opcional) marca la carrera como puntuable de un circuito con ese nombre: se usa para el podio en la general final (cláusula 9). Escríbelo igual en todas las pruebas de la liga.",
- "updated_at": "2026-11-14",
+ "updated_at": "2026-11-18",
  "races": [
   {
    "source": "LIGA",
@@ -216,6 +216,22 @@
   },
   {
    "source": "LIGA",
+   "league": "Marathon Cup BTT 2027",
+   "circuit": "Marathon Cup BTT",
+   "date": "2027-05-08",
+   "name": "Marathon Cup BTT – St. Fruitós de Bages",
+   "place": "St. Fruitós de Bages",
+   "province": "Barcelona",
+   "country": "España",
+   "modality": "BTT",
+   "subtype": "XCM",
+   "discipline": "BTT",
+   "kind": "Competición",
+   "info": "Marathon Cup BTT 2027 · Scott Marathon · 2 distancias, Pro y Open · 8 de mayo",
+   "url": "https://bikemarathonbtt.com/"
+  },
+  {
+   "source": "LIGA",
    "league": "Xallenger BTT Terres de l'Ebre 2027",
    "date": "2027-05-09",
    "name": "5a Argilers Bike Race",
@@ -244,6 +260,22 @@
    "kind": "Competición",
    "info": "Copa Catalana Internacional BTT 2027 · Biking Point · C1 · 29 de mayo",
    "url": "https://copacatalanabtt.com/"
+  },
+  {
+   "source": "LIGA",
+   "league": "Marathon Cup BTT 2027",
+   "circuit": "Marathon Cup BTT",
+   "date": "2027-05-30",
+   "name": "Marathon Cup BTT – Naturland",
+   "place": "Naturland",
+   "province": "",
+   "country": "Andorra",
+   "modality": "BTT",
+   "subtype": "XCM",
+   "discipline": "BTT",
+   "kind": "Competición",
+   "info": "Marathon Cup BTT 2027 · Scott Marathon · 2 distancias, Pro y Open · 30 de mayo",
+   "url": "https://bikemarathonbtt.com/"
   },
   {
    "source": "LIGA",
@@ -352,6 +384,22 @@
    "info": "Xallenger BTT Terres de l'Ebre 2027",
    "url": "https://www.xallengerbtt.net",
    "circuit": "Xallenger BTT Terres de l'Ebre"
+  },
+  {
+   "source": "LIGA",
+   "league": "Marathon Cup BTT 2027",
+   "circuit": "Marathon Cup BTT",
+   "date": "2027-09-19",
+   "name": "Marathon Cup BTT – Sea Otter Europe",
+   "place": "Sea Otter Europe",
+   "province": "Girona",
+   "country": "España",
+   "modality": "BTT",
+   "subtype": "XCM",
+   "discipline": "BTT",
+   "kind": "Competición",
+   "info": "Marathon Cup BTT 2027 · Scott Marathon · 2 distancias, Pro y Open · 19 de septiembre",
+   "url": "https://bikemarathonbtt.com/"
   },
   {
    "source": "LIGA",

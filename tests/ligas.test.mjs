@@ -28,7 +28,7 @@ test('cada liga usa un solo nombre de circuito', () => {
   const por = new Map();
   for (const r of data.races) if (r.circuit) (por.get(r.league) || por.set(r.league, new Set()).get(r.league)).add(r.circuit);
   for (const [liga, nombres] of por) assert.equal(nombres.size, 1, liga);
-  assert.ok(por.has("Xallenger BTT Terres de l'Ebre 2027") && por.has('Open Maxxis Marathon by Bryton 2027') && por.has('Copa Catalana Internacional BTT 2027'));
+  assert.ok(por.has("Xallenger BTT Terres de l'Ebre 2027") && por.has('Open Maxxis Marathon by Bryton 2027') && por.has('Copa Catalana Internacional BTT 2027') && por.has('Marathon Cup BTT 2027'));
 });
 
 test('las carreras de la liga salen al buscar por liga, pueblo o nombre', () => {
@@ -56,9 +56,20 @@ test('Copa Catalana Internacional BTT 2027: 6 pruebas de XCO que se encuentran p
   const names = (q) => searchRaces(q, data.races).map((r) => r.name);
   assert.equal(names('copa catalana').length, 6);
   assert.ok(names('banyoles').includes('Copa Catalana Internacional BTT – Banyoles'));
-  assert.ok(names('naturland').length === 1 && names('molina').length >= 1 && names('santa susanna').length === 1);
+  assert.ok(names('naturland').filter((n) => /Copa Catalana/.test(n)).length === 1 && names('molina').length >= 1 && names('santa susanna').length === 1);
   const cc = data.races.filter((r) => r.league === 'Copa Catalana Internacional BTT 2027');
   assert.deepEqual(cc.map((r) => r.date), ['2027-01-30', '2027-02-20', '2027-04-04', '2027-04-24', '2027-05-29', '2027-06-26']);
   assert.ok(cc.every((r) => r.subtype === 'XCO' && r.circuit === 'Copa Catalana Internacional BTT'));
   assert.equal(cc.find((r) => r.place === 'Naturland').country, 'Andorra');
+});
+
+test('Marathon Cup BTT 2027: 3 pruebas de XCM que se encuentran por liga, pueblo y nombre', () => {
+  const names = (q) => searchRaces(q, data.races).map((r) => r.name);
+  assert.equal(names('marathon cup btt').filter((n) => /^Marathon Cup/.test(n)).length, 3);
+  assert.ok(names('sea otter').includes('Marathon Cup BTT – Sea Otter Europe'));
+  assert.ok(names('fruitos').includes('Marathon Cup BTT – St. Fruitós de Bages'));
+  const mc = data.races.filter((r) => r.league === 'Marathon Cup BTT 2027');
+  assert.deepEqual(mc.map((r) => r.date), ['2027-05-08', '2027-05-30', '2027-09-19']);
+  assert.ok(mc.every((r) => r.subtype === 'XCM' && r.circuit === 'Marathon Cup BTT'));
+  assert.equal(mc.find((r) => r.place === 'Naturland').country, 'Andorra');
 });
