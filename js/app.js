@@ -931,6 +931,8 @@ const ICO = {
   users: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
   calplus: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM12 14v4M10 16h4',
   check: 'M20 6L9 17l-5-5',
+  folder: 'M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z',
+  money: 'M2 6h20v12H2zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 12h.01M18 12h.01',
   file: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8',
   idcard: 'M16 10h2M16 14h2M6.17 15a3 3 0 0 1 5.66 0M9 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
   ext: 'M15 3h6v6M10 14L21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6',
@@ -1073,7 +1075,7 @@ function bonusBarBig(st, cfg, planned = 0) {
       ${marks.map((m) => `<i class="bb-tick${total >= m.n ? ' hit' : ''}${m.min ? ' min' : ''}" style="left:${pct(m.n)}%"></i>`).join('')}
       <span class="bb-you" style="left:${pct(Math.max(total, 0))}%"><b>${total}</b></span>
     </div>
-    <div class="bb-labels">${marks.map((m, i) => `<span class="${total >= m.n ? 'hit' : ''}${m.min ? ' min' : ''}${i === marks.length - 1 ? ' last' : ''}" style="left:${pct(m.n)}%"><b>${m.n}</b><small>${esc(m.amount)}</small></span>`).join('')}</div>
+    <div class="bb-labels">${marks.map((m) => `<span class="${total >= m.n ? 'hit' : ''}"><b>${m.n} carreras</b><small>(${esc(m.amount)})</small></span>`).join('')}</div>
   </div>`;
 }
 
@@ -1097,7 +1099,7 @@ function runnerBonusCard(d) {
   ].filter(Boolean).join('');
   const tiers = st.tiers || [];
   const rules = `<details class="rules" data-open-key="rules"${S.open?.rules ? ' open' : ''}>
-    <summary>${ico('info')}<span>Ver tramos y normativa de tu contrato</span>${ico('chevd', 'rules-chev')}</summary>
+    <summary>${ico('info')}<span>Ver tramos y normativa</span>${ico('chevd', 'rules-chev')}</summary>
     <div class="rules-body">
       <p class="hint">La <b>bonificación</b> es la ayuda económica del club según las carreras que corras en la temporada (cláusula 3 de tu contrato).${b.contract ? ` Tu contrato: <b>${esc(contractLabel(b.contract).toLowerCase())}</b>.` : ''}</p>
       <h4>Tramos${st.contract ? ` (${esc(contractLabel(st.contract).toLowerCase())})` : ''}</h4>
@@ -1110,12 +1112,16 @@ function runnerBonusCard(d) {
         <li>🏆 <b>Plus de bonificación</b>: un podio en la general final de una liga suma +${per} carreras para el bono, pero <b>no cuenta para el mínimo de ${cfg.minimum}</b>.</li></ul>
       ${circuitsCard(d)}
     </div></details>`;
-  return `<section class="card bonus-card"><div class="bn-head"><h2>Tu bonificación ${b.year}</h2>${minChip}</div>
+  return `<h2 class="blk-title">Tu bonificación ${b.year} ${ico('money')}</h2>
+  <section class="card bonus-card">
+    ${st.reachesMinimum ? `<div class="bn-min ok">${ico('check')}Mínimo de contrato cumplido (${st.minimum} carreras)</div>` : ''}
     ${chips ? `<div class="bn-chips">${chips}</div>` : ''}
-    <p class="bn-line"><b>${st.count}</b> ${plural(st.count, 'carrera hecha', 'carreras hechas')}<span class="sep">·</span>${st.tier ? `<span class="nw">tramo <b class="amt">${euros(st.amount)}</b></span>` : '<span class="muted nw">aún sin tramo</span>'}</p>
+    <p class="bn-main"><b>${st.count}</b> ${plural(st.count, 'carrera realizada', 'carreras realizadas')}</p>
+    <p class="bn-tier">${st.tier ? `Tramo actual: <b>${euros(st.amount)}</b>` : 'Aún sin tramo'}</p>
     ${support ? `<p class="bn-support">${support}</p>` : ''}
     ${st.reachesMinimum ? '' : penaltyAlert(st, cfg, b.year)}
     ${bonusBarBig(st, cfg, b.planned || 0)}
+    ${b.contract ? `<p class="bn-contract"><span>Contrato: ${esc(contractLabel(b.contract))}</span></p>` : ''}
     ${b.planned ? `<p class="hint bn-plan">Con tus ${b.planned} inscripcion${b.planned === 1 ? '' : 'es'} de ${b.year} llegarías a ${proj.bonusCount}${proj.tier ? ` (${euros(proj.amount)})` : ''}${proj.reachesMinimum ? '' : ', aún por debajo del mínimo'}.</p>` : ''}
     ${rules}
   </section>`;
@@ -1312,19 +1318,20 @@ function viewRunnerRace(id) {
 
 /** «Mi temporada»: bono, mis carreras e instalación. */
 /** Enlaces del club (pedido de ropa…): se editan en js/enlaces.js. */
-const clubLinksCard = () => ENLACES_CONTRATO.map((l) => `<a class="card quick" href="${esc(l.href)}" target="_blank" rel="noopener noreferrer">
-  <span class="q-ic">${l.icono === '👕' ? ico('shirt') : esc(l.icono || '🔗')}</span>
-  <span class="q-tx"><b>${esc(l.boton || l.titulo)}</b>${l.texto ? `<small class="muted">${esc(l.texto)}</small>` : ''}</span>${ico('ext', 'q-go')}</a>`).join('');
+const clubLinksCard = () => ENLACES_CONTRATO.map((l) => `<section class="card club-link">
+  <h3>${l.icono === '👕' ? ico('shirt') : esc(l.icono || '🔗')}${esc(l.titulo)}</h3>
+  ${l.texto ? `<p class="hint">${esc(l.texto)}</p>` : ''}
+  <a class="btn primary block" href="${esc(l.href)}" target="_blank" rel="noopener noreferrer">${esc(l.boton || 'Abrir')} ↗</a></section>`).join('');
 
 /** «Mi licencia»: enlaces a la web de cada federación, donde el corredor ve su licencia digital con su propia cuenta. */
 function licenseCard() {
   const link = (id) => {
     const f = FEDERACIONES[id];
-    return `<a class="lic-tile${S.fedSeguro === id ? ' on' : ''}" href="${esc(f.licencia.href)}" target="_blank" rel="noopener noreferrer">${ico('idcard')}<span><b>${esc(f.corto)}</b><small class="muted">Licencia digital</small></span>${ico('ext', 'q-go')}</a>`;
+    return `<a class="lic-pill${S.fedSeguro === id ? ' on' : ''}" href="${esc(f.licencia.href)}" target="_blank" rel="noopener noreferrer">${esc(f.corto)} ${ico('ext')}</a>`;
   };
-  return `<section class="card lic-card"><h3>Mi licencia</h3>
-    <div class="lic-row">${ORDEN_FEDERACIONES.map(link).join('')}</div>
-    <p class="hint">Entra con tu cuenta de federado.</p></section>`;
+  return `<section class="card lic-card"><h3>${ico('idcard')}Mi licencia</h3>
+    <p class="hint">Accede a tu licencia digital en la web de tu federación:</p>
+    <div class="lic-row">${ORDEN_FEDERACIONES.map(link).join('')}</div></section>`;
 }
 
 function viewRunnerMine() {
@@ -1345,8 +1352,8 @@ function viewRunnerContract() {
   return frame(runnerTitle(), `
     ${previewBanner()}
     ${runnerBonusCard(S.runnerData)}
-    ${myDocsCard()}
     ${clubLinksCard()}
+    ${myDocsCard()}
     ${licenseCard()}`,
   { rtab: 'contrato' });
 }
@@ -2867,13 +2874,13 @@ function myDocsCard() {
   const docs = S.myDocs, tpl = S.myTpl;
   if (!docs) return '';
   const row = (x, kind, act, idAttr) => `<li class="file-row"><span class="file-ic ${/pdf/.test(x.mime) ? 'pdf' : 'img'}">${ico('file')}</span>
-    <span class="file-tx"><b>${esc(x.title)}</b><small class="muted">${kind} · ${fmtSize(x.size)}</small></span>
+    <span class="file-tx"><b>${esc(x.title)}</b><small class="muted">(${kind} · ${fmtSize(x.size)})</small></span>
     <button class="btn ghost small" data-act="${act}"${idAttr}>Ver</button></li>`;
   const list = [
-    tpl ? row(tpl, `Contrato · ${esc(contractLabel(tpl.contract))}`, 'my-tpl-open', '') : '',
+    tpl ? row(tpl, esc(contractLabel(tpl.contract)), 'my-tpl-open', '') : '',
     ...docs.map((x) => row(x, `Temporada ${x.year}`, 'my-doc-open', ` data-id="${x.id}"`)),
   ].filter(Boolean);
-  return `<section class="card docs-block"><h2>Mi contrato y documentos</h2>
+  return `<section class="card docs-block"><h2>${ico('folder')}Mi contrato y documentos</h2>
     ${list.length ? `<ul class="file-list">${list.join('')}</ul>` : '<p class="empty small">La dirección aún no ha subido tu contrato.</p>'}
   </section>`;
 }
