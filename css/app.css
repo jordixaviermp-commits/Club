@@ -1002,3 +1002,44 @@ nav.tabs a { position: relative; }
 .chro-tag { white-space: nowrap; flex: none; }
 .chro-tag.pend { color: color-mix(in srgb, #9a6b00 70%, var(--text)); }
 .chro-tag.ok { color: color-mix(in srgb, #1b7f3b 70%, var(--text)); }
+
+/* ---- Carreras (corredor): cabecera limpia, resumen del equipo con leyenda y tarjeta de carrera más ligera ---- */
+html, body { overscroll-behavior-y: contain; }
+.t-i { width: 1em; height: 1em; vertical-align: -.14em; margin-right: .25em; }
+.tag .t-i { margin-right: .3em; }
+.view-row { display: flex; justify-content: flex-end; margin: .2rem 0 .5rem; }
+.seg-sw { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; background: var(--card); }
+.seg-sw button { display: inline-flex; align-items: center; gap: .3rem; border: 0; background: none; color: var(--muted); font: inherit; font-size: .85rem; padding: .3rem .8rem; cursor: pointer; }
+.seg-sw button .ico { width: 16px; height: 16px; }
+.seg-sw button.on { background: var(--accent); color: var(--on-accent); font-weight: 700; }
+.pulse h3 { display: flex; align-items: center; gap: .4rem; font-size: 1rem; } .pulse h3 .ico { width: 20px; height: 20px; }
+.pulse-nums { display: grid; grid-template-columns: 1.5fr 1fr; gap: .5rem; margin: .3rem 0 .2rem; }
+.pulse-nums:has(.pn:only-child) { grid-template-columns: 1fr; }
+.pn { display: flex; align-items: center; gap: .55rem; padding: .45rem .6rem; border-radius: 12px; background: var(--accent-2); }
+.pn.me { background: color-mix(in srgb, #1b7f3b 14%, var(--card)); }
+.pn b { font-size: 1.9rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.pn span { display: flex; flex-direction: column; font-weight: 700; font-size: .88rem; line-height: 1.15; } .pn small { font-weight: 400; color: var(--muted); font-size: .76rem; }
+.pulse-legend { display: flex; flex-wrap: wrap; gap: .2rem .8rem; margin: .45rem 0 0; font-size: .8rem; color: var(--muted); }
+.pulse-legend span { display: inline-flex; align-items: center; gap: .3rem; } .pulse-legend i { width: .7rem; height: .7rem; border-radius: 50%; background: var(--mc); }
+.race-side { display: flex; align-items: center; gap: .3rem; flex: none; }
+.race .edit-ico { padding: .25rem; color: var(--muted); } .race .edit-ico .ico { width: 18px; height: 18px; }
+.race-head .soon { margin: 0 0 0 .3rem; white-space: nowrap; } .race-head .soon .t-i { margin-right: .2rem; }
+.club-row { display: flex; align-items: center; gap: .5rem; margin-top: .5rem; min-width: 0; }
+.club-row .count { margin: 0; display: inline-flex; align-items: center; gap: .3rem; flex: none; white-space: nowrap; } .club-row .count .ico { width: 17px; height: 17px; }
+.club-row .people { flex-wrap: nowrap; overflow-x: auto; margin: 0; padding-bottom: 2px; scrollbar-width: none; min-width: 0; } .club-row .people::-webkit-scrollbar { display: none; }
+.club-row .people li { white-space: nowrap; flex: none; }
+.joined-acts { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: .4rem; margin-top: .6rem; }
+.joined-acts .btn { display: inline-flex; align-items: center; justify-content: center; gap: .3rem; }
+.joined-acts .btn .ico { width: 16px; height: 16px; flex: none; }
+.joined-btn { background: color-mix(in srgb, #1b7f3b 16%, var(--card)); border: 1px solid color-mix(in srgb, #1b7f3b 45%, transparent); color: color-mix(in srgb, #1b7f3b 70%, var(--text)); font-weight: 700; }
+.joined-btn .jb-more { margin-left: auto; }
+.state-tag .t-i { margin-right: .3rem; }
+.pulse-nums { grid-template-columns: 1.15fr 1fr; } .pn span i { font-style: normal; white-space: nowrap; }
+.pn { padding: .45rem .55rem; gap: .45rem; }
+.joined-acts { grid-template-columns: 1.7fr 1fr 1fr; } .joined-acts .btn { padding: .3rem .35rem; font-size: clamp(.72rem, 3.4vw, .85rem); white-space: nowrap; }
+.joined-btn span { overflow: hidden; text-overflow: ellipsis; }
+.race-head .soon { margin-left: 0; display: inline-flex; align-items: center; }
+.joined-acts { grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr) minmax(0, 1fr); gap: .35rem; }
+.joined-acts .btn { min-width: 0; padding: .3rem .25rem; gap: .2rem; font-size: clamp(.7rem, 3.2vw, .82rem); }
+.joined-acts .btn .ico { width: 15px; height: 15px; }
+.joined-acts { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr); } .joined-btn .jb-more { display: none; }
