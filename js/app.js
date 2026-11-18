@@ -975,15 +975,6 @@ function myRacesCard(d, afterSummary = () => '') {
       return tot ? `<div class="bar seg sum-bar" role="img" aria-label="Reparto de tus carreras">${[['seg-done', list.length], ['seg-pend', pending.length], ['seg-next', upcoming.length], ['seg-canc', cancelled.length]].filter(([, n]) => n).map(([c, n]) => `<span class="${c}" style="flex:${n}"></span>`).join('')}</div>` : ''; })()}
     ${(() => { const pod = [1, 2, 3].map((k) => list.filter((x) => x.position === k).length), NAMES = [['Oro', 'Oros'], ['Plata', 'Platas'], ['Bronce', 'Bronces']];
       return pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}">${medalBadge(i + 1)}${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : ''; })()}
-    ${pending.length && !S.preview ? '<p class="hint alert-hint">Tienes carreras ya corridas sin resultado: tócalas y pon tu puesto.</p>' : ''}
-  </section>
-
-  ${afterSummary()}
-
-  <section class="card season-block next-block" id="sec-next">
-    <h2 class="sec-h">Mis próximas inscripciones <small>(${upcoming.length})</small><button type="button" class="info-btn" data-act="info-next" aria-label="Qué es esto">${ico('info')}</button></h2>
-    ${upcoming.length ? `<ul class="mini-list">${upcoming.map((g, i) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, hero: i === 0, pill: `${dleft(g)}${myCat(g) ? ` · ${esc(myCat(g))}` : ''}`, edit: editMine(g) })).join('')}</ul>`
-      : '<p class="empty small">No estás apuntado a ninguna. Búscalas en la pestaña Carreras.</p>'}
   </section>
 
   ${pending.length ? `<section class="card season-block pend-block" id="sec-pend">
@@ -995,6 +986,14 @@ function myRacesCard(d, afterSummary = () => '') {
         ? `<span class="badge-sent">${g.my_result.position}º${g.my_result.time_seconds ? ' · ' + formatTime(g.my_result.time_seconds) : ''} · ya cuenta</span>`
         : (S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>`) })).join('')}</ul>
   </section>` : ''}
+
+  ${afterSummary()}
+
+  <section class="card season-block next-block" id="sec-next">
+    <h2 class="sec-h">Mis próximas inscripciones <small>(${upcoming.length})</small><button type="button" class="info-btn" data-act="info-next" aria-label="Qué es esto">${ico('info')}</button></h2>
+    ${upcoming.length ? `<ul class="mini-list">${upcoming.map((g, i) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, hero: i === 0, pill: `${dleft(g)}${myCat(g) ? ` · ${esc(myCat(g))}` : ''}`, edit: editMine(g) })).join('')}</ul>`
+      : '<p class="empty small">No estás apuntado a ninguna. Búscalas en la pestaña Carreras.</p>'}
+  </section>
 
   ${(() => { const todo = results.filter((x) => missingFields(x).length);
     return todo.length && !S.preview ? `<details class="card season-block"><summary><b>📝 Ayuda a completar tus carreras (${todo.length})</b></summary>
@@ -1162,6 +1161,9 @@ function teamPulse(d) {
       <b>${MES[Number(ym.slice(5)) - 1]}</b></button>`).join('')}</div></section>`;
 }
 
+/** Tarjeta «Planificar ruta» (herramienta ruta/): va en Carreras, justo bajo el buscador. */
+const rutaCard = () => `<a class="card ruta-card" href="ruta/">${ico('route', 'ruta-ic')}<span class="ruta-txt"><b>Planificar ruta <span class="new-tag">NUEVO</span></b><small class="muted">Sube tu track y mira viento, tiempo y subidas</small></span><span class="mrow-go" aria-hidden="true">${ico('go')}</span></a>`;
+
 function viewRunnerHome() {
   const d = S.runnerData, me = d.me, today = d.today || todayISO();
   const regs = regFilter(d.registrations, me);
@@ -1184,8 +1186,7 @@ function viewRunnerHome() {
       ${S.fd?.has ? `<button type="button" class="icon-btn fbtn${S.fd.active ? ' on' : ''}" data-act="r-filters" aria-label="Filtros${S.fd.active ? ' (activos)' : ''}" title="Filtros">${icon(ICON_FILTER)}${S.fd.active ? '<i class="fdot"></i>' : ''}</button>` : ''}
       <button class="btn primary add-btn mini" data-act="r-new" aria-label="Añadir una carrera que no está" title="Añadir una carrera que no está">＋ Nueva</button>
     </div>
-    ${(() => { const n = S.chron instanceof Set ? chronicleStatus(d, S.chron, d.today || todayISO(), new Date().getFullYear()).pending.length : 0;
-      return n && !S.preview ? `<a class="chro-nudge" href="${runnerHref('mi')}">✍️ Tienes <b>${n}</b> crónica${n === 1 ? '' : 's'} pendiente${n === 1 ? '' : 's'} <small>(crónica, resultados y fotos, como dice tu contrato)</small></a>` : ''; })()}
+    ${S.preview ? '' : rutaCard()}
     <div id="pulse-box">${normalize(S.q.runner || '').length >= 2 ? '' : teamPulse(d)}</div>
     <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
     ${body}`,
@@ -1264,7 +1265,7 @@ function viewRunnerMine() {
   return frame(runnerTitle(), `
     ${previewBanner()}
     <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
-    ${myRacesCard(d, () => `<a class="card ruta-card" href="ruta/">${ico('route', 'ruta-ic')}<span class="ruta-txt"><b>Planificar ruta <span class="new-tag">NUEVO</span></b><small class="muted">Sube tu track y mira viento, tiempo y subidas</small></span><span class="mrow-go" aria-hidden="true">${ico('go')}</span></a>${chronicleCard(d)}`)}
+    ${myRacesCard(d, () => chronicleCard(d))}
     <a class="btn block" href="${runnerHref('contrato')}">📄 Mi contrato y mi bonificación</a>
     ${installHint()}
     ${S.preview ? '' : `<p class="center"><button class="link muted" data-act="r-forget">No soy ${esc(me.name)}</button></p>`}

@@ -918,8 +918,6 @@ nav.tabs a { position: relative; }
 .chro-row { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .35rem .5rem; border-radius: 9px; background: color-mix(in srgb, var(--line) 30%, transparent); }
 .chro-name { display: flex; flex-direction: column; min-width: 0; font-size: .88rem; } .chro-name small { font-size: .74rem; }
 .chro-done { margin-top: .4rem; } .chro-done > summary { cursor: pointer; font-size: .82rem; color: var(--muted, #667); }
-.chro-nudge { display: block; margin: 0 0 .6rem; padding: .5rem .7rem; border: 1px solid #e0a030; border-radius: 12px; background: color-mix(in srgb, #e0a030 10%, var(--card)); color: var(--text); text-decoration: none; font-size: .9rem; }
-.chro-nudge small { color: var(--muted, #667); }
 .chro-row .btn.small { min-height: 34px; padding: .2rem .65rem; font-size: .8rem; flex: none; }
 
 .net-cro > summary { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .5rem; cursor: pointer; list-style: none; }
