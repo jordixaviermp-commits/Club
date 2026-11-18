@@ -251,7 +251,13 @@ async function onRoute() {
 
 /** Crónicas que el corredor ya pasó (Set de claves). null = falta el SQL; undefined = aún sin cargar. */
 async function loadChron() {
-  try { const keys = await api.runnerChronicles(S.code || S.previewCode); S.chron = Array.isArray(keys) ? new Set(keys) : null; } catch { S.chron = null; }
+  const code = S.code || S.previewCode;
+  try {
+    const team = await api.runnerChroniclesTeam(code);   // las pasadas por cualquiera: basta con que la pase uno
+    if (Array.isArray(team)) { S.chron = new Set(team.map((x) => x.key)); S.chronBy = new Map(team.map((x) => [x.key, x])); return; }
+  } catch { /* sin el SQL nuevo: se sigue con las propias */ }
+  S.chronBy = null;
+  try { const keys = await api.runnerChronicles(code); S.chron = Array.isArray(keys) ? new Set(keys) : null; } catch { S.chron = null; }
 }
 async function loadRunner() {
   try { S.runnerData = await api.runnerView(S.code); await loadNews(); await loadCorrections(); await loadChron(); }
@@ -1085,7 +1091,7 @@ function myRacesCard(d, afterSummary = () => '') {
 
 
 /** Aviso del contrato al apuntarse a una carrera ya corrida (mensaje automático) y al pasar la crónica. */
-const CHRONICLE_RULE = 'Según tu contrato, de cada carrera en la que participas debes hacer la <b>crónica</b>, <b>pasar los resultados</b> y <b>enviar fotos</b>.';
+const CHRONICLE_RULE = 'Según el contrato, de cada carrera hay que hacer la <b>crónica</b>, <b>pasar los resultados</b> y <b>enviar fotos</b>. <b>Basta con que la pase uno</b> de los que corristeis: si ya la ha pasado un compañero, no tienes que hacerla.';
 const chronicleReminder = (name) => choose('✍️ Recuerda tu crónica', `${name ? `<b>${esc(name)}</b><br>` : ''}${CHRONICLE_RULE}<br>Cuando lo hayas enviado, márcala como pasada en <b>Mi temporada</b>.`, [{ label: 'Entendido', value: true, kind: 'primary' }]);
 
 /** Crónicas del corredor: pendientes y pasadas, pequeña y con un desplegable para marcarlas. */
@@ -1095,7 +1101,8 @@ function chronicleCard(d) {
   const c = chronicleStatus(d, S.chron, d.today || todayISO(), year);
   if (!c.total) return '';
   const plural = (n, a, b) => (n === 1 ? a : b);
-  const li = (x, isDone) => `<li class="chro-row"><span class="chro-name"><b>${esc(x.name)}</b><small class="muted">${esc(formatDate(x.date, false))}${x.place ? ' · ' + esc(x.place) : ''}</small></span>${S.preview ? '' : `<button class="btn small${isDone ? ' ghost' : ' primary'}" data-act="chro-toggle" data-key="${esc(x.key)}" data-done="${isDone ? 0 : 1}">${isDone ? 'Deshacer' : '✓ Ya la pasé'}</button>`}</li>`;
+  const li = (x, isDone) => { const by = S.chronBy?.get(x.key), other = isDone && by && !by.mine;
+    return `<li class="chro-row"><span class="chro-name"><b>${esc(x.name)}</b><small class="muted">${esc(formatDate(x.date, false))}${x.place ? ' · ' + esc(x.place) : ''}${other ? ` · la pasó ${esc(by.by)}` : ''}</small></span>${S.preview || other ? '' : `<button class="btn small${isDone ? ' ghost' : ' primary'}" data-act="chro-toggle" data-key="${esc(x.key)}" data-done="${isDone ? 0 : 1}">${isDone ? 'Deshacer' : '✓ Ya la pasé'}</button>`}</li>`; };
   const pend = c.pending.length;
   return `<section class="card chro-card${pend ? ' has-pend' : ''}"><details class="chro-det" data-open-key="chro"${S.open?.chro ? ' open' : ''}>
     <summary><span class="chro-ic">${ico('book')}</span><b class="chro-t">Crónicas${year === new Date().getFullYear() ? '' : ` <small class="muted">${year}</small>`}</b>
@@ -1903,7 +1910,7 @@ function viewNetworks() {
       return `<li class="net-piece ${x.st}"><details class="net-cro" data-open-key="${esc(ok)}"${S.open?.[ok] ? ' open' : ''}><summary><span class="net-k" title="${NET_LABEL.cro}">${NET_ICON.cro}</span><span class="net-tx">${esc(x.text)}</span><span class="net-glyph" aria-hidden="true">${NET_GLYPH[x.st]}</span></summary>
         <ul class="net-people">${x.people.map((q) => `<li><label class="check"><input type="checkbox" data-act-change="chro-admin" data-runner="${esc(q.id)}" data-key="${esc(x.key)}" ${q.done ? 'checked' : ''}> ${esc(q.name)}</label></li>`).join('')}</ul>
         ${missing.length ? `<button class="btn small" data-act="chro-admin-all" data-ids="${esc(missing.join(','))}" data-key="${esc(x.key)}">✓ Todos la pasaron</button>` : ''}
-        <p class="hint">Marca a quien ya la pasó aunque no lo haya marcado en su perfil.</p></details></li>`;
+        <p class="hint">Basta con que la pase uno: en cuanto alguien la marca, la crónica queda hecha para todos. Marca a quien ya la pasó aunque no lo haya marcado en su perfil.</p></details></li>`;
     }
     const isRes = x.k === 'res', canMark = x.key && (x.k === 'aviso' || isRes);
     const act = x.k === 'story' ? (x.st === 'pend' ? `<button class="btn small" data-act="pub-story-manual" data-key="${esc(x.key)}">Marcar a mano</button>` : '')

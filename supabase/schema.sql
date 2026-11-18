@@ -1332,6 +1332,22 @@ begin
   end if;
 end $$;
 
+-- Crónicas pasadas por cualquier compañero (basta con que la pase uno)
+create or replace function public.runner_chronicles_team(p_code text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare v_runner uuid;
+begin
+  select id into v_runner from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  return coalesce((
+    select jsonb_agg(jsonb_build_object('key', k.race_key, 'by', k.by_name, 'mine', k.mine) order by k.race_key)
+      from (select c.race_key,
+                   (array_agg(r.name order by (c.runner_id = v_runner) desc, c.done_at))[1] as by_name,
+                   bool_or(c.runner_id = v_runner) as mine
+              from chronicles c join runners r on r.id = c.runner_id
+             group by c.race_key) k), '[]'::jsonb);
+end $$;
+
 
 revoke execute on all functions in schema public from public, anon;
 grant execute on function public.runner_view(text), public.runner_join(text, uuid, text),
@@ -1340,7 +1356,7 @@ grant execute on function public.runner_view(text), public.runner_join(text, uui
                           public.runner_update_race(text, uuid, jsonb), public.runner_delete_race(text, uuid),
                           public.runner_report_result(text, text, uuid, int, text, text, int),
                           public.runner_documents_list(text), public.runner_get_document(text, uuid), public.runner_contract_template(text), public.runner_get_contract_template(text),
-                          public.runner_team(text), public.runner_chronicles(text), public.runner_chronicle_set(text, text, boolean),
+                          public.runner_team(text), public.runner_chronicles(text), public.runner_chronicles_team(text), public.runner_chronicle_set(text, text, boolean),
                           public.runner_leave(text, uuid), public.runner_set_paid(text, uuid, boolean, numeric, date), public.runner_join_race(text, uuid, text),
                           public.runner_set_race_type(text, uuid, text, text), public.runner_propose_circuit(text, text, int, int, text),
                           public.runner_cancel_circuit(text, uuid), public.runner_news(text), public.runner_set_race_details(text, uuid, text, numeric), public.runner_complete_race(text, text, uuid, jsonb), public.auto_promote_registrations(),

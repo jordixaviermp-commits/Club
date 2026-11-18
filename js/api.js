@@ -151,6 +151,8 @@ export function supabaseApi(url, key) {
     async runnerTeam(code) { return ok(await sb.rpc('runner_team', { p_code: code })); },
     /** Crónicas ya pasadas por el corredor (claves «AAAA-MM-DD|nombre»). null = falta el SQL. */
     async runnerChronicles(code) { try { return ok(await sb.rpc('runner_chronicles', { p_code: code })); } catch { return null; } },
+    // crónicas ya pasadas por CUALQUIER compañero (para que baste con que la pase uno); null si falta el SQL
+    async runnerChroniclesTeam(code) { try { return ok(await sb.rpc('runner_chronicles_team', { p_code: code })); } catch { return null; } },
     async runnerSetChronicle(code, key, done) { ok(await sb.rpc('runner_chronicle_set', { p_code: code, p_key: key, p_done: !!done })); },
     /** Dirección: marca o desmarca la crónica de un corredor (por si la pasó y no la marcó en su perfil). */
     async setChronicle(runnerId, key, done) {
@@ -655,6 +657,11 @@ export function demoApi(storage = globalThis.localStorage) {
       save();
     },
     async runnerChronicles(code) { const me = byCode(code); return clone((load().chronicles || []).filter((x) => x.runner_id === me.id).map((x) => x.race_key)); },
+    async runnerChroniclesTeam(code) {
+      const me = byCode(code), d = load(), by = new Map();
+      for (const x of d.chronicles || []) { const cur = by.get(x.race_key); const nm = d.runners.find((r) => r.id === x.runner_id)?.name || '?'; if (!cur || (x.runner_id === me.id && !cur.mine)) by.set(x.race_key, { key: x.race_key, by: nm, mine: x.runner_id === me.id || !!cur?.mine }); else if (x.runner_id === me.id) cur.mine = true; }
+      return clone([...by.values()]);
+    },
     async runnerSetChronicle(code, key, done) {
       const me = byCode(code), d = load(); d.chronicles = (d.chronicles || []).filter((x) => !(x.runner_id === me.id && x.race_key === key));
       if (done) d.chronicles.push({ runner_id: me.id, race_key: key, done_at: new Date().toISOString() });
