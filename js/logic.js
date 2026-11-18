@@ -16,7 +16,7 @@ export const RACE_TYPES = [
 /** Formato de la carrera según la modalidad (el resto de modalidades no lo piden). */
 export const SUBTYPES = {
   Carretera: ['Critérium', 'Ciclodeportiva', 'Máster', 'Contrarreloj', 'Otra'],
-  BTT: ['XCO', 'XCM', 'UXCM', 'Otra'],
+  BTT: ['XCO', 'XCM', 'UXCM', 'Rally', 'Otra'],
 };
 /** Km de un valor de formulario: número entre 0 y 1000 con un decimal, o null. */
 export function parseKm(v) {
@@ -30,6 +30,7 @@ export function guessSubtype(name, modality) {
     if (/\buxcm\b|\bultra\b/.test(n)) return 'UXCM';
     if (/\bxcm\b|maraton|marathon|maratona/.test(n)) return 'XCM';
     if (/\bxco\b/.test(n)) return 'XCO';
+    if (/\brally\b|\brallye\b/.test(n)) return 'Rally';
   } else if (modality === 'Carretera') {
     if (/criterium/.test(n)) return 'Critérium';
     if (/contrarreloj|contrarellotge|\bcri\b|cronoescalada/.test(n)) return 'Contrarreloj';
@@ -167,6 +168,8 @@ export function planRosterRenewal(text, runners) {
   return { keep, add, remove: [...current.values()], duplicates, unknownCategory };
 }
 
+/** Clave de una disciplina: modalidad + formato («BTT|XCO»; sin formato, «BTT|»). */
+export const disciplineKey = (modality, subtype) => `${modality || ''}|${subtype || ''}`;
 export const isPodium = (position) => Number.isInteger(position) && position >= 1 && position <= 3;
 export const yearOf = (date) => Number(String(date).slice(0, 4));
 
@@ -217,11 +220,17 @@ export function yearSummary(year, races, runners) {
   })).filter((x) => x.modality === 'Carretera' || x.modality === 'BTT' || x.races > 0);
 
   // Carreras de cada mes, repartidas por modalidad (para el gráfico de barras del resumen).
-  const byMonth = Array.from({ length: 12 }, (_, month) => ({ month, total: 0, mods: {} }));
+  // `discs`: lo mismo por disciplina (modalidad + formato: «BTT|XCO»), para colorear las barras por formato.
+  const byMonth = Array.from({ length: 12 }, (_, month) => ({ month, total: 0, mods: {}, discs: {} }));
+  const byDiscipline = new Map();
   for (const r of yr) {
     const mo = byMonth[Number(String(r.date).slice(5, 7)) - 1];
-    if (mo) { mo.total++; mo.mods[r.modality] = (mo.mods[r.modality] || 0) + 1; }
+    const dk = disciplineKey(r.modality, r.subtype);
+    if (mo) { mo.total++; mo.mods[r.modality] = (mo.mods[r.modality] || 0) + 1; mo.discs[dk] = (mo.discs[dk] || 0) + 1; }
+    const e = byDiscipline.get(dk) || { key: dk, modality: r.modality, subtype: r.subtype || '', races: 0 };
+    e.races++; byDiscipline.set(dk, e);
   }
+  const disciplines = [...byDiscipline.values()].sort((a, b) => b.races - a.races || byText(a.key, b.key));
 
   const countBy = (keyFn) => {
     const m = new Map();
@@ -277,7 +286,7 @@ export function yearSummary(year, races, runners) {
     type, stage, position,
   }));
 
-  return { year, totals, byModality, byMonth, bySubtype, byCategory, countries, provinces, missingPlace, perRunner, byPodiumType, podiumList };
+  return { year, totals, byModality, byMonth, bySubtype, disciplines, byCategory, countries, provinces, missingPlace, perRunner, byPodiumType, podiumList };
 }
 
 // ---------- CSV ----------

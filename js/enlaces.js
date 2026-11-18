@@ -6,8 +6,8 @@ export const ENLACES_CONTRATO = [
   {
     icono: '👕',
     titulo: 'Pedido de ropa del club',
-    texto: 'Formulario para pedir la ropa del club. Está aquí siempre, para cuando se abra el pedido de cada temporada.',
-    boton: 'Abrir el formulario',
+    texto: 'Formulario para pedir la equipación del club.',
+    boton: 'Pedir ropa del club',
     href: 'https://docs.google.com/forms/d/e/1FAIpQLScTPkYkF04lv5wwHDTUpEFIqzXpRi3f2orhJntCJpkEFRQDTw/viewform',
   },
 ];
