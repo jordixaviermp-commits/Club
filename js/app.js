@@ -2266,13 +2266,13 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
   // carreras por mes + formatos más comunes
   const maxMonth = maxOf(s.byMonth.map((m) => m.total));
   const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-  const fmts = s.bySubtype.slice(0, 6);
+  const fmts = s.bySubtype;
   const months = `<section class="card eq-months"><h2>Carreras por mes</h2>
     <div class="mchart" role="img" aria-label="Carreras de cada mes">${s.byMonth.map((m) => `<div class="mc${m.total ? '' : ' none'}"><div class="mc-area"><em>${m.total || ''}</em>
       <div class="mc-stack" style="height:${m.total ? (m.total / maxMonth) * 100 : 0}%">${MODALITIES.filter((x) => m.mods[x]).map((x) =>
         `<span class="${modClass(x)}" style="flex:${m.mods[x]}" title="${esc(x)}: ${m.mods[x]}"></span>`).join('')}</div></div><b>${MES[m.month]}</b></div>`).join('')}</div>
     <p class="mod-legend2">${all.byModality.filter((m) => m.races).map((m) => `<span class="${modClass(m.modality)}"><i></i>${esc(m.modality)}</span>`).join('')}</p>
-    ${fmts.length ? `<h3>Formatos más comunes</h3><div class="pills">${fmts.map((x) => `<span class="pill">${esc(x.subtype)}</span>`).join('')}</div>` : ''}</section>`;
+    ${fmts.length ? `<h3>Carreras por formato</h3><div class="pills fmt-pills">${fmts.map((x) => `<span class="pill ${modClass(x.modality)}"><i class="dot"></i>${esc(x.subtype)} <b>${x.races}</b></span>`).join('')}</div>` : ''}</section>`;
   // clasificación: cuatro primeros y el resto desplegado
   const active = people.filter((r) => r.races > 0), idle = people.filter((r) => !r.races && r.current);
   const maxR = maxOf(active.map((r) => r.races));
