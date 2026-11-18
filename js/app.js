@@ -977,15 +977,16 @@ function myRacesCard(d, afterSummary = () => '') {
       return pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}">${medalBadge(i + 1)}${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : ''; })()}
   </section>
 
-  ${pending.length ? `<section class="card season-block pend-block" id="sec-pend">
-    <h2 class="sec-h">Ya corridas, pendientes de resultado <small>(${pending.length})</small></h2>
+  ${pending.length ? `<section class="card chro-card pend-card has-pend" id="sec-pend"><details class="chro-det" data-open-key="pend"${S.open?.pend ? ' open' : ''}>
+    <summary><span class="chro-ic">${ico('flag')}</span><b class="chro-t">Sin resultado</b>
+      <span class="chro-tag pend">${pending.length} ${pending.length === 1 ? 'pendiente' : 'pendientes'}${ico('go')}</span></summary>
     <p class="hint">Pon tu puesto: en cuanto lo pongas <b>ya cuenta para el bono</b>. Si no fuiste, ábrela y pulsa «No fui: borrarme».</p>
     <ul class="mini-list">${pending.map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`,
       edit: editMine(g),
       below: g.my_result
         ? `<span class="badge-sent">${g.my_result.position}º${g.my_result.time_seconds ? ' · ' + formatTime(g.my_result.time_seconds) : ''} · ya cuenta</span>`
         : (S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>`) })).join('')}</ul>
-  </section>` : ''}
+  </details></section>` : ''}
 
   ${afterSummary()}
 
@@ -3609,7 +3610,7 @@ const actions = {
     await run(async () => { await api.runnerReplyNews(S.code, el.dataset.id, el.dataset.a, guests); await loadNews(); }, el.dataset.a === 'si' ? '¡Apuntado!' : 'Anotado: no vienes');
     render();
   },
-  'goto-sec'(el) { const t = document.getElementById(el.dataset.to); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); else toast('No tienes carreras en este apartado.'); },
+  'goto-sec'(el) { const t = document.getElementById(el.dataset.to); if (t) { const dt = t.querySelector('details'); if (dt) { dt.open = true; S.open = { ...(S.open || {}), [dt.dataset.openKey]: true }; } t.scrollIntoView({ behavior: 'smooth', block: 'start' }); } else toast('No tienes carreras en este apartado.'); },
   'hist-filter'(el) { S.histFilter = el.dataset.f; render(); },
   'week-view'(el) { S.weekView = el.dataset.v; render(); },
   'week-all'() { const set = postedSet(), list = weekRaces(S.weekDays || 14); setPostedKeys(list.map(postKey), !list.every((g) => set.has(postKey(g)))); },
