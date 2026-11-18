@@ -1230,3 +1230,8 @@ html, body { overscroll-behavior-y: contain; }
 .file-row .btn { border: 2px solid var(--text); color: var(--text); border-radius: 999px; padding: .3rem 1.1rem; font-weight: 700; background: none; }
 .lic-row { flex-wrap: nowrap; gap: .4rem; } .lic-pill { flex: 1 1 0; justify-content: center; padding: .5rem .3rem; font-size: clamp(.7rem, 3.3vw, .84rem); gap: .25rem; min-width: 0; } .lic-pill .ico { width: 14px; height: 14px; flex: none; }
 .lic-pill { font-size: .95rem; padding: .55rem .5rem; }
+.fmt-pills { gap: .45rem; }
+.fmt-pills .pill { display: inline-flex; align-items: center; gap: .35rem; padding: .3rem .4rem .3rem .75rem; font-size: .9rem; color: var(--text); background: color-mix(in srgb, var(--mc) 15%, var(--card)); border: 1px solid color-mix(in srgb, var(--mc) 55%, transparent); }
+.fmt-pills .pill .dot { width: .6rem; height: .6rem; border-radius: 50%; background: var(--mc); margin: 0; }
+.fmt-pills .pill small { color: var(--muted); font-size: .72rem; }
+.fmt-pills .pill b { display: inline-grid; place-items: center; min-width: 1.5rem; height: 1.5rem; padding: 0 .3rem; border-radius: 999px; background: var(--mc); color: #fff; font-size: .8rem; }

@@ -301,7 +301,7 @@ test('formato y km: parseKm, kmText y resumen', () => {
   assert.equal(parseKm('85,46'), 85.5); assert.equal(parseKm('42'), 42);
   assert.equal(parseKm(''), null); assert.equal(parseKm('-3'), null); assert.equal(parseKm('5000'), null); assert.equal(parseKm('abc'), null);
   assert.ok(kmText(85.5).endsWith('km'));
-  assert.deepEqual(SUBTYPES.BTT, ['XCO', 'XCM', 'UXCM', 'Otra']); assert.ok(SUBTYPES.Carretera.includes('Critérium'));
+  assert.deepEqual(SUBTYPES.BTT, ['XCO', 'XCM', 'UXCM', 'Rally', 'Otra']); assert.ok(SUBTYPES.Carretera.includes('Critérium'));
   const runners = [{ id: 'a', name: 'Ana' }, { id: 'b', name: 'Bea' }];
   const races = [
     { id: 'r1', name: 'A', date: '2026-03-01', modality: 'BTT', subtype: 'XCM', km: 80, results: [{ runner_id: 'a', runner_name: 'Ana', position: 1 }, { runner_id: 'b', runner_name: 'Bea', position: 5 }] },
@@ -474,4 +474,10 @@ test('historia previa automática: registro, estado y anomalía', async () => {
   const a = socialAudit(2026, [], regs, [], today, log);
   assert.equal(a.storyMissing.length, 1); assert.equal(a.storyMissing[0].id, 'f'); assert.ok(a.anomalies >= 1);
   assert.equal(a.done, 1);                                                                              // la historia de Open BTT cuenta como hecha
+});
+
+test('Rally: es un formato de BTT y se deduce del nombre', () => {
+  assert.ok(SUBTYPES.BTT.includes('Rally'));
+  assert.equal(guessSubtype('Rally de Montserrat', 'BTT'), 'Rally');
+  assert.equal(guessSubtype('Rally de Montserrat', 'Carretera'), '');
 });
