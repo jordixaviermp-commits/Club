@@ -2191,31 +2191,33 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
   const filters = `<div class="eq-filters"><label class="year-pick"><select data-year-sel aria-label="Temporada">${years.map((y) => `<option value="${y}"${y === S.year ? ' selected' : ''}>${y}</option>`).join('')}</select>${ico('chevd')}</label>
     <div class="eq-chips"><button class="chip${mod ? '' : ' on'}" data-act="sum-mod" data-m="all">Todos</button>${all.byModality.map((m) =>
       `<button class="chip${mod === m.modality ? ' on' : ''}" data-act="sum-mod" data-m="${esc(m.modality)}">${esc(m.modality)}</button>`).join('')}</div></div>`;
-  const big = (n, label) => `<div><b>${n}</b><span>${label}</span></div>`;
-  const mini = (icon, v, l) => `<div>${ico(icon)}<span><b>${v}</b><small>${l}</small></span></div>`;
+  const big = (n, label, c) => `<div class="b-${c}"><b>${n}</b><span>${label}</span></div>`;
+  const mini = (icon, v, l, c) => `<div class="m-${c}"><i>${ico(icon)}</i><b>${v}</b><small>${l}</small></div>`;
   const hero = `<section class="sum-hero eq-hero ${cls}">
     <p class="sum-hero-t">${ico('flag')}${mod ? esc(mod) : 'Todo el equipo'} · Temporada ${S.year}</p>
-    <div class="sum-big">${big(T.races, 'Carreras')}${big(T.runners, 'Corredores')}${big(T.podiums, 'Podios')}${big(T.wins, 'Victorias')}</div>
-    <div class="eq-mini">${mini('ruler', T.km ? kmText(T.km) : '—', 'totales')}${mini('clock', T.timed ? formatTime(T.time, true) : '—', 'en carrera')}${mini('users', T.participations, 'particip.')}${mini('bars', T.podiums ? `${Math.round((T.podiums / Math.max(1, T.participations)) * 100)} %` : '—', 'podios')}</div>
+    <div class="sum-big">${big(T.races, 'Carreras', 'r')}${big(T.runners, 'Corredores', 'c')}${big(T.podiums, 'Podios', 'p')}${big(T.wins, 'Victorias', 'w')}</div>
+    <div class="eq-mini">${mini('ruler', T.km ? kmText(T.km) : '—', 'totales', 'km')}${mini('clock', T.timed ? formatTime(T.time, true) : '—', 'en carrera', 'tm')}${mini('users', T.participations, 'particip.', 'pt')}${mini('bars', T.podiums ? `${Math.round((T.podiums / Math.max(1, T.participations)) * 100)} %` : '—', 'podios', 'pc')}</div>
   </section>`;
   const lead = (icon, label, score, unit) => {
     const top = Math.max(0, ...people.map(score));
     if (!top) return '';
-    return `<div class="lead"><span class="lead-i">${ico(icon)}</span><small>${label}</small><b>${names(people.filter((r) => score(r) === top), 2)}</b><em>${top} ${top === 1 ? unit : unit + 's'}</em></div>`;
+    return `<div class="lead l-${icon}"><span class="lead-i">${ico(icon)}</span><small>${label}</small><b>${names(people.filter((r) => score(r) === top), 2)}</b><em>${top} ${top === 1 ? unit : unit + 's'}</em></div>`;
   };
   const leaders = [lead('flag', 'Más carreras', (r) => r.races, 'carrera'), lead('trophy', 'Más podios', (r) => r.p1 + r.p2 + r.p3, 'podio'), lead('medal', 'Más victorias', (r) => r.p1, 'victoria')].join('');
   const byMod = `<section class="card eq-mod"><h2>Por modalidad</h2>
     ${all.byModality.map((m) => `<button type="button" class="modrow2 ${modClass(m.modality)}${mod === m.modality ? ' sel' : ''}" data-act="sum-mod" data-m="${esc(m.modality)}">
-      <i class="stripe"></i><span class="mr-main"><b>${esc(m.modality)}</b><small>${m.runners} corredor${m.runners === 1 ? '' : 'es'} · ${m.participations} participaci${m.participations === 1 ? 'ón' : 'ones'}</small></span>
-      <span class="mr-n">${m.races} carrera${m.races === 1 ? '' : 's'}</span></button>`).join('')}</section>`;
+      <i class="stripe"></i><span class="mr-main"><b>${esc(m.modality)}</b><small>${m.runners} corredor${m.runners === 1 ? '' : 'es'} · ${m.participations} participaci${m.participations === 1 ? 'ón' : 'ones'}</small>
+        <span class="mr-chips"><span class="mchip-s">${ico('trophy')}${m.podiums}</span><span class="mchip-s w">${ico('medal')}${m.wins}</span></span></span>
+      <span class="mr-n"><b>${m.races}</b>carrera${m.races === 1 ? '' : 's'}</span></button>`).join('')}</section>`;
   // carreras por mes + formatos más comunes
   const maxMonth = maxOf(s.byMonth.map((m) => m.total));
-  const MES = ['E', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+  const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   const fmts = s.bySubtype.slice(0, 6);
   const months = `<section class="card eq-months"><h2>Carreras por mes</h2>
     <div class="mchart" role="img" aria-label="Carreras de cada mes">${s.byMonth.map((m) => `<div class="mc${m.total ? '' : ' none'}"><div class="mc-area"><em>${m.total || ''}</em>
       <div class="mc-stack" style="height:${m.total ? (m.total / maxMonth) * 100 : 0}%">${MODALITIES.filter((x) => m.mods[x]).map((x) =>
         `<span class="${modClass(x)}" style="flex:${m.mods[x]}" title="${esc(x)}: ${m.mods[x]}"></span>`).join('')}</div></div><b>${MES[m.month]}</b></div>`).join('')}</div>
+    <p class="mod-legend2">${all.byModality.filter((m) => m.races).map((m) => `<span class="${modClass(m.modality)}"><i></i>${esc(m.modality)}</span>`).join('')}</p>
     ${fmts.length ? `<h3>Formatos más comunes</h3><div class="pills">${fmts.map((x) => `<span class="pill">${esc(x.subtype)}</span>`).join('')}</div>` : ''}</section>`;
   // clasificación: cuatro primeros y el resto desplegado
   const active = people.filter((r) => r.races > 0), idle = people.filter((r) => !r.races && r.current);
@@ -2234,8 +2236,8 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
         ${rest.length ? `<ol class="rank rank2" start="5">${rest.map((r, i) => row(r, i + 4)).join('')}</ol>` : ''}
         ${idle.length ? `<p class="muted small">Sin carreras todavía: ${names(idle, 40)}.</p>` : ''}</details>` : ''}`
       : '<p class="muted">Todavía no hay carreras este año.</p>'}</section>`;
-  return `<div class="eq">${filters}${hero}${leaders ? `<div class="leads eq-leads">${leaders}</div>` : ''}${mod ? '' : byMod}
-    <div class="eq-two">${months}${rank}</div>${cats}${pods}${mod ? byMod : ''}${places}</div>`;
+  return `<div class="eq">${filters}${hero}${leaders ? `<div class="leads eq-leads">${leaders}</div>` : ''}
+    ${months}${rank}${byMod}${cats}${pods}${places}</div>`;
 }
 
 /**

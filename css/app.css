@@ -1103,3 +1103,43 @@ html, body { overscroll-behavior-y: contain; }
 .mchart { align-items: start; } .mc-area { flex: none; overflow: hidden; }
 .mc-stack { flex: none; }
 .eq-hero { background: linear-gradient(135deg, #2c4c60, #1c3545); color: #fff; }
+
+/* ---- Equipo (corredor), 2.ª pasada: más color, sin solapes, bloques a todo el ancho ---- */
+.eq { display: flex; flex-direction: column; gap: .8rem; } .eq > * { margin: 0 !important; }
+.eq-hero .sum-big { gap: .45rem; }
+.eq-hero .sum-big > div { background: rgba(255, 255, 255, .08); border-radius: 12px; border-top: 3px solid var(--bc); padding: .5rem .1rem .45rem; }
+.eq-hero .sum-big b { color: var(--bc); font-size: 2.2rem; }
+.eq-hero .b-r { --bc: #62d0ff; } .eq-hero .b-c { --bc: #6fe3a0; } .eq-hero .b-p { --bc: #ffd35c; } .eq-hero .b-w { --bc: #ff9f5a; }
+.eq-mini { gap: .45rem; margin-top: .7rem; }
+.eq-mini > div { display: flex; flex-direction: column; align-items: center; gap: .15rem; text-align: center; padding: .1rem 0; min-width: 0; }
+.eq-mini > div > i { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: color-mix(in srgb, var(--bc) 30%, transparent); color: var(--bc); }
+.eq-mini > div > i .ico { width: 17px; height: 17px; margin: 0; opacity: 1; }
+.eq-mini b { font-size: .88rem; line-height: 1.1; white-space: nowrap; } .eq-mini small { font-size: .72rem; opacity: .85; white-space: nowrap; }
+.eq-mini .m-km { --bc: #62d0ff; } .eq-mini .m-tm { --bc: #c6a8ff; } .eq-mini .m-pt { --bc: #6fe3a0; } .eq-mini .m-pc { --bc: #ffd35c; }
+.eq-leads .lead { border-top: 4px solid var(--lc, var(--line)); gap: .15rem; }
+.eq-leads .lead-i { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: color-mix(in srgb, var(--lc) 18%, var(--card)); margin-bottom: .15rem; }
+.eq-leads .lead-i .ico { width: 24px; height: 24px; color: var(--lc); }
+.eq-leads .l-flag { --lc: #1f6fd1; } .eq-leads .l-trophy { --lc: #d19a00; } .eq-leads .l-medal { --lc: #e07800; }
+.eq-mod h2, .eq-months h2, .eq-rank h2 { border-left: 5px solid var(--hc, var(--accent)); padding-left: .55rem; margin: 0 0 .7rem; font-size: 1.15rem; }
+.eq-months { --hc: #1f6fd1; } .eq-rank { --hc: #d19a00; } .eq-mod { --hc: #e07800; }
+.eq-months, .eq-rank, .eq-mod { padding: .9rem .9rem; }
+.eq-months .mchart { gap: 4px; } .mc-area { height: 130px; } .mc b { font-size: .7rem; margin-top: 4px; } .mc-area em { font-size: .78rem; font-weight: 700; color: var(--text); }
+.mc-stack { border-radius: 6px 6px 2px 2px; }
+.mod-legend2 { display: flex; flex-wrap: wrap; gap: .3rem 1rem; margin: .7rem 0 0; font-size: .85rem; }
+.mod-legend2 span { display: inline-flex; align-items: center; gap: .35rem; } .mod-legend2 i { width: .8rem; height: .8rem; border-radius: 50%; background: var(--mc); }
+.eq-months h3 { font-size: 1rem; margin: .9rem 0 .4rem; } .eq-months .pill { font-size: .85rem; padding: .25rem .7rem; }
+.rank2 li { gap: .6rem; padding: .55rem .2rem; }
+.avatar { width: 38px; height: 38px; font-size: .85rem; }
+.rank2 .rk-h { flex-direction: row; justify-content: space-between; align-items: baseline; gap: .5rem; margin-bottom: .3rem; } .rank2 .rk-h b { font-size: .98rem; } .rank2 .rk-h small { font-size: .82rem; flex: none; }
+.rank2 .bar { height: 9px; border-radius: 6px; } .rank2 .rk-n { min-width: 2.1rem; height: 2.1rem; font-size: 1.05rem; border-radius: 10px; }
+.rank2 .rk-n.n3 { background: #d99a5b; color: #3a2000; }
+.eq-mod .modrow2 { background: color-mix(in srgb, var(--mc) 9%, var(--card)); padding: .6rem .7rem; margin-bottom: .5rem; border-radius: 12px; gap: .7rem; }
+.eq-mod .modrow2.sel { background: color-mix(in srgb, var(--mc) 22%, var(--card)); }
+.modrow2 .stripe { width: 6px; }
+.mr-chips { display: flex; gap: .35rem; margin-top: .3rem; }
+.mchip-s { display: inline-flex; align-items: center; gap: .25rem; font-size: .8rem; font-weight: 700; padding: .1rem .55rem; border-radius: 999px; background: color-mix(in srgb, #d19a00 20%, var(--card)); color: color-mix(in srgb, #8a6400 75%, var(--text)); }
+.mchip-s.w { background: color-mix(in srgb, #e07800 20%, var(--card)); color: color-mix(in srgb, #a85a00 75%, var(--text)); }
+.mchip-s .ico { width: 14px; height: 14px; }
+.modrow2 .mr-n { display: flex; flex-direction: column; align-items: flex-end; font-size: .78rem; } .modrow2 .mr-n b { font-size: 1.5rem; line-height: 1; color: var(--mct, var(--text)); }
+.eq-hero .sum-big span { font-size: .78rem; }
+.mchip-s { color: color-mix(in srgb, #8a6400 45%, var(--text)); } .mchip-s.w { color: color-mix(in srgb, #a85a00 45%, var(--text)); }
