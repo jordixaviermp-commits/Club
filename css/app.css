@@ -1439,3 +1439,5 @@ nav.tabs a:not(.on) svg { padding: 3px 16px; box-sizing: content-box; }
 .k-mine { background: var(--accent); } .k-club { background: color-mix(in srgb, var(--accent) 24%, var(--card)); } .k-past { border: 2px dashed var(--muted); }
 .cal-months { margin-top: .55rem; } .cal-months .chip { border-radius: 999px; }
 .cal-months .chip.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.toolbar .view-btn.on { background: color-mix(in srgb, var(--accent) 14%, var(--card)); border-width: 2px; }
+.toolbar .view-btn svg { width: 22px; height: 22px; }

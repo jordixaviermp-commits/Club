@@ -710,7 +710,6 @@ function calendarView(regs, card, isMine = () => false, { done = [], doneCard = 
         ${monthGrid(ym).flat().map(cell).join('')}
       </div>
       ${monthDiscs.length ? `<div class="cal-legend">${monthDiscs.map(([k, g]) => `<span class="${discClass(g.modality, g.subtype)}"><i></i>${esc(discLabel(g.modality, g.subtype))}</span>`).join('')}</div>` : ''}
-      <p class="cal-key"><span class="k-mine"></span> Mi inscripción <span class="k-club"></span> Del club <span class="k-past"></span> Ya disputada${isPosted ? ' · ✓ publicada · ½ alguna sin publicar' : ''}</p>
       ${months.length ? `<div class="cal-months">${months.map((mm) => {
         const [yy, mo] = mm.split('-').map(Number);
         const n = items.filter((it) => touches(it.g, mm)).length;
@@ -1309,15 +1308,14 @@ function viewRunnerHome() {
   return frame(runnerTitle(), `
     ${previewBanner()}
     <div class="toolbar">
-      ${searchBox('runner', 'Buscar carrera…')}
+      ${searchBox('runner', 'Buscar…')}
       ${S.fd?.has ? `<button type="button" class="icon-btn fbtn${S.fd.active ? ' on' : ''}" data-act="r-filters" aria-label="Filtros${S.fd.active ? ' (activos)' : ''}" title="Filtros">${icon(ICON_FILTER)}${S.fd.active ? '<i class="fdot"></i>' : ''}</button>` : ''}
-      <button class="btn primary add-btn mini" data-act="r-new" aria-label="Añadir una carrera que no está" title="Añadir una carrera que no está">＋ Nueva</button>
+      <button type="button" class="icon-btn fbtn view-btn${S.regView === 'cal' ? ' on' : ''}" data-act="reg-view" aria-label="${S.regView === 'cal' ? 'Ver como lista' : 'Ver calendario'}" title="${S.regView === 'cal' ? 'Ver como lista' : 'Ver calendario'}">${icon(S.regView === 'cal' ? ICON_LIST : ICON_CAL)}</button>
+      <button class="btn primary add-btn" data-act="r-new" aria-label="Añadir una carrera que no está" title="Añadir una carrera que no está">＋</button>
     </div>
-    ${S.regView === 'cal' ? `<div class="view-row">${viewSwitch()}</div>` : ''}
     ${S.regView === 'cal' || S.preview ? '' : rutaCard()}
     <div id="pulse-box">${S.regView === 'cal' || normalize(S.q.runner || '').length >= 2 ? '' : teamPulse(d)}</div>
     <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
-    ${S.regView === 'cal' ? '' : `<div class="view-row">${viewSwitch()}</div>`}
     ${body}
     ${S.regView === 'cal' && !S.preview ? rutaCard() : ''}`,
   { rtab: '', noSearch: true });
