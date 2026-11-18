@@ -1235,3 +1235,5 @@ html, body { overscroll-behavior-y: contain; }
 .fmt-pills .pill .dot { width: .6rem; height: .6rem; border-radius: 50%; background: var(--mc); margin: 0; }
 .fmt-pills .pill small { color: var(--muted); font-size: .72rem; }
 .fmt-pills .pill b { display: inline-grid; place-items: center; min-width: 1.5rem; height: 1.5rem; padding: 0 .3rem; border-radius: 999px; background: var(--mc); color: #fff; font-size: .8rem; }
+.tag b { font-weight: 800; }
+.tag b, .mini-list li .tag b, .mrow-l2 .tag b { font-size: inherit; font-weight: 800; }
