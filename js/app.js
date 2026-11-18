@@ -931,6 +931,7 @@ const ICO = {
   users: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
   calplus: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM12 14v4M10 16h4',
   check: 'M20 6L9 17l-5-5',
+  euro: 'M4 10h12M4 14h9M19 6a7.7 7.7 0 0 0-5.2-2A7.9 7.9 0 0 0 6 12c0 4.4 3.5 8 7.8 8 2 0 3.8-.8 5.2-2',
   chevd: 'M6 9l6 6 6-6',
   list: 'M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01',
 };
@@ -1125,7 +1126,7 @@ function runnerRegCard(g) {
     const soon = open && !g.suspended && daysTo(g.date) <= 14;
     const edit = g.mine_created && !S.preview ? `<a class="edit-ico" href="#/editar/${g.id}" aria-label="Añadida por ti: editar o borrar la carrera" title="Añadida por ti: editar o borrar la carrera">${ico('pen')}</a>` : '';
     const mates = g.entries.length ? `<div class="club-row"><span class="count">${ico('users')}${g.entries.length} del club</span><ul class="people">${g.entries.map((e) =>
-      `<li class="${e.runner_id === me.id ? 'me' : ''}">${esc(e.name)}${e.category ? ` <small>${esc(e.category)}</small>` : ''}</li>`).join('')}</ul></div>` : '';
+      `<li class="${e.runner_id === me.id ? 'me' : ''}${e.paid ? ' paid' : ''}">${esc(e.name)}${e.category ? ` <small>${esc(e.category)}</small>` : ''}${e.paid ? `<span class="paid-mark" title="Ha pagado la inscripción" aria-label="ha pagado la inscripción">${ico('euro')}</span>` : ''}</li>`).join('')}</ul></div>` : '';
     return `<article class="card race ${open ? '' : 'past-reg '}${modClass(g.modality)}">
       <div class="race-head"><div><h3>${esc(g.name)}</h3>
         <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}${soon ? ` <span class="soon${daysTo(g.date) <= 7 ? ' now' : ''}">${ico('clock', 't-i')}${daysToText(daysTo(g.date))}</span>` : ''}</p></div>
@@ -1139,6 +1140,7 @@ function runnerRegCard(g) {
            <button class="btn primary" data-act="r-join" data-id="${g.id}">La hice: apuntarme</button></div>` : ''}`}
       ${g.notes ? `<p class="notes">${esc(g.notes)}</p>` : ''}
       ${mates}
+      ${mine && !S.preview && !g.suspended && (open || !g.my_result) ? `<button type="button" class="pay-btn${mine.paid ? ' on' : ''}" data-act="r-paid" data-id="${g.id}">${ico('euro')}<span>${mine.paid ? `Pagada${mine.paid_amount != null ? ' · ' + euros(mine.paid_amount) : ''}` : 'Marcar como pagada'}</span></button>` : ''}
       ${!open || g.suspended ? '' : mine
         ? `<div class="joined-acts">
              <button class="btn joined-btn" data-act="r-joined" data-id="${g.id}" aria-label="Estás inscrito${mine.category ? ' en ' + esc(mine.category) : ''}: cambiar categoría o borrarme">${ico('check')}<span>Inscrito${mine.category ? ' (' + esc(mine.category) + ')' : ''}</span>${ico('chevd', 'jb-more')}</button>
@@ -2837,6 +2839,26 @@ function askLink(title, text, current) {
 }
 
 /** Ventana para elegir la categoría con la que se apunta alguien (obligatoria). Devuelve la categoría o null si cancela. */
+/** Ventana «Pago de la inscripción»: importe opcional; devuelve {paid, amount} o null. */
+function askPaid(name, mine) {
+  return new Promise((resolve) => {
+    const dlg = document.getElementById('dialog');
+    dlg.innerHTML = `<form method="dialog" class="dlg"><h2>Pago de la inscripción</h2><p>${esc(name || '')}</p>
+      <p class="hint">Anota que ya la has pagado en la web de la carrera. Tus compañeros verán que la tienes pagada; <b>el importe solo lo ves tú</b>.</p>
+      <label>Importe pagado (opcional)<input name="amount" type="number" inputmode="decimal" step="0.01" min="0" max="10000" placeholder="Ej.: 25" value="${mine?.paid_amount ?? ''}"></label>
+      <div class="dlg-actions"><button value="ok" class="btn primary">${mine?.paid ? 'Guardar' : 'Ya la he pagado'}</button>${mine?.paid ? '<button value="no" class="btn danger" formnovalidate>Quitar el pago</button>' : ''}<button value="" class="btn ghost" formnovalidate>Cancelar</button></div></form>`;
+    dlg.onclose = () => {
+      const v = dlg.returnValue;
+      if (v === 'no') return resolve({ paid: false, amount: null });
+      if (v !== 'ok') return resolve(null);
+      const raw = dlg.querySelector('input[name="amount"]').value.trim().replace(',', '.');
+      resolve({ paid: true, amount: raw === '' || !(Number(raw) >= 0) ? null : Math.round(Number(raw) * 100) / 100 });
+    };
+    dlg.returnValue = '';
+    dlg.showModal();
+  });
+}
+
 function askCategory(name, okLabel = 'Apuntarme', current = '') {
   return new Promise((resolve) => {
     const dlg = document.getElementById('dialog');
@@ -3325,6 +3347,15 @@ const actions = {
   async 'r-leave'(el) {
     if (!await confirmAction('Borrar inscripción', '¿Seguro que quieres borrarte de esta carrera?', 'Sí, borrarme')) return;
     await run(async () => { await api.runnerLeave(S.code, el.dataset.id); await loadRunner(); }, 'Te has borrado');
+    render();
+  },
+  // Pago de la inscripción: lo marca el corredor (con el importe, opcional); los compañeros ven solo «pagada»
+  async 'r-paid'(el) {
+    const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id); if (!g) return;
+    const mine = g.entries.find((e) => e.runner_id === S.runnerData.me.id); if (!mine) return;
+    const r = await askPaid(g.name, mine);
+    if (!r) return;
+    await run(async () => { await api.runnerSetPaid(S.code, g.id, r.paid, r.amount); await loadRunner(); }, r.paid ? '✓ Pago anotado' : 'Pago quitado');
     render();
   },
   // Botón verde «✓ Inscrito (M40)»: cambiar la categoría o borrarse
@@ -3976,7 +4007,7 @@ document.addEventListener('visibilitychange', async () => {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['chro-toggle', 'chro-all', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
+const RUNNER_ACTIONS = new Set(['chro-toggle', 'chro-all', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
 // los enlaces de la ventana emergente (p. ej. las carreras de un compañero) cierran la ventana al navegar
 document.getElementById('dialog').addEventListener('click', (ev) => { if (ev.target.closest('a[href^="#/"]')) ev.currentTarget.close(); });
 $app.addEventListener('click', (ev) => {

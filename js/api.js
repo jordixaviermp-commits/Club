@@ -25,6 +25,9 @@ export function friendlyError(e) {
   if (/fecha_no_valida/.test(msg)) return 'Revisa las fechas: desde el 1 de enero del año pasado hasta, como mucho, dentro de dos años.';
   if (/demasiadas_carreras/.test(msg)) return 'Hoy ya has añadido muchas carreras. Si necesitas más, pídeselo a la dirección.';
   if (/inscripcion_cerrada/.test(msg)) return 'Ya no se puede cambiar: es una carrera demasiado antigua o ya has puesto tu resultado. Pídeselo a la dirección del club.';
+  if (/PGRST202|Could not find/i.test(msg) && /runner_set_paid/.test(msg)) return 'Para marcar el pago falta activarlo en la base de datos. Avisa a la dirección.';
+  if (/importe_no_valido/.test(msg)) return 'Revisa el importe: entre 0 y 10 000 euros.';
+  if (/no_inscrito/.test(msg)) return 'Primero tienes que estar apuntado a esa carrera.';
   if (/solo_direccion|permission denied|42501/.test(msg)) return 'No tienes permiso para hacer esto.';
   if (/Invalid login credentials/i.test(msg)) return 'Email o contraseña incorrectos.';
   if (/duplicate key|unique/i.test(msg)) return 'Hay un corredor repetido en la misma carrera.';
@@ -169,6 +172,7 @@ export function supabaseApi(url, key) {
     async runnerCreate(code, reg, category) { return ok(await sb.rpc('runner_create_registration', { p_code: code, p_reg: reg, p_category: category || null })); },
     async runnerJoin(code, regId, category) { ok(await sb.rpc('runner_join', { p_code: code, p_registration: regId, p_category: category || null })); },
     async runnerLeave(code, regId) { ok(await sb.rpc('runner_leave', { p_code: code, p_registration: regId })); },
+    async runnerSetPaid(code, regId, paid, amount) { ok(await sb.rpc('runner_set_paid', { p_code: code, p_registration: regId, p_paid: !!paid, p_amount: amount ?? null })); },
     async runnerJoinRace(code, raceId, category) { ok(await sb.rpc('runner_join_race', { p_code: code, p_race: raceId, p_category: category || null })); },
     async autoPromote() { try { return ok(await sb.rpc('auto_promote_registrations')); } catch { return 0; } },
     async runnerComplete(code, kind, id, data) { ok(await sb.rpc('runner_complete_race', { p_code: code, p_kind: kind, p_id: id, p_data: data })); },
@@ -575,7 +579,7 @@ export function demoApi(storage = globalThis.localStorage) {
             return e ? { position: e.self_position, podium_type: e.self_podium_type, time_seconds: e.self_time_seconds || null } : null; })(),
           entries: d.registration_entries.filter((e) => e.registration_id === g.id).map((e) => {
             const rn = d.runners.find((r) => r.id === e.runner_id);
-            return { runner_id: e.runner_id, name: rn?.name, category: e.category };
+            return { runner_id: e.runner_id, name: rn?.name, category: e.category, paid: !!e.paid_at, paid_amount: e.runner_id === me.id ? (e.paid_amount ?? null) : null };
           }).sort((a, b) => a.name.localeCompare(b.name)),
         })),
       });
@@ -687,8 +691,17 @@ export function demoApi(storage = globalThis.localStorage) {
     },
     async runnerJoin(code, regId, category) {
       const me = byCode(code); openReg(regId); const d = load();
+      const prev = d.registration_entries.find((e) => e.registration_id === regId && e.runner_id === me.id); // como la base de datos: solo cambia la categoría
       d.registration_entries = d.registration_entries.filter((e) => !(e.registration_id === regId && e.runner_id === me.id));
-      d.registration_entries.push({ registration_id: regId, runner_id: me.id, category: category || null, created_at: new Date().toISOString() });
+      d.registration_entries.push({ ...(prev || { created_at: new Date().toISOString() }), registration_id: regId, runner_id: me.id, category: category || null });
+      save();
+    },
+    async runnerSetPaid(code, regId, paid, amount) {
+      const me = byCode(code); const d = load();
+      const e = d.registration_entries.find((x) => x.registration_id === regId && x.runner_id === me.id);
+      if (!e) throw new Error('no_inscrito');
+      if (amount != null && (!(amount >= 0) || amount > 10000)) throw new Error('importe_no_valido');
+      if (paid) { e.paid_at = e.paid_at || new Date().toISOString(); e.paid_amount = amount ?? null; } else { e.paid_at = null; e.paid_amount = null; }
       save();
     },
     async runnerJoinRace(code, raceId, category) {

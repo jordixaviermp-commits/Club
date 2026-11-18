@@ -84,6 +84,11 @@ alter table public.results add column if not exists time_seconds integer;
 alter table public.results drop constraint if exists results_time_check;
 alter table public.results add constraint results_time_check check (time_seconds is null or (time_seconds > 0 and time_seconds <= 3600000));
 alter table public.registration_entries add column if not exists self_time_seconds integer;
+-- Pago de la inscripción (lo marca el propio corredor; los compañeros ven solo «pagada», el importe es privado)
+alter table public.registration_entries add column if not exists paid_at timestamptz;
+alter table public.registration_entries add column if not exists paid_amount numeric(8,2);
+alter table public.registration_entries drop constraint if exists entries_paid_check;
+alter table public.registration_entries add constraint entries_paid_check check (paid_amount is null or (paid_amount >= 0 and paid_amount <= 10000));
 alter table public.registration_entries drop constraint if exists entries_self_check;
 alter table public.registration_entries add constraint entries_self_check check (
   (self_position is null or self_position > 0) and (self_podium_type is null or self_podium_type in ('suelta','general','campeonato'))
@@ -673,7 +678,8 @@ begin
                                from registration_entries e where e.registration_id = g.id and e.runner_id = me.id and e.self_position is not null),
                'province', g.province, 'country', g.country, 'modality', g.modality, 'notes', g.notes,
                'entries', coalesce((
-                  select jsonb_agg(jsonb_build_object('runner_id', r.id, 'name', r.name, 'category', e.category)
+                  select jsonb_agg(jsonb_build_object('runner_id', r.id, 'name', r.name, 'category', e.category,
+                                     'paid', e.paid_at is not null, 'paid_amount', case when r.id = me.id then e.paid_amount end)
                                    order by r.name)
                     from registration_entries e join runners r on r.id = e.runner_id
                    where e.registration_id = g.id), '[]'::jsonb))
@@ -1270,6 +1276,23 @@ begin
   delete from registration_entries where registration_id = p_registration and runner_id = v_runner;
 end $$;
 
+-- El corredor marca (o desmarca) que ha pagado su inscripción; el importe es opcional y solo lo ve él (y la dirección).
+create or replace function public.runner_set_paid(p_code text, p_registration uuid, p_paid boolean, p_amount numeric default null)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_runner uuid;
+begin
+  select id into v_runner from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  if p_amount is not null and (p_amount < 0 or p_amount > 10000) then raise exception 'importe_no_valido'; end if;
+  update registration_entries
+     set paid_at = case when coalesce(p_paid, true) then coalesce(paid_at, now()) else null end,
+         paid_amount = case when coalesce(p_paid, true) then p_amount else null end
+   where registration_id = p_registration and runner_id = v_runner;
+  if not found then raise exception 'no_inscrito'; end if;
+end $$;
+revoke execute on function public.runner_set_paid(text, uuid, boolean, numeric) from public, anon;
+grant execute on function public.runner_set_paid(text, uuid, boolean, numeric) to anon, authenticated;
+
 -- Señal de vida para que el proyecto gratuito no se pause (ver .github/workflows/keepalive.yml).
 create or replace function public.ping() returns text
 language sql stable as $$ select 'ok'::text $$;
@@ -1311,7 +1334,7 @@ grant execute on function public.runner_view(text), public.runner_join(text, uui
                           public.runner_report_result(text, text, uuid, int, text, text, int),
                           public.runner_documents_list(text), public.runner_get_document(text, uuid), public.runner_contract_template(text), public.runner_get_contract_template(text),
                           public.runner_team(text), public.runner_chronicles(text), public.runner_chronicle_set(text, text, boolean),
-                          public.runner_leave(text, uuid), public.runner_join_race(text, uuid, text),
+                          public.runner_leave(text, uuid), public.runner_set_paid(text, uuid, boolean, numeric), public.runner_join_race(text, uuid, text),
                           public.runner_set_race_type(text, uuid, text, text), public.runner_propose_circuit(text, text, int, int, text),
                           public.runner_cancel_circuit(text, uuid), public.runner_news(text), public.runner_set_race_details(text, uuid, text, numeric), public.runner_complete_race(text, text, uuid, jsonb), public.auto_promote_registrations(),
                           public.runner_reply_news(text, uuid, text, int), public.runner_request_correction(text, text, uuid, int, text, text, text),

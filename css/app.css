@@ -1043,3 +1043,11 @@ html, body { overscroll-behavior-y: contain; }
 .joined-acts .btn { min-width: 0; padding: .3rem .25rem; gap: .2rem; font-size: clamp(.7rem, 3.2vw, .82rem); }
 .joined-acts .btn .ico { width: 15px; height: 15px; }
 .joined-acts { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr); } .joined-btn .jb-more { display: none; }
+
+/* ---- Pago de la inscripción: discreto (una pastilla) y una marca pequeña en los compañeros que ya pagaron ---- */
+.pay-btn { display: inline-flex; align-items: center; gap: .35rem; margin-top: .55rem; padding: .2rem .7rem .2rem .5rem; border-radius: 999px; border: 1px dashed var(--line); background: none; color: var(--muted); font: inherit; font-size: .84rem; cursor: pointer; }
+.pay-btn .ico { width: 15px; height: 15px; }
+.pay-btn.on { border-style: solid; border-color: color-mix(in srgb, #1b7f3b 45%, transparent); background: color-mix(in srgb, #1b7f3b 14%, var(--card)); color: color-mix(in srgb, #1b7f3b 70%, var(--text)); font-weight: 700; }
+.people .paid-mark { display: inline-grid; place-items: center; margin-left: .3rem; color: color-mix(in srgb, #1b7f3b 75%, var(--text)); vertical-align: middle; }
+.people .paid-mark .ico { width: 14px; height: 14px; }
+.people li.paid { border-color: color-mix(in srgb, #1b7f3b 40%, var(--line)); }
