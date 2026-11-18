@@ -1642,7 +1642,11 @@ async function enterNews() {
 /** Bloque «¿Vienes?» de una noticia que pide confirmación. */
 function rsvpBlock(n) {
   const yes = Number(n.yes_count) || 0;
-  const counts = `<p class="count">👥 ${yes} apuntado${yes === 1 ? '' : 's'}${n.no_count ? ` · ${n.no_count} no van` : ''}</p>`;
+  const who = n.yes_list || [];
+  const counts = who.length
+    ? `<details class="rsvp-who" data-open-key="who-${esc(n.id)}"${S.open?.[`who-${n.id}`] ? ' open' : ''}><summary><span>${ico('users')}<b>${yes} apuntado${yes === 1 ? '' : 's'}</b>${n.no_count ? ` <small class="muted">· ${n.no_count} no van</small>` : ''}</span>${ico('chevd', 'desp-chev')}</summary>
+        <ul class="who-list">${who.map((x) => `<li>${esc(x.name)}${x.guests ? ` <small class="muted">+${x.guests} acompañante${x.guests === 1 ? '' : 's'}</small>` : ''}</li>`).join('')}</ul></details>`
+    : `<p class="count">${ico('users')} ${yes} apuntado${yes === 1 ? '' : 's'}${n.no_count ? ` · ${n.no_count} no van` : ''}</p>`;
   if (S.preview) return `<div class="rsvp"><p class="muted small">Esta noticia pide confirmación («Me apunto / No voy»).</p>${counts}</div>`;
   const mine = n.my_answer === 'si' ? `✅ Te has apuntado${n.my_guests ? ` con ${n.my_guests} acompañante${n.my_guests === 1 ? '' : 's'}` : ''}`
     : n.my_answer === 'no' ? '❌ Has dicho que no vas' : '';

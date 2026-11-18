@@ -443,7 +443,8 @@ export function demoApi(storage = globalThis.localStorage) {
       return clone((load().announcements || []).filter((x) => !x.expires_at || x.expires_at >= t).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 30).map((n) => {
         const mine = reps.find((r) => r.announcement_id === n.id && r.runner_id === me.id), all = reps.filter((r) => r.announcement_id === n.id);
         return { ...n, rsvp: !!n.rsvp, my_answer: mine?.answer || null, my_guests: mine?.guests ?? null,
-          yes_count: all.filter((r) => r.answer === 'si').reduce((c, r) => c + 1 + r.guests, 0), no_count: all.filter((r) => r.answer === 'no').length };
+          yes_count: all.filter((r) => r.answer === 'si').reduce((c, r) => c + 1 + r.guests, 0), no_count: all.filter((r) => r.answer === 'no').length,
+          yes_list: all.filter((r) => r.answer === 'si').map((r) => ({ name: load().runners.find((x) => x.id === r.runner_id)?.name || '?', guests: r.guests || 0 })).sort((x, y) => x.name.localeCompare(y.name, 'es')) };
       }));
     },
     async socialView(code) {

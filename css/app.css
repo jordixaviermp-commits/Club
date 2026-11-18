@@ -1363,3 +1363,12 @@ nav.tabs a:not(.on) svg { padding: 3px 16px; box-sizing: content-box; }
 .mini-list li.mini:not(.mate-row) .mini-main > b { font-size: 1rem; }
 .pod-l2 .rname { font-size: .92rem; }
 .next-hero .mrow-name { font-size: 1.25rem; }
+/* Noticias con «Me apunto»: quién asiste, en desplegable */
+.rsvp-who { margin: .2rem 0 .5rem; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+.rsvp-who > summary { display: flex; align-items: center; justify-content: space-between; gap: .5rem; cursor: pointer; list-style: none; padding: .5rem .7rem; }
+.rsvp-who > summary::-webkit-details-marker { display: none; }
+.rsvp-who > summary > span { display: inline-flex; align-items: center; gap: .4rem; flex-wrap: wrap; } .rsvp-who > summary .ico:first-child { width: 18px; height: 18px; }
+.rsvp-who > summary .desp-chev { flex: none; } .rsvp-who[open] > summary .desp-chev { transform: rotate(180deg); }
+.who-list { list-style: none; margin: 0; padding: 0 .7rem .6rem; display: flex; flex-wrap: wrap; gap: .35rem; }
+.who-list li { padding: .2rem .7rem; border-radius: 999px; background: var(--card); border: 1px solid var(--line); font-size: .9rem; }
+.rsvp .count .ico { width: 17px; height: 17px; vertical-align: -3px; }
