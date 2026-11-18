@@ -2285,11 +2285,18 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
     return `<div class="lead l-${icon}"><span class="lead-i">${ico(icon)}</span><small>${label}</small><b>${names(people.filter((r) => score(r) === top), 2)}</b><em>${top} ${top === 1 ? unit : unit + 's'}</em></div>`;
   };
   const leaders = [lead('flag', 'Más carreras', (r) => r.races, 'carrera'), lead('trophy', 'Más podios', (r) => r.p1 + r.p2 + r.p3, 'podio'), lead('medal', 'Más victorias', (r) => r.p1, 'victoria')].join('');
-  const byMod = `<section class="card eq-mod"><h2>Por disciplina</h2>
-    ${all.disciplines.map((x) => `<button type="button" class="modrow2 ${discClass(x.modality, x.subtype)}${mod === x.key ? ' sel' : ''}" data-act="sum-mod" data-m="${esc(x.key)}">
-      <i class="stripe"></i><span class="mr-main"><b>${esc(x.subtype ? `${x.modality} · ${x.subtype}` : x.modality)}</b><small>${x.runners} corredor${x.runners === 1 ? '' : 'es'} · ${x.participations} participaci${x.participations === 1 ? 'ón' : 'ones'}</small>
-        <span class="mr-chips"><span class="mchip-s">${ico('trophy')}${x.podiums}</span><span class="mchip-s w">${ico('medal')}${x.wins}</span></span></span>
-      <span class="mr-n"><b>${x.races}</b>carrera${x.races === 1 ? '' : 's'}</span></button>`).join('')}</section>`;
+  // participación del equipo: por disciplina o por categoría (sin medallas: esas están en «Podios»)
+  const pview = S.partView === 'cat' ? 'cat' : 'disc';
+  const maxCat = Math.max(1, ...s.byCategory.map((c) => c.participations));
+  const byMod = `<section class="card eq-mod"><h2>Participación del equipo</h2>
+    <div class="seg-sw pod-sw" role="group" aria-label="Ver la participación por"><button type="button" class="${pview === 'disc' ? 'on' : ''}" data-act="part-view" data-v="disc">Por disciplina</button><button type="button" class="${pview === 'cat' ? 'on' : ''}" data-act="part-view" data-v="cat">Por categoría</button></div>
+    ${pview === 'disc' ? `<p class="hint">Toca una disciplina para ver solo lo suyo.</p>${all.disciplines.map((x) => `<button type="button" class="modrow2 ${discClass(x.modality, x.subtype)}${mod === x.key ? ' sel' : ''}" data-act="sum-mod" data-m="${esc(x.key)}">
+      <i class="stripe"></i><span class="mr-main"><b>${esc(x.subtype ? `${x.modality} · ${x.subtype}` : x.modality)}</b><small>${x.runners} corredor${x.runners === 1 ? '' : 'es'} · ${x.participations} participaci${x.participations === 1 ? 'ón' : 'ones'}</small></span>
+      <span class="mr-n"><b>${x.races}</b>carrera${x.races === 1 ? '' : 's'}</span></button>`).join('')}`
+    : `<p class="hint">Cuántos corredores y participaciones tiene cada categoría.</p>${s.byCategory.map((c) => `<div class="modrow2 cat-row">
+      <i class="stripe"></i><span class="mr-main"><b>${c.category ? esc(c.category) : 'Sin categoría'}</b><small>${c.runners} corredor${c.runners === 1 ? '' : 'es'}${c.km ? ` · ${esc(kmText(c.km))}` : ''}</small>
+        <span class="cat-bar"><span style="width:${(c.participations / maxCat) * 100}%"></span></span></span>
+      <span class="mr-n"><b>${c.participations}</b>participaci${c.participations === 1 ? 'ón' : 'ones'}</span></div>`).join('')}`}</section>`;
   // carreras por mes + formatos más comunes
   const maxMonth = maxOf(s.byMonth.map((m) => m.total));
   const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -2345,7 +2352,7 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
       ${items.length > SHOWN ? `<details class="pod-more"><summary>Ver los ${items.length - SHOWN} anteriores</summary><ul class="pod-items">${items.slice(SHOWN).map(podItem).join('')}</ul></details>` : ''}`
       : '<p class="muted">Sin podios este año.</p>'}</section>`;
   return `<div class="eq">${filters}${hero}${leaders ? `<div class="leads eq-leads">${leaders}</div>` : ''}
-    ${months}${rank}${byMod}${cats}${podRunner}${places}</div>`;
+    ${months}${rank}${byMod}${podRunner}${places}</div>`;
 }
 
 /**
@@ -3806,6 +3813,7 @@ const actions = {
   },
   'sum-mod'(el) { S.sumMod = el.dataset.m; render(); },
   'pod-view'(el) { S.podView = el.dataset.v; render(); },
+  'part-view'(el) { S.partView = el.dataset.v; render(); },
   'race-mod'(el) { S.raceMod = el.dataset.m; render(); },
   'race-todo'() { S.raceTodo = !S.raceTodo; render(); },
   'race-repeat'() {
