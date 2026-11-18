@@ -1041,11 +1041,14 @@ function myRacesCard(d, afterSummary = () => '') {
 
   ${afterSummary()}
 
+  ${upcoming.length ? `<ul class="mini-list next-hero" id="sec-hero">${mrow(upcoming[0], { href: `${runnerHref('carrera')}/${upcoming[0].id}`, hero: true, pill: `${dleft(upcoming[0])}${myCat(upcoming[0]) ? ` · ${esc(myCat(upcoming[0]))}` : ''}`, edit: editMine(upcoming[0]), below: payChips(upcoming[0]) })}</ul>` : ''}
+
   <details class="card season-block next-block desp" id="sec-next" data-open-key="next"${S.open?.next ? ' open' : ''}>
     <summary><span class="desp-t">Mis próximas inscripciones <small>(${upcoming.length})</small></span>${ico('chevd', 'desp-chev')}
       ${upcoming.length ? `<span class="desp-sub">${payLineInline(upcoming)}</span>` : ''}</summary>
     <p class="hint">Carreras a las que estás apuntado y que aún no se han corrido. <b>Toca una</b> para abrirla: ves quién va, puedes borrarte y, si la añadiste tú, editarla.</p>
-    ${upcoming.length ? `<ul class="mini-list">${upcoming.map((g, i) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, hero: i === 0, pill: `${dleft(g)}${myCat(g) ? ` · ${esc(myCat(g))}` : ''}`, edit: editMine(g), below: payChips(g) })).join('')}</ul>`
+    ${upcoming.length > 1 ? `<ul class="mini-list">${upcoming.slice(1).map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, pill: `${dleft(g)}${myCat(g) ? ` · ${esc(myCat(g))}` : ''}`, edit: editMine(g), below: payChips(g) })).join('')}</ul>`
+      : upcoming.length ? '<p class="empty small">No tienes más carreras apuntadas: la próxima cita está arriba.</p>'
       : '<p class="empty small">No estás apuntado a ninguna. Búscalas en la pestaña Carreras.</p>'}
   </details>
 
