@@ -944,6 +944,9 @@ const ICO = {
   users: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
   calplus: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM12 14v4M10 16h4',
   check: 'M20 6L9 17l-5-5',
+  layers: 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
+  calcheck: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM9 16l2 2 4-4',
+  timer: 'M10 2h4M12 14l3-3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z',
   folder: 'M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z',
   money: 'M2 6h20v12H2zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 12h.01M18 12h.01',
   file: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8',
@@ -2298,12 +2301,25 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
     <div class="sum-big">${big(T.races, 'Carreras', 'r')}${big(T.runners, 'Corredores', 'c')}${big(T.podiums, 'Podios', 'p')}${big(T.wins, 'Victorias', 'w')}</div>
     <div class="eq-mini">${mini('ruler', T.km ? kmText(T.km) : '—', 'totales', 'km')}${mini('clock', T.timed ? formatTime(T.time, true) : '—', 'en carrera', 'tm')}${mini('users', T.participations, 'particip.', 'pt')}${mini('bars', T.podiums ? `${Math.round((T.podiums / Math.max(1, T.participations)) * 100)} %` : '—', 'podios', 'pc')}</div>
   </section>`;
-  const lead = (icon, label, score, unit) => {
+  // tarjetas de líderes: nombre de quien lidera y su cifra; las de «récord» llevan su propio texto
+  const lead = (icon, label, score, fmt, cls = icon) => {
     const top = Math.max(0, ...people.map(score));
     if (!top) return '';
-    return `<div class="lead l-${icon}"><span class="lead-i">${ico(icon)}</span><small>${label}</small><b>${names(people.filter((r) => score(r) === top), 2)}</b><em>${top} ${top === 1 ? unit : unit + 's'}</em></div>`;
+    return `<div class="lead l-${cls}"><span class="lead-i">${ico(icon)}</span><small>${label}</small><b>${names(people.filter((r) => score(r) === top), 2)}</b><em>${fmt(top)}</em></div>`;
   };
-  const leaders = [lead('flag', 'Más carreras', (r) => r.races, 'carrera'), lead('trophy', 'Más podios', (r) => r.p1 + r.p2 + r.p3, 'podio'), lead('medal', 'Más victorias', (r) => r.p1, 'victoria')].join('');
+  const plu = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const L = s.longest;
+  const longestCard = L ? `<div class="lead l-ruler"><span class="lead-i">${ico('ruler')}</span><small>Carrera más larga</small><b>${esc(kmText(L.km))}</b><em class="lead-race">${esc(L.race)}</em><em>${esc(L.runners.slice(0, 2).join(', '))}${L.runners.length > 2 ? ` y ${L.runners.length - 2} más` : ''}</em></div>` : '';
+  const leaders = [
+    lead('flag', 'Más carreras', (r) => r.races, (n) => plu(n, 'carrera', 'carreras')),
+    lead('trophy', 'Más podios', (r) => r.p1 + r.p2 + r.p3, (n) => plu(n, 'podio', 'podios')),
+    lead('medal', 'Más victorias', (r) => r.p1, (n) => plu(n, 'victoria', 'victorias')),
+    longestCard,
+    lead('route', 'Más kilómetros', (r) => r.km, (n) => kmText(n), 'route'),
+    lead('timer', 'Más tiempo en carrera', (r) => r.time, (n) => formatTime(n, true), 'timer'),
+    lead('layers', 'Más versátil', (r) => Object.keys(r.discs || {}).length, (n) => plu(n, 'disciplina distinta', 'disciplinas distintas')),
+    lead('calcheck', 'Más constante', (r) => r.months?.size || 0, (n) => plu(n, 'mes con carrera', 'meses con carrera'), 'calcheck'),
+  ].filter(Boolean).join('');
   // participación del equipo, compacta: una barra repartida (por disciplina o por categoría) y globos debajo
   const pview = S.partView === 'cat' ? 'cat' : 'disc';
   const partItems = pview === 'disc'
@@ -2371,7 +2387,7 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
       <h3>Últimos podios</h3><ul class="pod-items">${items.slice(0, SHOWN).map(podItem).join('')}</ul>
       ${items.length > SHOWN ? `<details class="pod-more"><summary>Ver los ${items.length - SHOWN} anteriores</summary><ul class="pod-items">${items.slice(SHOWN).map(podItem).join('')}</ul></details>` : ''}`
       : '<p class="muted">Sin podios este año.</p>'}</section>`;
-  return `<div class="eq">${filters}${hero}${leaders ? `<div class="leads eq-leads">${leaders}</div>` : ''}
+  return `<div class="eq">${filters}${hero}${leaders ? `<div class="eq-leads-wrap"><div class="leads eq-leads" role="list" aria-label="Líderes y récords del equipo">${leaders}</div><p class="leads-hint">Desliza para ver más récords ›</p></div>` : ''}
     ${months}${rank}${byMod}${podRunner}${places}</div>`;
 }
 

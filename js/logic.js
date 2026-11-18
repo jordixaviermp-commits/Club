@@ -249,16 +249,17 @@ export function yearSummary(year, races, runners) {
 
   // Participaciones por corredor: toda la plantilla (también con 0) y quien ya no está pero corrió ese año.
   const rows = new Map();
-  for (const rn of runners) rows.set(rn.id, { key: rn.id, name: rn.name, current: true, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {}, discs: {}, km: 0, time: 0, timed: 0 });
+  for (const rn of runners) rows.set(rn.id, { key: rn.id, name: rn.name, current: true, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {}, discs: {}, months: new Set(), km: 0, time: 0, timed: 0 });
   for (const { race, res } of parts) {
     const k = personKey(res);
-    if (!rows.has(k)) rows.set(k, { key: k, name: res.runner_name, current: false, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {}, discs: {}, km: 0, time: 0, timed: 0 });
+    if (!rows.has(k)) rows.set(k, { key: k, name: res.runner_name, current: false, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {}, discs: {}, months: new Set(), km: 0, time: 0, timed: 0 });
     const row = rows.get(k);
     row.races++;
     row.km = Math.round((row.km + (Number(race.km) || 0)) * 10) / 10;
     if (Number(res.time_seconds) > 0) { row.time += Number(res.time_seconds); row.timed++; }
     row.mods[race.modality] = (row.mods[race.modality] || 0) + 1;
     { const dk = disciplineKey(race.modality, race.subtype); row.discs[dk] = (row.discs[dk] || 0) + 1; }
+    row.months.add(String(race.date).slice(0, 7));
     if (race.modality === 'Carretera') row.road++;
     if (race.modality === 'BTT') row.btt++;
   }
@@ -292,7 +293,11 @@ export function yearSummary(year, races, runners) {
     type, stage, position,
   }));
 
-  return { year, totals, byModality, byMonth, bySubtype, disciplines, byCategory, countries, provinces, missingPlace, perRunner, byPodiumType, podiumList };
+  // Carrera más larga (km) y quién la corrió
+  let longest = null;
+  for (const { race } of parts) { const km = Number(race.km) || 0; if (km > 0 && (!longest || km > longest.km)) longest = { km, race: race.name, raceId: race.id, runners: [] }; }
+  if (longest) longest.runners = parts.filter((x) => x.race.id === longest.raceId).map((x) => x.res.runner_name).sort(byText);
+  return { year, totals, longest, byModality, byMonth, bySubtype, disciplines, byCategory, countries, provinces, missingPlace, perRunner, byPodiumType, podiumList };
 }
 
 // ---------- CSV ----------
