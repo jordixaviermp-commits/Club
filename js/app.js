@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, disciplineKey, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
+  directorBoard, groupMessage, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -240,6 +240,7 @@ async function onRoute() {
     }
   }
   if (S.session?.isAdmin && view === 'historial') loadChanges();
+  if (S.session?.isAdmin && view === 'corredores' && id && RFILTERS.some(([f]) => f === id)) S.rfilter = id;
   if (S.session?.isAdmin) {
     if (view === 'inscripciones' && id) S.draft = draftRegistration(id);
     if (view === 'carreras' && id) S.draft = draftRace(id);
@@ -260,6 +261,7 @@ async function loadChron() {
   try { const keys = await api.runnerChronicles(code); S.chron = Array.isArray(keys) ? new Set(keys) : null; } catch { S.chron = null; }
 }
 async function loadRunner() {
+  if (!S.session?.isAdmin) api.runnerPing?.(S.code).catch(() => {});   // actividad: última vez que abrió la app
   try { S.runnerData = await api.runnerView(S.code); await loadNews(); await loadCorrections(); await loadChron(); }
   catch (e) {
     S.runnerData = null;
@@ -271,12 +273,19 @@ async function loadRunner() {
 // ---------- marco común ----------
 
 const ADMIN_TABS = [
-  ['inscripciones', 'Inscripciones', 'M8 2v3M16 2v3M3 9h18M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z'],
-  ['carreras', 'Carreras', 'M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3'],
+  ['hoy', 'Hoy', 'M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z'],
+  ['inscripciones', 'Carreras', 'M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3'],
+  ['corredores', 'Equipo', 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8'],
   ['resumen', 'Resumen', 'M4 20V10M10 20V4M16 20v-7M22 20H2'],
-  ['corredores', 'Corredores', 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8'],
   ['redes', 'Redes', 'M18 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM8.6 13.5l6.8 4M15.4 6.5l-6.8 4'],
 ];
+/** Pestaña de la dirección a la que pertenece cada pantalla (y su color). */
+const ADMIN_GROUP = { '': 'hoy', hoy: 'hoy', avisos: 'hoy', mensajes: 'hoy', calidad: 'hoy', actividad: 'hoy', noticias: 'hoy', historial: 'hoy',
+  inscripciones: 'inscripciones', carreras: 'inscripciones', federaciones: 'inscripciones',
+  corredores: 'corredores', contratos: 'corredores', computo: 'corredores', informe: 'corredores', bonos: 'corredores', corredor: 'corredores', docs: 'corredores',
+  resumen: 'resumen', instagram: 'resumen', datos: 'resumen', temporada: 'resumen', memoria: 'resumen', vista: 'corredores', equipo: 'resumen',
+  redes: 'redes', semana: 'redes', publicaciones: 'redes' };
+const SEC_OF = { hoy: 'hoy', inscripciones: 'car', corredores: 'eq', resumen: 'res', redes: 'red', '': 'car', federaciones: 'fed', mi: 'hoy', contrato: 'eq', equipo: 'res', noticias: 'hoy', carrera: 'car', nueva: 'car' };
 const icon = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
 // Menú de pie de página de los corredores (y de la vista previa de la dirección).
 const RUNNER_TABS = [
@@ -291,6 +300,10 @@ const runnerHref = (sub) => (sub ? `${runnerBase()}/${sub}` : `${runnerBase()}/`
 
 // ---------- Búsqueda rápida (lupa de la cabecera) ----------
 const adminScreens = () => [
+  ['🏠', 'Hoy: lo que tienes por hacer', '#/hoy', 'hoy inicio pendiente por hacer tareas resumen dia'],
+  ['💬', 'Mensaje al equipo (WhatsApp por grupos)', '#/mensajes', 'mensaje whatsapp recordar avisar grupo resultados apuntarse inactivos'],
+  ['📲', 'Actividad: quién usa la app', '#/actividad', 'actividad usa app abierto entrado ultima vez inactivos'],
+  ['🧹', 'Datos incompletos de las carreras', '#/calidad', 'datos incompletos calidad provincia disciplina km puesto falta'],
   ['📋', 'Inscripciones', '#/inscripciones', 'inscripciones apuntarse calendario proximas carreras abiertas'],
   ['🏆', 'Carreras (resultados)', '#/carreras', 'carreras resultados podios historico hechas'],
   ['📊', 'Resumen de la temporada', '#/resumen', 'resumen estadistica categorias podios km modalidad temporada'],
@@ -409,12 +422,12 @@ function frame(title, body, { back, actions = '', rtab = null, noSearch = false 
     ? `<nav class="tabs">${RUNNER_TABS.map(([v, label, d]) =>
       `<a href="${runnerHref(v)}" class="${v === rtab ? 'on' : ''}">${icon(d)}<span>${label}</span></a>`).join('')}</nav>`
     : admin ? `<nav class="tabs">${ADMIN_TABS.map(([v, label, d]) =>
-      `<a href="#/${v}" class="${view === v || (!view && v === 'inscripciones') || (v === 'corredores' && ['contratos', 'computo', 'informe'].includes(view)) || (v === 'resumen' && ['instagram', 'datos', 'temporada', 'memoria'].includes(view)) || (v === 'redes' && ['semana', 'publicaciones'].includes(view)) ? 'on' : ''}">${icon(d)}${v === 'redes' && S.data && socialPending() ? `<b class="tab-n">${socialPending()}</b>` : ''}<span>${label}</span></a>`).join('')}</nav>` : '';
+      `<a href="#/${v}" class="${(ADMIN_GROUP[view] || 'hoy') === v ? 'on' : ''}">${icon(d)}${v === 'redes' && S.data && socialPending() ? `<b class="tab-n">${socialPending()}</b>` : ''}${v === 'hoy' && S.data && todayCount() ? `<b class="tab-n">${todayCount()}</b>` : ''}<span>${label}</span></a>`).join('')}</nav>` : '';
   return `
     ${api.mode === 'demo' ? `<div class="demo-bar">Modo demostración: datos de prueba guardados solo en este móvil.</div>` : ''}
     <header class="top">
       ${back ? `<a class="back" href="${back}" aria-label="Volver">‹</a>` : '<img class="logo" src="icons/logo.png" alt="">'}
-      <h1>${esc(title)}</h1>${actions}${(admin && rtab === null && !back && S.data) || rtab !== null ? (noSearch ? '' : searchButton()) + accidentButton() : ''}${admin && rtab === null && !back && S.data ? bellButton() : ''}${rtab !== null ? newsBell() : ''}
+      <h1>${esc(title)}</h1>${actions}${(admin && rtab === null && !back && S.data) || rtab !== null ? (noSearch ? '' : searchButton()) + accidentButton() : ''}${rtab !== null ? newsBell() : ''}
     </header>
     <main>${body}</main>
     ${tabs}`;
@@ -442,18 +455,22 @@ function render() {
   else if (view === 'accidente' && (admin || S.code)) html = viewAccident();
   else if (admin) {
     html = ({
+      '': viewToday, hoy: viewToday, mensajes: viewMessages, calidad: viewQuality, actividad: viewActivity,
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
       carreras: S.draft ? viewRaceEdit : viewRaces,
       resumen: viewSummary, temporada: viewSeasonDash, memoria: viewMemoria, instagram: viewInstagram, redes: viewNetworks, corredores: viewRunners, contratos: viewContracts, computo: viewSeasonCount, informe: viewSeasonReport, publicaciones: viewPublications, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
       vista: () => (S.preview && S.runnerData ? runnerScreen(parseRoute().id || '') : viewRunners()),
       equipo: () => (S.preview ? viewTeam() : viewSummary()),
-    }[view] || viewRegistrations)();
+    }[view] || viewToday)();
   } else if (view === 'redes' && store.get(SOCIAL_KEY)) html = viewSocial();
   else if (S.code && S.runnerData) html = runnerScreen(view);
   else html = viewWelcome();
   $app.innerHTML = html;
   if ($app.querySelector('#app-ver')) checkVersion();
   document.body.classList.toggle('has-tabs', !!$app.querySelector('nav.tabs'));
+  // color de la sección: cada pestaña tiene el suyo
+  document.body.dataset.sec = admin && view !== 'vista' ? ({ hoy: 'hoy', inscripciones: 'car', corredores: 'eq', resumen: 'res', redes: 'red' }[ADMIN_GROUP[view] || 'hoy'])
+    : (SEC_OF[admin ? (parseRoute().id || '') : view] || 'car');
 }
 
 // ---------- En caso de accidente ----------
@@ -966,6 +983,12 @@ const ICO = {
   bars: 'M12 20V10M18 20V4M6 20v-4',
   euro: 'M4 10h12M4 14h9M19 6a7.7 7.7 0 0 0-5.2-2A7.9 7.9 0 0 0 6 12c0 4.4 3.5 8 7.8 8 2 0 3.8-.8 5.2-2',
   chevd: 'M6 9l6 6 6-6',
+  home: 'M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z',
+  alert: 'M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01',
+  msg: 'M21 11.5a8.4 8.4 0 0 1-12.3 7.4L3 21l2.1-5.7A8.4 8.4 0 1 1 21 11.5z',
+  act: 'M22 12h-4l-3 9L9 3l-3 9H2',
+  db: 'M12 8c4.4 0 8-1.3 8-3s-3.6-3-8-3-8 1.3-8 3 3.6 3 8 3zM4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',
+  send: 'M22 2L11 13M22 2l-7 20-4-9-9-4z',
   list: 'M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01',
 };
 const ico = (k, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${ICO[k]}"/></svg>`;
@@ -1449,7 +1472,8 @@ function viewRegistrations() {
       <p class="count">👥 ${g.entries.length} del club${g.entries.length ? ': ' +
         esc(g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p>
       ${g.created_by ? `<p class="count">Añadida por ${esc(runnerById(g.created_by)?.name || 'un corredor')}</p>` : ''}${editCta()}</a>`;
-  return frame('Inscripciones', `
+  return frame('Carreras', `
+    ${carTabs('inscripciones')}
     <div class="toolbar">
       ${searchBox('admin', 'Buscar inscripción…')}
       <a class="btn primary add-btn" href="#/inscripciones/nueva" aria-label="Nueva inscripción" title="Nueva inscripción">＋</a>
@@ -2097,7 +2121,7 @@ async function refreshPosts(force = false) {
     const sig = (a) => a.map((x) => x.key).sort().join('\n');
     const changed = sig(rows) !== sig(S.data.socialPosts);
     S.data.socialPosts = rows;
-    if ((changed || force) && ['semana', 'avisos', 'redes', 'inscripciones', ''].includes(parseRoute().view) && !S.draft) render();
+    if ((changed || force) && ['semana', 'avisos', 'redes', 'inscripciones', '', 'hoy'].includes(parseRoute().view) && !S.draft) render();
   } catch { /* sin conexión */ }
 }
 function adminAlerts() {
@@ -2154,8 +2178,179 @@ function viewAlerts() {
       <button class="btn ghost block" data-act="backup-snooze">Recordármelo en 7 días</button>` : ''}
     ${a.noContract.length ? `<h2 class="section">📄 Corredores sin tipo de contrato (${a.noContract.length})</h2>
       <p class="hint">Sin contrato indicado se les aplican los bonos y la penalización de renovación: ${esc(a.noContract.map((r) => r.name).join(', '))}.</p>
-      <a class="btn block" href="#/bonos">Indicarlo en Bonos</a>` : ''}`, { back: '#/inscripciones' });
+      <a class="btn block" href="#/bonos">Indicarlo en Bonos</a>` : ''}`, { back: '#/hoy' });
 }
+
+
+// ======================================================================
+//  Hoy: el panel de la dirección (qué hacer ahora, quién falta, qué viene)
+// ======================================================================
+
+const board = () => directorBoard({ races: S.data.races, registrations: S.data.registrations, runners: S.data.runners }, todayISO());
+/** Lo urgente que marca la pestaña Hoy. */
+const todayCount = () => { try { return alertCount() + board().pendingResults.length; } catch { return 0; } };
+/** Iniciales con un color propio por nombre (siempre el mismo). */
+function avatar(name, cls = '') {
+  const n = cleanName(name) || '?';
+  const ini = n.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+  let h = 0; for (const ch of n) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  return `<span class="av ${cls}" style="--h:${h}" aria-hidden="true">${esc(ini)}</span>`;
+}
+const avatars = (ids, max = 5) => { const names = ids.map((id) => runnerById(id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es'));
+  return `<span class="avs">${names.slice(0, max).map((n) => avatar(n)).join('')}${names.length > max ? `<span class="av more">+${names.length - max}</span>` : ''}</span>`; };
+const namesOf = (ids) => ids.map((id) => runnerById(id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es'));
+const MON3 = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
+/** Fecha en bloque (día grande, mes corto) con el color de la disciplina. */
+const dateBadge = (g) => `<span class="dbadge ${discClass(g.modality, g.subtype)}"><b>${Number(g.date.slice(8, 10))}</b><small>${MON3[Number(g.date.slice(5, 7)) - 1]}</small></span>`;
+const seenDot = (r) => (r && Object.prototype.hasOwnProperty.call(r, 'last_seen') ? (() => { const d = seenDays(r.last_seen); return `<i class="seen s-${seenLevel(d)}" title="${esc(seenText(d))}"></i>`; })() : '');
+const agoDays = (n) => (n === 0 ? 'hoy' : n === 1 ? 'ayer' : `hace ${n} días`);
+
+/** Una tarea del panel Hoy: icono de color, qué pasa y qué hacer. */
+function task({ tone, icon: ic, title, sub = '', href = '', acts = '' }) {
+  const main = `<span class="tc-ico">${ico(ic)}</span><span class="tc-body"><b>${title}</b>${sub ? `<small>${sub}</small>` : ''}</span>${href ? `<span class="tc-go">${ico('go')}</span>` : ''}`;
+  return `<article class="tcard t-${tone}">${href ? `<a class="tc-main" href="${esc(href)}">${main}</a>` : `<div class="tc-main">${main}</div>`}${acts ? `<div class="tc-acts">${acts}</div>` : ''}</article>`;
+}
+const msgBtn = (kind, ref = '', label = 'Recordar por WhatsApp') => `<a class="btn small wa" href="#/mensajes/${kind}${ref ? '/' + ref : ''}">${ico('msg')}${label}</a>`;
+
+function viewToday() {
+  const b = board(), a = adminAlerts(), year = new Date().getFullYear();
+  const per = bonusCfg(year).circuitExtra ?? 4;
+  const rows = rosterRows(), low = rows.filter((x) => x.low);
+  const social = socialPending();
+  const tasks = [];
+  if (a.corrections.length) tasks.push(task({ tone: 'red', icon: 'pen', title: `${a.corrections.length} corrección${a.corrections.length === 1 ? '' : 'es'} de puesto por revisar`, sub: esc(a.corrections.map((c) => runnerById(c.runner_id)?.name).filter(Boolean).join(', ')), href: '#/avisos' }));
+  if (a.circuits.length) tasks.push(task({ tone: 'red', icon: 'trophy', title: `${a.circuits.length} plus de circuito por confirmar`, sub: `+${per} carreras para el bono si lo confirmas`, href: '#/avisos' }));
+  for (const x of b.pendingResults.slice(0, 4)) {
+    const miss = namesOf(x.missing);
+    tasks.push(task({ tone: x.days > 7 ? 'red' : 'amber', icon: 'flag', title: `Faltan ${miss.length} resultado${miss.length === 1 ? '' : 's'} · ${esc(x.reg.name)}`,
+      sub: `Terminó ${agoDays(x.days)} · ${esc(miss.join(', '))}`, href: `#/inscripciones/${x.reg.id}`, acts: msgBtn('results', x.reg.id) }));
+  }
+  if (b.pendingResults.length > 4) tasks.push(task({ tone: 'amber', icon: 'flag', title: `Y ${b.pendingResults.length - 4} carreras más sin todos los resultados`, href: '#/mensajes/results' }));
+  if (social) tasks.push(task({ tone: 'pink', icon: 'share', title: `${social} ${social === 1 ? 'publicación' : 'publicaciones'} de redes pendiente${social === 1 ? '' : 's'}`, sub: 'Historias, avisos, resultados y crónicas', href: '#/redes' }));
+  for (const x of a.backup) tasks.push(task({ tone: 'amber', icon: 'db', title: `Copia de seguridad de ${x.kind === 'data' ? 'datos' : 'documentos'}`, sub: `Última: ${agoText(x.days)}`,
+    acts: `<button class="btn small primary" data-act="${x.kind === 'data' ? 'backup' : 'backup-docs'}">Descargar</button><button class="btn small ghost" data-act="backup-snooze">En 7 días</button>` }));
+  if (b.activity && b.counts.never + b.counts.cold) tasks.push(task({ tone: 'violet', icon: 'act', title: `${b.counts.never + b.counts.cold} corredor${b.counts.never + b.counts.cold === 1 ? ' no usa' : 'es no usan'} la app`,
+    sub: `${b.counts.never ? `${b.counts.never} no la ha${b.counts.never === 1 ? '' : 'n'} abierto nunca` : ''}${b.counts.never && b.counts.cold ? ' · ' : ''}${b.counts.cold ? `${b.counts.cold} hace más de un mes` : ''}`, href: '#/actividad', acts: msgBtn('inactive') }));
+  if (low.length) tasks.push(task({ tone: 'amber', icon: 'alert', title: `${low.length} por debajo del mínimo de carreras`, sub: esc(low.map((x) => x.r.name).sort((p, q) => p.localeCompare(q, 'es')).slice(0, 6).join(', ') + (low.length > 6 ? '…' : '')), href: '#/corredores/bajo', acts: msgBtn('low') }));
+  if (a.noContract.length) tasks.push(task({ tone: 'blue', icon: 'file', title: `${a.noContract.length} sin tipo de contrato`, sub: 'Sin él no se calcula bien el bono', href: '#/bonos' }));
+  if (b.quality.length) tasks.push(task({ tone: 'blue', icon: 'list', title: `${b.quality.length} carrera${b.quality.length === 1 ? '' : 's'} con datos incompletos`, sub: 'Provincia, disciplina, km o puestos: para la memoria', href: '#/calidad' }));
+  const urgent = todayCount();
+  const active = b.activity ? b.activity.filter((x) => x.level === 'hot').length : null;
+  const weekN = b.upcoming.filter((x) => x.days <= 7).length;
+  const dt = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+  const races = S.data.races.filter((r) => yearOf(r.date) === year).length;
+  const up = b.upcoming.map((x) => `<a class="up-row" href="#/inscripciones/${x.reg.id}">${dateBadge(x.reg)}
+      <span class="up-main"><b>${esc(x.reg.name)}</b><small>${x.days === 0 ? 'Hoy' : x.days === 1 ? 'Mañana' : `En ${x.days} días`}${place(x.reg) ? ' · ' + esc(place(x.reg)) : ''}</small>${avatars(x.ids)}</span>
+      <span class="up-n"><b>${x.ids.length}</b><small>del club</small></span></a>`).join('');
+  return frame('Hoy', `
+    <section class="hero-today">
+      <p class="ht-date">${esc(dt)}</p>
+      <h2>${tasks.length ? `Tienes <b>${tasks.length}</b> cosa${tasks.length === 1 ? '' : 's'} por mirar` : 'Todo al día ✅'}</h2>
+      <p class="ht-sub">${urgent ? `${urgent} urgente${urgent === 1 ? '' : 's'} · ` : ''}${weekN ? `${weekN} carrera${weekN === 1 ? '' : 's'} esta semana` : 'Ninguna carrera esta semana'}</p>
+      <div class="ht-kpis">
+        <a href="#/corredores"><b>${S.data.runners.length}</b><span>corredores</span></a>
+        <a href="#/actividad"><b>${active == null ? '—' : `${active}`}</b><span>activos 7 días</span></a>
+        <a href="#/carreras"><b>${races}</b><span>carreras ${year}</span></a>
+        <a href="#/inscripciones"><b>${b.upcoming.reduce((n, x) => n + x.ids.length, 0)}</b><span>inscritos 10 días</span></a>
+      </div>
+    </section>
+    <h2 class="sec-h">${ico('check')} Por hacer</h2>
+    ${tasks.length ? `<div class="tasks">${tasks.join('')}</div>` : '<p class="card ok-card">✅ No tienes nada pendiente. Buen trabajo.</p>'}
+    <h2 class="sec-h">${ico('cal')} Próximos 10 días</h2>
+    ${up ? `<div class="up-list">${up}</div>` : '<p class="empty small">No hay carreras con gente del club en los próximos 10 días.</p>'}
+    ${b.upcoming.length ? `<p class="center">${msgBtn('next', b.upcoming[0].reg.id, `Animar a apuntarse a ${esc(b.upcoming[0].reg.name)}`)}</p>` : ''}
+    <h2 class="sec-h">${ico('layers')} Atajos</h2>
+    <div class="qgrid">
+      <a class="qtile q-cyan" href="#/noticias">${ico('msg')}<b>Noticia</b><small>a todo el equipo</small></a>
+      <a class="qtile q-green" href="#/mensajes/all">${ico('send')}<b>WhatsApp</b><small>mensaje por grupos</small></a>
+      <a class="qtile q-orange" href="#/inscripciones/nueva">${ico('calplus')}<b>Inscripción</b><small>nueva carrera</small></a>
+      <a class="qtile q-violet" href="#/actividad">${ico('act')}<b>Actividad</b><small>quién usa la app</small></a>
+      <a class="qtile q-blue" href="#/calidad">${ico('list')}<b>Datos</b><small>carreras incompletas</small></a>
+      <a class="qtile q-pink" href="#/memoria">${ico('book')}<b>Memoria</b><small>para sponsors</small></a>
+    </div>`, { actions: '' });
+}
+
+// ---------- Actividad: quién usa la app ----------
+function viewActivity() {
+  const b = board();
+  if (!b.activity) return frame('Actividad', `<section class="card warn"><h2>Falta un cambio en Supabase</h2>
+    <p>Para saber quién abre la app hay que ejecutar <b>supabase/cambios/2026-11-19-actividad.sql</b> en el editor SQL de Supabase. Desde ese momento se apunta la última vez que cada corredor entra con su enlace.</p></section>`, { back: '#/hoy' });
+  const groups = [['hot', 'Activos esta semana', 'green'], ['warm', 'Este mes', 'blue'], ['cold', 'Hace más de un mes', 'amber'], ['never', 'No la han abierto nunca', 'red']];
+  const by = (lv) => b.activity.filter((x) => x.level === lv).map((x) => ({ ...x, r: runnerById(x.id) })).filter((x) => x.r)
+    .sort((p, q) => (p.days ?? 1e9) - (q.days ?? 1e9) || byName(p.r, q.r));
+  const n = (lv) => b.activity.filter((x) => x.level === lv).length;
+  const tot = b.activity.length || 1;
+  return frame('Actividad', `
+    <section class="card act-sum"><div class="act-bar">${groups.map(([lv, , tone]) => n(lv) ? `<span class="t-${tone}" style="flex:${n(lv)}">${n(lv)}</span>` : '').join('')}</div>
+      <div class="act-leg">${groups.map(([lv, label, tone]) => `<span class="t-${tone}"><i></i>${label} <b>${n(lv)}</b></span>`).join('')}</div>
+      <p class="hint">Cuenta cada vez que el corredor abre la app con su enlace personal. ${Math.round((n('hot') / tot) * 100)} % activos esta semana.</p></section>
+    ${groups.map(([lv, label, tone]) => { const list = by(lv); if (!list.length) return '';
+      return `<h2 class="sec-h t-${tone}"><i class="seen s-${lv}"></i> ${label} <span class="muted">(${list.length})</span></h2>
+      <ul class="plist">${list.map((x) => `<li><a href="#/corredor/${x.r.id}">${avatar(x.r.name)}<span><b>${esc(x.r.name)}</b><small>${esc(seenText(x.days))}${x.r.category ? ' · ' + esc(x.r.category) : ''}</small></span>${ico('go')}</a></li>`).join('')}</ul>
+      ${lv === 'cold' || lv === 'never' ? `<p class="center">${msgBtn('inactive')}</p>` : ''}`; }).join('')}`, { back: '#/hoy' });
+}
+
+// ---------- Calidad de datos: lo que le falta a cada carrera ----------
+function viewQuality() {
+  const b = board(), year = new Date().getFullYear();
+  const all = S.data.races.filter((r) => yearOf(r.date) === year).length;
+  const ok = all - b.quality.filter((x) => x.gaps.some((g) => g !== 'km')).length, pct = all ? Math.round((ok / all) * 100) : 100;   // los km no se exigen
+  const count = (k) => b.quality.filter((x) => x.gaps.some((g) => g.includes(k))).length;
+  return frame('Datos incompletos', `
+    <section class="card q-head"><div class="ring" style="--p:${pct}"><b>${pct}%</b></div>
+      <div><h2>${ok} de ${all} carreras completas</h2><p class="muted small">Temporada ${year}. Provincia, disciplina y puestos completos: así sale bien la memoria para los sponsors. Los km son opcionales, pero suman al total del año y a la más larga.</p></div></section>
+    ${b.quality.length ? `<div class="q-chips">${[['provincia', 'Sin provincia'], ['disciplina', 'Sin disciplina'], ['km', 'Sin km'], ['sin puesto', 'Sin puesto']].map(([k, l]) => count(k) ? `<span class="qchip">${l} <b>${count(k)}</b></span>` : '').join('')}</div>
+    <div class="mlist">${b.quality.map((x) => `<a class="mrow-card ${discClass(x.race.modality, x.race.subtype)}" href="#/carreras/${x.race.id}">${dateBadge(x.race)}
+      <span class="up-main"><b>${esc(x.race.name)}</b><span class="gaps">${x.gaps.map((g) => `<i${g === 'km' ? ' class="soft"' : ''}>${g === 'km' ? 'sin km' : esc(g)}</i>`).join('')}</span></span><span class="tc-go">${ico('go')}</span></a>`).join('')}</div>`
+      : '<p class="card ok-card">✅ Todas las carreras de la temporada tienen los datos completos.</p>'}`, { back: '#/hoy' });
+}
+
+// ---------- Mensajes por grupos (WhatsApp) ----------
+const MSG_KINDS = [['results', '🏁 Faltan resultados'], ['next', '📅 Próxima carrera'], ['idle', '💤 Sin carreras apuntadas'], ['inactive', '📲 No usan la app'], ['low', '⚠️ Bajo el mínimo'], ['all', '📣 Todo el equipo']];
+function msgGroup(kind, ref) {
+  const b = board();
+  if (kind === 'results') {
+    const list = b.pendingResults; const x = list.find((y) => y.reg.id === ref) || list[0];
+    return { ids: x ? x.missing : [], extra: { race: x?.reg.name }, pick: list.map((y) => [y.reg.id, `${y.reg.name} (${y.missing.length})`]), ref: x?.reg.id, empty: 'No falta ningún resultado. 🎉' };
+  }
+  if (kind === 'next') {
+    const today = todayISO();
+    const list = S.data.registrations.filter((g) => !g.suspended && g.date >= today).sort((p, q) => p.date.localeCompare(q.date)).slice(0, 12);
+    const g = list.find((y) => y.id === ref) || list[0];
+    const inn = new Set((g?.entries || []).map((e) => e.runner_id));
+    return { ids: g ? S.data.runners.filter((r) => !inn.has(r.id)).map((r) => r.id) : [], extra: { race: g?.name, when: g ? when(g) : '' }, pick: list.map((y) => [y.id, `${formatDate(y.date, false)} · ${y.name}`]), ref: g?.id,
+      note: g ? `${inn.size} ya apuntado${inn.size === 1 ? '' : 's'}: el mensaje va a los que aún no.` : '', empty: 'No hay inscripciones próximas.' };
+  }
+  if (kind === 'idle') return { ids: b.idle, empty: 'Todos tienen alguna carrera apuntada. 🎉' };
+  if (kind === 'inactive') return b.activity ? { ids: b.activity.filter((x) => x.level === 'never' || x.level === 'cold').map((x) => x.id), empty: 'Todos han entrado en el último mes. 🎉' }
+    : { ids: [], empty: 'Falta el cambio de Supabase de actividad (2026-11-19-actividad.sql).' };
+  if (kind === 'low') return { ids: rosterRows().filter((x) => x.low).map((x) => x.r.id), empty: 'Nadie está por debajo del mínimo. 🎉' };
+  return { ids: [], all: true };
+}
+function viewMessages() {
+  const { id, rest } = parseRoute();
+  const kind = MSG_KINDS.some(([k]) => k === id) ? id : 'results';
+  const g = msgGroup(kind, rest);
+  const key = `${kind}|${g.ref || ''}`;
+  if (S.msgKey !== key) { S.msgKey = key; S.msgOff = new Set(); }
+  const on = g.ids.filter((x) => !S.msgOff.has(x));
+  const text = groupMessage(kind, g.all ? [] : namesOf(on), g.extra || {});
+  return frame('Mensaje al equipo', `
+    <div class="msg-kinds">${MSG_KINDS.map(([k, l]) => `<a class="chip${k === kind ? ' on' : ''}" href="#/mensajes/${k}">${l}</a>`).join('')}</div>
+    ${g.pick?.length > 1 ? `<label class="msg-pick">${kind === 'results' ? 'Carrera' : 'Inscripción'}<select data-msg-pick="${kind}">${g.pick.map(([v, l]) => opt(v, l, g.ref)).join('')}</select></label>` : ''}
+    ${g.note ? `<p class="hint">${esc(g.note)}</p>` : ''}
+    ${g.all ? '' : g.ids.length ? `<section class="card"><h3>Para ${on.length} de ${g.ids.length}</h3><p class="hint">Quita a quien no quieras nombrar.</p>
+      <div class="who-chips">${namesOf(g.ids).map((n) => { const r = S.data.runners.find((x) => x.name === n); const off = S.msgOff.has(r.id);
+        return `<button type="button" class="who${off ? ' off' : ''}" data-act="msg-who" data-id="${r.id}" aria-pressed="${!off}">${avatar(n)}${esc(n)}</button>`; }).join('')}</div></section>`
+      : `<p class="card ok-card">${esc(g.empty || 'Nadie en este grupo.')}</p>`}
+    ${g.all || on.length ? `<section class="card msg-box"><label>Mensaje <small class="muted">(puedes cambiarlo antes de enviar)</small><textarea id="msg-text" rows="8">${esc(text)}</textarea></label>
+      <div class="row"><button class="btn primary wa-big" data-act="msg-wa">${ico('msg')}Enviar por WhatsApp</button><button class="btn" data-act="msg-copy">Copiar</button></div>
+      <p class="hint">WhatsApp se abre para que elijas el chat (el grupo del equipo o una persona). Los nombres van con viñeta para que se vea a quién va.</p></section>` : ''}`, { back: '#/hoy' });
+}
+
+/** Pestañas de Carreras: próximas (inscripciones) y resultados. */
+const carTabs = (cur) => { const today = todayISO(); const up = S.data.registrations.filter((g) => g.date >= today).length;
+  return `<div class="seg2" role="tablist"><a href="#/inscripciones" class="${cur === 'inscripciones' ? 'on' : ''}">${ico('cal')}Próximas<b>${up}</b></a><a href="#/carreras" class="${cur === 'carreras' ? 'on' : ''}">${ico('trophy')}Resultados<b>${S.data.races.filter((r) => yearOf(r.date) === new Date().getFullYear()).length}</b></a></div>`; };
 
 // ======================================================================
 //  Carreras con resultados (dirección)
@@ -2212,6 +2407,7 @@ function viewRaces() {
   const years = availableYears(S.data.races);
   if (!years.includes(S.year)) S.year = years[0];
   return frame('Carreras', `
+    ${carTabs('carreras')}
     ${normalize(S.q.races || '').length >= 2 ? '' : yearPicker(years)}
     <div class="toolbar">
       ${searchBox('races', 'Buscar carrera o lugar…')}
@@ -3135,7 +3331,21 @@ function viewRunnerCard(id) {
   const docs = (S.docs || []).filter((x) => x.runner_id === r.id);
   const circuits = (S.data.circuitPodiums || []).filter((c) => c.runner_id === r.id && c.year === S.year);
   const tot = S.data.races.reduce((n, x) => n + x.results.filter((y) => y.runner_id === r.id).length, 0);
+  const today = todayISO();
+  const mine = (g) => (g.entries || []).some((e) => e.runner_id === r.id);
+  const pendRes = board().pendingResults.filter((x) => x.missing.includes(r.id));
+  const next = S.data.registrations.filter((g) => !g.suspended && g.date >= today && mine(g)).sort((p, q) => p.date.localeCompare(q.date));
+  const tracked = Object.prototype.hasOwnProperty.call(r, 'last_seen'), sd = tracked ? seenDays(r.last_seen) : null;
+  const yb = yearBonuses(new Date().getFullYear(), S.data.races, S.data.registrations, S.data.runners, bonusCfg(new Date().getFullYear()), S.data.circuitPodiums || []).find((x) => x.runner.id === r.id);
   return frame(r.name, `
+    <section class="rc-hero">${avatar(r.name, 'big')}<div><h2>${esc(r.name)}</h2><p>${[r.category, contractLabel(r.contract)].filter(Boolean).map(esc).join(' · ')}</p></div></section>
+    <div class="rc-stats">
+      <div class="${tracked ? 's-' + seenLevel(sd) : ''}"><i class="seen s-${tracked ? seenLevel(sd) : 'none'}"></i><b>${tracked ? (sd == null ? 'Nunca' : sd === 0 ? 'Hoy' : `${sd} d`) : '—'}</b><span>${tracked ? 'última vez en la app' : 'actividad (falta SQL)'}</span></div>
+      <div class="${yb && !yb.reachesMinimum ? 'bad' : yb?.tier ? 'good' : ''}"><b>${yb ? yb.bonusCount : 0}</b><span>${yb ? (yb.reachesMinimum ? (yb.tier ? `bono ${euros(yb.amount)}` : 'mínimo hecho') : `faltan ${yb.missingToMinimum}`) : 'carreras'}</span></div>
+      <a class="${pendRes.length ? 'warn' : ''}" href="${pendRes.length ? `#/inscripciones/${pendRes[0].reg.id}` : '#/corredor/' + r.id}"><b>${pendRes.length}</b><span>sin resultado</span></a>
+      <div><b>${next.length}</b><span>próximas${next[0] ? `: ${formatDate(next[0].date, false)}` : ''}</span></div>
+    </div>
+    ${pendRes.length ? `<p class="card warn small">🏁 Le falta poner su resultado en: <b>${pendRes.map((x) => esc(x.reg.name)).join(', ')}</b>.</p>` : ''}
     <section class="card stack">
       <label>Categoría${catSelect(`data-runner-cat="${r.id}"`, r.category || '')}</label>
       <label>Contrato${contractSelect(`data-runner-contract="${r.id}"`, r.contract || '')}</label>
@@ -3459,9 +3669,11 @@ function rosterRows() {
   for (const r of S.data.races) for (const x of r.results) if (x.runner_id) counts.set(x.runner_id, (counts.get(x.runner_id) || 0) + 1);
   const bonusBy = new Map(yearBonuses(year, S.data.races, S.data.registrations, S.data.runners, bonusCfg(year), S.data.circuitPodiums || []).map((b) => [b.runner.id, b]));
   return S.data.runners.map((r) => { const b = bonusBy.get(r.id);
-    return { r, b, total: counts.get(r.id) || 0, noContract: !CONTRACTS.some((c) => c.id === r.contract), low: !!b && !b.reachesMinimum, withBonus: !!b?.tier }; });
+    const seen = Object.prototype.hasOwnProperty.call(r, 'last_seen') ? seenLevel(seenDays(r.last_seen)) : null;
+    return { r, b, total: counts.get(r.id) || 0, noContract: !CONTRACTS.some((c) => c.id === r.contract), low: !!b && !b.reachesMinimum, withBonus: !!b?.tier, noApp: seen === 'never' || seen === 'cold' }; });
 }
-const RFILTERS = [['todos', 'Corredores', ''], ['sincontrato', 'Sin contrato', 'warn'], ['bajo', 'Bajo el mínimo', 'bad'], ['bono', 'Con bono', 'good']];
+const RFILTERS = [['todos', 'Corredores', ''], ['sincontrato', 'Sin contrato', 'warn'], ['bajo', 'Bajo el mínimo', 'bad'], ['bono', 'Con bono', 'good'], ['app', 'Sin usar la app', 'violet']];
+const rfilters = () => RFILTERS.filter(([id]) => id !== 'app' || S.data.runners.some((r) => Object.prototype.hasOwnProperty.call(r, 'last_seen')));
 
 /** Lista filtrable de la plantilla: se repinta sola al escribir en el buscador. */
 function runnersListHtml() {
@@ -3472,6 +3684,7 @@ function runnersListHtml() {
   if (f === 'sincontrato') rows = rows.filter((x) => x.noContract);
   else if (f === 'bajo') rows = rows.filter((x) => x.low);
   else if (f === 'bono') rows = rows.filter((x) => x.withBonus);
+  else if (f === 'app') rows = rows.filter((x) => x.noApp);
   if (normalize(q).length >= 1) { const ids = new Set(matchPeople(q, rows.map((x) => x.r)).map((m) => m.id)); rows = rows.filter((x) => ids.has(x.r.id)); }
   const sort = S.rsort || 'nombre';
   if (sort === 'carreras') rows.sort((a, b) => (b.b?.count || 0) - (a.b?.count || 0) || byName(a.r, b.r));
@@ -3480,16 +3693,19 @@ function runnersListHtml() {
   if (!rows.length) return `<p class="empty">${q ? `Ningún corredor se parece a «${esc(q)}».` : f === 'todos' ? 'Todavía no hay corredores.' : 'Nadie en esta lista. 🎉'}</p>`;
   const row = ({ r, b, total, noContract, low }) => {
     const top = b?.tiers.at(-1)?.races || 1, pct = b ? Math.min(100, Math.round((b.bonusCount / top) * 100)) : 0;
-    return `<li class="rr ${low ? 'low' : b?.tier ? 'ok' : ''}${noContract ? ' nocon' : ''}">
-      <div class="rr-main"><span class="name"><a class="name-link" href="#/corredor/${r.id}">${esc(r.name)} ›</a>${(S.docs || []).some((x) => x.runner_id === r.id && x.year === year) ? ' <a class="doc-badge" href="#/docs/' + r.id + '" title="Contrato ' + year + ' subido">📄</a>' : ''}</span>
-        <small class="muted">${total} carrera${total === 1 ? '' : 's'} en total${noContract ? ' · <b class="warn-txt">⚠️ sin tipo de contrato</b>' : ''}</small></div>
-      ${b ? `<div class="rr-bono"><div class="rp-bar ${b.reachesMinimum ? (b.tier ? 'ok' : 'mid') : 'low'}"><i style="width:${pct}%"></i></div>
-        <small><b>${b.bonusCount}</b> en ${year} · ${b.reachesMinimum ? (b.tier ? `✅ bono ${euros(b.amount)}` : '✅ mínimo') : `<span class="bad-txt">⚠️ faltan ${b.missingToMinimum}</span>`}</small></div>` : ''}
-      <button class="icon-btn link-btn" data-act="runner-menu" data-id="${r.id}" aria-label="Enviar o copiar el enlace de ${esc(r.name)}" title="Enlace personal">${ico('share')}</button>
-      <div class="roster-sel">
+    const tracked = Object.prototype.hasOwnProperty.call(r, 'last_seen'), sd = tracked ? seenDays(r.last_seen) : null;
+    const sels = `<div class="roster-sel">
         ${catSelect(`data-runner-cat="${r.id}" aria-label="Categoría habitual de ${esc(r.name)}"`, r.category || '')}
         <span class="sel-wrap${noContract ? ' needs' : ''}">${contractSelect(`data-runner-contract="${r.id}" aria-label="Tipo de contrato de ${esc(r.name)}"`, r.contract || '')}</span>
-      </div>
+      </div>`;
+    return `<li class="rr rr2 ${low ? 'low' : b?.tier ? 'ok' : ''}${noContract ? ' nocon' : ''}">
+      <div class="rr-top"><a class="rr-who" href="#/corredor/${r.id}">${avatar(r.name)}${tracked ? `<i class="seen s-${seenLevel(sd)}" title="${esc(seenText(sd))}"></i>` : ''}
+        <span class="rr-name"><b>${esc(r.name)}</b><span class="rr-tags">${r.category ? `<i class="rt cat">${esc(r.category)}</i>` : '<i class="rt warn">sin categoría</i>'}${noContract ? '<i class="rt warn">sin contrato</i>' : `<i class="rt">${esc(contractLabel(r.contract))}</i>`}${(S.docs || []).some((x) => x.runner_id === r.id && x.year === year) ? '<i class="rt ok">📄 contrato</i>' : ''}</span>
+        <small class="muted">${total} carrera${total === 1 ? '' : 's'} en total${tracked ? ` · ${esc(seenText(sd))}` : ''}</small></span>${ico('go', 'rr-go')}</a>
+        <button class="icon-btn link-btn" data-act="runner-menu" data-id="${r.id}" aria-label="Enviar o copiar el enlace de ${esc(r.name)}" title="Enlace personal">${ico('share')}</button></div>
+      ${b ? `<div class="rr-bono"><div class="rp-bar ${b.reachesMinimum ? (b.tier ? 'ok' : 'mid') : 'low'}"><i style="width:${pct}%"></i></div>
+        <small><b>${b.bonusCount}</b> en ${year} · ${b.reachesMinimum ? (b.tier ? `✅ bono ${euros(b.amount)}` : '✅ mínimo') : `<span class="bad-txt">⚠️ faltan ${b.missingToMinimum}</span>`}</small></div>` : ''}
+      ${noContract || !r.category ? sels : `<details class="rr-edit"><summary>Cambiar categoría o contrato</summary>${sels}</details>`}
       ${adminRunnerRaces(r, year)}</li>`;
   };
   return `<p class="hint rr-count">${rows.length} corredor${rows.length === 1 ? '' : 'es'}${q || f !== 'todos' ? ' (filtrado)' : ''}</p><ul class="roster">${rows.map(row).join('')}</ul>`;
@@ -3498,12 +3714,12 @@ function runnersListHtml() {
 function viewRunners() {
   const year = new Date().getFullYear();
   const all = rosterRows();
-  const n = { todos: all.length, sincontrato: all.filter((x) => x.noContract).length, bajo: all.filter((x) => x.low).length, bono: all.filter((x) => x.withBonus).length };
+  const n = { todos: all.length, sincontrato: all.filter((x) => x.noContract).length, bajo: all.filter((x) => x.low).length, bono: all.filter((x) => x.withBonus).length, app: all.filter((x) => x.noApp).length };
   const f = S.rfilter || 'todos';
-  return frame(`Corredores (${all.length})`, `
+  return frame(`Equipo (${all.length})`, `
     ${runnersTabs('corredores')}
     ${S.data?.settings?.enlaces_direccion?.ropa_respuestas ? clothingLine() : ''}
-    <div class="rr-kpis">${RFILTERS.map(([id, label, cls]) => `<button class="rr-kpi ${cls}${f === id ? ' on' : ''}${id !== 'todos' && !n[id] ? ' zero' : ''}" data-act="r-filter" data-f="${id}" aria-pressed="${f === id}"><b>${n[id]}</b><span>${label}</span></button>`).join('')}</div>
+    <div class="rr-kpis" style="grid-template-columns:repeat(${rfilters().length},1fr)">${rfilters().map(([id, label, cls]) => `<button class="rr-kpi ${cls}${f === id ? ' on' : ''}${id !== 'todos' && !n[id] ? ' zero' : ''}" data-act="r-filter" data-f="${id}" aria-pressed="${f === id}"><b>${n[id]}</b><span>${label}</span></button>`).join('')}</div>
     <div class="toolbar">
       ${searchBox('rlist', 'Buscar corredor…')}
       <button class="btn primary add-btn" data-act="r-manage" aria-label="Añadir corredores" title="Añadir corredores">＋</button>
@@ -3657,8 +3873,11 @@ async function runnerDo(choice, r) {
 }
 
 const actions = {
+  'msg-who'(el) { const id = el.dataset.id; S.msgOff = S.msgOff || new Set(); if (S.msgOff.has(id)) S.msgOff.delete(id); else S.msgOff.add(id); render(); },
+  'msg-wa'() { const t = document.getElementById('msg-text')?.value || ''; if (t.trim()) window.open(`https://wa.me/?text=${encodeURIComponent(t)}`, '_blank', 'noopener'); },
+  'msg-copy'() { copyText(document.getElementById('msg-text')?.value || '', 'Mensaje copiado: pégalo en el chat'); },
   async install() { S.installEvt?.prompt(); S.installEvt = null; render(); },
-  async 'demo-admin'() { await api.signIn(); S.session = await api.session(); await run(reload); go('#/inscripciones'); },
+  async 'demo-admin'() { await api.signIn(); S.session = await api.session(); await run(reload); go('#/hoy'); },
   async 'demo-reset'() {
     if (!await confirmAction('Reiniciar demostración', 'Se borran los cambios de prueba y se cargan los datos de ejemplo.', 'Reiniciar')) return;
     await api.resetDemo(); await run(reload, 'Demostración reiniciada'); render();
@@ -4118,7 +4337,7 @@ const forms = {
     const ok = await run(async () => { await api.signIn(f.email.value.trim(), f.password.value); S.session = await api.session(); return true; });
     if (!ok) return;
     if (!S.session?.isAdmin) { toast('Esta cuenta no es de la dirección.', true); render(); return; }
-    S.data = null; go('#/inscripciones');
+    S.data = null; go('#/hoy');
   },
   async bulk(f) {
     const { toAdd, duplicates, unknownCategory } = parseBulkRunners(f.bulk.value, S.data.runners.map((r) => r.name));
@@ -4455,6 +4674,7 @@ $app.addEventListener('input', (ev) => {
 $app.addEventListener('change', async (ev) => {
   const t = ev.target;
   if (t.dataset.yearSel !== undefined) { S.year = Number(t.value); render(); return; }
+  if (t.dataset.msgPick) { go(`#/mensajes/${t.dataset.msgPick}/${t.value}`); return; }
   if (t.dataset.filter) { actions[{ mod: 'mod-filter', sub: 'sub-filter', who: 'who-filter' }[t.dataset.filter]]({ dataset: { m: t.value, s: t.value, w: t.value } }); return; }
   if (t.dataset.f === 'modality' && S.draft) { // cambia la modalidad: el formato depende de ella
     S.draft.modality = t.value; if (!SUBTYPES[t.value]?.includes(S.draft.subtype)) S.draft.subtype = guessSubtype(S.draft.name, t.value); render(); return;

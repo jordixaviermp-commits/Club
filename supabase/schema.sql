@@ -14,6 +14,7 @@ create table if not exists public.runners (
   code        text not null unique check (length(code) >= 10),  -- enlace personal
   created_at  timestamptz default now()
 );
+alter table public.runners add column if not exists last_seen timestamptz;   -- última vez que abrió la app
 
 create table if not exists public.registrations (          -- inscripciones (carreras futuras)
   id          uuid primary key default gen_random_uuid(),
@@ -612,6 +613,14 @@ begin
     delete from settings where true;
     insert into settings select * from jsonb_populate_recordset(null::settings, coalesce(p->'settings','[]'));
   end if;
+end $$;
+
+-- Actividad: última vez que el corredor abrió la app (como mucho una escritura por hora).
+create or replace function public.runner_ping(p_code text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  update runners set last_seen = now()
+   where code = p_code and (last_seen is null or last_seen < now() - interval '1 hour');
 end $$;
 
 -- ---------- Funciones de corredores (entran con su enlace personal) ----
@@ -1350,7 +1359,7 @@ end $$;
 
 
 revoke execute on all functions in schema public from public, anon;
-grant execute on function public.runner_view(text), public.runner_join(text, uuid, text),
+grant execute on function public.runner_ping(text), public.runner_view(text), public.runner_join(text, uuid, text),
                           public.runner_create_registration(text, jsonb, text),
                           public.runner_update_registration(text, uuid, jsonb), public.runner_delete_registration(text, uuid),
                           public.runner_update_race(text, uuid, jsonb), public.runner_delete_race(text, uuid),

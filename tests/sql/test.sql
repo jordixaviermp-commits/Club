@@ -650,4 +650,15 @@ select pg_temp.expect_fail($q$select runner_set_paid('codigo-falso', '20000000-0
 select pg_temp.expect_fail($q$select runner_set_paid('$q$ || :'crcode' || $q$', '20000000-0000-0000-0000-00000000f0a9', true, -5)$q$, 'pago: importe negativo rechazado');
 select pg_temp.expect_fail($q$select runner_set_paid('$q$ || :'crcode2' || $q$', '20000000-0000-0000-0000-00000000f0a9', true, null)$q$, 'pago: sin estar inscrito no se puede marcar');
 reset role;
+-- actividad: abrir la app guarda la última vez (como mucho una vez por hora)
+set role anon;
+select runner_ping(:'crcode');
+reset role;
+select pg_temp.check((select last_seen from runners where code = :'crcode') > now() - interval '1 minute', 'actividad: abrir la app guarda la última vez');
+update runners set last_seen = now() - interval '10 minutes' where code = :'crcode';
+set role anon;
+select runner_ping(:'crcode');
+select runner_ping('codigo-falso');
+reset role;
+select pg_temp.check((select last_seen from runners where code = :'crcode') < now() - interval '9 minutes', 'actividad: no se reescribe dentro de la misma hora');
 \echo TODAS LAS PRUEBAS SQL OK

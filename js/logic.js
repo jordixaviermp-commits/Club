@@ -1115,3 +1115,78 @@ export function chronicleStatus(d, done, today, year = null) {
   const all = [...seen.values()].filter((x) => year == null || yearOf(x.date) === year).sort((a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name, 'es'));
   return { pending: all.filter((x) => !done.has(x.key)), done: all.filter((x) => done.has(x.key)), total: all.length };
 }
+
+// ======================================================================
+//  Panel «Hoy» de la dirección: lo que hay que hacer, ordenado por urgencia
+// ======================================================================
+
+const isoPlus = (iso, n) => { const d = new Date(String(iso).slice(0, 10) + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const daysBetween = (a, b) => Math.round((Date.parse(String(b).slice(0, 10) + 'T12:00:00Z') - Date.parse(String(a).slice(0, 10) + 'T12:00:00Z')) / 864e5);
+/** Días desde la última vez que abrió la app (null = nunca o sin datos). */
+export function seenDays(lastSeen, now = new Date()) {
+  if (!lastSeen) return null;
+  const t = Date.parse(lastSeen);
+  return Number.isFinite(t) ? Math.max(0, Math.floor((now.getTime() - t) / 864e5)) : null;
+}
+export const seenText = (days) => (days == null ? 'no ha abierto la app' : days === 0 ? 'activo hoy' : days === 1 ? 'activo ayer' : `hace ${days} días`);
+/** Nivel de actividad: 'hot' (≤ 7 días), 'warm' (≤ 30), 'cold' (> 30), 'never'. */
+export const seenLevel = (days) => (days == null ? 'never' : days <= 7 ? 'hot' : days <= 30 ? 'warm' : 'cold');
+
+/** Qué le falta a una carrera con resultados para que la memoria y las estadísticas salgan completas. */
+export function raceGaps(r) {
+  const out = [];
+  if (!String(r?.province ?? '').trim()) out.push('provincia');
+  if (SUBTYPES[r?.modality] && !String(r?.subtype ?? '').trim()) out.push('disciplina');
+  if (!(Number(r?.km) > 0)) out.push('km');
+  const noPos = (r?.results || []).filter((x) => x.position == null || x.position === '').length;
+  if (noPos) out.push(`${noPos} sin puesto`);
+  if (!(r?.results || []).length) out.push('sin participantes');
+  return out;
+}
+
+/**
+ * Todo lo que la dirección tiene que mirar hoy.
+ * - pendingResults: carreras ya disputadas (últimos 60 días) con inscritos que aún no han puesto su puesto.
+ * - upcoming: carreras de los próximos `ahead` días con gente del club.
+ * - activity: actividad de cada corredor (si la base de datos ya guarda `last_seen`).
+ * - quality: carreras de la temporada con datos incompletos.
+ * - idle: corredores sin ninguna inscripción próxima.
+ */
+export function directorBoard({ races = [], registrations = [], runners = [] }, today, { ahead = 10, back = 60, now = new Date() } = {}) {
+  const last = (g) => g.end_date || g.date;
+  const live = new Set(runners.map((r) => r.id));
+  const pendingResults = registrations
+    .filter((g) => !g.suspended && last(g) < today && last(g) >= isoPlus(today, -back))
+    .map((g) => ({ reg: g, days: daysBetween(last(g), today), missing: (g.entries || []).filter((e) => !e.self_position && live.has(e.runner_id)).map((e) => e.runner_id),
+      total: (g.entries || []).length }))
+    .filter((x) => x.missing.length)
+    .sort((a, b) => a.days - b.days || a.reg.name.localeCompare(b.reg.name, 'es'));
+  const upcoming = registrations
+    .filter((g) => !g.suspended && g.date >= today && g.date <= isoPlus(today, ahead) && (g.entries || []).length)
+    .map((g) => ({ reg: g, days: daysBetween(today, g.date), ids: (g.entries || []).map((e) => e.runner_id) }))
+    .sort((a, b) => a.days - b.days || a.reg.name.localeCompare(b.reg.name, 'es'));
+  const tracked = runners.some((r) => Object.prototype.hasOwnProperty.call(r, 'last_seen'));
+  const activity = tracked ? runners.map((r) => { const days = seenDays(r.last_seen, now); return { id: r.id, days, level: seenLevel(days) }; }) : null;
+  const year = yearOf(today);
+  const quality = races.filter((r) => yearOf(r.date) === year).map((r) => ({ race: r, gaps: raceGaps(r) })).filter((x) => x.gaps.length)
+    .sort((a, b) => b.race.date.localeCompare(a.race.date));
+  const signed = new Set(registrations.filter((g) => !g.suspended && g.date >= today).flatMap((g) => (g.entries || []).map((e) => e.runner_id)));
+  const idle = runners.filter((r) => !signed.has(r.id)).map((r) => r.id);
+  return { pendingResults, upcoming, activity, quality, idle,
+    counts: { results: pendingResults.reduce((n, x) => n + x.missing.length, 0), never: activity ? activity.filter((a) => a.level === 'never').length : 0,
+      cold: activity ? activity.filter((a) => a.level === 'cold').length : 0, quality: quality.length, idle: idle.length } };
+}
+
+/** Texto de WhatsApp para un grupo de corredores (sin teléfonos: se pega en el chat del equipo o se reenvía). */
+export function groupMessage(kind, names, extra = {}) {
+  const list = names.length ? names.map((n) => `• ${n}`).join('\n') : '';
+  const head = {
+    results: `🏁 *${extra.race || 'Carrera'}*: falta vuestro resultado. Entrad en la app con vuestro enlace y poned el puesto (y el tiempo si lo tenéis). ¡Gracias!`,
+    next: `📅 *${extra.race || 'Próxima carrera'}*${extra.when ? ` · ${extra.when}` : ''}: ¿quién se apunta? Apuntaos desde la app para que lo tengamos controlado.`,
+    idle: '📅 No tenéis ninguna carrera apuntada en la app. Mirad el calendario y apuntaos a las próximas que vayáis a hacer.',
+    inactive: '📲 Hace tiempo que no entráis en la app del club. Abrid vuestro enlace personal: ahí apuntáis carreras, ponéis resultados y veis el bono.',
+    low: '⚠️ Vais por debajo del mínimo de carreras de la temporada. Revisad en la app (Contrato) cuántas os faltan.',
+    all: extra.text || '📣 Mensaje de la dirección del CC Monzón.',
+  }[kind] || extra.text || '';
+  return `${head}${list ? `\n\n${list}` : ''}`;
+}

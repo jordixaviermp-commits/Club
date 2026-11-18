@@ -152,6 +152,7 @@ export function supabaseApi(url, key) {
     /** Crónicas ya pasadas por el corredor (claves «AAAA-MM-DD|nombre»). null = falta el SQL. */
     async runnerChronicles(code) { try { return ok(await sb.rpc('runner_chronicles', { p_code: code })); } catch { return null; } },
     // crónicas ya pasadas por CUALQUIER compañero (para que baste con que la pase uno); null si falta el SQL
+    async runnerPing(code) { try { await sb.rpc('runner_ping', { p_code: code }); } catch { /* sin el SQL de actividad */ } },
     async runnerChroniclesTeam(code) { try { return ok(await sb.rpc('runner_chronicles_team', { p_code: code })); } catch { return null; } },
     async runnerSetChronicle(code, key, done) { ok(await sb.rpc('runner_chronicle_set', { p_code: code, p_key: key, p_done: !!done })); },
     /** Dirección: marca o desmarca la crónica de un corredor (por si la pasó y no la marcó en su perfil). */
@@ -227,6 +228,9 @@ function demoSeed() {
   const runners = [mk('Pere Soler', 'M40'), mk('Anna Puig', 'Élite'), mk('Jordi Vila', 'M50'),
     mk('Marta Roca', 'M30'), mk('Joan Ferrer', 'M60'), mk('Laia Serra', 'Sub-23')];
   const [pere, anna, jordi, marta, joan, laia] = runners;
+  const ago = (h) => new Date(Date.now() - h * 3600e3).toISOString();
+  pere.last_seen = ago(20); anna.last_seen = ago(3); jordi.last_seen = ago(24 * 40); marta.last_seen = ago(24 * 6);   // actividad de ejemplo
+  const off = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
   const race = (name, date, place, province, modality, results) => ({
     id: uuid(), name, date, place, province, country: 'España', modality, notes: null, created_at: null, results });
   const res = (r, category, position, podium_type = 'suelta') => ({ id: uuid(), runner_id: r.id, runner_name: r.name, category, position, podium_type });
@@ -243,6 +247,8 @@ function demoSeed() {
   const registrations = [
     reg('Volta a la Cerdanya', `${y + 1}-06-14`, 'Puigcerdà', 'Girona', 'Carretera', [[pere, 'M40'], [anna, 'Élite']]),
     reg('BTT Les Garrigues', `${y + 1}-02-22`, 'Les Borges Blanques', 'Lleida', 'BTT', [[marta, 'M30']]),
+    reg('Cursa de la Segarra', off(4), 'Cervera', 'Lleida', 'Carretera', [[pere, 'M40'], [jordi, 'M50'], [laia, 'Sub-23']]),
+    reg('XCO Montsec', off(-5), 'Àger', 'Lleida', 'BTT', [[marta, 'M30'], [anna, 'Élite']]),
   ];
   return {
     runners,
@@ -656,6 +662,7 @@ export function demoApi(storage = globalThis.localStorage) {
       if (done) d.chronicles.push({ runner_id: runnerId, race_key: key, done_at: new Date().toISOString() });
       save();
     },
+    async runnerPing(code) { const me = byCode(code); me.last_seen = new Date().toISOString(); save(); },
     async runnerChronicles(code) { const me = byCode(code); return clone((load().chronicles || []).filter((x) => x.runner_id === me.id).map((x) => x.race_key)); },
     async runnerChroniclesTeam(code) {
       const me = byCode(code), d = load(), by = new Map();

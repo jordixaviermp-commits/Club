@@ -488,3 +488,29 @@ test('Rally: es un formato de BTT y se deduce del nombre', () => {
   assert.equal(guessSubtype('Rally de Montserrat', 'BTT'), 'Rally');
   assert.equal(guessSubtype('Rally de Montserrat', 'Carretera'), '');
 });
+
+test('panel Hoy: resultados pendientes, próximas, actividad, calidad e inactivos', async () => {
+  const { directorBoard, seenDays, seenLevel, groupMessage, raceGaps } = await import('../js/logic.js');
+  const runners = [{ id: 'a', name: 'Anna', last_seen: '2026-11-17T10:00:00Z' }, { id: 'b', name: 'Bru', last_seen: null }, { id: 'c', name: 'Cesc', last_seen: '2026-09-01T10:00:00Z' }];
+  const registrations = [
+    { id: 'g1', name: 'Pasada', date: '2026-11-13', entries: [{ runner_id: 'a', self_position: 3 }, { runner_id: 'b' }] },
+    { id: 'g2', name: 'Próxima', date: '2026-11-22', entries: [{ runner_id: 'a' }] },
+    { id: 'g3', name: 'Lejana', date: '2027-02-01', entries: [{ runner_id: 'c' }] },
+    { id: 'g4', name: 'Vieja', date: '2026-06-01', entries: [{ runner_id: 'b' }] },
+    { id: 'g5', name: 'Suspendida', date: '2026-11-10', suspended: true, entries: [{ runner_id: 'c' }] },
+  ];
+  const races = [{ id: 'r1', name: 'Hecha', date: '2026-05-01', modality: 'BTT', province: '', km: 0, results: [{ position: null }] },
+    { id: 'r2', name: 'Completa', date: '2026-04-01', modality: 'Carretera', subtype: 'Máster', province: 'Lleida', km: 80, results: [{ position: 2 }] }];
+  const b = directorBoard({ races, registrations, runners }, '2026-11-18', { now: new Date('2026-11-18T12:00:00Z') });
+  assert.deepEqual(b.pendingResults.map((x) => [x.reg.id, x.missing, x.days]), [['g1', ['b'], 5]]);
+  assert.deepEqual(b.upcoming.map((x) => [x.reg.id, x.days]), [['g2', 4]]);
+  assert.deepEqual(b.activity.map((x) => x.level), ['hot', 'never', 'cold']);
+  assert.deepEqual(b.quality.map((x) => x.race.id), ['r1']);
+  assert.deepEqual(raceGaps(races[0]), ['provincia', 'disciplina', 'km', '1 sin puesto']);
+  assert.deepEqual(b.idle, ['b']);
+  assert.equal(b.counts.results, 1);
+  assert.equal(directorBoard({ races, registrations, runners: [{ id: 'a' }] }, '2026-11-18').activity, null, 'sin la columna no hay actividad');
+  assert.equal(seenDays(null), null);
+  assert.equal(seenLevel(12), 'warm');
+  assert.match(groupMessage('results', ['Bru'], { race: 'Pasada' }), /Pasada[\s\S]*• Bru/);
+});
