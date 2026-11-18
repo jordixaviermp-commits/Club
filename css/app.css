@@ -1252,3 +1252,4 @@ html, body { overscroll-behavior-y: contain; }
 :root[data-theme="dark"] :is([class^="d-"], [class*=" d-"]) { filter: brightness(1.18); }
 .mstack > span:is([class^="d-"], [class*=" d-"]) { background: var(--dc); }
 .pulse-legend span:is([class^="d-"], [class*=" d-"]) i { background: var(--dc); }
+.disc-field select { border-width: 2px; } .disc-field .hint { display: block; margin: .25rem 0 0; font-weight: 400; }
