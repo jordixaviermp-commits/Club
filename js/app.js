@@ -910,6 +910,34 @@ function viewRunnerNew() {
       : '<button class="btn danger ghost block" data-act="r-delete-mine">🗑️ Borrar esta carrera</button>') : ''}`, { back: isRace ? runnerHref('mi') : runnerHref('') });
 }
 
+
+/** Iconos de línea (estilo Lucide) de Mi temporada: sustituyen a los emojis grandes. */
+const ICO = {
+  cal: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
+  ok: 'M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4 12 14.01l-3-3',
+  flag: 'M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zM4 22v-7',
+  ban: 'M4.93 4.93l14.14 14.14M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z',
+  go: 'M9 18l6-6-6-6',
+  pen: 'M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z',
+};
+const ico = (k, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${ICO[k]}"/></svg>`;
+const MON_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const dateTile = (g) => { const d = new Date(String(g.date).slice(0, 10) + 'T12:00:00Z'); return `<span class="date-tile" aria-hidden="true"><b>${d.getUTCDate()}</b><small>${MON_SHORT[d.getUTCMonth()]}</small></span>`; };
+const weekdayOf = (g) => new Date(String(g.date).slice(0, 10) + 'T12:00:00Z').toLocaleDateString('es-ES', { weekday: 'short', timeZone: 'UTC' });
+/** Medalla de podio dibujada (sin emoji): círculo oro / plata / bronce con el puesto. */
+const medalBadge = (p) => `<i class="medal m${p}" aria-label="Puesto ${p}">${p}</i>`;
+/** Fila de carrera de Mi temporada: fecha en un cuadrito, nombre, día · lugar, modalidad y, debajo, estado o botones. */
+const mrow = (g, { below = '', end = '', href = '', hero = false, kicker = '' } = {}) => `<li class="mrow ${modClass(g.modality)}${hero ? ' hero' : ''}${href ? ' tappable' : ''}">
+  ${dateTile(g)}
+  ${href ? `<a class="mrow-main" href="${href}">` : '<div class="mrow-main">'}
+    ${kicker ? `<span class="mrow-kicker">${kicker}</span>` : ''}
+    <b class="mrow-name">${esc(g.name)}</b>
+    <span class="mrow-sub">${g.end_date && g.end_date > g.date ? esc(formatRange(g.date, g.end_date)) : esc(weekdayOf(g))}${place(g) ? ' · ' + esc(place(g)) : ''}</span>
+    <span class="mrow-chips">${modTag(g.modality)}${g.km ? `<small class="muted">${kmText(g.km)}</small>` : ''}</span>
+  ${href ? '</a>' : '</div>'}
+  ${end || (href ? `<span class="mrow-go" aria-hidden="true">${ico('go')}</span>` : '')}
+  ${below ? `<div class="mrow-below">${below}</div>` : ''}</li>`;
+
 /** «Mis carreras»: sus carreras con resultados por temporada y las apuntadas pendientes de resultado. */
 function myRacesCard(d, afterSummary = () => '') {
   const results = d.my_results;
@@ -925,48 +953,47 @@ function myRacesCard(d, afterSummary = () => '') {
   const days = list.reduce((n, r) => n + numDays(r.date, r.end_date), 0);
   const row = (r) => {
     const stagePods = (r.stage_positions || []).slice(0, (r.stages || []).length).map((p, i) => ({ p, n: stageName(r, i) })).filter((x) => isPodium(x.p));
-    const pos = r.position ? `${isPodium(r.position) ? medal(r.position) + ' ' : ''}${r.position}º${r.category ? ` ${esc(r.category)}` : ''}${r.time_seconds ? `<br><small class="muted">⏱️ ${formatTime(r.time_seconds)}</small>` : ''}${r.self_reported ? '<br><small class="self-res">📝 puesto por ti</small>' : ''}`
+    const pos = r.position ? `${isPodium(r.position) ? medalBadge(r.position) : `${r.position}º`}${r.category ? ` <small>${esc(r.category)}</small>` : ''}${r.time_seconds ? `<br><small class="muted">${formatTime(r.time_seconds)}</small>` : ''}${r.self_reported ? '<br><small class="self-res">puesto por ti</small>' : ''}`
       : (S.preview ? '<span class="muted">sin puesto</span>' : `<a class="btn primary small" href="#/resultado/race_${r.race_id}">Poner mi puesto</a>`);
-    return `<li class="mini tappable ${modClass(r.modality)}"><a class="mini-main" href="${runnerHref('carrera')}/race_${r.race_id}"><b>${esc(r.name)}</b>
-      <small class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''} · ${esc(r.modality)}${r.km ? ` · ${kmText(r.km)}` : ''}</small>
-      ${stagePods.length ? `<small>${stagePods.map((x) => `${medal(x.p)} ${esc(x.n)}`).join(' · ')}</small>` : ''}</a>
-      <span class="pos">${pos}${r.mine_created && !S.preview ? `<br><a class="btn small edit-mine" href="#/editar/race_${r.race_id}" aria-label="Editar o borrar ${esc(r.name)}">✏️ Editar</a>` : ''}</span></li>`;
+    return mrow(r, { href: `${runnerHref('carrera')}/race_${r.race_id}`,
+      end: `<span class="pos">${pos}${r.mine_created && !S.preview ? `<br><a class="btn small edit-mine" href="#/editar/race_${r.race_id}" aria-label="Editar o borrar ${esc(r.name)}">✏️ Editar</a>` : ''}</span>`,
+      below: stagePods.length ? `<small>${stagePods.map((x) => `${medalBadge(x.p)} ${esc(x.n)}`).join(' · ')}</small>` : '' });
   };
   const myCat = (g) => g.entries.find((e) => e.runner_id === d.me.id)?.category;
   const editMine = (g) => (g.mine_created && !S.preview ? `<a class="btn small edit-mine" href="#/editar/${g.id}" aria-label="Editar o borrar ${esc(g.name)}">✏️</a>` : '');
   const dleft = (g) => { const n = Math.round((new Date(g.date + 'T12:00:00Z') - new Date(today + 'T12:00:00Z')) / 864e5);
     return n === 0 ? 'hoy' : n === 1 ? 'mañana' : `en ${n} días`; };
   return `
-  <section class="card sum-card"><h2>🧭 Mis carreras ${S.myYear}</h2>
+  <section class="card sum-card"><h2>Mis carreras ${S.myYear}</h2>
     <div class="tiles">
-      <a href="#" class="tile t-next" data-act="goto-sec" data-to="sec-next"><span class="t-i">📅</span><b>${upcoming.length}</b><span class="t-l">Próximas</span><small>inscrito</small></a>
-      <a href="#" class="tile t-done" data-act="goto-sec" data-to="sec-done"><span class="t-i">✅</span><b>${list.length}</b><span class="t-l">Hechas</span><small>${days !== list.length ? `${days} días de competición` : 'con resultado'}</small></a>
-      <a href="#" class="tile t-pend${pending.length ? ' alert' : ''}" data-act="goto-sec" data-to="sec-pend"><span class="t-i">🏁</span><b>${pending.length}</b><span class="t-l">Pendientes</span><small>${pending.length ? 'falta tu resultado' : 'de resultado'}</small></a>
-      <a href="#" class="tile t-canc" data-act="goto-sec" data-to="sec-canc"><span class="t-i">⛔</span><b>${cancelled.length}</b><span class="t-l">Anuladas</span><small>suspendidas</small></a>
+      <a href="#" class="tile t-next" data-act="goto-sec" data-to="sec-next"><span class="t-l">Próximas</span>${ico('cal', 't-ico')}<b>${upcoming.length}</b><small>inscrito</small></a>
+      <a href="#" class="tile t-done" data-act="goto-sec" data-to="sec-done"><span class="t-l">Hechas</span>${ico('ok', 't-ico')}<b>${list.length}</b><small>${days !== list.length ? `${days} días de competición` : 'con resultado'}</small></a>
+      <a href="#" class="tile t-pend${pending.length ? ' alert' : ''}" data-act="goto-sec" data-to="sec-pend"><span class="t-l">Pendientes</span>${ico('flag', 't-ico')}<b>${pending.length}</b><small>${pending.length ? 'falta tu resultado' : 'de resultado'}</small></a>
+      <a href="#" class="tile t-canc" data-act="goto-sec" data-to="sec-canc"><span class="t-l">Anuladas</span>${ico('ban', 't-ico')}<b>${cancelled.length}</b><small>suspendidas</small></a>
     </div>
-    ${(() => { const tot = list.length + pending.length + upcoming.length + cancelled.length;
-      return tot ? `<div class="bar seg sum-bar" role="img" aria-label="Reparto de tus carreras">${[['seg-done', list.length], ['seg-pend', pending.length], ['seg-next', upcoming.length], ['seg-canc', cancelled.length]].filter(([, n]) => n).map(([c, n]) => `<span class="${c}" style="flex:${n}"></span>`).join('')}</div>
-        <div class="sum-legend"><span class="seg-done">✅ hechas</span><span class="seg-pend">🏁 pendientes</span><span class="seg-next">📅 próximas</span><span class="seg-canc">⛔ anuladas</span></div>` : ''; })()}
     ${(() => { const pod = [1, 2, 3].map((k) => list.filter((x) => x.position === k).length);
-      return pod.some(Boolean) ? `<p class="podium-strip">🏅 Podios ${S.myYear}: ${pod[0] ? `🥇 ${pod[0]} ` : ''}${pod[1] ? `🥈 ${pod[1]} ` : ''}${pod[2] ? `🥉 ${pod[2]}` : ''}</p>` : ''; })()}
-    ${pending.length && !S.preview ? '<p class="hint alert-hint">👉 Tienes carreras ya corridas sin resultado: tócalas y pon tu puesto.</p>' : ''}
+      return pod.some(Boolean) ? `<div class="pod-strip" role="img" aria-label="Podios ${S.myYear}"><span class="pod-title">Podios ${S.myYear}</span>${pod.map((n, i) => (n ? `<span class="pod-item">${medalBadge(i + 1)}<b>${n}</b></span>` : '')).join('')}</div>` : ''; })()}
+    ${(() => { const tot = list.length + pending.length + upcoming.length + cancelled.length;
+      return tot ? `<div class="bar seg sum-bar" role="img" aria-label="Reparto de tus carreras">${[['seg-done', list.length], ['seg-pend', pending.length], ['seg-next', upcoming.length], ['seg-canc', cancelled.length]].filter(([, n]) => n).map(([c, n]) => `<span class="${c}" style="flex:${n}"></span>`).join('')}</div>` : ''; })()}
+    ${pending.length && !S.preview ? '<p class="hint alert-hint">Tienes carreras ya corridas sin resultado: tócalas y pon tu puesto.</p>' : ''}
   </section>
 
   ${afterSummary()}
 
   <section class="card season-block next-block" id="sec-next">
-    <h2>📅 Mis próximas inscripciones <small>(${upcoming.length})</small></h2>
-    <p class="hint">Carreras a las que estás apuntado y que aún no se han corrido. <b>Toca una para abrirla</b>: ves quién va, puedes borrarte y, si la añadiste tú, editarla.</p>
-    ${upcoming.length ? `<ul class="mini-list">${upcoming.map((g) => miniRow(g, `<span class="badge-next">${dleft(g)}${myCat(g) ? ` · ${esc(myCat(g))}` : ''}</span>${editMine(g)}`, `${runnerHref('carrera')}/${g.id}`)).join('')}</ul>`
+    <h2 class="sec-h">${ico('cal')} Mis próximas inscripciones <small>(${upcoming.length})</small></h2>
+    ${upcoming.length ? `<ul class="mini-list">${upcoming.map((g, i) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, hero: i === 0, kicker: i === 0 ? `Próxima cita · ${dleft(g)}` : '',
+        below: `${i === 0 ? '' : `<span class="badge-next">${dleft(g)}</span>`}${myCat(g) ? `<span class="cat-pill">${esc(myCat(g))}</span>` : ''}${editMine(g)}` })).join('')}</ul>`
       : '<p class="empty small">No estás apuntado a ninguna. Búscalas en la pestaña Carreras.</p>'}
   </section>
 
   ${pending.length ? `<section class="card season-block pend-block" id="sec-pend">
-    <h2>🏁 Ya corridas, pendientes de resultado <small>(${pending.length})</small></h2>
-    <p class="hint">Estabas apuntado y ya se han disputado. Pon tu resultado (lo puedes cambiar después): <b>en cuanto lo pongas ya te cuenta para el bono</b>, y a los 3 días de acabar la carrera pasa sola a resultados. Si no fuiste, toca la carrera y pulsa «No fui: borrarme».</p>
-    <ul class="mini-list">${pending.map((g) => miniRow(g, (g.my_result
-      ? `<span class="badge-sent">📝 ${g.my_result.position}º${g.my_result.time_seconds ? " · ⏱️ " + formatTime(g.my_result.time_seconds) : ""} · ya cuenta</span>`
-      : (S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>`)) + editMine(g), `${runnerHref('carrera')}/${g.id}`)).join('')}</ul>
+    <h2 class="sec-h">${ico('flag')} Ya corridas, pendientes de resultado <small>(${pending.length})</small></h2>
+    <p class="hint">Pon tu puesto: en cuanto lo pongas <b>ya cuenta para el bono</b>. Si no fuiste, ábrela y pulsa «No fui: borrarme».</p>
+    <ul class="mini-list">${pending.map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`,
+      below: (g.my_result
+        ? `<span class="badge-sent">${g.my_result.position}º${g.my_result.time_seconds ? ' · ' + formatTime(g.my_result.time_seconds) : ''} · ya cuenta</span>`
+        : (S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>`)) + editMine(g) })).join('')}</ul>
   </section>` : ''}
 
   ${(() => { const todo = results.filter((x) => missingFields(x).length);
@@ -975,18 +1002,17 @@ function myRacesCard(d, afterSummary = () => '') {
       <ul class="mini-list">${todo.slice(0, 20).map((x) => miniRow(x, `<span class="badge-pend">${missingFields(x).map((k) => FIELD_LABELS[k]).join(', ')}</span>`, `${runnerHref('carrera')}/race_${x.race_id}`)).join('')}</ul></details>` : ''; })()}
 
   ${cancelled.length ? `<section class="card season-block canc-block" id="sec-canc">
-    <h2>⛔ Anuladas <small>(${cancelled.length})</small></h2>
-    <p class="hint">Carreras que se suspendieron. Cuentan para el mínimo de carreras, pero no para la bonificación.</p>
-    <ul class="mini-list">${cancelled.map((g) => miniRow(g, '<span class="badge-pend">⛔ anulada</span>', `${runnerHref('carrera')}/${g.id}`)).join('')}</ul>
+    <h2 class="sec-h">${ico('ban')} Anuladas <small>(${cancelled.length})</small></h2>
+    <p class="hint">Suspendidas: cuentan para el mínimo de carreras, no para el bono.</p>
+    <ul class="mini-list">${cancelled.map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, below: '<span class="badge-pend">anulada</span>' })).join('')}</ul>
   </section>` : ''}
 
   <section class="card season-block done-block" id="sec-done">
-    <h2>✅ Carreras hechas ${S.myYear} <small>(${list.length}${days !== list.length ? ` · ${days} días para el bono` : ''})</small></h2>
+    <h2 class="sec-h">${ico('ok')} Carreras hechas ${S.myYear} <small>(${list.length}${days !== list.length ? ` · ${days} días para el bono` : ''})</small></h2>
     ${years.length > 1 ? `<div class="years">${years.map((y) => `<button class="chip${y === S.myYear ? ' on' : ''}" data-act="my-year" data-y="${y}">${y}</button>`).join('')}</div>` : ''}
     ${list.length ? `<ul class="mini-list">${list.map(row).join('')}</ul>`
       : `<p class="empty small">Todavía no hay carreras tuyas con resultado en ${S.myYear}.</p>`}
-    ${list.some((r) => r.mine_created) && !S.preview ? '<p class="hint">✏️ Las que añadiste tú las puedes editar (todos sus datos) o borrar.</p>' : ''}
-    <p class="hint">Si falta alguna carrera o un puesto, díselo a la dirección del club.</p>
+    <p class="hint">Si falta alguna carrera o un puesto, díselo a la dirección del club.${list.some((r) => r.mine_created) && !S.preview ? ' Las que añadiste tú las puedes editar o borrar.' : ''}</p>
   </section>`;
 }
 
@@ -1004,7 +1030,7 @@ function chronicleCard(d) {
   const plural = (n, a, b) => (n === 1 ? a : b);
   const li = (x, isDone) => `<li class="chro-row"><span class="chro-name"><b>${esc(x.name)}</b><small class="muted">${esc(formatDate(x.date, false))}${x.place ? ' · ' + esc(x.place) : ''}</small></span>${S.preview ? '' : `<button class="btn small${isDone ? ' ghost' : ' primary'}" data-act="chro-toggle" data-key="${esc(x.key)}" data-done="${isDone ? 0 : 1}">${isDone ? 'Deshacer' : '✓ Ya la pasé'}</button>`}</li>`;
   return `<section class="card chro-card${c.pending.length ? ' has-pend' : ''}">
-    <div class="chro-top"><h3>✍️ Crónicas${year === new Date().getFullYear() ? '' : ` <small class="muted">${year}</small>`}</h3>
+    <div class="chro-top"><h3 class="sec-h">${ico('pen')} Crónicas${year === new Date().getFullYear() ? '' : ` <small class="muted">${year}</small>`}</h3>
       <div class="chro-pills"><span class="chro-pill pend${c.pending.length ? '' : ' zero'}"><b>${c.pending.length}</b> ${plural(c.pending.length, 'pendiente', 'pendientes')}</span><span class="chro-pill ok"><b>${c.done.length}</b> ${plural(c.done.length, 'pasada', 'pasadas')}</span></div></div>
     <details class="chro-det" data-open-key="chro"${S.open?.chro ? ' open' : ''}>
       <summary>${c.pending.length ? 'Ver las que me faltan y marcarlas' : 'Ver mis crónicas pasadas'}</summary>
@@ -1239,8 +1265,8 @@ function viewRunnerMine() {
   return frame(runnerTitle(), `
     ${previewBanner()}
     <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
-    <a class="btn block ruta-link" href="ruta/"><span>🗺️ Planificar ruta <span class="new-tag">NUEVO</span></span><small class="muted">Sube tu track y mira viento, tiempo y subidas</small></a>
     ${myRacesCard(d, () => chronicleCard(d))}
+    <a class="btn block ruta-link" href="ruta/"><span>🗺️ Planificar ruta <span class="new-tag">NUEVO</span></span><small class="muted">Sube tu track y mira viento, tiempo y subidas</small></a>
     <a class="btn block" href="${runnerHref('contrato')}">📄 Mi contrato y mi bonificación</a>
     ${installHint()}
     ${S.preview ? '' : `<p class="center"><button class="link muted" data-act="r-forget">No soy ${esc(me.name)}</button></p>`}
