@@ -1250,3 +1250,5 @@ html, body { overscroll-behavior-y: contain; }
 .fmt-pills .pill:is([class^="d-"], [class*=" d-"]) .dot, .fmt-pills .pill:is([class^="d-"], [class*=" d-"]) b { background: var(--dc); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) :is([class^="d-"], [class*=" d-"]) { filter: brightness(1.18); } }
 :root[data-theme="dark"] :is([class^="d-"], [class*=" d-"]) { filter: brightness(1.18); }
+.mstack > span:is([class^="d-"], [class*=" d-"]) { background: var(--dc); }
+.pulse-legend span:is([class^="d-"], [class*=" d-"]) i { background: var(--dc); }

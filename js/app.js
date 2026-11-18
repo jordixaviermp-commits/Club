@@ -1222,20 +1222,23 @@ function teamPulse(d) {
   const mine = up.filter((g) => g.entries.some((e) => e.runner_id === d.me.id)).length;
   const byMonth = new Map();
   for (const g of up) {
-    const ym = g.date.slice(0, 7), m = byMonth.get(ym) || { total: 0, races: 0, mods: {} };
-    m.total += g.entries.length; m.races++; m.mods[g.modality] = (m.mods[g.modality] || 0) + g.entries.length; byMonth.set(ym, m);
+    const ym = g.date.slice(0, 7), m = byMonth.get(ym) || { total: 0, races: 0, discs: {} }, dk = disciplineKey(g.modality, g.subtype);
+    m.total += g.entries.length; m.races++; m.discs[dk] = (m.discs[dk] || 0) + g.entries.length; byMonth.set(ym, m);
   }
   const cols = [...byMonth].sort(([a], [b]) => a.localeCompare(b)).slice(0, 7);
   const mx = Math.max(1, ...cols.map(([, m]) => m.total));
   const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-  const mods = MODALITIES.filter((x) => cols.some(([, m]) => m.mods[x]));
+  const tot = {};
+  for (const [, m] of cols) for (const [k, n] of Object.entries(m.discs)) tot[k] = (tot[k] || 0) + n;
+  const discs = Object.keys(tot).sort((a, b) => tot[b] - tot[a] || a.localeCompare(b, 'es'));
   return `<section class="card pulse"><h3>${ico('users')}El equipo ya está apuntado</h3>
     <div class="pulse-nums"><div class="pn"><b>${up.length}</b><span>carrera${up.length === 1 ? '' : 's'} próxima${up.length === 1 ? '' : 's'}<small>${parts} inscripci${parts === 1 ? 'ón' : 'ones'} · ${people} corredor${people === 1 ? '' : 'es'}</small></span></div>
       ${mine ? `<div class="pn me"><b>${mine}</b><span><i>Tú estás en</i><small>${mine === 1 ? 'carrera' : 'carreras'}</small></span></div>` : ''}</div>
     <div class="months pulse-months" role="group" aria-label="Inscripciones del equipo por mes">${cols.map(([ym, m]) => `<button type="button" class="mcol pulse-col" data-act="pulse-month" data-m="${ym}" aria-label="${MES[Number(ym.slice(5)) - 1]}: ${m.total} inscripciones en ${m.races} carreras">
-      <em>${m.total}</em><div class="mstack" style="height:${(m.total / mx) * 100}%">${MODALITIES.filter((x) => m.mods[x]).map((x) => `<span class="${modClass(x)}" style="flex:${m.mods[x]}" title="${esc(x)}: ${m.mods[x]}"></span>`).join('')}</div>
+      <em>${m.total}</em><div class="mstack" style="height:${(m.total / mx) * 100}%">${discs.filter((k) => m.discs[k]).reverse().map((k) => { const [dm, ds] = k.split('|');
+        return `<span class="${discClass(dm, ds)}" style="flex:${m.discs[k]}" title="${esc(discLabel(dm, ds))}: ${m.discs[k]}"></span>`; }).join('')}</div>
       <b>${MES[Number(ym.slice(5)) - 1]}</b></button>`).join('')}</div>
-    <p class="pulse-legend">${mods.map((x) => `<span class="${modClass(x)}"><i></i>${esc(x)}</span>`).join('')}</p></section>`;
+    <p class="pulse-legend">${discs.map((k) => { const [dm, ds] = k.split('|'); return `<span class="${discClass(dm, ds)}"><i></i>${esc(discLabel(dm, ds))}</span>`; }).join('')}</p></section>`;
 }
 
 /** Tarjeta «Planificar ruta» (herramienta ruta/): va en Carreras, justo bajo el buscador. */
