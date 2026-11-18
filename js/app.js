@@ -964,6 +964,25 @@ const mrow = (g, { pill = '', edit = '', below = '', end = '', href = '', hero =
   ${below ? `<div class="mrow-below">${below}</div>` : ''}</li>`;
 
 /** «Mis carreras»: sus carreras con resultados por temporada y las apuntadas pendientes de resultado. */
+const dayMon = (iso) => (iso ? `${Number(iso.slice(8, 10))} ${['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'][Number(iso.slice(5, 7)) - 1]}` : '');
+/** Mi entrada en una carrera (la del corredor que mira). */
+const myEntry = (g) => (g.entries || []).find((e) => e.runner_id === S.runnerData?.me?.id);
+/** Resumen rápido: cuántas de mis próximas carreras están pagadas y cuántas no. */
+function payLine(list) {
+  const mine = list.map(myEntry).filter(Boolean);
+  if (!mine.length) return '';
+  const paid = mine.filter((e) => e.paid).length, unpaid = mine.length - paid;
+  return `<p class="pay-sum"><span class="ok">${ico('euro')}${paid} ${paid === 1 ? 'pagada' : 'pagadas'}</span>${unpaid ? `<span class="wait">${unpaid} sin pagar</span>` : ''}</p>`;
+}
+/** Fila de chips de una inscripción: desde cuándo estoy inscrito y si está pagada (y cuándo). */
+function payChips(g) {
+  const e = myEntry(g);
+  if (!e) return '';
+  const label = e.paid ? `Pagada${e.paid_on ? ` · ${dayMon(e.paid_on)}` : ''}${e.paid_amount != null ? ` · ${euros(e.paid_amount)}` : ''}` : 'Sin pagar';
+  const chip = `${ico('euro')}${label}`;
+  return `${e.joined_on ? `<span class="ins-chip">${ico('check')}Inscrito ${dayMon(e.joined_on)}</span>` : ''}${S.preview ? `<span class="pay-chip${e.paid ? ' on' : ''}">${chip}</span>` : `<button type="button" class="pay-chip${e.paid ? ' on' : ''}" data-act="r-paid" data-id="${g.id}">${chip}</button>`}`;
+}
+
 function myRacesCard(d, afterSummary = () => '') {
   const results = d.my_results;
   if (!results) return ''; // base de datos aún sin actualizar
@@ -1015,7 +1034,7 @@ function myRacesCard(d, afterSummary = () => '') {
 
   <section class="card season-block next-block" id="sec-next">
     <h2 class="sec-h">Mis próximas inscripciones <small>(${upcoming.length})</small><button type="button" class="info-btn" data-act="info-next" aria-label="Qué es esto">${ico('info')}</button></h2>
-    ${upcoming.length ? `<ul class="mini-list">${upcoming.map((g, i) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, hero: i === 0, pill: `${dleft(g)}${myCat(g) ? ` · ${esc(myCat(g))}` : ''}`, edit: editMine(g) })).join('')}</ul>`
+    ${upcoming.length ? `${payLine(upcoming)}<ul class="mini-list">${upcoming.map((g, i) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, hero: i === 0, pill: `${dleft(g)}${myCat(g) ? ` · ${esc(myCat(g))}` : ''}`, edit: editMine(g), below: payChips(g) })).join('')}</ul>`
       : '<p class="empty small">No estás apuntado a ninguna. Búscalas en la pestaña Carreras.</p>'}
   </section>
 
@@ -2963,15 +2982,16 @@ function askPaid(name, mine) {
   return new Promise((resolve) => {
     const dlg = document.getElementById('dialog');
     dlg.innerHTML = `<form method="dialog" class="dlg"><h2>Pago de la inscripción</h2><p>${esc(name || '')}</p>
-      <p class="hint">Anota que ya la has pagado en la web de la carrera. Tus compañeros verán que la tienes pagada; <b>el importe solo lo ves tú</b>.</p>
+      <p class="hint">Anota que ya la has pagado en la web de la carrera. Tus compañeros verán que la tienes pagada; <b>el importe y el día solo los ves tú</b>.</p>
       <label>Importe pagado (opcional)<input name="amount" type="number" inputmode="decimal" step="0.01" min="0" max="10000" placeholder="Ej.: 25" value="${mine?.paid_amount ?? ''}"></label>
+      <label>Día del pago<input name="date" type="date" max="${todayISO()}" value="${mine?.paid_on || todayISO()}"></label>
       <div class="dlg-actions"><button value="ok" class="btn primary">${mine?.paid ? 'Guardar' : 'Ya la he pagado'}</button>${mine?.paid ? '<button value="no" class="btn danger" formnovalidate>Quitar el pago</button>' : ''}<button value="" class="btn ghost" formnovalidate>Cancelar</button></div></form>`;
     dlg.onclose = () => {
       const v = dlg.returnValue;
       if (v === 'no') return resolve({ paid: false, amount: null });
       if (v !== 'ok') return resolve(null);
       const raw = dlg.querySelector('input[name="amount"]').value.trim().replace(',', '.');
-      resolve({ paid: true, amount: raw === '' || !(Number(raw) >= 0) ? null : Math.round(Number(raw) * 100) / 100 });
+      resolve({ paid: true, amount: raw === '' || !(Number(raw) >= 0) ? null : Math.round(Number(raw) * 100) / 100, date: dlg.querySelector('input[name="date"]').value || null });
     };
     dlg.returnValue = '';
     dlg.showModal();
@@ -3474,7 +3494,7 @@ const actions = {
     const mine = g.entries.find((e) => e.runner_id === S.runnerData.me.id); if (!mine) return;
     const r = await askPaid(g.name, mine);
     if (!r) return;
-    await run(async () => { await api.runnerSetPaid(S.code, g.id, r.paid, r.amount); await loadRunner(); }, r.paid ? '✓ Pago anotado' : 'Pago quitado');
+    await run(async () => { await api.runnerSetPaid(S.code, g.id, r.paid, r.amount, r.date); await loadRunner(); }, r.paid ? '✓ Pago anotado' : 'Pago quitado');
     render();
   },
   // Botón verde «✓ Inscrito (M40)»: cambiar la categoría o borrarse
