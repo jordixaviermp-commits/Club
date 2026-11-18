@@ -2,7 +2,7 @@
 import { CONFIG } from './config.js';
 import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
-  CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
+  CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, disciplineKey, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
   extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
@@ -61,6 +61,11 @@ const opt = (value, label, sel) => `<option value="${esc(value)}"${value === sel
 const modClass = (m) => 'm-' + normalize(m || 'Otra').replace(/[^a-z]/g, '');
 /** Etiqueta de modalidad con su formato: «BTT · XCO», «Carretera · Critérium»… */
 const modTag = (m, sub) => `<span class="tag ${modClass(m)}">${esc(m)}${sub ? ` · <b>${esc(sub)}</b>` : ''}</span>`;
+/** Clase de color de una disciplina (modalidad + formato): «d-btt-xco». */
+const slug = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const discClass = (m, sub) => `d-${slug(m)}-${slug(sub) || 'sin'}`;
+/** Nombre corto de una disciplina: «XCO»; si el formato no la identifica sola, «BTT · Otra». */
+const discLabel = (m, sub) => (!sub ? (SUBTYPES[m] ? `${m} · sin formato` : m) : sub === 'Otra' ? `${m} · Otra` : sub);
 const modText = (x) => [x.modality, x.subtype].filter(Boolean).join(' · ');
 const modLegend = (mods) => `<div class="mod-legend">${MODALITIES.filter((m) => !mods || mods.includes(m))
   .map((m) => `<span class="${modClass(m)}"><i></i>${esc(m)}</span>`).join('')}</div>`;
@@ -991,10 +996,8 @@ function myRacesCard(d, afterSummary = () => '') {
       <a href="#" class="tile t-pend${pending.length ? ' alert' : ''}" data-act="goto-sec" data-to="sec-pend"><span class="t-n">${pending.length}</span><span class="t-l">Pendientes</span>${ico('flag', 't-ico')}<small>${pending.length ? 'falta tu resultado' : 'de resultado'}</small></a>
       <a href="#" class="tile t-canc" data-act="goto-sec" data-to="sec-canc"><span class="t-n">${cancelled.length}</span><span class="t-l">Anuladas</span>${ico('ban', 't-ico')}<small>suspendidas</small></a>
     </div>
-    ${(() => { const tot = list.length + pending.length + upcoming.length + cancelled.length;
-      return tot ? `<div class="bar seg sum-bar" role="img" aria-label="Reparto de tus carreras">${[['seg-done', list.length], ['seg-pend', pending.length], ['seg-next', upcoming.length], ['seg-canc', cancelled.length]].filter(([, n]) => n).map(([c, n]) => `<span class="${c}" style="flex:${n}"></span>`).join('')}</div>` : ''; })()}
     ${(() => { const pod = [1, 2, 3].map((k) => list.filter((x) => x.position === k).length), NAMES = [['Oro', 'Oros'], ['Plata', 'Platas'], ['Bronce', 'Bronces']];
-      return pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}">${medalBadge(i + 1)}${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : ''; })()}
+      return pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}"><i class="medal m${i + 1}"></i>${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : ''; })()}
   </section>
 
   ${pending.length ? `<section class="card chro-card pend-card has-pend" id="sec-pend"><details class="chro-det" data-open-key="pend"${S.open?.pend ? ' open' : ''}>
@@ -2267,13 +2270,13 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
   // carreras por mes + formatos más comunes
   const maxMonth = maxOf(s.byMonth.map((m) => m.total));
   const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-  const fmts = s.bySubtype;
+  const discOrder = (k) => s.disciplines.findIndex((d) => d.key === k);
   const months = `<section class="card eq-months"><h2>Carreras por mes</h2>
-    <div class="mchart" role="img" aria-label="Carreras de cada mes">${s.byMonth.map((m) => `<div class="mc${m.total ? '' : ' none'}"><div class="mc-area"><em>${m.total || ''}</em>
-      <div class="mc-stack" style="height:${m.total ? (m.total / maxMonth) * 100 : 0}%">${MODALITIES.filter((x) => m.mods[x]).map((x) =>
-        `<span class="${modClass(x)}" style="flex:${m.mods[x]}" title="${esc(x)}: ${m.mods[x]}"></span>`).join('')}</div></div><b>${MES[m.month]}</b></div>`).join('')}</div>
-    <p class="mod-legend2">${all.byModality.filter((m) => m.races).map((m) => `<span class="${modClass(m.modality)}"><i></i>${esc(m.modality)}</span>`).join('')}</p>
-    ${fmts.length ? `<h3>Carreras por formato</h3><div class="pills fmt-pills">${fmts.map((x) => `<span class="pill ${modClass(x.modality)}"><i class="dot"></i>${esc(x.subtype)} <b>${x.races}</b></span>`).join('')}</div>` : ''}</section>`;
+    <div class="mchart" role="img" aria-label="Carreras de cada mes, por disciplina">${s.byMonth.map((m) => `<div class="mc${m.total ? '' : ' none'}"><div class="mc-area"><em>${m.total || ''}</em>
+      <div class="mc-stack" style="height:${m.total ? (m.total / maxMonth) * 100 : 0}%">${Object.entries(m.discs).sort(([x], [y]) => discOrder(y) - discOrder(x)).map(([k, n]) => { const [dm, ds] = k.split('|');
+        return `<span class="${discClass(dm, ds)}" style="flex:${n}" title="${esc(discLabel(dm, ds))}: ${n}"></span>`; }).join('')}</div></div><b>${MES[m.month]}</b></div>`).join('')}</div>
+    <h3>Carreras por disciplina</h3>
+    <div class="pills fmt-pills">${s.disciplines.map((x) => `<span class="pill ${discClass(x.modality, x.subtype)}"><i class="dot"></i>${esc(discLabel(x.modality, x.subtype))} <b>${x.races}</b></span>`).join('')}</div></section>`;
   // clasificación: cuatro primeros y el resto desplegado
   const active = people.filter((r) => r.races > 0), idle = people.filter((r) => !r.races && r.current);
   const maxR = maxOf(active.map((r) => r.races));
