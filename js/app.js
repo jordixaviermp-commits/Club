@@ -2285,11 +2285,19 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
     return `<div class="lead l-${icon}"><span class="lead-i">${ico(icon)}</span><small>${label}</small><b>${names(people.filter((r) => score(r) === top), 2)}</b><em>${top} ${top === 1 ? unit : unit + 's'}</em></div>`;
   };
   const leaders = [lead('flag', 'Más carreras', (r) => r.races, 'carrera'), lead('trophy', 'Más podios', (r) => r.p1 + r.p2 + r.p3, 'podio'), lead('medal', 'Más victorias', (r) => r.p1, 'victoria')].join('');
-  const byMod = `<section class="card eq-mod"><h2>Por disciplina</h2>
-    ${all.disciplines.map((x) => `<button type="button" class="modrow2 ${discClass(x.modality, x.subtype)}${mod === x.key ? ' sel' : ''}" data-act="sum-mod" data-m="${esc(x.key)}">
-      <i class="stripe"></i><span class="mr-main"><b>${esc(x.subtype ? `${x.modality} · ${x.subtype}` : x.modality)}</b><small>${x.runners} corredor${x.runners === 1 ? '' : 'es'} · ${x.participations} participaci${x.participations === 1 ? 'ón' : 'ones'}</small>
-        <span class="mr-chips"><span class="mchip-s">${ico('trophy')}${x.podiums}</span><span class="mchip-s w">${ico('medal')}${x.wins}</span></span></span>
-      <span class="mr-n"><b>${x.races}</b>carrera${x.races === 1 ? '' : 's'}</span></button>`).join('')}</section>`;
+  // participación del equipo, compacta: una barra repartida (por disciplina o por categoría) y globos debajo
+  const pview = S.partView === 'cat' ? 'cat' : 'disc';
+  const partItems = pview === 'disc'
+    ? all.disciplines.map((x) => ({ key: x.key, cls: discClass(x.modality, x.subtype), label: x.subtype ? (x.subtype === 'Otra' ? `${x.modality} · Otra` : x.subtype) : x.modality, n: x.participations, tip: `${x.runners} corredor${x.runners === 1 ? '' : 'es'} · ${x.races} carrera${x.races === 1 ? '' : 's'}` })).filter((x) => x.n)
+    : s.byCategory.map((c) => ({ key: '', cls: `d-cat-${slug(c.category) || 'sin'}`, label: c.category || 'Sin categoría', n: c.participations, tip: `${c.runners} corredor${c.runners === 1 ? '' : 'es'}${c.km ? ` · ${kmText(c.km)}` : ''}` }));
+  const partTot = partItems.reduce((n, x) => n + x.n, 0) || 1;
+  const byMod = `<section class="card eq-mod"><div class="part-head"><h2>Participación</h2>
+      <div class="seg-sw part-sw" role="group" aria-label="Ver la participación por"><button type="button" class="${pview === 'disc' ? 'on' : ''}" data-act="part-view" data-v="disc">Disciplina</button><button type="button" class="${pview === 'cat' ? 'on' : ''}" data-act="part-view" data-v="cat">Categoría</button></div></div>
+    <div class="part-bar" role="img" aria-label="Participaciones del equipo por ${pview === 'disc' ? 'disciplina' : 'categoría'}">${partItems.map((x) => `<span class="${x.cls}" style="flex:${x.n}" title="${esc(x.label)}: ${x.n} (${x.tip})">${x.n / partTot >= 0.09 ? x.n : ''}</span>`).join('')}</div>
+    <div class="part-chips">${partItems.map((x) => (x.key
+      ? `<button type="button" class="part-chip ${x.cls}${mod === x.key ? ' sel' : ''}" data-act="sum-mod" data-m="${esc(x.key)}" title="${esc(x.tip)}"><i></i>${esc(x.label)} <b>${x.n}</b></button>`
+      : `<span class="part-chip ${x.cls}" title="${esc(x.tip)}"><i></i>${esc(x.label)} <b>${x.n}</b></span>`)).join('')}</div>
+</section>`;
   // carreras por mes + formatos más comunes
   const maxMonth = maxOf(s.byMonth.map((m) => m.total));
   const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -2345,7 +2353,7 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
       ${items.length > SHOWN ? `<details class="pod-more"><summary>Ver los ${items.length - SHOWN} anteriores</summary><ul class="pod-items">${items.slice(SHOWN).map(podItem).join('')}</ul></details>` : ''}`
       : '<p class="muted">Sin podios este año.</p>'}</section>`;
   return `<div class="eq">${filters}${hero}${leaders ? `<div class="leads eq-leads">${leaders}</div>` : ''}
-    ${months}${rank}${byMod}${cats}${podRunner}${places}</div>`;
+    ${months}${rank}${byMod}${podRunner}${places}</div>`;
 }
 
 /**
@@ -3806,6 +3814,7 @@ const actions = {
   },
   'sum-mod'(el) { S.sumMod = el.dataset.m; render(); },
   'pod-view'(el) { S.podView = el.dataset.v; render(); },
+  'part-view'(el) { S.partView = el.dataset.v; render(); },
   'race-mod'(el) { S.raceMod = el.dataset.m; render(); },
   'race-todo'() { S.raceTodo = !S.raceTodo; render(); },
   'race-repeat'() {
