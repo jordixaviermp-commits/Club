@@ -710,11 +710,6 @@ function calendarView(regs, card, isMine = () => false, { done = [], doneCard = 
         ${monthGrid(ym).flat().map(cell).join('')}
       </div>
       ${monthDiscs.length ? `<div class="cal-legend">${monthDiscs.map(([k, g]) => `<span class="${discClass(g.modality, g.subtype)}"><i></i>${esc(discLabel(g.modality, g.subtype))}</span>`).join('')}</div>` : ''}
-      ${months.length ? `<div class="cal-months">${months.map((mm) => {
-        const [yy, mo] = mm.split('-').map(Number);
-        const n = items.filter((it) => touches(it.g, mm)).length;
-        return `<button class="chip${mm === ym ? ' on' : ''}${mm < today.slice(0, 7) ? ' old' : ''}" data-act="cal-goto" data-m="${mm}">${MONTH_NAMES[mo - 1].slice(0, 3)} ${String(yy).slice(2)} · ${n}</button>`;
-      }).join('')}</div>` : ''}
     </section>
     ${S.calDay ? `<h2 class="section">${formatDate(S.calDay)} <button class="link small" data-act="cal-day" data-d="${S.calDay}">Ver todo el mes</button></h2>` : ''}
     ${shownUp.length ? `<h2 class="section">📅 Próximas (${shownUp.length})</h2>${shownUp.map(cardOf).join('')}` : ''}
