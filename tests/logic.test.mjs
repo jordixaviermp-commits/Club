@@ -514,3 +514,31 @@ test('panel Hoy: resultados pendientes, próximas, actividad, calidad e inactivo
   assert.equal(seenLevel(12), 'warm');
   assert.match(groupMessage('results', ['Bru'], { race: 'Pasada' }), /Pasada[\s\S]*• Bru/);
 });
+
+test('yearInsights: ritmo, días de la semana, histograma y calendario', async () => {
+  const { yearInsights } = await import('../js/logic.js');
+  const runners = [{ id: 'a', name: 'Anna' }, { id: 'b', name: 'Bru' }, { id: 'c', name: 'Cesc' }];
+  const res = (id, name, position) => ({ runner_id: id, runner_name: name, position, category: 'M40' });
+  const races = [
+    { id: 'r1', name: 'Uno', date: '2026-03-07', modality: 'Carretera', km: 80, results: [res('a', 'Anna', 1), res('b', 'Bru', 5)] },       // sábado
+    { id: 'r2', name: 'Dos', date: '2026-03-14', end_date: '2026-03-15', modality: 'BTT', subtype: 'XCO', km: 40, results: [res('a', 'Anna', 2)] },   // 2 días
+    { id: 'r3', name: 'Tres', date: '2026-05-02', modality: 'BTT', results: [res('a', 'Anna', 9)] },
+    { id: 'r4', name: 'Otro año', date: '2025-05-02', modality: 'BTT', results: [res('c', 'Cesc', 1)] },
+  ];
+  const i = yearInsights(2026, races, runners, [{ id: 'g', date: '2026-12-01', entries: [{ runner_id: 'a' }, { runner_id: 'b' }] }, { id: 'h', date: '2026-01-10', entries: [{}] }], '2026-06-01');
+  assert.equal(i.summary.totals.races, 3);
+  assert.equal(i.weekdays[5], 3, 'las tres empiezan en sábado');
+  assert.equal(i.days, 4);
+  assert.equal(i.multiDay, 1);
+  assert.deepEqual(i.bestMonth, { month: 2, total: 2 });
+  assert.equal(i.avgPart, 1.3);
+  assert.equal(i.rosterSize, 3);
+  assert.equal(i.activeCount, 2);
+  assert.deepEqual(i.idle.map((x) => x.name), ['Cesc']);
+  assert.deepEqual(i.hist.map((h) => h.runners), [1, 1, 1, 0, 0]);   // Cesc 0, Bru 1, Anna 3
+  assert.equal(i.podiumRate, 50);
+  assert.equal(i.avgRaceKm, 60);
+  assert.deepEqual(i.upcoming, { races: 1, entries: 2 });
+  assert.equal(i.cal.length, 3);
+  assert.equal(i.first, '2026-03-07');
+});

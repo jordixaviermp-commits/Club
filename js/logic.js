@@ -1190,3 +1190,46 @@ export function groupMessage(kind, names, extra = {}) {
   }[kind] || extra.text || '';
   return `${head}${list ? `\n\n${list}` : ''}`;
 }
+
+// ======================================================================
+//  Resumen de la dirección: datos extra para el panel de temporada
+// ======================================================================
+
+export const WEEKDAYS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+export const HIST_BUCKETS = [['0', 0, 0], ['1-2', 1, 2], ['3-5', 3, 5], ['6-10', 6, 10], ['11+', 11, 1e9]];
+const monthOf = (iso) => Number(String(iso).slice(5, 7)) - 1;
+
+/**
+ * Cifras que completan `yearSummary` para el panel de la dirección:
+ * ritmo (días de competición, media de participantes, mejor mes), reparto por día de la semana,
+ * cuántos corredores han corrido (y cuántos de la plantilla no), histograma de carreras por corredor
+ * y el calendario del año (una entrada por carrera, con su disciplina y participantes).
+ */
+export function yearInsights(year, races, runners, registrations = [], today = '') {
+  const s = yearSummary(year, races, runners);
+  const yr = races.filter((r) => yearOf(r.date) === year);
+  const weekdays = Array(7).fill(0);
+  let days = 0, multiDay = 0, withKm = 0;
+  for (const r of yr) {
+    const d = new Date(String(r.date).slice(0, 10) + 'T12:00:00Z');
+    weekdays[(d.getUTCDay() + 6) % 7]++;
+    const n = numDays(r.date, r.end_date); days += n; if (n > 1) multiDay++;
+    if (Number(r.km) > 0) withKm++;
+  }
+  const best = s.byMonth.reduce((b, m) => (m.total > (b?.total ?? 0) ? m : b), null);
+  const current = s.perRunner.filter((r) => r.current);
+  const active = current.filter((r) => r.races > 0);
+  const hist = HIST_BUCKETS.map(([label, lo, hi]) => ({ label, runners: current.filter((r) => r.races >= lo && r.races <= hi).length }));
+  const cal = yr.map((r) => ({ id: r.id, name: r.name, date: r.date, end_date: r.end_date || null, modality: r.modality, subtype: r.subtype || '', n: (r.results || []).length }));
+  const up = registrations.filter((g) => yearOf(g.date) === year && !g.suspended && today && g.date >= today);
+  const rate = s.totals.participations ? Math.round((s.totals.podiums / s.totals.participations) * 100) : 0;
+  return {
+    summary: s, weekdays, days, multiDay, withKm,
+    avgPart: s.totals.races ? Math.round((s.totals.participations / s.totals.races) * 10) / 10 : 0,
+    avgRaceKm: withKm ? Math.round((yr.reduce((n, r) => n + (Number(r.km) > 0 ? Number(r.km) : 0), 0) / withKm) * 10) / 10 : 0,
+    bestMonth: best && best.total ? { month: best.month, total: best.total } : null,
+    rosterSize: current.length, activeCount: active.length, idle: current.filter((r) => !r.races), hist, cal, podiumRate: rate,
+    upcoming: { races: up.length, entries: up.reduce((n, g) => n + (g.entries || []).length, 0) },
+    first: yr.length ? yr[0].date : null, last: yr.length ? yr[yr.length - 1].date : null,
+  };
+}
