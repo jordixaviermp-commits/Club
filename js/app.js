@@ -429,7 +429,7 @@ function frame(title, body, { back, actions = '', rtab = null, noSearch = false 
     ${api.mode === 'demo' ? `<div class="demo-bar">Modo demostración: datos de prueba guardados solo en este móvil.</div>` : ''}
     <header class="top">
       ${back ? `<a class="back" href="${back}" aria-label="Volver">‹</a>` : '<img class="logo" src="icons/logo.png" alt="">'}
-      <h1>${esc(title)}</h1>${actions}${(admin && rtab === null && !back && S.data) || rtab !== null ? (noSearch ? '' : searchButton()) + accidentButton() : ''}${rtab !== null ? newsBell() : ''}
+      ${rtab !== null && !S.preview && S.runnerData?.me?.name && title === runnerTitle() ? `<h1 class="greet" aria-label="${esc(title)}" title="${esc(title)}"><span>${esc(title)}</span></h1>` : `<h1>${esc(title)}</h1>`}${actions}${(admin && rtab === null && !back && S.data) || rtab !== null ? (noSearch ? '' : searchButton()) + accidentButton() : ''}${rtab !== null ? newsBell() : ''}
     </header>
     <main>${body}</main>
     ${tabs}`;
@@ -448,6 +448,14 @@ async function checkVersion() {
     }
   } catch { /* sin acceso a la caché: solo se enseña la versión */ }
 }
+
+/** Si el nombre de la barra de arriba no cabe, se desliza de ida y vuelta para poder leerlo entero. */
+function fitGreeting() {
+  const h = $app.querySelector('h1.greet'); if (!h) return;
+  const t = h.firstElementChild, over = Math.ceil(t.scrollWidth - h.clientWidth);
+  if (over > 2) { h.style.setProperty('--ov', `${over + 6}px`); h.style.setProperty('--dur', `${Math.max(6, Math.round(over / 18) + 5)}s`); h.classList.add('scroll'); }
+}
+window.addEventListener('resize', () => { const h = $app.querySelector('h1.greet'); if (h) { h.classList.remove('scroll'); fitGreeting(); } });
 
 function render() {
   const { view } = parseRoute();
@@ -468,6 +476,7 @@ function render() {
   else if (S.code && S.runnerData) html = runnerScreen(view);
   else html = viewWelcome();
   $app.innerHTML = html;
+  fitGreeting();
   if ($app.querySelector('#app-ver')) checkVersion();
   document.body.classList.toggle('has-tabs', !!$app.querySelector('nav.tabs'));
   // color de la sección: cada pestaña tiene el suyo
@@ -1242,8 +1251,8 @@ function runnerScreen(sub) {
 /** Aviso de la vista previa de la dirección (en todas las pantallas del corredor). */
 const previewBanner = () => (S.session?.isAdmin && S.preview ? `<p class="card warn">👁️ <b>Vista previa</b> de ${esc(S.preview.name)}: no se puede apuntar ni borrar.
   <a href="#/corredores">Salir</a>${S.preview.sqlOk ? '' : '<br><b>⚠️ Falta ejecutar en Supabase el SQL de «Mis carreras»</b> (supabase/cambios/2026-11-11-mis-carreras.sql).'}</p>` : '');
-/** Título de la barra de arriba del corredor: «Hola, Pere» (el escudo ya dice que es del club). */
-const runnerTitle = () => (S.session?.isAdmin && S.preview ? `Vista de ${S.preview.name}` : S.runnerData?.me?.name ? `Hola, ${cleanName(S.runnerData.me.name).split(' ')[0]}` : 'CC Monzón');
+/** Título de la barra de arriba del corredor: «Hola, Pere Soler» con el nombre completo (hay nombres repetidos); si no cabe, se desliza solo. */
+const runnerTitle = () => (S.session?.isAdmin && S.preview ? `Vista de ${S.preview.name}` : S.runnerData?.me?.name ? `Hola, ${cleanName(S.runnerData.me.name)}` : 'CC Monzón');
 
 /** Tarjeta de una carrera ya disputada (con resultados), para el calendario. */
 function doneRaceCard(r, { admin = false, meId = null } = {}) {
