@@ -3557,10 +3557,21 @@ function resTravel(pk) {
     <p class="hint">Cálculo orientativo: línea recta desde el punto de salida (${esc(ORIGEN.nombre)}) hasta la población de cada carrera, × ${String(FACTOR_CARRETERA).replace('.', ',')} para estimar la carretera, ida y vuelta, por cada corredor que participó. No cuenta coches compartidos ni el domicilio real de cada uno. ${t.travelRaces} de ${t.races} carreras con ubicación${t.travelApprox ? ` (${t.travelApprox} solo por su provincia)` : ''}${pend ? `; faltan ${pend} por buscar` : ''}.</p>`;
 }
 
+/** Rosco de reparto: cada porción un color, con el total en el centro y la leyenda al lado (nombre, carreras y %). */
+const PLACE_COLORS = ['#15906a', '#2f6fd6', '#d8601a', '#6a4fd6', '#cf2f68', '#0a8fc0', '#9aa7b0'];
+function placeDonut(rows, { title, max = 6, unit = 'carreras' }) {
+  if (!rows.length) return `<div><h3>${title}</h3><p class="muted small">Sin datos</p></div>`;
+  const top = rows.slice(0, max), rest = rows.slice(max).reduce((n, c) => n + c.races, 0);
+  const items = [...top.map((c) => ({ name: c.name, n: c.races })), ...(rest ? [{ name: `Otras (${rows.length - max})`, n: rest, other: true }] : [])];
+  const tot = items.reduce((n, x) => n + x.n, 0) || 1, R = 38, C = 2 * Math.PI * R;
+  let acc = 0;
+  const arcs = items.map((x, i) => { const len = (x.n / tot) * C, o = -acc; acc += len; return `<circle cx="50" cy="50" r="${R}" fill="none" stroke="${x.other ? PLACE_COLORS[6] : PLACE_COLORS[i % 6]}" stroke-width="16" stroke-dasharray="${Math.max(0, len - 1.2).toFixed(2)} ${(C - Math.max(0, len - 1.2)).toFixed(2)}" stroke-dashoffset="${o.toFixed(2)}" transform="rotate(-90 50 50)"><title>${esc(x.name)}: ${x.n}</title></circle>`; }).join('');
+  return `<div class="pd"><h3>${title} <small class="muted">(${rows.length})</small></h3>
+    <div class="pd-wrap"><svg class="pd-svg" viewBox="0 0 100 100" role="img" aria-label="${esc(title)}: reparto de ${unit}">${arcs}<text x="50" y="49" text-anchor="middle" class="pd-n">${tot}</text><text x="50" y="60" text-anchor="middle" class="pd-u">${unit}</text></svg>
+      <ul class="pd-leg">${items.map((x, i) => `<li><i style="background:${x.other ? PLACE_COLORS[6] : PLACE_COLORS[i % 6]}"></i><span>${esc(x.name)}</span><b>${x.n}</b><em>${Math.round((x.n / tot) * 100)} %</em></li>`).join('')}</ul></div></div>`;
+}
 function resReach(pk) {
   const s = pk.s, i = pk.ins, t = s.totals, L = s.longest;
-  const where = (title, rows, n = 12) => { const top = rows.slice(0, n), mx = Math.max(1, ...top.map((c) => c.races));
-    return `<div><h3>${title} (${rows.length})</h3>${top.length ? top.map((c) => `<div class="hbar"><span>${esc(c.name)}</span>${bar((c.races / mx) * 100)}<b>${c.races}</b></div>`).join('') : '<p class="muted small">Sin datos</p>'}${rows.length > n ? `<p class="hint">y ${rows.length - n} más</p>` : ''}</div>`; };
   const km = s.perRunner.filter((r) => r.km > 0).sort((a, b) => b.km - a.km).slice(0, 5), kmx = Math.max(1, ...km.map((r) => r.km));
   const tm = s.perRunner.filter((r) => r.timed > 0).sort((a, b) => b.time - a.time).slice(0, 5), tmx = Math.max(1, ...tm.map((r) => r.time));
   const figs = `<div class="rs-tiles">
@@ -3572,15 +3583,15 @@ function resReach(pk) {
     <div class="rs-tile">${ico('mountain')}<small>Media por carrera</small><b>${i.avgElev ? esc(elevText(i.avgElev)) : '—'}</b><em>${i.withElev} de ${t.races} con desnivel</em></div></div>`;
   const people = (rows, key, fmt, mx) => rows.map((r, k) => `<li><span class="pos">${k + 1}</span><div>${personTag(r.key, r.name)}${bar((r[key] / mx) * 100)}</div><span class="rk-m">${fmt(r[key])}</span></li>`).join('');
   return `${figs}
-    <section class="card rs-card"><h2>Dónde se ha competido</h2><div class="grid2 top-align">${where('Provincias', s.provinces)}${where('Países', s.countries, 6)}</div>
+    <section class="card rs-card"><h2>Dónde se ha competido</h2>${placeDonut(s.provinces, { title: 'Provincias', max: 6 })}${s.countries.length > 1 ? placeDonut(s.countries, { title: 'Países', max: 5 }) : s.countries.length ? `<p class="hint">Todas las carreras han sido en ${esc(s.countries[0].name)}.</p>` : ''}
       ${s.missingPlace.length ? `<div class="warn"><b>Faltan datos en ${s.missingPlace.length} carrera${s.missingPlace.length === 1 ? '' : 's'}:</b><ul>${s.missingPlace.map((m) => `<li><a href="#/carreras/${m.id}">${esc(m.name)}</a>: sin ${m.missing.join(' ni ')}</li>`).join('')}</ul></div>` : ''}</section>
     <section class="card rs-card"><h2>Las carreras más duras</h2>${resHardest(pk)}${i.climb ? `<p class="hint">De media, ${String(i.climb).replace('.', ',')} metros de subida por kilómetro.</p>` : ''}</section>
     ${pk.ins.cal.filter((r) => r.km && r.elevation).length > 1 ? `<section class="card rs-card"><h2>Km frente a desnivel</h2>${resScatter(pk)}</section>` : ''}
     ${(() => { const el = s.perRunner.filter((r) => r.elev > 0).sort((a, b) => b.elev - a.elev).slice(0, 5), ex = Math.max(1, ...el.map((r) => r.elev));
       return el.length ? `<section class="card rs-card"><h2>Quién ha subido más</h2><ol class="rs-rank">${people(el, 'elev', (n) => esc(elevText(n)), ex)}</ol></section>` : ''; })()}
+    ${resTimeCard(pk)}
     <section class="card rs-card"><h2>Desplazamientos</h2>${resTravel(pk)}</section>
     <section class="card rs-card"><h2>Mapa de desplazamientos</h2>${resTripMap(pk)}</section>
-    ${resTimeCard(pk)}
     <section class="card rs-card"><h2>Cuánto cuesta competir</h2>${resCost(pk)}</section>
     ${km.length ? `<section class="card rs-card"><h2>Quién ha recorrido más</h2><ol class="rs-rank">${people(km, 'km', (n) => esc(kmText(n)), kmx)}</ol></section>` : ''}
     ${tm.length ? `<section class="card rs-card"><h2>Más tiempo en carrera</h2><ol class="rs-rank">${people(tm, 'time', (n) => formatTime(n, true), tmx)}</ol></section>` : ''}
@@ -3702,7 +3713,7 @@ function runnerMoreStats(pk) {
       ${i.cal.filter((r) => r.km && r.elevation).length > 1 ? `<h3>Km frente a desnivel</h3>${resScatter(pk)}` : ''}</section>` : '';
   const trip = t.travelKm ? `<section class="card rs-card"><h2>${ico('compass')} Desplazamientos</h2>${resTravel(pk)}<h3>Mapa de desplazamientos</h3>${resTripMap(pk)}</section>` : '';
   const cost = t.pricedRaces ? `<section class="card rs-card"><h2>${ico('money')} Cuánto cuesta competir</h2>${resCost(pk)}</section>` : '';
-  return `${climb}${trip}${resTimeCard(pk)}${cost}`;
+  return `${climb}${resTimeCard(pk)}${trip}${cost}`;
 }
 
 function viewSummary() {

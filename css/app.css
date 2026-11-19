@@ -2010,3 +2010,17 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .ig-sec .pills { flex-direction: column; align-items: stretch; }
 .ig-sec .pill { background: var(--sec-soft); border: 1px solid var(--sec-line); color: var(--text); border-radius: 12px; padding: .45rem .7rem; }
 .net-tab.on { background: var(--sec); border-color: var(--sec); color: var(--sec-ink); }
+
+/* Dónde se ha competido: rosco + leyenda con porcentaje */
+.pd + .pd { margin-top: .4rem; border-top: 1px solid var(--line); padding-top: .2rem; }
+.pd h3 { margin: .6rem 0 .3rem; }
+.pd-wrap { display: flex; align-items: center; gap: .9rem; }
+.pd-svg { flex: none; width: 128px; height: 128px; }
+.pd-svg circle { transition: opacity .15s; }
+.pd-n { font-size: 20px; font-weight: 800; fill: var(--text); } .pd-u { font-size: 7px; fill: var(--muted); }
+.pd-leg { list-style: none; margin: 0; padding: 0; flex: 1; min-width: 0; display: grid; gap: .3rem; }
+.pd-leg li { display: grid; grid-template-columns: .7rem minmax(0, 1fr) auto 2.6rem; gap: .4rem; align-items: center; font-size: .86rem; }
+.pd-leg i { width: .7rem; height: .7rem; border-radius: 3px; }
+.pd-leg span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pd-leg b { font-variant-numeric: tabular-nums; } .pd-leg em { font-style: normal; color: var(--muted); font-size: .76rem; text-align: right; }
+@media (max-width: 340px) { .pd-wrap { flex-direction: column; align-items: stretch; } .pd-svg { align-self: center; } }
