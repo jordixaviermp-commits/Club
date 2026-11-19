@@ -288,7 +288,7 @@ const ADMIN_TABS = [
 const ADMIN_GROUP = { '': 'hoy', hoy: 'hoy', avisos: 'hoy', mensajes: 'hoy', calidad: 'hoy', actividad: 'hoy', noticias: 'hoy', historial: 'hoy',
   inscripciones: 'inscripciones', carreras: 'inscripciones', federaciones: 'inscripciones',
   corredores: 'corredores', contratos: 'corredores', computo: 'corredores', informe: 'corredores', bonos: 'corredores', corredor: 'corredores', docs: 'corredores',
-  resumen: 'resumen', instagram: 'resumen', datos: 'resumen', temporada: 'resumen', memoria: 'resumen', vista: 'corredores', equipo: 'resumen',
+  resumen: 'resumen', instagram: 'redes', datos: 'resumen', temporada: 'resumen', memoria: 'resumen', vista: 'corredores', equipo: 'resumen',
   redes: 'redes', semana: 'redes', publicaciones: 'redes' };
 const SEC_OF = { hoy: 'hoy', inscripciones: 'car', corredores: 'eq', resumen: 'res', redes: 'red', '': 'car', federaciones: 'fed', mi: 'hoy', contrato: 'eq', equipo: 'res', noticias: 'hoy', carrera: 'car', nueva: 'car' };
 const icon = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
@@ -319,6 +319,7 @@ const adminScreens = () => [
   ['📊', 'Cómputo de la temporada', '#/computo', 'computo fin temporada descargar csv excel control cerrar'],
   ['🖨️', 'Informe de temporada', '#/informe', 'informe imprimir pdf bono saldo penalizacion cierre hojas corredor'],
   ['💶', 'Bonos', '#/bonos', 'bonos bonificacion minimo penalizacion tramos plus circuito condiciones'],
+  ['📈', 'Estadísticas de Instagram (en Redes)', '#/instagram', 'instagram estadisticas seguidores alcance interacciones visualizaciones publicaciones redes'],
   ['📱', 'Redes: panel de historias, avisos y resultados', '#/redes', 'redes instagram historia post resultados avisos publicar pendiente encargado panel'],
   ['📸', 'Publicaciones en redes (control detallado)', '#/publicaciones', 'redes instagram historia post resultados publicar anomalias encargado'],
   ['📅', 'Próximas carreras (para redes)', '#/semana', 'semana redes avisar encargado proximas'],
@@ -1977,7 +1978,7 @@ function socialAdminCard() {
 /** Pestañas de la zona de redes (se repiten arriba en Panel, Calendario y Publicaciones). */
 function netTabs(on) {
   let pend = 0, due = 0; try { pend = socialPending(); due = pubDue(); } catch { /* sin datos aún */ }
-  return `<nav class="net-tabs no-print" aria-label="Redes">${[['panel', '📋', 'Panel', '#/redes', pend], ['cal', '📅', 'Calendario', '#/semana', 0], ['pub', '📸', 'Publicaciones', '#/publicaciones', due]]
+  return `<nav class="net-tabs no-print" aria-label="Redes">${[['panel', '📋', 'Panel', '#/redes', pend], ['cal', '📅', 'Calendario', '#/semana', 0], ['pub', '📸', 'Publicar', '#/publicaciones', due], ['ig', '📈', 'Instagram', '#/instagram', 0]]
     .map(([k, i, l, h, n]) => `<a class="net-tab${on === k ? ' on' : ''}" href="${h}"><span aria-hidden="true">${i}</span><b>${l}</b>${n ? `<em>${n}</em>` : ''}</a>`).join('')}</nav>`;
 }
 
@@ -2930,10 +2931,9 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
 }
 
 // ======================================================================
-//  Estadísticas de Instagram (Resumen → Instagram)
+//  Estadísticas de Instagram (Redes → Instagram)
 // ======================================================================
 
-const resumenTabs = (on) => `<div class="years subtabs no-print"><a class="chip${on === 'club' ? ' on' : ''}" href="#/resumen">📊 Resumen</a><a class="chip${on === 'ig' ? ' on' : ''}" href="#/instagram">📸 Instagram</a></div>`;
 const nf = (n) => (n == null ? '—' : Number(n).toLocaleString('de-DE'));   // 5.200 (el «es-ES» no pone el punto en 4 cifras)
 const IG_MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const igShort = (iso) => `${Number(iso.slice(8))} ${IG_MES[Number(iso.slice(5, 7)) - 1]} ${iso.slice(2, 4)}`;
@@ -2959,7 +2959,7 @@ async function loadIg(force = false) {
 
 function viewInstagram() {
   if (!S.ig) loadIg();
-  const head = (inner) => frame('Instagram', `${resumenTabs('ig')}${inner}`);
+  const head = (inner) => frame('Redes', `${netTabs('ig')}${inner}`);
   if (!S.ig || S.ig.loading) return head('<p class="empty">Cargando…</p>');
   if (S.ig.missing) return head('<p class="card warn">Aún no está activado: falta ejecutar en Supabase <code>supabase/cambios/2026-11-14-instagram.sql</code> (ver docs/instagram-captura.md).</p>');
   if (S.ig.failed) return head(`<p class="card warn">${esc(S.ig.failed)}</p>`);
@@ -3297,7 +3297,7 @@ function resHero(pk) {
   const sub = [i.summary.totals.participations ? `${t.participations} participaciones` : '', i.podiumRate ? `${i.podiumRate} % acaban en podio` : '', i.days > t.races ? `${i.days} días de competición` : '',
     t.km ? `📏 ${kmText(Math.round(t.km))}` : '', t.elevation ? `⛰️ ${elevText(t.elevation)}` : '', t.travelKm ? `🧭 ${kmText(t.travelKm)} de viaje` : '', t.timed ? `⏱️ ${formatTime(t.time, true)}` : ''].filter(Boolean);
   return `<section class="rs-hero">
-    <p class="rs-hero-t">${pk.mod ? esc(pk.mod) : 'Todo el equipo'} · temporada ${pk.year}</p>
+    <p class="rs-hero-t">${pk.mod ? esc(pk.mod.split('|').filter(Boolean).join(' · ')) : 'Todo el equipo'} · temporada ${pk.year}</p>
     <div class="rs-bigs">${big(t.races, 'carreras', rsDelta(pk, t.races, o.races))}${big(t.runners, 'corredores', rsDelta(pk, t.runners, o.runners))}${big(t.podiums, 'podios', rsDelta(pk, t.podiums, o.podiums))}${big(t.wins, 'victorias', rsDelta(pk, t.wins, o.wins))}</div>
     ${sub.length ? `<p class="rs-hero-s">${sub.map(esc).join(' · ')}</p>` : ''}
     ${pk.hasPrev ? `<p class="rs-hero-p">Flechas: frente a ${pk.year - 1}</p>` : ''}</section>`;
@@ -3422,7 +3422,7 @@ function resTeam(pk) {
   const i = pk.ins, s = pk.s, year = pk.year;
   const pct = pctOf(i.activeCount, i.rosterSize), mx = Math.max(1, ...i.hist.map((h) => h.runners));
   const part = `<section class="card rs-card"><h2>Participación</h2><div class="rs-part"><div class="ring" style="--p:${pct}"><b>${pct}%</b></div>
-      <div><p><b>${i.activeCount} de ${i.rosterSize}</b> corredores han corrido${pk.mod ? ` ${esc(pk.mod)}` : ''} en ${year}.</p>
+      <div><p><b>${i.activeCount} de ${i.rosterSize}</b> corredores han corrido${pk.mod ? ` ${esc(pk.mod.split('|').filter(Boolean).join(' · '))}` : ''} en ${year}.</p>
       <p class="muted small">${s.totals.participations} participaciones: <b>${i.avgPart ? String(i.avgPart).replace('.', ',') : 0}</b> corredores por carrera.</p></div></div>
     <div class="rs-hist">${i.hist.map((h) => `<div><em>${h.runners || ''}</em><span style="height:${(h.runners / mx) * 100}%"></span><b>${h.label}</b></div>`).join('')}</div><p class="hint">Cuántos corredores han hecho cada número de carreras.</p>
     ${i.idle.length ? `<p class="small"><b>Sin ninguna carrera (${i.idle.length}):</b> ${i.idle.sort(byName).map((r) => `<a href="#/corredor/${r.key}">${esc(r.name)}</a>`).join(', ')}.</p>` : '<p class="small">✅ Todos han corrido alguna vez este año.</p>'}</section>`;
@@ -3560,8 +3560,9 @@ function resReach(pk) {
 
 
 /** Contenido de la ventana de filtros del Resumen del equipo (temporada, modalidad y, si la hay, disciplina). */
+const eqSource = () => (S.session?.isAdmin && !S.preview ? { races: S.data?.races || [], runners: S.data?.runners || [] } : { races: S.team?.races || [], runners: S.team?.runners || [] });
 function eqFilterHtml() {
-  const races = S.team?.races || [], runners = S.team?.runners || [];
+  const { races, runners } = eqSource();
   const years = availableYears(races), mods = yearSummary(S.year, races, runners).byModality.filter((m) => m.races > 0);
   const cur = S.sumMod && S.sumMod !== 'all' ? S.sumMod : null, curMod = cur ? cur.split('|')[0] : null;
   const discs = curMod ? yearSummary(S.year, races.filter((r) => r.modality === curMod), runners).disciplines.filter((d) => d.subtype) : [];
@@ -3578,9 +3579,9 @@ function eqFilterHtml() {
     const b = ev.target.closest('.eqdlg [data-eqf]'); if (!b) return;
     ev.preventDefault();
     const [kind, ...rest] = b.dataset.eqf.split(':'), val = rest.join(':');
-    if (kind === 'year') { S.year = Number(val); if (S.sumMod && S.sumMod !== 'all' && !(S.team?.races || []).some((r) => yearOf(r.date) === S.year && r.modality === S.sumMod.split('|')[0])) S.sumMod = 'all'; }
+    if (kind === 'year') { S.year = Number(val); if (S.sumMod && S.sumMod !== 'all' && !eqSource().races.some((r) => yearOf(r.date) === S.year && r.modality === S.sumMod.split('|')[0])) S.sumMod = 'all'; }
     else if (kind === 'mod') S.sumMod = val;
-    else if (kind === 'clear') { S.sumMod = 'all'; S.year = availableYears(S.team?.races || [])[0]; }
+    else if (kind === 'clear') { S.sumMod = 'all'; S.year = availableYears(eqSource().races)[0]; }
     render(); dlg.innerHTML = eqFilterHtml();
   });
 }
@@ -3667,19 +3668,19 @@ function viewSummary() {
   if (!years.includes(S.year)) S.year = years[0];
   const base = yearSummary(S.year, S.data.races, S.data.runners);
   const mods = base.byModality.filter((m) => m.races > 0);
-  if (S.sumMod && S.sumMod !== 'all' && !mods.some((m) => m.modality === S.sumMod)) S.sumMod = 'all';
+  if (S.sumMod && S.sumMod !== 'all' && !mods.some((m) => m.modality === S.sumMod.split('|')[0])) S.sumMod = 'all';
   const mod = S.sumMod && S.sumMod !== 'all' ? S.sumMod : null;
+  const modLabel = mod ? mod.split('|').filter(Boolean).join(' · ') : '';
   const tab = RES_TABS.some(([k]) => k === S.resTab) ? S.resTab : 'pan';
   const pk = resPack(S.year, mod);
   const body = { pan: resPanorama, pod: resPodiums, eq: resTeam, alc: resReach }[tab](pk);
-  return frame('Resumen', `${resumenTabs('club')}
-    <nav class="rs-tabs" role="tablist" aria-label="Apartados del resumen">${RES_TABS.map(([k, l, ic]) => `<button type="button" class="${k === tab ? 'on' : ''}" data-act="res-tab" data-t="${k}" role="tab" aria-selected="${k === tab}">${ico(ic)}<span>${l}</span></button>`).join('')}</nav>
-    <div class="rs-filters">${yearPicker(years)}${mods.length > 1 ? `<div class="years mod-chips" role="tablist" aria-label="Modalidad"><button class="chip${mod ? '' : ' on'}" data-act="sum-mod" data-m="all">Todas</button>
-      ${mods.map((m) => `<button class="chip mchip ${modClass(m.modality)}${mod === m.modality ? ' on' : ''}" data-act="sum-mod" data-m="${esc(m.modality)}"><i class="dot"></i>${esc(m.modality)}</button>`).join('')}</div>` : ''}</div>
+  const filterOn = !!mod || S.year !== years[0];
+  return frame('Resumen', `<div class="eq-bar"><nav class="rs-tabs" role="tablist" aria-label="Apartados del resumen">${RES_TABS.map(([k, l, ic]) => `<button type="button" class="${k === tab ? 'on' : ''}" data-act="res-tab" data-t="${k}" role="tab" aria-selected="${k === tab}">${ico(ic)}<span>${l}</span></button>`).join('')}</nav>
+      <button type="button" class="eq-fbtn${filterOn ? ' on' : ''}" data-act="eq-filters" aria-label="Filtros${filterOn ? ' (activos)' : ''}" title="Filtros">${icon(ICON_FILTER)}${filterOn ? '<i class="fdot"></i>' : ''}</button></div>
+    ${filterOn ? `<div class="eq-active"><span>${S.year}${mod ? ` · ${esc(modLabel)}` : ''}</span><button type="button" class="link" data-act="eq-clear">Quitar filtros ✕</button></div>` : ''}
     ${body}
     <section class="card rs-card rs-links"><h2>Informes y exportar</h2>
       <a class="rs-link" href="#/memoria">${ico('book')}<span><b>Memoria para sponsors</b><small>Una página limpia para imprimir o PDF, sin bonos ni contratos</small></span>${ico('go')}</a>
-      <a class="rs-link" href="#/instagram">${ico('share')}<span><b>Estadísticas de Instagram</b><small>Seguidores, alcance e interacciones</small></span>${ico('go')}</a>
       <a class="rs-link" href="#/computo">${ico('money')}<span><b>Cómputo de la temporada</b><small>Bonos, control antes de cerrar e informe por corredor</small></span>${ico('go')}</a>
       <a class="rs-link" href="#/calidad">${ico('list')}<span><b>Datos incompletos</b><small>Carreras a las que les falta algo</small></span>${ico('go')}</a>
       <div class="row-btns"><button class="btn" data-act="csv-year">📊 Resultados ${S.year} (Excel)</button><button class="btn" data-act="tp-csv-runners">📊 Corredores</button><button class="btn" data-act="tp-csv-disc">📊 Disciplinas</button></div></section>
@@ -4928,7 +4929,7 @@ const actions = {
   'eq-tab'(el) { S.eqTab = el.dataset.t; render(); window.scrollTo({ top: 0 }); },
   'eq-metric'(el) { S.eqMetric = el.dataset.k; render(); },
   'eq-filters'() { const dlg = document.getElementById('dialog'); dlg.innerHTML = eqFilterHtml(); dlg.onclose = null; dlg.showModal(); },
-  'eq-clear'() { S.sumMod = 'all'; S.year = availableYears(S.team?.races || [])[0]; render(); },
+  'eq-clear'() { S.sumMod = 'all'; S.year = availableYears(eqSource().races)[0]; render(); },
   'res-tab'(el) { S.resTab = el.dataset.t; render(); window.scrollTo({ top: 0 }); },
   'pod-view'(el) { S.podView = el.dataset.v; render(); },
   'tp-sort'(el) { const k = el.dataset.k, cur = S.tsort || { k: 'races', dir: -1 }; S.tsort = { k, dir: cur.k === k ? -cur.dir : (k === 'name' ? 1 : -1) }; render(); },

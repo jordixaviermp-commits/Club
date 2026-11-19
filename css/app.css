@@ -889,7 +889,7 @@ nav.tabs a { position: relative; }
 .net-links { display: flex; flex-direction: column; gap: .4rem; }
 .data-det > summary { cursor: pointer; padding: .2rem 0; } .data-det[open] > summary { margin-bottom: .6rem; }
 
-.net-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; margin: 0 0 .7rem; }
+.net-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: .4rem; margin: 0 0 .7rem; }
 .net-tab { position: relative; display: flex; flex-direction: column; align-items: center; gap: .1rem; padding: .5rem .2rem; border: 2px solid var(--line); border-radius: 14px; background: var(--card); color: var(--text); text-decoration: none; min-height: 58px; justify-content: center; }
 .net-tab span { font-size: 1.25rem; line-height: 1; } .net-tab b { font-size: .8rem; }
 .net-tab.on { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
@@ -1963,3 +1963,5 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .rb-val { font-size: .98rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .rb-more { margin-top: .6rem; } .rb-more > summary { cursor: pointer; font-weight: 700; color: var(--sec); padding: .3rem 0; } .rb-more .rb-list { margin-top: .4rem; }
 .rb h3 { margin: .8rem 0 .4rem; font-size: .92rem; }
+.net-tab b { font-size: .74rem; white-space: nowrap; } .net-tab { padding: .5rem .1rem; }
+.rs-filters { display: none; }
