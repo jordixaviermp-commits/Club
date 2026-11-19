@@ -736,25 +736,28 @@ insert into registrations (name, date, candidate) values ('Candidata Vieja', cur
 select auto_promote_registrations();
 select pg_temp.check((select count(*) from registrations where name = 'Candidata Vieja') = 0, 'por valorar→carreras: la que ya pasó sin inscritos se limpia sola');
 select pg_temp.check(public.norm_name('Marxa del Montsení – 2ª Ç!') = 'marxadelmontseni2c', 'nombre normalizado sin tildes ni signos');
--- web de la carrera: la pone cualquiera si está vacía; después solo quien la puso
+-- web de la carrera: la puede poner, cambiar o quitar cualquier corredor
 set role anon;
 select runner_create_registration('codigo-valorador-uno-01', jsonb_build_object('name', 'Carrera Con Web', 'date', (current_date + 45)::text, 'url', 'https://carrera.example/web'), 'M40') as rweb \gset
-select pg_temp.check((select g->>'url' = 'https://carrera.example/web' and (g->>'url_mine')::boolean from jsonb_array_elements(runner_view('codigo-valorador-uno-01')->'registrations') g where g->>'name' = 'Carrera Con Web'), 'web: el que la crea la ve y es suya');
-select pg_temp.check((select g->>'url' = 'https://carrera.example/web' and not (g->>'url_mine')::boolean from jsonb_array_elements(runner_view('codigo-valorador-dos-02')->'registrations') g where g->>'name' = 'Carrera Con Web'), 'web: los demás la ven (y no es suya)');
-select pg_temp.expect_fail($q$select runner_set_registration_url('codigo-valorador-dos-02', '$q$ || :'rweb' || $q$', 'https://otra.example')$q$, 'web: otro corredor no pisa la que ya hay');
+select pg_temp.check((select g->>'url' = 'https://carrera.example/web' from jsonb_array_elements(runner_view('codigo-valorador-uno-01')->'registrations') g where g->>'name' = 'Carrera Con Web'), 'web: el que la crea la ve');
+select pg_temp.check((select g->>'url' = 'https://carrera.example/web' from jsonb_array_elements(runner_view('codigo-valorador-dos-02')->'registrations') g where g->>'name' = 'Carrera Con Web'), 'web: los demás la ven');
+select runner_set_registration_url('codigo-valorador-dos-02', :'rweb', 'https://otra.example');
+reset role;
+select pg_temp.check((select url = 'https://otra.example' from registrations where id = :'rweb'), 'web: cualquier corredor puede cambiar la web');
+set role anon;
 select runner_set_registration_url('codigo-valorador-uno-01', :'rweb', 'https://carrera.example/nueva');
 reset role;
-select pg_temp.check((select url = 'https://carrera.example/nueva' from registrations where id = :'rweb'), 'web: quien la puso puede cambiarla');
+select pg_temp.check((select url = 'https://carrera.example/nueva' from registrations where id = :'rweb'), 'web: y el otro también');
 set role anon;
 select pg_temp.expect_fail($q$select runner_set_registration_url('codigo-valorador-uno-01', '$q$ || :'rweb' || $q$', 'javascript:alert(1)')$q$, 'web: solo http(s)');
 select pg_temp.expect_fail($q$select runner_set_registration_url('codigo-falso', '$q$ || :'rweb' || $q$', 'https://x.example')$q$, 'web: enlace falso rechazado');
-select runner_set_registration_url('codigo-valorador-uno-01', :'rweb', '');
+select runner_set_registration_url('codigo-valorador-dos-02', :'rweb', '');
 reset role;
-select pg_temp.check((select url is null and url_by is null from registrations where id = :'rweb'), 'web: quien la puso puede quitarla');
+select pg_temp.check((select url is null and url_by is null from registrations where id = :'rweb'), 'web: cualquiera puede quitarla');
 set role anon;
 select runner_set_registration_url('codigo-valorador-dos-02', :'rweb', 'https://dos.example');
 reset role;
-select pg_temp.check((select url = 'https://dos.example' from registrations where id = :'rweb'), 'web: si está vacía la puede poner cualquiera');
+select pg_temp.check((select url = 'https://dos.example' from registrations where id = :'rweb'), 'web: y volver a ponerla');
 set role anon;
 -- guardada en «Por valorar» con web: se comparte; no pisa la que ya existe
 select runner_watch_save('codigo-valorador-uno-01', null, jsonb_build_object('name', 'Carrera Con Web', 'date', (current_date + 45)::text, 'url', 'https://uno.example'));

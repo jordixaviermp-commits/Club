@@ -1363,7 +1363,7 @@ end $$;
 
 
 
--- Web de la carrera: la puede poner cualquiera que la conozca (solo si está vacía; después solo quien la puso, o la dirección).
+-- Web de la carrera: la puede poner, cambiar o quitar cualquier corredor (url_by = quién la tocó por última vez).
 alter table public.registrations add column if not exists url text;
 alter table public.registrations add column if not exists url_by uuid;
 alter table public.races add column if not exists url text;
@@ -1408,7 +1408,7 @@ begin
 end $$;
 
 
--- Cualquier corredor puede poner la web de una carrera que aún no la tiene; después solo la cambia (o la quita) quien la puso.
+-- Cualquier corredor puede poner, cambiar o quitar la web de una carrera (url_by guarda quién la tocó por última vez).
 create or replace function public.runner_set_registration_url(p_code text, p_registration uuid, p_url text)
 returns void language plpgsql security definer set search_path = public as $$
 declare v_runner uuid; v_url text := nullif(btrim(coalesce(p_url, '')), ''); v_n int;
@@ -1418,13 +1418,10 @@ begin
   if v_url is not null and (length(v_url) > 500 or v_url !~* '^https?://[^[:space:]]+$') then raise exception 'enlace_web_no_valido'; end if;
   perform set_config('app.skip_log', 'on', true);
   update registrations set url = v_url, url_by = case when v_url is null then null else v_runner end
-   where id = p_registration and (url is null or url_by = v_runner);
+   where id = p_registration;
   get diagnostics v_n = row_count;
   perform set_config('app.skip_log', 'off', true);
-  if v_n = 0 then
-    if exists (select 1 from registrations where id = p_registration) then raise exception 'web_ya_puesta'; end if;
-    raise exception 'no_existe';
-  end if;
+  if v_n = 0 then raise exception 'no_existe'; end if;
 end $$;
 
 -- Borra las candidatas sin inscritos que ya nadie tiene en «Por valorar» (o cuya fecha ya pasó).

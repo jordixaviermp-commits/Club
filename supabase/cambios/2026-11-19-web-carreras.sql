@@ -1,8 +1,8 @@
 -- =====================================================================
 --  Cambio del 19/11/2026 (3): la web de cada carrera, para todos.
---  Cualquier corredor que conozca la web de una carrera la puede poner (si aún no la tiene) y le sale
+--  Cualquier corredor que conozca la web de una carrera la puede poner, cambiar o quitar, y le sale
 --  a todos con un botón «Web de la carrera». Se puede poner al crearla, al guardarla en «Por valorar» o después.
---  Solo la cambia (o la quita) quien la puso, o la dirección. Al pasar a resultados, la web se conserva.
+--  Al pasar a resultados, la web se conserva.
 --  Se puede ejecutar más de una vez. Necesita antes 2026-11-19-por-valorar-en-carreras.sql.
 -- =====================================================================
 -- Web de la carrera: la puede poner cualquiera que la conozca (solo si está vacía; después solo quien la puso, o la dirección).
@@ -48,13 +48,10 @@ begin
   if v_url is not null and (length(v_url) > 500 or v_url !~* '^https?://[^[:space:]]+$') then raise exception 'enlace_web_no_valido'; end if;
   perform set_config('app.skip_log', 'on', true);
   update registrations set url = v_url, url_by = case when v_url is null then null else v_runner end
-   where id = p_registration and (url is null or url_by = v_runner);
+   where id = p_registration;
   get diagnostics v_n = row_count;
   perform set_config('app.skip_log', 'off', true);
-  if v_n = 0 then
-    if exists (select 1 from registrations where id = p_registration) then raise exception 'web_ya_puesta'; end if;
-    raise exception 'no_existe';
-  end if;
+  if v_n = 0 then raise exception 'no_existe'; end if;
 end $$;
 
 create or replace function public.runner_watch_save(p_code text, p_id uuid, p_data jsonb)

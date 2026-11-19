@@ -711,7 +711,6 @@ export function demoApi(storage = globalThis.localStorage) {
       const me = byCode(code), d = load(), g = d.registrations.find((x) => x.id === regId);
       if (!g) throw new Error('no_existe');
       const u = cleanWeb(url); if (u === '!') throw new Error('enlace_web_no_valido');
-      if (g.url && g.url_by !== me.id) throw new Error('web_ya_puesta');
       g.url = u; g.url_by = u ? me.id : null; save();
     },
     async runnerWatchList(code) { const me = byCode(code); return clone((load().runner_watch || []).filter((w) => w.runner_id === me.id).map(({ runner_id, ...w }) => w).sort((a, b) => a.date.localeCompare(b.date))); },

@@ -951,8 +951,8 @@ function viewRunnerNew() {
       ${fsec(3, 'bars', 'Qué tipo de carrera es', `<div class="disc-field"><span class="flabel">Modalidad</span>${modalityChips(d, 'data-rf')}</div>
         ${detailInputs(d, 'data-rf')}
         ${S.runnerData.circuits ? typeFields(d, 'data-rf') : ''}`, '#e07800')}
-      ${isRace ? '' : fsec(4, 'link', 'Web de la carrera (opcional)', `<label class="flabel-l">Dirección de la web<input type="text" inputmode="url" data-rf="url" value="${esc(d.url || '')}" maxlength="500" placeholder="https://…" autocomplete="off"${d.urlLocked ? ' disabled' : ''}></label>
-        <p class="hint">${d.urlLocked ? 'La puso otro compañero. Si está mal, díselo a la dirección.' : 'La verán todos los corredores para ir directos a inscribirse. Si no la sabes, déjala vacía: otro compañero podrá ponerla.'}</p>`, '#2f6fd6')}
+      ${isRace ? '' : fsec(4, 'link', 'Web de la carrera (opcional)', `<label class="flabel-l">Dirección de la web<input type="text" inputmode="url" data-rf="url" value="${esc(d.url || '')}" maxlength="500" placeholder="https://…" autocomplete="off"></label>
+        <p class="hint">La verán todos los corredores para ir directos a inscribirse. Si no la sabes, déjala vacía: cualquier compañero podrá ponerla.</p>`, '#2f6fd6')}
       ${fsec(5, 'users', editing ? 'Notas' : 'Tú', editing ? `<label class="flabel-l">Notas<textarea data-rf="notes" rows="2" maxlength="500">${esc(d.notes || '')}</textarea></label>`
         : `<label class="flabel-l">Tu categoría${catSelect('data-rf="category" required', d.category, 'Elige tu categoría')}</label>`, '#8e44ad')}
       <button class="btn primary big-save">${editing ? 'Guardar cambios' : 'Añadir y apuntarme'}</button>
@@ -1236,7 +1236,7 @@ function runnerScreen(sub) {
     }
     const g = S.runnerData.registrations.find((x) => x.id === id && x.mine_created);
     if (!g) return frame('Editar carrera', '<p class="empty">Esta carrera no existe o no la añadiste tú.</p>', { back: runnerHref('') });
-    if (S.rdraft?.id !== id) S.rdraft = emptyRunnerDraft({ id, url: g.url || '', urlLocked: !!g.url && !g.url_mine, name: g.name, date: g.date, multi: !!g.end_date, end_date: g.end_date || '',
+    if (S.rdraft?.id !== id) S.rdraft = emptyRunnerDraft({ id, url: g.url || '', name: g.name, date: g.date, multi: !!g.end_date, end_date: g.end_date || '',
       place: g.place || '', province: g.province || '', country: g.country || DEFAULT_COUNTRY, modality: g.modality, notes: g.notes || '', race_type: g.race_type || 'suelta', circuit: g.circuit || '', subtype: g.subtype || '', km: g.km ?? '' });
     return viewRunnerNew();
   }
@@ -1274,7 +1274,7 @@ function doneRaceCard(r, { admin = false, meId = null } = {}) {
 
 /** Web de la carrera: botón para ir directo si alguien la puso; si no, invita a ponerla para todos. */
 function webRow(g, canAdd) {
-  if (g.url) return `<div class="web-row"><a class="btn small web-btn" href="${esc(g.url)}" target="_blank" rel="noopener noreferrer">${ico('ext')}Web de la carrera</a>${g.url_mine && !S.preview ? `<button type="button" class="btn small ghost" data-act="r-web" data-id="${g.id}" aria-label="Cambiar la web de la carrera" title="Cambiar la web">${ico('pen')}</button>` : ''}</div>`;
+  if (g.url) return `<div class="web-row"><a class="btn small web-btn" href="${esc(g.url)}" target="_blank" rel="noopener noreferrer">${ico('ext')}Web de la carrera</a>${!S.preview ? `<button type="button" class="btn small ghost" data-act="r-web" data-id="${g.id}" aria-label="Cambiar la web de la carrera" title="Cambiar la web">${ico('pen')}</button>` : ''}</div>`;
   if (!canAdd || S.preview) return '';
   return `<div class="web-row"><button type="button" class="btn small ghost web-add" data-act="r-web" data-id="${g.id}">${ico('link')}¿Conoces su web? Ponla para todos</button></div>`;
 }
@@ -1284,7 +1284,7 @@ function askWeb(name, current) {
     const dlg = document.getElementById('dialog');
     dlg.innerHTML = `<form method="dialog" class="dlg"><h2>Web de la carrera</h2><p><b>${esc(name)}</b></p>
       <label>Dirección de la web<input name="url" type="text" inputmode="url" placeholder="https://…" value="${esc(current)}" autocomplete="off" maxlength="500"></label>
-      <p class="hint">La verán todos los corredores del club, para ir directos a inscribirse o ver el recorrido. Pon solo la web oficial de la carrera.</p>
+      <p class="hint">La verán todos los corredores del club, para ir directos a inscribirse o ver el recorrido. Cualquiera puede cambiarla: pon solo la web oficial de la carrera.</p>
       <div class="dlg-actions"><button value="save" class="btn primary">Guardar</button>${current ? '<button value="clear" class="btn danger ghost">Quitar la web</button>' : ''}<button value="" class="btn ghost">Cancelar</button></div></form>`;
     dlg.onclose = () => { const v = dlg.returnValue; resolve(v === 'save' ? dlg.querySelector('input[name="url"]').value.trim() : v === 'clear' ? '' : null); };
     dlg.returnValue = '';
@@ -4276,7 +4276,7 @@ const actions = {
   async 'r-new'() { S.rdraft = null; if (!S.fed) loadFed(); go('#/nueva'); },
   async 'r-web'(el) {
     const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id); if (!g) return;
-    const v = await askWeb(g.name, g.url_mine ? g.url : ''); if (v === null) return;
+    const v = await askWeb(g.name, g.url || ''); if (v === null) return;
     const u = cleanWeb(v); if (u === '!') return toast('Esa dirección no parece una web. Pon algo como https://nombre-de-la-carrera.com', true);
     const ok = await run(async () => { await api.runnerSetUrl(S.code, g.id, u); await loadRunner(); return true; }, u ? 'Web guardada: ya la ven todos' : 'Web quitada');
     if (ok) render();
@@ -4828,7 +4828,7 @@ const forms = {
           province: cleanName(d.province), country: d.country, modality: d.modality, notes: d.notes || '' });
         await setMyRaceType(d.id, d); await setMyDetails(d.id, d);
         const cur = S.runnerData.registrations.find((x) => x.id === d.id)?.url || '';
-        if (!d.urlLocked && cleanWeb(d.url) !== '!' && (cleanWeb(d.url) || '') !== cur) await api.runnerSetUrl(S.code, d.id, cleanWeb(d.url));
+        if (cleanWeb(d.url) !== '!' && (cleanWeb(d.url) || '') !== cur) await api.runnerSetUrl(S.code, d.id, cleanWeb(d.url));
         await loadRunner(); return true;
       }, 'Carrera actualizada');
       if (ok) { S.rdraft = null; go('#/'); }
