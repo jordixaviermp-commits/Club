@@ -1300,7 +1300,8 @@ function askWeb(name, current) {
 }
 
 /** Tarjeta de una inscripción para el corredor: datos, quién va y sus acciones (apuntarse, borrarse, resultado, editar). */
-function runnerRegCard(g) {
+/** Una inscripción para el corredor: una fila con nombre, día, lugar e inscritos que se despliega con toda la información y sus acciones. */
+function runnerRegCard(g, opts = {}) {
   const d = S.runnerData, me = d.me, today = d.today || todayISO();
     const mine = g.entries.find((e) => e.runner_id === me.id);
     const open = g.date >= today;
@@ -1308,10 +1309,23 @@ function runnerRegCard(g) {
     const edit = g.mine_created && !S.preview ? `<div class="edit-row"><span class="muted">Añadida por ti</span><a class="edit-btn" href="#/editar/${g.id}" aria-label="Editar o borrar la carrera ${esc(g.name)}">${ico('pen')}Editar</a></div>` : '';
     const mates = g.entries.length ? `<div class="club-row"><span class="count">${ico('users')}${g.entries.length} del club</span><ul class="people">${g.entries.map((e) =>
       `<li class="${e.runner_id === me.id ? 'me' : ''}${e.paid ? ' paid' : ''}">${esc(e.name)}${e.category ? ` <small>${esc(e.category)}</small>` : ''}${e.paid ? `<span class="paid-mark" title="Ha pagado la inscripción" aria-label="ha pagado la inscripción">${ico('euro')}</span>` : ''}</li>`).join('')}</ul></div>` : '';
-    return `<article class="card race ${open ? '' : 'past-reg '}${modClass(g.modality)}">
-      <div class="race-head"><div><h3>${esc(g.name)}</h3>
-        <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}${soon ? ` <span class="soon${daysTo(g.date) <= 7 ? ' now' : ''}">${ico('clock', 't-i')}${daysToText(daysTo(g.date))}</span>` : ''}</p></div>
-        <div class="race-side">${modTag(g.modality, g.subtype)}${open && !mine && !g.suspended && !S.preview ? starBtn(g, 'w-add-reg', ['id', g.id]) : ''}</div></div>${typeTag(g)}
+    const key = `rc-${g.id}`, isOpen = !!opts.open || !!S.open?.[key];
+    const chips = [
+      mine && !g.suspended ? `<span class="rc-chip ok">${ico('check')}Inscrito</span>` : '',
+      g.suspended ? `<span class="rc-chip off">${ico('ban')}Suspendida</span>` : '',
+      !open && !g.suspended && mine && !g.my_result ? `<span class="rc-chip warn">${ico('flag')}Falta tu resultado</span>` : '',
+      !open && !g.suspended && !mine ? `<span class="rc-chip off">${ico('flag')}Ya disputada</span>` : '',
+      soon ? `<span class="soon${daysTo(g.date) <= 7 ? ' now' : ''}">${ico('clock', 't-i')}${daysToText(daysTo(g.date))}</span>` : '',
+    ].filter(Boolean).join('');
+    return `<details class="card race rcard ${open ? '' : 'past-reg '}${modClass(g.modality)}" data-open-key="${key}"${isOpen ? ' open' : ''}>
+      <summary class="rc-sum">
+        <span class="rc-main"><b class="rc-name">${esc(g.name)}</b>
+          <span class="rc-sub">${esc(when(g))}${place(g) ? ' · ' + esc(place(g)) : ''}</span>${chips ? `<span class="rc-chips">${chips}</span>` : ''}</span>
+        <span class="rc-ins" title="Inscritos del club"><b>${g.entries.length}</b><small>inscrit${g.entries.length === 1 ? 'o' : 'os'}</small></span>
+        <span class="rc-chev" aria-hidden="true">${ico('chevd')}</span>
+      </summary>
+      <div class="rc-body">
+      <div class="rc-tags">${modTag(g.modality, g.subtype)}${open && !mine && !g.suspended && !S.preview ? starBtn(g, 'w-add-reg', ['id', g.id]) : ''}</div>${typeTag(g)}
       ${g.suspended ? `<p class="state-tag">${ico('ban', 't-i')}Suspendida: cuenta para el mínimo de carreras, no para el bono</p>` : ''}
       ${open || g.suspended ? '' : `<p class="state-tag">${ico('flag', 't-i')}Ya disputada · pendiente de resultados</p>
         ${mine && !S.preview ? (g.my_result ? `<p class="mine-created">Tu resultado: ${g.my_result.position}º (enviado) · <a href="#/resultado/reg_${g.id}">${ico('pen', 't-i')}Cambiar</a></p>`
@@ -1331,7 +1345,8 @@ function runnerRegCard(g) {
              <button class="btn ghost small" data-act="r-ics" data-id="${g.id}" aria-label="Añadir al calendario del móvil">${ico('calplus')}Calendario</button></div>`
         : `<div class="row join-row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">Apuntarme</button></div>`}
-    </article>`;
+      </div>
+    </details>`;
   }
 
 /** Barra de «participaciones futuras» del equipo: cuántas inscripciones hay ya en las próximas carreras, por mes (para animar a apuntarse y a crear carreras). */
@@ -1371,7 +1386,7 @@ function viewRunnerHome() {
   const regs = regFilter(d.registrations, me);
   const upcoming = regs.filter((g) => g.date >= today);
   const past = regs.filter((g) => g.date < today);
-  const card = runnerRegCard;
+  const card = (g) => runnerRegCard(g);
   modFilterBar(d.registrations, me); // calcula S.fd (botón y ventana de filtros)
   const isMine = (g) => (g.entries || []).some((e) => e.runner_id === me.id) || (g.results || []).some((x) => x.runner_id === me.id);
   const done = byMod((S.team?.races || []).filter((r) => (r.results || []).length));
@@ -1442,7 +1457,7 @@ function viewRunnerRace(id) {
   const g = S.runnerData.registrations.find((x) => x.id === id);
   const back = runnerHref('mi');
   if (!g) return frame('Carrera', `${previewBanner()}<p class="empty">Esta carrera ya no está entre las inscripciones: puede que la dirección ya la haya pasado a resultados. Mírala en «Carreras hechas».</p>`, { back });
-  return frame('Carrera', `${previewBanner()}${runnerRegCard(g)}
+  return frame('Carrera', `${previewBanner()}${runnerRegCard(g, { open: true })}
     ${completeBox(g, 'reg', g.id)}
     ${g.mine_created || S.preview ? '' : '<p class="hint">Solo puede cambiar los datos de una carrera quien la añadió, o la dirección del club.</p>'}`, { back });
 }
