@@ -1,7 +1,7 @@
 // Acceso a datos. Dos versiones con la misma interfaz:
 //  - Supabase (real), cuando config.js tiene URL y clave.
 //  - Demostración, guardada solo en este navegador, para probar la app sin montar nada.
-import { newCode, todayISO, pastLimit, numDays, yearOf, SUBTYPES, parseKm, normalize } from './logic.js';
+import { newCode, todayISO, pastLimit, numDays, yearOf, SUBTYPES, parseKm, normalize, parseElev, parsePrice } from './logic.js';
 
 const TABLES = ['runners', 'registrations', 'registration_entries', 'races', 'results', 'settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests', 'social_posts', 'chronicles'];
 const OPTIONAL = new Set(['settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests', 'social_posts', 'chronicles']); // tablas que pueden faltar si aún no se ha ejecutado su SQL
@@ -29,6 +29,7 @@ export function friendlyError(e) {
   if (/importe_no_valido/.test(msg)) return 'Revisa el importe: entre 0 y 10 000 euros.';
   if (/no_inscrito/.test(msg)) return 'Primero tienes que estar apuntado a esa carrera.';
   if (/PGRST202|Could not find/i.test(msg) && /runner_watch/.test(msg)) return 'Esta función aún no está activada en la base de datos. Avisa a la dirección del club.';
+  if (/desnivel_no_valido|registrations_extra_check|races_extra_check|runner_watch_elev_check/.test(msg)) return 'Revisa el desnivel (entre 1 y 10 000 m) y el precio (entre 0 y 10 000 €).';
   if (/web_ya_puesta/.test(msg)) return 'Esa carrera ya tiene web, puesta por otro compañero. Si está mal, díselo a la dirección.';
   if (/enlace_web_no_valido|runner_watch_url_check|registrations_url_check|races_url_check/.test(msg)) return 'La web tiene que empezar por http:// o https://';
   if (/precio_no_valido|runner_watch_price_check/.test(msg)) return 'Revisa el precio: entre 0 y 10 000 euros.';
@@ -135,6 +136,7 @@ export function supabaseApi(url, key) {
       await sb.from('registrations').update(typeFields(reg)).eq('id', id);
       await sb.from('registrations').update(detailFields(reg)).eq('id', id); // se ignora si aún falta su SQL
       await sb.from('registrations').update({ suspended: !!reg.suspended }).eq('id', id); // se ignora si aún falta su SQL
+      if (reg.elevation !== undefined || reg.price !== undefined) await sb.from('registrations').update({ elevation: parseElev(reg.elevation), price: parsePrice(reg.price) }).eq('id', id); // se ignora si aún falta su SQL
       if (reg.url !== undefined) await sb.from('registrations').update({ url: cleanWeb(reg.url) === '!' ? null : cleanWeb(reg.url) }).eq('id', id); // la web (si falta su SQL, se ignora)
       return id;
     },
@@ -145,6 +147,7 @@ export function supabaseApi(url, key) {
       const id = ok(await sb.rpc('save_race', { p_race: race, p_results: results }));
       await sb.from('races').update(typeFields(race)).eq('id', id);
       await sb.from('races').update(detailFields(race)).eq('id', id);
+      if (race.elevation !== undefined || race.price !== undefined) await sb.from('races').update({ elevation: parseElev(race.elevation), price: parsePrice(race.price) }).eq('id', id);
       if (race.url !== undefined) await sb.from('races').update({ url: cleanWeb(race.url) === '!' ? null : cleanWeb(race.url) }).eq('id', id);
       return id;
     },
@@ -269,17 +272,23 @@ function demoSeed() {
     reg('XCO Montsec', off(-5), 'Àger', 'Lleida', 'BTT', [[marta, 'M30'], [anna, 'Élite']]),
   ];
   registrations[0].url = 'https://example.org/volta-cerdanya';   // una con web puesta (por la dirección)
+  // datos de ejemplo de formato, km, desnivel (m) y precio de inscripción (€)
+  const extras = { 'Marxa del Montseny': ['Ciclodeportiva', 96, 1450, 28], 'Open BTT Osona': ['XCM', 44, 1100, 22], 'Campionat de Catalunya CRI': ['Contrarreloj', 38, 220, 30],
+    'Gravel Pirineus': [null, 120, 2300, 45], 'Trofeu de Tardor': ['Critérium', 60, 380, 18] };
+  for (const r of races) { const e = extras[r.name]; if (e) { if (e[0]) r.subtype = e[0]; r.km = e[1]; r.elevation = e[2]; r.price = e[3]; } }
+  const regExtras = { 'Volta a la Cerdanya': [95, 1800, 35], 'BTT Les Garrigues': [38, 900, 20], 'Cursa de la Segarra': [70, 650, 18], 'XCO Montsec': [32, 780, 15] };
+  for (const g of registrations) { const e = regExtras[g.name]; if (e) { g.km = e[0]; g.elevation = e[1]; g.price = e[2]; } }
   return {
     runners,
     registrations: [...registrations.map(({ entries, ...g }) => g),
       // lo que Pere guarda en «Por valorar» también está en Carreras, sin inscritos ni dueño
-      { id: uuid(), name: 'Gran Fondo Monzón', date: off(52), end_date: null, place: 'Monzón', province: 'Huesca', country: 'España', modality: 'Carretera', subtype: 'Ciclodeportiva', km: 120, notes: null, created_at: null, created_by: null, candidate: true, url: 'https://example.org/gran-fondo', url_by: pere.id }],
+      { id: uuid(), name: 'Gran Fondo Monzón', date: off(52), end_date: null, place: 'Monzón', province: 'Huesca', country: 'España', modality: 'Carretera', subtype: 'Ciclodeportiva', km: 120, notes: null, created_at: null, created_by: null, candidate: true, url: 'https://example.org/gran-fondo', url_by: pere.id, elevation: 2100, price: 32 }],
     registration_entries: registrations.flatMap((g) => g.entries.map((e) => ({ registration_id: g.id, ...e }))),
     races: races.map(({ results, ...r }) => r),
     results: races.flatMap((r) => r.results.map((x) => ({ race_id: r.id, ...x }))),
     runner_watch: [   // carreras «por valorar» de ejemplo (de Pere)
       { id: uuid(), runner_id: pere.id, name: 'Gran Fondo Monzón', date: off(52), end_date: null, place: 'Monzón', province: 'Huesca', country: 'España', modality: 'Carretera', subtype: 'Ciclodeportiva', km: 120,
-        url: 'https://example.org/gran-fondo', price: 32, deadline: off(5), notes: 'Subida larga al final. Mirar si hay avituallamiento y si encaja con la preparación.', created_at: ago(24 * 9) },
+        url: 'https://example.org/gran-fondo', price: 32, elevation: 2100, deadline: off(5), notes: 'Subida larga al final. Mirar si hay avituallamiento y si encaja con la preparación.', created_at: ago(24 * 9) },
       { id: uuid(), runner_id: pere.id, name: 'BTT Les Garrigues', date: `${y + 1}-02-22`, end_date: null, place: 'Les Borges Blanques', province: 'Lleida', country: 'España', modality: 'BTT', subtype: 'XCO', km: 38,
         url: 'https://example.org/open-btt', price: 20, deadline: off(70), notes: null, created_at: ago(24 * 3) },
       { id: uuid(), runner_id: pere.id, name: 'Volta a la Cerdanya', date: `${y + 1}-06-14`, end_date: null, place: 'Puigcerdà', province: 'Girona', country: 'España', modality: 'Carretera', subtype: 'Ciclodeportiva', km: 95,
@@ -335,9 +344,9 @@ export function demoApi(storage = globalThis.localStorage) {
   const publishWatch = (d, r, runnerId) => {
     if (r.date < todayISO()) return;
     const have = d.registrations.find((g) => g.date === r.date && normName(g.name) === normName(r.name));
-    if (have) { if (r.url && !have.url) { have.url = r.url; have.url_by = runnerId; } return; }   // ya existe: si no tenía web y este corredor la conoce, queda para todos
+    if (have) { if (r.url && !have.url) { have.url = r.url; have.url_by = runnerId; } if (have.elevation == null && r.elevation) have.elevation = r.elevation; if (have.price == null && r.price != null) have.price = r.price; return; }   // ya existe: si no tenía web y este corredor la conoce, queda para todos
     d.registrations.push({ id: uuid(), name: r.name, date: r.date, end_date: r.end_date, place: r.place, province: r.province, country: r.country || 'España', modality: r.modality, subtype: r.subtype, km: r.km,
-      notes: null, created_at: new Date().toISOString(), created_by: null, candidate: true, url: r.url || null, url_by: r.url ? runnerId : null });
+      notes: null, created_at: new Date().toISOString(), created_by: null, candidate: true, url: r.url || null, url_by: r.url ? runnerId : null, elevation: r.elevation || null, price: r.price ?? null });
   };
   /** Quita las candidatas sin inscritos que ya nadie valora o que ya pasaron. */
   const cleanCandidates = (d) => {
@@ -350,6 +359,8 @@ export function demoApi(storage = globalThis.localStorage) {
     ...(o.race_type !== undefined ? typeFields(o) : {}),
     ...(o.suspended !== undefined ? { suspended: !!o.suspended } : {}),
     ...(o.url !== undefined ? { url: cleanWeb(o.url) === '!' ? null : cleanWeb(o.url) } : {}),
+    ...(o.elevation !== undefined ? { elevation: parseElev(o.elevation) } : {}),
+    ...(o.price !== undefined ? { price: parsePrice(o.price) } : {}),
     ...(o.subtype !== undefined || o.km !== undefined ? detailFields(o) : {}),
     ...(o.stages !== undefined ? { stages: o.stages?.length ? o.stages : null } : {}) });
   const byCode = (code) => {
@@ -376,13 +387,14 @@ export function demoApi(storage = globalThis.localStorage) {
     async runnerComplete(code, kind, id, data) {
       const me = byCode(code); const d = load();
       const x = kind === 'reg' ? d.registrations.find((g) => g.id === id) : d.races.find((r) => r.id === id);
-      const mine = kind === 'reg' ? (d.registration_entries.some((e) => e.registration_id === id && e.runner_id === me.id) || x?.created_by === me.id)
+      const mine = kind === 'reg' ? true   // una inscripción la completa cualquier corredor (solo lo que falta)
         : d.results.some((r) => r.race_id === id && r.runner_id === me.id);
       if (!x || !mine) throw new Error('no_es_tuya');
       const done = [];
       const fill = (k, v) => { if (v === null || v === undefined || v === '') return; if (x[k] === null || x[k] === undefined || x[k] === '') { x[k] = v; done.push(`${k}: ${v}`); } };
       fill('place', String(data.place || '').trim()); fill('province', String(data.province || '').trim());
       fill('subtype', SUBTYPES[x.modality]?.includes(data.subtype) ? data.subtype : null); fill('km', parseKm(data.km));
+      fill('elevation', parseElev(data.elevation)); fill('price', parsePrice(data.price));
       if (done.length) { logc(me.name, 'update', `cambió ${kind === 'reg' ? 'la inscripción' : 'la carrera'} ${x.name}: ${done.join('; ')}`); save(); }
     },
     async addRunners(list) {
@@ -602,7 +614,7 @@ export function demoApi(storage = globalThis.localStorage) {
         my_results: d.results.filter((x) => x.runner_id === me.id).map((x) => {
           const r = d.races.find((y) => y.id === x.race_id);
           return r && { race_id: r.id, name: r.name, date: r.date, end_date: r.end_date || null, place: r.place, province: r.province,
-            country: r.country, modality: r.modality, stages: r.stages || null, race_type: r.race_type || 'suelta', circuit: r.circuit || null, subtype: r.subtype || null, km: r.km ?? null,
+            country: r.country, modality: r.modality, stages: r.stages || null, race_type: r.race_type || 'suelta', circuit: r.circuit || null, subtype: r.subtype || null, km: r.km ?? null, elevation: r.elevation ?? null, price: r.price ?? null,
             notes: r.notes || null, mine_created: r.created_by === me.id, others: d.results.filter((y) => y.race_id === r.id && y.runner_id !== me.id).length,
             category: x.category, position: x.position,
             podium_type: x.podium_type, stage_positions: x.stage_positions || null, time_seconds: x.time_seconds || null, self_reported: !!x.self_reported };
@@ -727,7 +739,7 @@ export function demoApi(storage = globalThis.localStorage) {
       const km = parseKm(data.km);
       const row = { name, date: data.date, end_date: data.end_date && data.end_date !== data.date ? data.end_date : null, place: String(data.place || '').trim() || null, province: String(data.province || '').trim() || null,
         country: String(data.country || '').trim() || null, modality: data.modality || 'Carretera', subtype: data.subtype || null, km, url: String(data.url || '').trim() || null, price, deadline: data.deadline || null,
-        notes: String(data.notes || '').trim().slice(0, 500) || null };
+        notes: String(data.notes || '').trim().slice(0, 500) || null, elevation: parseElev(data.elevation) };
       if (!id) {
         const same = d.runner_watch.find((w) => w.runner_id === me.id && w.date === row.date && normName(w.name) === normName(name));
         if (same) return same.id;
@@ -755,7 +767,7 @@ export function demoApi(storage = globalThis.localStorage) {
       return clone({
         runners: d.runners.map((r) => ({ id: r.id, name: r.name })).sort((a, b) => a.name.localeCompare(b.name)),
         races: d.races.map((r) => ({ id: r.id, name: r.name, date: r.date, end_date: r.end_date || null, place: r.place, province: r.province,
-          country: r.country, modality: r.modality, stages: r.stages || null, race_type: r.race_type || 'suelta', circuit: r.circuit || null, subtype: r.subtype || null, km: r.km ?? null,
+          country: r.country, modality: r.modality, stages: r.stages || null, race_type: r.race_type || 'suelta', circuit: r.circuit || null, subtype: r.subtype || null, km: r.km ?? null, elevation: r.elevation ?? null, price: r.price ?? null,
           results: d.results.filter((x) => x.race_id === r.id).map((x) => ({ runner_id: x.runner_id, runner_name: x.runner_name,
             category: x.category, position: x.position, podium_type: x.podium_type, stage_positions: x.stage_positions || null, time_seconds: x.time_seconds || null })) })),
       });
@@ -778,6 +790,8 @@ export function demoApi(storage = globalThis.localStorage) {
         d.registrations.push(g);
       }
       if (reg.url && cleanWeb(reg.url) !== '!' && !g.url) { g.url = cleanWeb(reg.url); g.url_by = me.id; }
+      if (g.elevation == null && parseElev(reg.elevation)) g.elevation = parseElev(reg.elevation);
+      if (g.price == null && parsePrice(reg.price) != null) g.price = parsePrice(reg.price);
       d.registration_entries = d.registration_entries.filter((e) => !(e.registration_id === g.id && e.runner_id === me.id));
       d.registration_entries.push({ registration_id: g.id, runner_id: me.id, category: category || null, created_at: new Date().toISOString() });
       g.candidate = false;

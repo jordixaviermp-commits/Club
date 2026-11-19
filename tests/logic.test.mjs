@@ -38,7 +38,7 @@ const races = [
 
 test('resumen anual', () => {
   const s = yearSummary(2026, races, runners);
-  assert.deepEqual(s.totals, { races: 3, runners: 3, participations: 4, podiums: 3, wins: 1, km: 0, time: 0, timed: 0 });
+  assert.deepEqual(s.totals, { races: 3, runners: 3, participations: 4, podiums: 3, wins: 1, km: 0, time: 0, timed: 0, elevation: 0, cost: 0, elevRaces: 0, pricedRaces: 0, avgPrice: 0 });
   assert.deepEqual(s.byModality.map((m) => m.modality), ['Carretera', 'BTT', 'Gravel']); // Pista no aparece en 2026
   assert.deepEqual(s.byModality[1], { modality: 'BTT', races: 1, participations: 2, podiums: 2, wins: 0, runners: 2 });
   assert.deepEqual(s.countries, [{ name: 'España', races: 2 }, { name: 'Francia', races: 1 }]);
@@ -53,7 +53,7 @@ test('resumen anual', () => {
 
 test('CSV ida y vuelta', () => {
   const csv = toCsv(csvRows(races.filter((r) => r.date.startsWith('2026'))));
-  assert.ok(csv.startsWith('﻿Fecha;Fecha fin;Carrera;Lugar;Provincia;País;Modalidad;Corredor;Categoría;Puesto;Podio;Tipo de podio\r\n'));
+  assert.ok(csv.startsWith('﻿Fecha;Fecha fin;Carrera;Lugar;Provincia;País;Modalidad;Corredor;Categoría;Puesto;Podio;Tipo de podio;Disciplina;Km;Desnivel (m);Precio inscripción (€)\r\n'));
   assert.match(csv, /2026-05-01;;Dos;;;Francia;BTT;Dani \(baja\);M50;2;Sí;General de varias pruebas/);
   const back = importResultsCsv(csv);
   assert.deepEqual(back.errors, []);
@@ -126,7 +126,7 @@ test('podios de etapa: cuentan como tipo «Etapa»', () => {
       { runner_id: 'b', runner_name: 'Biel', position: 7, podium_type: 'general', stage_positions: [null, 1, null, 1] }, // la 4.ª no existe
     ] }];
   const s = yearSummary(2027, races2, runners2);
-  assert.deepEqual(s.totals, { races: 1, runners: 2, participations: 2, podiums: 4, wins: 2, km: 0, time: 0, timed: 0 });
+  assert.deepEqual(s.totals, { races: 1, runners: 2, participations: 2, podiums: 4, wins: 2, km: 0, time: 0, timed: 0, elevation: 0, cost: 0, elevRaces: 0, pricedRaces: 0, avgPrice: 0 });
   assert.deepEqual(s.byPodiumType.map((t) => [t.type, t.podiums, t.wins]),
     [['suelta', 0, 0], ['general', 1, 0], ['campeonato', 0, 0], ['etapa', 3, 2]]);
   assert.deepEqual(s.perRunner.map((r) => [r.name, r.races, r.p1, r.p2, r.p3]), [['Anna', 1, 1, 1, 1], ['Biel', 1, 1, 0, 0]]);
@@ -389,7 +389,7 @@ test('cómputo de temporada: resumen por corredor y detalle', async () => {
   const { seasonByRunner, seasonDetail, SEASON_COLUMNS } = await import('../js/logic.js');
   const runners = [{ id: 'a', name: 'Ana', category: 'M30', contract: 'nuevo' }, { id: 'b', name: 'Beto' }];
   const races = [
-    { id: 'r1', name: 'Uno', date: '2026-03-01', modality: 'BTT', province: 'Huesca', country: 'España', km: 50, results: [{ runner_id: 'a', runner_name: 'Ana', position: 1, podium_type: 'suelta', time_seconds: 7200 }] },
+    { id: 'r1', name: 'Uno', date: '2026-03-01', modality: 'BTT', province: 'Huesca', country: 'España', km: 50, elevation: 1200, price: 30, results: [{ runner_id: 'a', runner_name: 'Ana', position: 1, podium_type: 'suelta', time_seconds: 7200 }] },
     { id: 'r2', name: 'Dos', date: '2026-04-01', end_date: '2026-04-03', modality: 'Carretera', province: 'Lleida', country: 'España', results: [{ runner_id: 'a', runner_name: 'Ana', position: 8 }] },
     { id: 'r3', name: 'Vieja', date: '2025-04-01', modality: 'BTT', results: [{ runner_id: 'b', runner_name: 'Beto', position: 2 }] },
   ];
@@ -401,7 +401,9 @@ test('cómputo de temporada: resumen por corredor y detalle', async () => {
   assert.equal(ana[ix('Km')], 50); assert.equal(ana[ix('Tiempo total (h:mm:ss)')], '2:00:00'); assert.equal(ana[ix('Provincias')], 'Huesca, Lleida');
   assert.equal(beto[ix('Carreras')], 0);
   const det = seasonDetail(2026, races);
-  assert.equal(det.length, 2); assert.equal(det[0][3], 'Uno'); assert.equal(det[0][15], '2:00:00');
+  const { SEASON_DETAIL_COLUMNS: DC } = await import('../js/logic.js');
+  assert.equal(det.length, 2); assert.equal(det[0][3], 'Uno'); assert.equal(det[0][DC.indexOf('Tiempo')], '2:00:00');
+  assert.equal(det[0][DC.indexOf('Desnivel (m)')], 1200); assert.equal(det[0][DC.indexOf('Precio inscripción (€)')], 30); assert.equal(ana[ix('Desnivel (m)')], 1200);
 });
 
 test('daysTo, daysToText e icsEvent', async () => {
@@ -506,7 +508,8 @@ test('panel Hoy: resultados pendientes, próximas, actividad, calidad e inactivo
   assert.deepEqual(b.upcoming.map((x) => [x.reg.id, x.days]), [['g2', 4]]);
   assert.deepEqual(b.activity.map((x) => x.level), ['hot', 'never', 'cold']);
   assert.deepEqual(b.quality.map((x) => x.race.id), ['r1']);
-  assert.deepEqual(raceGaps(races[0]), ['provincia', 'disciplina', 'km', '1 sin puesto']);
+  assert.deepEqual(raceGaps(races[0]), ['provincia', 'disciplina', 'km', 'desnivel', 'precio', '1 sin puesto']);
+  assert.deepEqual(b.soft.map((x) => x.race.id), ['r2'], 'r2 solo le falta desnivel y precio: aviso suave, no «incompleta»');
   assert.deepEqual(b.idle, ['b']);
   assert.equal(b.counts.results, 1);
   assert.equal(directorBoard({ races, registrations, runners: [{ id: 'a' }] }, '2026-11-18').activity, null, 'sin la columna no hay actividad');
@@ -560,4 +563,41 @@ test('por valorar: estado, orden y coincidencia con inscripciones del club', asy
   const regs = [{ id: 'g1', name: 'Gran Fondo Monzón', date: '2027-03-01', entries: [] }, { id: 'g2', name: 'Otra cosa', date: '2027-03-01', entries: [] }, { id: 'g3', name: 'Gran Fondo Monzón', date: '2027-03-01', suspended: true, entries: [] }];
   assert.equal(watchMatch(w('Gran Fondo Monzon', '2027-03-01'), regs)?.id, 'g1');
   assert.equal(watchMatch(w('Gran Fondo Monzón', '2027-04-01'), regs), null);
+});
+
+test('desnivel y precio: lectura de formularios, estadísticas, CSV y datos que faltan', async () => {
+  const { parseElev, parsePrice, elevText, yearSummary, yearInsights, raceGaps, missingFields, csvRows, toCsv, importResultsCsv } = await import('../js/logic.js');
+  assert.equal(parseElev('1.250'), 1250); assert.equal(parseElev('1250 m'), 1250); assert.equal(parseElev('0'), null); assert.equal(parseElev(''), null); assert.equal(parseElev('20000'), null);
+  assert.equal(parsePrice('27,5'), 27.5); assert.equal(parsePrice('30 €'), 30); assert.equal(parsePrice('0'), 0); assert.equal(parsePrice(''), null); assert.equal(parsePrice('-4'), null); assert.equal(parsePrice('12,345'), null);
+  assert.equal(elevText(1250), '1.250 m');
+  const runners = [{ id: 'a', name: 'Anna', category: 'M40' }, { id: 'b', name: 'Bru' }];
+  const res = (id, n, pos) => ({ runner_id: id, runner_name: n, position: pos, category: 'M40' });
+  const races = [
+    { id: 'r1', name: 'Dura', date: '2026-03-07', modality: 'BTT', subtype: 'XCM', km: 60, elevation: 2400, price: 40, results: [res('a', 'Anna', 1), res('b', 'Bru', 5)] },
+    { id: 'r2', name: 'Llana', date: '2026-04-11', modality: 'Carretera', km: 100, elevation: 300, price: 20, results: [res('a', 'Anna', 9)] },
+    { id: 'r3', name: 'Sin datos', date: '2026-05-02', modality: 'BTT', results: [res('b', 'Bru', 3)] },
+    { id: 'r4', name: 'Gratis', date: '2026-06-06', modality: 'Pista', price: 0, results: [res('a', 'Anna', 2)] },
+  ];
+  const s = yearSummary(2026, races, runners);
+  assert.equal(s.totals.elevation, 2400 * 2 + 300);            // cada participación suma el desnivel de su carrera
+  assert.equal(s.totals.cost, 40 * 2 + 20 + 0);                // y el precio de su inscripción
+  assert.equal(s.totals.elevRaces, 2); assert.equal(s.totals.pricedRaces, 3); assert.equal(s.totals.avgPrice, 20);   // media por carrera con precio: (40+20+0)/3
+  assert.equal(s.hardest.race, 'Dura'); assert.equal(s.hardest.elevation, 2400); assert.deepEqual(s.hardest.runners, ['Anna', 'Bru']);
+  assert.equal(s.steepest.race, 'Dura'); assert.equal(s.steepest.value, 40);   // 2400 m / 60 km
+  assert.equal(s.priciest.race, 'Dura'); assert.equal(s.priciest.price, 40);
+  const anna = s.perRunner.find((r) => r.key === 'a'), bru = s.perRunner.find((r) => r.key === 'b');
+  assert.equal(anna.elev, 2700); assert.equal(anna.cost, 60); assert.equal(bru.elev, 2400); assert.equal(bru.cost, 40);
+  assert.equal(s.byMonth[2].elev, 4800); assert.equal(s.byMonth[3].elev, 300); assert.equal(s.byMonth[2].cost, 80);
+  const xcm = s.disciplines.find((d) => d.key === 'BTT|XCM'); assert.equal(xcm.elevation, 4800); assert.equal(xcm.avgElev, 2400); assert.equal(xcm.avgPrice, 40);
+  assert.equal(s.byCategory.find((c) => c.category === 'M40').elev, 2400 + 2400 + 300);   // Anna y Bru en la dura + Anna en la llana
+  const i = yearInsights(2026, races, runners, [], '2026-01-01');
+  assert.equal(i.withElev, 2); assert.equal(i.avgElev, 1350); assert.equal(i.climb, Math.round(((2400 + 300) / (60 + 100)) * 10) / 10);
+  assert.deepEqual(raceGaps(races[2]), ['provincia', 'disciplina', 'km', 'desnivel', 'precio']);
+  assert.ok(!raceGaps(races[3]).includes('precio'), 'precio 0 (gratis) cuenta como indicado');
+  assert.deepEqual(missingFields(races[2], { extra: true }).filter((k) => k === 'elevation' || k === 'price'), ['elevation', 'price']);
+  assert.ok(!missingFields(races[2]).includes('elevation'), 'sin `extra` no se piden');
+  const csv = toCsv(csvRows(races));
+  const back = importResultsCsv(csv).races.find((r) => r.name === 'Dura');
+  assert.equal(back.elevation, 2400); assert.equal(back.price, 40); assert.equal(back.km, 60); assert.equal(back.subtype, 'XCM');
+  assert.equal(importResultsCsv(csv).races.find((r) => r.name === 'Gratis').price, 0);
 });

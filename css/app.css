@@ -1853,3 +1853,28 @@ header.top h1.greet.scroll > span { animation: greet-slide var(--dur, 8s) ease-i
 .web-btn .ico, .web-add .ico, .web-row .btn .ico { width: 15px; height: 15px; }
 .web-add { display: inline-flex; align-items: center; gap: .35rem; color: var(--muted); border-style: dashed; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .web-btn { color: #8db8ff; } } :root[data-theme="dark"] .web-btn { color: #8db8ff; }
+
+/* =====================================================================
+   v161 · Desnivel positivo y precio de la inscripción
+   ===================================================================== */
+.tag.t-elev { background: color-mix(in srgb, #7a5a3a 13%, var(--card)); border-color: color-mix(in srgb, #7a5a3a 40%, var(--line)); color: color-mix(in srgb, #6b4a2a 85%, var(--text)); }
+.tag.t-price { background: color-mix(in srgb, #1b8f52 11%, var(--card)); border-color: color-mix(in srgb, #1b8f52 40%, var(--line)); color: color-mix(in srgb, #14703f 85%, var(--text)); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tag.t-elev { color: #e6c9a6; } :root:not([data-theme="light"]) .tag.t-price { color: #8ee3b0; } } :root[data-theme="dark"] .tag.t-elev { color: #e6c9a6; } :root[data-theme="dark"] .tag.t-price { color: #8ee3b0; }
+.my-road { display: flex; gap: .5rem; flex-wrap: wrap; margin: .1rem 0 .6rem; }
+.my-road > span { display: inline-flex; align-items: center; gap: .35rem; padding: .25rem .7rem; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); font-size: .85rem; }
+.my-road .ico { width: 16px; height: 16px; color: var(--sec); } .my-road b { font-weight: 800; }
+.eq-mini5 { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; gap: .2rem !important; } .eq-mini5 b { font-size: .78rem !important; } .eq-mini5 small { font-size: .64rem !important; }
+.eq-mini .m-el { --bc: #ffb36b; }
+.lead.l-mountain .lead-i { color: #b06a2a; }
+.tp-disc li > .tp-xtra { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: .2rem .8rem; margin-top: .1rem; font-size: .78rem; color: var(--muted); }
+.tp-xtra i { font-style: normal; display: inline-flex; align-items: center; gap: .25rem; } .tp-xtra .ico { width: 13px; height: 13px; }
+.rs-elev span { background: linear-gradient(180deg, #d9a066, #a8703a); } .rs-costm span { background: linear-gradient(180deg, #5fd391, #1b8f52); }
+.rs-wk.rs-elev { grid-template-columns: repeat(12, 1fr); gap: 3px; } .rs-wk.rs-elev em { font-size: .6rem; } .rs-wk.rs-elev b { font-size: .66rem; }
+.rs-bar.warm > i { background: linear-gradient(90deg, #d9a066, #a8703a); }
+.rs-scatter { width: 100%; height: auto; display: block; overflow: visible; }
+.rs-scatter .sc-grid { stroke: var(--line); stroke-width: 1; } .rs-scatter .sc-t { fill: var(--muted); font-size: 9px; } .rs-scatter .sc-l { fill: var(--muted); font-size: 9px; font-weight: 700; }
+.rs-scatter .sc-dot { fill: var(--dc, var(--sec)); fill-opacity: .78; stroke: var(--card); stroke-width: 1.5; }
+.rs-cost { margin-bottom: .4rem; } .rs-card h3 { margin: .8rem 0 .3rem; font-size: .92rem; }
+.qchip.soft { background: var(--bg); border-color: var(--line); color: var(--muted); }
+.rs-cmp td.num { white-space: nowrap; }
+.tp-table td:last-child, .tp-table td.num { white-space: nowrap; }
