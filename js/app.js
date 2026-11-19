@@ -2697,7 +2697,7 @@ function viewRaceEdit() {
 // ======================================================================
 
 /** Resumen del equipo en la pantalla Equipo del corredor: filtros simples, cifras grandes, líderes con icono, modalidades, mes + formatos y clasificación compacta. */
-function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods, places, maxOf }) {
+function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods, places, maxOf, more = '' }) {
   const T = s.totals;
   const modLabel = !mod ? '' : mod.includes('|') ? mod.split('|').filter(Boolean).join(' · ') : mod;
   const filters = `<div class="eq-filters"><label class="year-pick"><select data-year-sel aria-label="Temporada">${years.map((y) => `<option value="${y}"${y === S.year ? ' selected' : ''}>${y}</option>`).join('')}</select>${ico('chevd')}</label>
@@ -2806,7 +2806,7 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
       ${items.length > SHOWN ? `<details class="pod-more"><summary>Ver los ${items.length - SHOWN} anteriores</summary><ul class="pod-items">${items.slice(SHOWN).map(podItem).join('')}</ul></details>` : ''}`
       : '<p class="muted">Sin podios este año.</p>'}</section>`;
   return `<div class="eq">${filters}${hero}${leaders ? `<div class="eq-leads-wrap"><div class="leads eq-leads" role="list" aria-label="Líderes y récords del equipo">${leaders}</div><p class="leads-hint">Desliza para ver más récords ›</p></div>` : ''}
-    ${months}${rank}${byMod}${podRunner}${places}</div>`;
+    ${months}${rank}${byMod}${podRunner}${places}${more}</div>`;
 }
 
 /**
@@ -2921,7 +2921,8 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
     ${admin && s.missingPlace.length ? `<div class="warn"><b>Faltan datos en ${s.missingPlace.length} carrera${s.missingPlace.length === 1 ? '' : 's'}:</b>
       <ul>${s.missingPlace.map((m) => `<li><a href="#/carreras/${m.id}">${esc(m.name)}</a> (${formatRange(m.date, m.end_date, false)}): sin ${m.missing.join(' ni ')}</li>`).join('')}</ul></div>` : ''}</section>`;
 
-  return summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods, places, maxOf });
+  const more = runnerMoreStats(resPack(S.year, mod, { races, runners, registrations: S.runnerData?.registrations || [] }));
+  return summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods, places, maxOf, more });
 }
 
 // ======================================================================
@@ -3264,6 +3265,10 @@ async function geocodeMissing(max = 12) {
 //  Panorama · Podios · Equipo · Alcance (todo filtrable por modalidad y con el año anterior al lado)
 // ======================================================================
 
+/** ¿Mira la dirección (con enlaces a fichas) o un corredor (o la vista previa de uno)? */
+const viewerIsAdmin = () => !!S.session?.isAdmin && !S.preview;
+const raceHref = (id) => (viewerIsAdmin() ? `#/carreras/${id}` : `${runnerHref('carrera')}/race_${id}`);
+const personTag = (key, name) => (viewerIsAdmin() ? `<a href="#/corredor/${esc(key)}"><b>${esc(name)}</b></a>` : `<b>${esc(name)}</b>`);
 const RES_TABS = [['pan', 'Panorama', 'bars'], ['pod', 'Podios', 'trophy'], ['eq', 'Equipo', 'users'], ['alc', 'Alcance', 'flag']];
 const MES3 = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const cap1 = (t) => String(t).charAt(0).toUpperCase() + String(t).slice(1);
@@ -3272,11 +3277,12 @@ const bar = (pct, cls = '') => `<span class="rs-bar ${cls}"><i style="width:${Ma
 /** «▲ 4» o «▼ 2» (sobre fondo claro u oscuro) frente al año anterior; vacío si no hay año anterior. */
 const rsDelta = (pk, cur, old, fmt = (n) => n) => (!pk.hasPrev || (cur === 0 && old === 0) ? '' : `<em class="rs-d ${cur > old ? 'up' : cur < old ? 'down' : ''}" title="frente a ${pk.year - 1}">${cur > old ? '▲' : cur < old ? '▼' : '='}${cur === old ? '' : ' ' + fmt(Math.abs(cur - old))}</em>`);
 
-function resPack(year, mod) {
-  const races = mod ? S.data.races.filter((r) => r.modality === mod) : S.data.races;
-  const regs = mod ? S.data.registrations.filter((g) => g.modality === mod) : S.data.registrations;
-  const ins = yearInsights(year, races, S.data.runners, regs, todayISO());
-  const pins = yearInsights(year - 1, races, S.data.runners, regs, todayISO());
+function resPack(year, mod, src = null) {
+  const base = src || { races: S.data.races, runners: S.data.runners, registrations: S.data.registrations };
+  const keep = (r) => !mod || (mod.includes('|') ? disciplineKey(r.modality, r.subtype) === mod : r.modality === mod);   // modalidad («BTT») o, en la pantalla del corredor, disciplina («BTT|XCO»)
+  const races = base.races.filter(keep), regs = base.registrations.filter(keep);
+  const ins = yearInsights(year, races, base.runners, regs, todayISO());
+  const pins = yearInsights(year - 1, races, base.runners, regs, todayISO());
   return { s: ins.summary, prev: pins.summary, hasPrev: pins.summary.totals.races > 0, year, ins, pins, mod };
 }
 
@@ -3460,13 +3466,13 @@ function resScatter(pk) {
     ${tick(my, 4).map((v) => `<g><line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" class="sc-grid"/><text x="${L - 4}" y="${Y(v) + 3}" class="sc-t" text-anchor="end">${v >= 1000 ? (v / 1000).toFixed(1).replace('.', ',') + 'k' : v}</text></g>`).join('')}
     ${tick(mx, 4).map((v) => `<text x="${X(v)}" y="${H - 8}" class="sc-t" text-anchor="middle">${v}</text>`).join('')}
     <text x="${L}" y="9" class="sc-l">m de subida</text><text x="${W - R}" y="${H - B - 4}" class="sc-l" text-anchor="end">km →</text>
-    ${pts.map((r) => `<a href="#/carreras/${r.id}"><circle cx="${X(r.km)}" cy="${Y(r.elevation)}" r="${Math.min(9, 4 + r.n * 1.2)}" class="sc-dot ${discClass(r.modality, r.subtype)}"><title>${esc(`${r.name}: ${r.km} km, ${elevText(r.elevation)}`)}</title></circle></a>`).join('')}</svg>
+    ${pts.map((r) => `<a href="${raceHref(r.id)}"><circle cx="${X(r.km)}" cy="${Y(r.elevation)}" r="${Math.min(9, 4 + r.n * 1.2)}" class="sc-dot ${discClass(r.modality, r.subtype)}"><title>${esc(`${r.name}: ${r.km} km, ${elevText(r.elevation)}`)}</title></circle></a>`).join('')}</svg>
     <p class="hint">Cada punto es una carrera; el tamaño crece con los corredores del club que la corrieron. Arriba a la derecha, las más largas y duras.</p>`;
 }
 /** Las carreras con más desnivel del año. */
 function resHardest(pk) {
   const list = pk.ins.cal.filter((r) => r.elevation).sort((a, b) => b.elevation - a.elevation).slice(0, 6), mx = Math.max(1, ...list.map((r) => r.elevation));
-  return list.length ? `<ol class="rs-rank">${list.map((r, k) => `<li><span class="pos">${k + 1}</span><div><a href="#/carreras/${r.id}"><b>${esc(r.name)}</b></a>
+  return list.length ? `<ol class="rs-rank">${list.map((r, k) => `<li><span class="pos">${k + 1}</span><div><a href="${raceHref(r.id)}"><b>${esc(r.name)}</b></a>
     <small class="muted">${esc(formatDate(r.date, false))}${r.km ? ` · ${esc(kmText(r.km))} · ${Math.round((r.elevation / r.km) * 10) / 10} m/km` : ''}${r.n ? ` · ${r.n} del club` : ''}</small>${bar((r.elevation / mx) * 100, 'warm')}</div><span class="rk-m">${esc(elevText(r.elevation))}</span></li>`).join('')}</ol>`
     : '<p class="hint">Todavía no hay carreras con desnivel indicado. Se completa desde cada carrera («Faltan datos») o al crearla.</p>';
 }
@@ -3494,7 +3500,7 @@ function resTripMap(pk) {
     ${rings.map((d) => `<circle cx="${C}" cy="${C}" r="${(d / top) * R}" class="tr-ring"/><text x="${C + 3}" y="${C - (d / top) * R + 10}" class="tr-t">${d} km</text>`).join('')}
     <line x1="${C}" y1="${C - R - 6}" x2="${C}" y2="${C + R + 6}" class="tr-axis"/><line x1="${C - R - 6}" y1="${C}" x2="${C + R + 6}" y2="${C}" class="tr-axis"/>
     <text x="${C}" y="10" class="tr-n" text-anchor="middle">N</text><text x="${W - 4}" y="${C + 4}" class="tr-n" text-anchor="end">E</text><text x="${C}" y="${W - 3}" class="tr-n" text-anchor="middle">S</text><text x="4" y="${C + 4}" class="tr-n">O</text>
-    ${pts.map((r) => { const q = pos(r); return `<a href="#/carreras/${r.id}"><circle cx="${q.x.toFixed(1)}" cy="${q.y.toFixed(1)}" r="${Math.min(9, 4 + r.n * 1.1)}" class="tr-dot ${discClass(r.modality, r.subtype)}${r.src === 'province' ? ' approx' : ''}"><title>${esc(`${r.name} (${r.place || 'sin lugar'}): ${r.dist} km${r.src === 'province' ? ' · aprox. por provincia' : ''}`)}</title></circle></a>`; }).join('')}
+    ${pts.map((r) => { const q = pos(r); return `<a href="${raceHref(r.id)}"><circle cx="${q.x.toFixed(1)}" cy="${q.y.toFixed(1)}" r="${Math.min(9, 4 + r.n * 1.1)}" class="tr-dot ${discClass(r.modality, r.subtype)}${r.src === 'province' ? ' approx' : ''}"><title>${esc(`${r.name} (${r.place || 'sin lugar'}): ${r.dist} km${r.src === 'province' ? ' · aprox. por provincia' : ''}`)}</title></circle></a>`; }).join('')}
     <circle cx="${C}" cy="${C}" r="5" class="tr-home"/><text x="${C + 8}" y="${C + 14}" class="tr-t">salida</text></svg>
     <p class="hint">El centro es el punto de salida (${esc(ORIGEN.nombre)}). Cada punto es una carrera: cuanto más lejos del centro, más km; el tamaño crece con los corredores del club que fueron. Los puntos huecos solo se conocen por su provincia.</p>`;
 }
@@ -3509,10 +3515,10 @@ function resTravel(pk) {
       <div class="rs-tile">${ico('compass')}<small>Viaje del equipo</small><b>${esc(kmText(t.travelKm))}</b><em>ida y vuelta${pk.hasPrev ? ` ${rsDelta(pk, t.travelKm, pk.prev.totals.travelKm, (n) => kmText(n))}` : ''}</em></div>
       <div class="rs-tile">${ico('route')}<small>Distancia media</small><b>${esc(kmText(t.avgDist))}</b><em>de ida a cada carrera</em></div></div>
     <h3>Quién se desplaza más</h3>
-    <ol class="rs-rank">${people.slice(0, 8).map((r, k) => `<li><span class="pos">${k + 1}</span><div><a href="#/corredor/${esc(r.key)}"><b>${esc(r.name)}</b></a>
+    <ol class="rs-rank">${people.slice(0, 8).map((r, k) => `<li><span class="pos">${k + 1}</span><div>${personTag(r.key, r.name)}
       <small class="muted">${r.tripN} carrera${r.tripN === 1 ? '' : 's'} · media ${esc(kmText(Math.round(r.trip / 2 / r.tripN)))}${r.tripRace ? ` · la más lejos: ${esc(kmText(r.tripMax))} (${esc(r.tripRace)})` : ''}</small>${bar((r.trip / mx) * 100, 'warm')}</div><span class="rk-m">${esc(kmText(r.trip))}</span></li>`).join('')}</ol>
     <h3>Las carreras más lejanas</h3>
-    <ol class="rs-rank">${far.map((r, k) => `<li><span class="pos">${k + 1}</span><div><a href="#/carreras/${r.id}"><b>${esc(r.name)}</b></a><small class="muted">${esc(r.place || '—')}${r.src === 'province' ? ' · aprox. (solo se sabe la provincia)' : ''}${r.n ? ` · ${r.n} del club` : ''}</small>${bar((r.dist / fmx) * 100, 'warm')}</div><span class="rk-m">${esc(kmText(r.dist))}</span></li>`).join('')}</ol>
+    <ol class="rs-rank">${far.map((r, k) => `<li><span class="pos">${k + 1}</span><div><a href="${raceHref(r.id)}"><b>${esc(r.name)}</b></a><small class="muted">${esc(r.place || '—')}${r.src === 'province' ? ' · aprox. (solo se sabe la provincia)' : ''}${r.n ? ` · ${r.n} del club` : ''}</small>${bar((r.dist / fmx) * 100, 'warm')}</div><span class="rk-m">${esc(kmText(r.dist))}</span></li>`).join('')}</ol>
     <p class="hint">Cálculo orientativo: línea recta desde el punto de salida (${esc(ORIGEN.nombre)}) hasta la población de cada carrera, × ${String(FACTOR_CARRETERA).replace('.', ',')} para estimar la carretera, ida y vuelta, por cada corredor que participó. No cuenta coches compartidos ni el domicilio real de cada uno. ${t.travelRaces} de ${t.races} carreras con ubicación${t.travelApprox ? ` (${t.travelApprox} solo por su provincia)` : ''}${pend ? `; faltan ${pend} por buscar` : ''}.</p>`;
 }
 
@@ -3529,7 +3535,7 @@ function resReach(pk) {
     <div class="rs-tile">${ico('layers')}<small>Pruebas de varios días</small><b>${i.multiDay}</b><em>${i.days} días de competición</em></div>
     <div class="rs-tile">${ico('mountain')}<small>Desnivel positivo</small><b>${t.elevation ? esc(elevText(t.elevation)) : '—'}</b><em>entre todos${pk.hasPrev ? ` ${rsDelta(pk, t.elevation, pk.prev.totals.elevation, (n) => elevText(n))}` : ''}</em></div>
     <div class="rs-tile">${ico('mountain')}<small>Media por carrera</small><b>${i.avgElev ? esc(elevText(i.avgElev)) : '—'}</b><em>${i.withElev} de ${t.races} con desnivel</em></div></div>`;
-  const people = (rows, key, fmt, mx) => rows.map((r, k) => `<li><span class="pos">${k + 1}</span><div><a href="#/corredor/${esc(r.key)}"><b>${esc(r.name)}</b></a>${bar((r[key] / mx) * 100)}</div><span class="rk-m">${fmt(r[key])}</span></li>`).join('');
+  const people = (rows, key, fmt, mx) => rows.map((r, k) => `<li><span class="pos">${k + 1}</span><div>${personTag(r.key, r.name)}${bar((r[key] / mx) * 100)}</div><span class="rk-m">${fmt(r[key])}</span></li>`).join('');
   return `${figs}
     <section class="card rs-card"><h2>Dónde se ha competido</h2><div class="grid2 top-align">${where('Provincias', s.provinces)}${where('Países', s.countries, 6)}</div>
       ${s.missingPlace.length ? `<div class="warn"><b>Faltan datos en ${s.missingPlace.length} carrera${s.missingPlace.length === 1 ? '' : 's'}:</b><ul>${s.missingPlace.map((m) => `<li><a href="#/carreras/${m.id}">${esc(m.name)}</a>: sin ${m.missing.join(' ni ')}</li>`).join('')}</ul></div>` : ''}</section>
@@ -3544,6 +3550,24 @@ function resReach(pk) {
     ${tm.length ? `<section class="card rs-card"><h2>Más tiempo en carrera</h2><ol class="rs-rank">${people(tm, 'time', (n) => formatTime(n, true), tmx)}</ol></section>` : ''}
     ${L ? `<section class="card rs-card"><h2>La carrera más larga</h2><p><a class="rname" href="#/carreras/${L.raceId}"><b>${esc(L.race)}</b></a> · <b>${esc(kmText(L.km))}</b></p><p class="muted small">La corrieron: ${esc(L.runners.join(', '))}.</p></section>` : ''}
     ${s.bySubtype.length ? `<section class="card rs-card"><h2>Formatos</h2><div class="pills">${s.bySubtype.map((x) => `<span class="pill ${modClass(x.modality)}"><i class="dot"></i>${pk.mod ? '' : `${esc(x.modality)} · `}${esc(x.subtype)} <b>${x.races}</b></span>`).join('')}</div></section>` : ''}`;
+}
+
+/** Para los corredores: las mismas estadísticas de desnivel, desplazamientos y coste que ve la dirección, con los datos del equipo. */
+function runnerMoreStats(pk) {
+  const t = pk.s.totals, i = pk.ins;
+  if (!t.elevation && !t.travelKm && !t.pricedRaces) return '';
+  const el = pk.s.perRunner.filter((r) => r.elev > 0).sort((a, b) => b.elev - a.elev).slice(0, 5), ex = Math.max(1, ...el.map((r) => r.elev));
+  const rank = (rows, key, fmt, mx) => rows.map((r, k) => `<li><span class="pos">${k + 1}</span><div>${personTag(r.key, r.name)}${bar((r[key] / mx) * 100, 'warm')}</div><span class="rk-m">${fmt(r[key])}</span></li>`).join('');
+  const climb = t.elevation ? `<section class="card rs-card"><h2>${ico('mountain')} Desnivel</h2>
+      <div class="rs-tiles"><div class="rs-tile">${ico('mountain')}<small>Desnivel positivo</small><b>${esc(elevText(t.elevation))}</b><em>entre todos${pk.hasPrev ? ` ${rsDelta(pk, t.elevation, pk.prev.totals.elevation, (n) => elevText(n))}` : ''}</em></div>
+        <div class="rs-tile">${ico('mountain')}<small>Media por carrera</small><b>${i.avgElev ? esc(elevText(i.avgElev)) : '—'}</b><em>${i.withElev} de ${t.races} con desnivel</em></div></div>
+      <h3>Las carreras más duras</h3>${resHardest(pk)}${i.climb ? `<p class="hint">De media, ${String(i.climb).replace('.', ',')} metros de subida por kilómetro.</p>` : ''}
+      <h3>Metros de subida por mes</h3>${seasonElevMonths(pk)}
+      ${el.length ? `<h3>Quién ha subido más</h3><ol class="rs-rank">${rank(el, 'elev', (n) => esc(elevText(n)), ex)}</ol>` : ''}
+      ${i.cal.filter((r) => r.km && r.elevation).length > 1 ? `<h3>Km frente a desnivel</h3>${resScatter(pk)}` : ''}</section>` : '';
+  const trip = t.travelKm ? `<section class="card rs-card"><h2>${ico('compass')} Desplazamientos</h2>${resTravel(pk)}<h3>Mapa de desplazamientos</h3>${resTripMap(pk)}</section>` : '';
+  const cost = t.pricedRaces ? `<section class="card rs-card"><h2>${ico('money')} Cuánto cuesta competir</h2>${resCost(pk)}</section>` : '';
+  return `<h2 class="eq-more-h">Más estadísticas del equipo</h2>${climb}${trip}${cost}`;
 }
 
 function viewSummary() {

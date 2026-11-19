@@ -1920,3 +1920,8 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .eq-trip .ico { width: 17px; height: 17px; } .eq-trip b { font-size: 1rem; } .eq-trip small { opacity: .8; }
 .lead.l-compass .lead-i { color: #2f6fd6; }
 .my-road > span[title] .ico { color: #2f6fd6; }
+
+/* Estadísticas de desnivel, desplazamientos y coste también en el Equipo del corredor */
+.eq-more-h { margin: 1.4rem 0 .6rem; font-size: 1.15rem; }
+.rs-card > h2 > .ico { width: 20px; height: 20px; flex: none; color: var(--sec); }
+.eq .rs-card { margin-bottom: 12px; }
