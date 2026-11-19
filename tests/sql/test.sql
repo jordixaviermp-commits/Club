@@ -776,4 +776,50 @@ insert into registrations (name, date, url) values ('Con Web Pasada', current_da
 insert into registration_entries (registration_id, runner_id, category, self_position) select :'rpas', id, 'M40', 3 from runners where code = 'codigo-valorador-uno-01';
 select auto_promote_registrations();
 select pg_temp.check((select url = 'https://pasada.example' from races where name = 'Con Web Pasada'), 'web: se conserva al pasar a resultados');
+-- desnivel y precio de la inscripción (cualquier corredor completa lo que falta de una inscripción)
+set role anon;
+select runner_create_registration('codigo-valorador-uno-01', jsonb_build_object('name', 'Carrera Con Desnivel', 'date', (current_date + 48)::text, 'elevation', '1850', 'price', '27.5'), 'M40') as rdes \gset
+select pg_temp.check((select (g->>'elevation')::int = 1850 and (g->>'price')::numeric = 27.5 from jsonb_array_elements(runner_view('codigo-valorador-dos-02')->'registrations') g where g->>'name' = 'Carrera Con Desnivel'), 'desnivel/precio: se guardan al crear y los demás los ven');
+select runner_create_registration('codigo-valorador-dos-02', jsonb_build_object('name', 'Carrera Con Desnivel', 'date', (current_date + 48)::text, 'elevation', '999', 'price', '99'), 'M40');
+reset role;
+select pg_temp.check((select elevation = 1850 and price = 27.5 from registrations where id = :'rdes'), 'desnivel/precio: lo que aporta otro no pisa lo que ya había');
+set role anon;
+select runner_create_registration('codigo-valorador-uno-01', jsonb_build_object('name', 'Sin Datos Extra', 'date', (current_date + 49)::text, 'elevation', '99999', 'price', '-5'), 'M40') as rsin \gset
+reset role;
+select pg_temp.check((select elevation is null and price is null from registrations where id = :'rsin'), 'desnivel/precio: valores absurdos se ignoran');
+set role anon;
+select runner_complete_race('codigo-valorador-dos-02', 'reg', :'rsin', jsonb_build_object('elevation', '640', 'price', '0'));
+reset role;
+select pg_temp.check((select elevation = 640 and price = 0 from registrations where id = :'rsin'), 'desnivel/precio: un inscrito los completa si faltan (precio 0 = gratis)');
+set role anon;
+select runner_complete_race('codigo-valorador-uno-01', 'reg', :'rsin', jsonb_build_object('elevation', '1', 'price', '50'));
+reset role;
+select pg_temp.check((select elevation = 640 and price = 0 from registrations where id = :'rsin'), 'desnivel/precio: completar no cambia lo que ya está');
+set role anon;
+select runner_update_registration('codigo-valorador-uno-01', :'rsin', jsonb_build_object('name', 'Sin Datos Extra', 'date', (current_date + 49)::text, 'modality', 'Carretera', 'elevation', '700', 'price', '12'));
+reset role;
+select pg_temp.check((select elevation = 700 and price = 12 from registrations where id = :'rsin'), 'desnivel/precio: quien creó la carrera puede corregirlos');
+set role anon;
+select runner_watch_save('codigo-valorador-uno-01', null, jsonb_build_object('name', 'Valorada Con Desnivel', 'date', (current_date + 55)::text, 'elevation', '2100', 'price', '35')) as wvd \gset
+select pg_temp.check((select (g->>'elevation')::int = 2100 and (g->>'price')::numeric = 35 from jsonb_array_elements(runner_view('codigo-valorador-dos-02')->'registrations') g where g->>'name' = 'Valorada Con Desnivel'), 'desnivel/precio: lo guardado en Por valorar se comparte');
+select pg_temp.expect_fail($q$select runner_watch_save('codigo-valorador-uno-01', null, '{"name":"Desnivel absurdo","date":"$q$ || (current_date + 20)::text || $q$","elevation":"20000"}')$q$, 'desnivel/precio: desnivel absurdo rechazado en Por valorar');
+reset role;
+select pg_temp.expect_fail($q$update registrations set elevation = 0 where id = '$q$ || :'rsin' || $q$'$q$, 'desnivel/precio: la base de datos rechaza desniveles no válidos');
+insert into registrations (name, date, elevation, price) values ('Con Datos Pasada', current_date - 6, 1500, 22) returning id as rdp \gset
+insert into registration_entries (registration_id, runner_id, category, self_position) select :'rdp', id, 'M40', 5 from runners where code = 'codigo-valorador-uno-01';
+select auto_promote_registrations();
+select pg_temp.check((select elevation = 1500 and price = 22 from races where name = 'Con Datos Pasada'), 'desnivel/precio: se conservan al pasar a resultados');
+select pg_temp.check((select (r->>'elevation')::int = 1500 and (r->>'price')::numeric = 22 from jsonb_array_elements(runner_team('codigo-valorador-dos-02')->'races') r where r->>'name' = 'Con Datos Pasada'), 'desnivel/precio: el resumen del equipo los incluye');
+-- ubicación de la carrera para los desplazamientos
+reset role;
+insert into registrations (name, date, place, province, lat, lon, geo_key) values ('Con Ubicacion', current_date + 70, 'Pueblo Raro', 'Huesca', 42.01234, 0.55432, 'pueblo raro|huesca') returning id as rgeo \gset
+set role anon;
+select pg_temp.check((select (g->>'lat')::numeric = 42.01234 and (g->>'lon')::numeric = 0.55432 and g->>'geo_key' = 'pueblo raro|huesca' from jsonb_array_elements(runner_view('codigo-valorador-dos-02')->'registrations') g where g->>'name' = 'Con Ubicacion'), 'ubicación: los corredores reciben las coordenadas de la carrera');
+reset role;
+select pg_temp.expect_fail($q$update registrations set lat = 200 where name = 'Con Ubicacion'$q$, 'ubicación: la base de datos rechaza coordenadas imposibles');
+insert into registrations (name, date, place, province, lat, lon, geo_key) values ('Ubicacion Pasada', current_date - 6, 'Pueblo Raro', 'Huesca', 42.01234, 0.55432, 'pueblo raro|huesca') returning id as rgp \gset
+insert into registration_entries (registration_id, runner_id, category, self_position) select :'rgp', id, 'M40', 4 from runners where code = 'codigo-valorador-uno-01';
+select auto_promote_registrations();
+select pg_temp.check((select lat = 42.01234 and lon = 0.55432 and geo_key = 'pueblo raro|huesca' from races where name = 'Ubicacion Pasada'), 'ubicación: se conserva al pasar a resultados');
+select pg_temp.check((select (r->>'lat')::numeric = 42.01234 from jsonb_array_elements(runner_team('codigo-valorador-dos-02')->'races') r where r->>'name' = 'Ubicacion Pasada'), 'ubicación: el resumen del equipo la incluye');
 \echo TODAS LAS PRUEBAS SQL OK

@@ -1853,3 +1853,70 @@ header.top h1.greet.scroll > span { animation: greet-slide var(--dur, 8s) ease-i
 .web-btn .ico, .web-add .ico, .web-row .btn .ico { width: 15px; height: 15px; }
 .web-add { display: inline-flex; align-items: center; gap: .35rem; color: var(--muted); border-style: dashed; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .web-btn { color: #8db8ff; } } :root[data-theme="dark"] .web-btn { color: #8db8ff; }
+
+/* =====================================================================
+   v161 · Desnivel positivo y precio de la inscripción
+   ===================================================================== */
+.tag.t-elev { background: color-mix(in srgb, #7a5a3a 13%, var(--card)); border-color: color-mix(in srgb, #7a5a3a 40%, var(--line)); color: color-mix(in srgb, #6b4a2a 85%, var(--text)); }
+.tag.t-price { background: color-mix(in srgb, #1b8f52 11%, var(--card)); border-color: color-mix(in srgb, #1b8f52 40%, var(--line)); color: color-mix(in srgb, #14703f 85%, var(--text)); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tag.t-elev { color: #e6c9a6; } :root:not([data-theme="light"]) .tag.t-price { color: #8ee3b0; } } :root[data-theme="dark"] .tag.t-elev { color: #e6c9a6; } :root[data-theme="dark"] .tag.t-price { color: #8ee3b0; }
+.my-road { display: flex; gap: .5rem; flex-wrap: wrap; margin: .1rem 0 .6rem; }
+.my-road > span { display: inline-flex; align-items: center; gap: .35rem; padding: .25rem .7rem; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); font-size: .85rem; }
+.my-road .ico { width: 16px; height: 16px; color: var(--sec); } .my-road b { font-weight: 800; }
+.eq-mini5 { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; gap: .2rem !important; } .eq-mini5 b { font-size: .78rem !important; } .eq-mini5 small { font-size: .64rem !important; }
+.eq-mini .m-el { --bc: #ffb36b; }
+.lead.l-mountain .lead-i { color: #b06a2a; }
+.tp-disc li > .tp-xtra { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: .2rem .8rem; margin-top: .1rem; font-size: .78rem; color: var(--muted); }
+.tp-xtra i { font-style: normal; display: inline-flex; align-items: center; gap: .25rem; } .tp-xtra .ico { width: 13px; height: 13px; }
+.rs-elev span { background: linear-gradient(180deg, #d9a066, #a8703a); } .rs-costm span { background: linear-gradient(180deg, #5fd391, #1b8f52); }
+.rs-wk.rs-elev { grid-template-columns: repeat(12, 1fr); gap: 3px; } .rs-wk.rs-elev em { font-size: .6rem; } .rs-wk.rs-elev b { font-size: .66rem; }
+.rs-bar.warm > i { background: linear-gradient(90deg, #d9a066, #a8703a); }
+.rs-scatter { width: 100%; height: auto; display: block; overflow: visible; }
+.rs-scatter .sc-grid { stroke: var(--line); stroke-width: 1; } .rs-scatter .sc-t { fill: var(--muted); font-size: 9px; } .rs-scatter .sc-l { fill: var(--muted); font-size: 9px; font-weight: 700; }
+.rs-scatter .sc-dot { fill: var(--dc, var(--sec)); fill-opacity: .78; stroke: var(--card); stroke-width: 1.5; }
+.rs-cost { margin-bottom: .4rem; } .rs-card h3 { margin: .8rem 0 .3rem; font-size: .92rem; }
+.qchip.soft { background: var(--bg); border-color: var(--line); color: var(--muted); }
+.rs-cmp td.num { white-space: nowrap; }
+.tp-table td:last-child, .tp-table td.num { white-space: nowrap; }
+
+/* =====================================================================
+   v162 · Carreras del corredor: fila compacta que se despliega
+   ===================================================================== */
+details.card.rcard { padding: 0; margin-bottom: 8px; overflow: hidden; }
+.rc-sum { list-style: none; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: .55rem; padding: .6rem .7rem .6rem .8rem; cursor: pointer; min-height: 56px; -webkit-tap-highlight-color: transparent; }
+.rc-sum::-webkit-details-marker { display: none; } .rc-sum::marker { content: ""; }
+.rc-sum:active { background: var(--sec-soft); }
+.rc-main { display: flex; flex-direction: column; gap: .12rem; min-width: 0; }
+.rc-name { text-transform: uppercase; font-size: .95rem; line-height: 1.2; letter-spacing: .005em; overflow-wrap: anywhere; }
+.rc-sub { font-size: .84rem; color: var(--muted); line-height: 1.3; }
+.rc-chips { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; margin-top: .1rem; }
+.rc-chip { display: inline-flex; align-items: center; gap: .2rem; padding: .02rem .5rem; border-radius: 999px; font-size: .74rem; font-weight: 700; background: var(--bg); border: 1px solid var(--line); color: var(--muted); }
+.rc-chip .ico { width: 12px; height: 12px; }
+.rc-chip.ok { color: #14703f; background: color-mix(in srgb, #1b8f52 12%, var(--card)); border-color: color-mix(in srgb, #1b8f52 45%, var(--line)); }
+.rc-chip.warn { color: #9a5b00; background: color-mix(in srgb, #e08a00 14%, var(--card)); border-color: color-mix(in srgb, #e08a00 50%, var(--line)); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .rc-chip.ok { color: #8ee3b0; } :root:not([data-theme="light"]) .rc-chip.warn { color: #ffc46b; } } :root[data-theme="dark"] .rc-chip.ok { color: #8ee3b0; } :root[data-theme="dark"] .rc-chip.warn { color: #ffc46b; }
+.rc-ins { display: flex; flex-direction: column; align-items: center; min-width: 44px; padding: .15rem .3rem; border-radius: 10px; background: var(--sec-soft); border: 1px solid var(--sec-line); line-height: 1.1; }
+.rc-ins b { font-size: 1.1rem; color: var(--sec); font-variant-numeric: tabular-nums; } .rc-ins small { font-size: .6rem; color: var(--muted); }
+.rc-chev { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--line); background: var(--card); color: var(--muted); transition: transform .18s; }
+.rc-chev .ico { width: 16px; height: 16px; }
+details.rcard[open] > .rc-sum .rc-chev { transform: rotate(180deg); color: var(--sec); border-color: var(--sec-line); }
+details.rcard[open] > .rc-sum { border-bottom: 1px dashed var(--line); }
+.rc-body { padding: .6rem .8rem .8rem; }
+.rc-tags { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.rc-tags .star-btn { margin-top: 0; }
+.rc-body > .type-line { margin-top: .5rem; }
+details.card.rcard.past-reg .rc-name { color: var(--muted); }
+
+/* =====================================================================
+   v163 · Desplazamientos a las carreras
+   ===================================================================== */
+.rs-trip { width: 100%; max-width: 360px; height: auto; display: block; margin: 0 auto; overflow: visible; }
+.rs-trip .tr-ring { fill: none; stroke: var(--line); stroke-width: 1; } .rs-trip .tr-axis { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 4; }
+.rs-trip .tr-t { fill: var(--muted); font-size: 8.5px; } .rs-trip .tr-n { fill: var(--muted); font-size: 9px; font-weight: 800; }
+.rs-trip .tr-dot { fill: var(--dc, var(--sec)); fill-opacity: .82; stroke: var(--card); stroke-width: 1.5; }
+.rs-trip .tr-dot.approx { fill-opacity: .12; stroke: var(--dc, var(--sec)); stroke-width: 2; stroke-dasharray: 3 2; }
+.rs-trip .tr-home { fill: var(--text); stroke: var(--card); stroke-width: 2; }
+.eq-trip { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; margin: .7rem 0 0; padding-top: .6rem; border-top: 1px solid rgba(255, 255, 255, .18); font-size: .85rem; position: relative; z-index: 1; }
+.eq-trip .ico { width: 17px; height: 17px; } .eq-trip b { font-size: 1rem; } .eq-trip small { opacity: .8; }
+.lead.l-compass .lead-i { color: #2f6fd6; }
+.my-road > span[title] .ico { color: #2f6fd6; }
