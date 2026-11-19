@@ -1117,7 +1117,7 @@ function myRacesCard(d, afterSummary = () => '') {
   ${sent.length ? `<section class="card chro-card sent-card"><details class="chro-det" data-open-key="sent"${S.open?.sent ? ' open' : ''}>
     <summary><span class="chro-ic">${ico('check')}</span><b class="chro-t">Resultado enviado</b>
       <span class="chro-tag ok">${sent.length}${ico('go')}</span></summary>
-    <p class="hint">Ya cuentan para tu bono. La dirección las pasará a la clasificación del equipo; mientras tanto puedes cambiar el puesto o el tiempo.</p>
+    <p class="hint">Lo que pones vale tal cual y ya cuenta para tu bono; nadie tiene que validarlo. A los 3 días de la carrera pasa solo a la clasificación del equipo (se espera por si otros compañeros ponen también su resultado). Mientras tanto puedes cambiar el puesto o el tiempo.</p>
     <ul class="mini-list">${sent.map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, edit: editMine(g),
       below: `<span class="badge-sent">${g.my_result.position}º${g.my_result.time_seconds ? ' · ' + formatTime(g.my_result.time_seconds) : ''} · ya cuenta</span>${S.preview ? '' : `<a class="edit-btn" href="#/resultado/reg_${g.id}">${ico('pen')}Cambiar</a>`}` })).join('')}</ul>
   </details></section>` : ''}
