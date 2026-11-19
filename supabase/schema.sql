@@ -442,6 +442,7 @@ begin
     perform public.log_change('Sistema', 'race', v_race, 'auto_resultados', format('pasó sola a resultados: %s (%s)', g.name, g.date));
     v_n := v_n + 1;
   end loop;
+  perform public.watch_cleanup();   -- quita las «candidatas» (de Por valorar) que ya nadie valora o que ya pasaron sin inscritos
   perform set_config('app.skip_log', 'off', true);
   return v_n;
 end $$;
@@ -758,7 +759,7 @@ begin
     raise exception 'demasiadas_carreras';
   end if;
   if v_date < current_date then
-    select id into v_id from races where date = v_date and lower(name) = lower(v_name) limit 1;
+    select id into v_id from races where date = v_date and public.norm_name(name) = public.norm_name(v_name) limit 1;
     if v_id is not null then
       insert into results (race_id, runner_id, runner_name, category)
       select v_id, v_runner, name, nullif(p_category, '') from runners where id = v_runner
@@ -766,7 +767,7 @@ begin
       return v_id;
     end if;
   end if;
-  select id into v_id from registrations where date = v_date and lower(name) = lower(v_name) limit 1;
+  select id into v_id from registrations where date = v_date and public.norm_name(name) = public.norm_name(v_name) limit 1;
   if v_id is null then
     insert into registrations (name, date, end_date, place, province, country, modality, notes, created_by)
     values (v_name, v_date, v_end,
@@ -1358,6 +1359,60 @@ begin
 end $$;
 
 
+
+-- Las carreras que alguien guarda en «Por valorar» se crean también en Carreras (sin inscritos y sin dueño: nadie sabe quién la guardó)
+-- para que otro corredor las encuentre ya con sus datos y no se dupliquen cuando varios se inscriben. Solo se publica la carrera
+-- (nombre, fecha, lugar, modalidad, disciplina y km): web, precio, plazo y notas siguen siendo privados.
+alter table public.registrations add column if not exists candidate boolean default false;
+
+-- Nombre para comparar: sin mayúsculas, tildes ni signos («Gran Fondo Monzón» = «gran fondo monzon»).
+create or replace function public.norm_name(t text)
+returns text language sql immutable as $$
+  select regexp_replace(translate(lower(coalesce(t, '')), 'áàäâãéèëêíìïîóòöôõúùüûñçÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑÇ', 'aaaaaeeeeiiiiooooouuuuncaaaaaeeeeiiiiooooouuuunc'), '[^a-z0-9]', '', 'g')
+$$;
+
+create or replace function public.watch_publish(p_name text, p_date date, p_end date, p_place text, p_province text, p_country text, p_modality text, p_subtype text, p_km numeric)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_prev text := nullif(current_setting('app.skip_log', true), '');
+begin
+  if p_date < current_date then return; end if;
+  if exists (select 1 from registrations where date = p_date and public.norm_name(name) = public.norm_name(p_name)) then return; end if;
+  perform set_config('app.skip_log', 'on', true);
+  begin
+    insert into registrations (name, date, end_date, place, province, country, modality, subtype, km, candidate)
+    values (p_name, p_date, p_end, p_place, p_province, coalesce(p_country, 'España'), p_modality, p_subtype, p_km, true);
+  exception when others then null;   -- si algún dato no encaja, la lista personal se guarda igual
+  end;
+  perform set_config('app.skip_log', coalesce(v_prev, 'off'), true);
+end $$;
+
+-- Borra las candidatas sin inscritos que ya nadie tiene en «Por valorar» (o cuya fecha ya pasó).
+create or replace function public.watch_cleanup()
+returns void language plpgsql security definer set search_path = public as $$
+declare v_prev text := nullif(current_setting('app.skip_log', true), '');
+begin
+  perform set_config('app.skip_log', 'on', true);
+  delete from registrations g
+   where coalesce(g.candidate, false)
+     and not exists (select 1 from registration_entries e where e.registration_id = g.id)
+     and (g.date < current_date
+          or not exists (select 1 from runner_watch w where w.date = g.date and public.norm_name(w.name) = public.norm_name(g.name)));
+  perform set_config('app.skip_log', coalesce(v_prev, 'off'), true);
+end $$;
+
+-- En cuanto alguien se apunta, deja de ser «candidata»: es una inscripción normal.
+create or replace function public.reg_entry_clears_candidate()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare v_prev text := nullif(current_setting('app.skip_log', true), '');
+begin
+  perform set_config('app.skip_log', 'on', true);
+  update registrations set candidate = false where id = new.registration_id and coalesce(candidate, false);
+  perform set_config('app.skip_log', coalesce(v_prev, 'off'), true);
+  return new;
+end $$;
+drop trigger if exists reg_entry_candidate on public.registration_entries;
+create trigger reg_entry_candidate after insert on public.registration_entries for each row execute function public.reg_entry_clears_candidate();
+
 -- ---------- «Por valorar»: carreras que el corredor se guarda para decidir más adelante ----------
 -- Es personal: solo lo ve el propio corredor (sin política de lectura: se accede únicamente con las funciones de abajo,
 -- ni la dirección ni los compañeros lo ven). No lleva clave foránea para que restaurar una copia no lo borre.
@@ -1428,7 +1483,7 @@ begin
   if v_km is not null and (v_km <= 0 or v_km > 1000) then raise exception 'km_no_validos'; end if;
   if v_mod not in ('Carretera','BTT','Gravel','Ciclocross','Pista','Otra') then raise exception 'modalidad_no_valida'; end if;
   if p_id is null then
-    select id into v_id from runner_watch where runner_id = v_runner and date = v_date and lower(name) = lower(v_name) limit 1;
+    select id into v_id from runner_watch where runner_id = v_runner and date = v_date and public.norm_name(name) = public.norm_name(v_name) limit 1;
     if v_id is not null then return v_id; end if;
     if (select count(*) from runner_watch where runner_id = v_runner) >= 60 then raise exception 'demasiadas_guardadas'; end if;
     insert into runner_watch (runner_id, name, date, end_date, place, province, country, modality, subtype, km, url, price, deadline, notes)
@@ -1436,6 +1491,8 @@ begin
             nullif(left(btrim(coalesce(p_data->>'country','')), 60), ''), v_mod, nullif(left(btrim(coalesce(p_data->>'subtype','')), 40), ''), v_km, v_url, v_price, v_deadline,
             nullif(left(btrim(coalesce(p_data->>'notes','')), 500), ''))
     returning id into v_id;
+    perform public.watch_publish(v_name, v_date, v_end, nullif(left(btrim(coalesce(p_data->>'place','')), 120), ''), nullif(left(btrim(coalesce(p_data->>'province','')), 60), ''),
+                                 nullif(left(btrim(coalesce(p_data->>'country','')), 60), ''), v_mod, nullif(left(btrim(coalesce(p_data->>'subtype','')), 30), ''), v_km);
   else
     update runner_watch set name = v_name, date = v_date, end_date = v_end, place = nullif(left(btrim(coalesce(p_data->>'place','')), 120), ''),
            province = nullif(left(btrim(coalesce(p_data->>'province','')), 60), ''), country = nullif(left(btrim(coalesce(p_data->>'country','')), 60), ''), modality = v_mod,
@@ -1443,6 +1500,9 @@ begin
            notes = nullif(left(btrim(coalesce(p_data->>'notes','')), 500), '')
      where id = p_id and runner_id = v_runner returning id into v_id;
     if v_id is null then raise exception 'no_encontrada'; end if;
+    perform public.watch_publish(v_name, v_date, v_end, nullif(left(btrim(coalesce(p_data->>'place','')), 120), ''), nullif(left(btrim(coalesce(p_data->>'province','')), 60), ''),
+                                 nullif(left(btrim(coalesce(p_data->>'country','')), 60), ''), v_mod, nullif(left(btrim(coalesce(p_data->>'subtype','')), 30), ''), v_km);
+    perform public.watch_cleanup();
   end if;
   return v_id;
 end $$;
@@ -1454,6 +1514,7 @@ begin
   select id into v_runner from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
   delete from runner_watch where id = p_id and runner_id = v_runner;
+  perform public.watch_cleanup();
 end $$;
 
 revoke execute on all functions in schema public from public, anon;

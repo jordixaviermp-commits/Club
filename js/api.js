@@ -1,7 +1,7 @@
 // Acceso a datos. Dos versiones con la misma interfaz:
 //  - Supabase (real), cuando config.js tiene URL y clave.
 //  - Demostración, guardada solo en este navegador, para probar la app sin montar nada.
-import { newCode, todayISO, pastLimit, numDays, yearOf, SUBTYPES, parseKm } from './logic.js';
+import { newCode, todayISO, pastLimit, numDays, yearOf, SUBTYPES, parseKm, normalize } from './logic.js';
 
 const TABLES = ['runners', 'registrations', 'registration_entries', 'races', 'results', 'settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests', 'social_posts', 'chronicles'];
 const OPTIONAL = new Set(['settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests', 'social_posts', 'chronicles']); // tablas que pueden faltar si aún no se ha ejecutado su SQL
@@ -43,6 +43,8 @@ export function friendlyError(e) {
 }
 
 /** Formato (Critérium, XCM…) y km de la carrera, listos para guardar. */
+/** Nombre para comparar: sin mayúsculas, tildes ni signos («Gran Fondo Monzón» = «gran fondo monzon»). */
+const normName = (s) => normalize(String(s || '')).replace(/[^a-z0-9]/g, '');
 const detailFields = (o) => ({ subtype: SUBTYPES[o.modality]?.includes(o.subtype) ? o.subtype : null, km: parseKm(o.km) });
 
 /** Tipo de carrera y nombre del circuito, listos para guardar. */
@@ -262,14 +264,16 @@ function demoSeed() {
   ];
   return {
     runners,
-    registrations: registrations.map(({ entries, ...g }) => g),
+    registrations: [...registrations.map(({ entries, ...g }) => g),
+      // lo que Pere guarda en «Por valorar» también está en Carreras, sin inscritos ni dueño
+      { id: uuid(), name: 'Gran Fondo Monzón', date: off(52), end_date: null, place: 'Monzón', province: 'Huesca', country: 'España', modality: 'Carretera', subtype: 'Ciclodeportiva', km: 120, notes: null, created_at: null, created_by: null, candidate: true }],
     registration_entries: registrations.flatMap((g) => g.entries.map((e) => ({ registration_id: g.id, ...e }))),
     races: races.map(({ results, ...r }) => r),
     results: races.flatMap((r) => r.results.map((x) => ({ race_id: r.id, ...x }))),
     runner_watch: [   // carreras «por valorar» de ejemplo (de Pere)
       { id: uuid(), runner_id: pere.id, name: 'Gran Fondo Monzón', date: off(52), end_date: null, place: 'Monzón', province: 'Huesca', country: 'España', modality: 'Carretera', subtype: 'Ciclodeportiva', km: 120,
         url: 'https://example.org/gran-fondo', price: 32, deadline: off(5), notes: 'Subida larga al final. Mirar si hay avituallamiento y si encaja con la preparación.', created_at: ago(24 * 9) },
-      { id: uuid(), runner_id: pere.id, name: 'Open BTT Les Garrigues', date: off(95), end_date: null, place: 'Les Borges Blanques', province: 'Lleida', country: 'España', modality: 'BTT', subtype: 'XCO', km: 38,
+      { id: uuid(), runner_id: pere.id, name: 'BTT Les Garrigues', date: `${y + 1}-02-22`, end_date: null, place: 'Les Borges Blanques', province: 'Lleida', country: 'España', modality: 'BTT', subtype: 'XCO', km: 38,
         url: 'https://example.org/open-btt', price: 20, deadline: off(70), notes: null, created_at: ago(24 * 3) },
       { id: uuid(), runner_id: pere.id, name: 'Volta a la Cerdanya', date: `${y + 1}-06-14`, end_date: null, place: 'Puigcerdà', province: 'Girona', country: 'España', modality: 'Carretera', subtype: 'Ciclodeportiva', km: 95,
         url: null, price: null, deadline: null, notes: 'Ya hay compañeros apuntados.', created_at: ago(24 * 20) },
@@ -319,6 +323,17 @@ export function demoApi(storage = globalThis.localStorage) {
     }
     if (n) save();
     return n;
+  };
+  /** Lo guardado en «Por valorar» se crea también en Carreras (sin inscritos ni dueño) para que otros la encuentren y no se duplique. */
+  const publishWatch = (d, r) => {
+    if (r.date < todayISO() || d.registrations.some((g) => g.date === r.date && normName(g.name) === normName(r.name))) return;
+    d.registrations.push({ id: uuid(), name: r.name, date: r.date, end_date: r.end_date, place: r.place, province: r.province, country: r.country || 'España', modality: r.modality, subtype: r.subtype, km: r.km,
+      notes: null, created_at: new Date().toISOString(), created_by: null, candidate: true });
+  };
+  /** Quita las candidatas sin inscritos que ya nadie valora o que ya pasaron. */
+  const cleanCandidates = (d) => {
+    const hasEntries = (g) => d.registration_entries.some((e) => e.registration_id === g.id);
+    d.registrations = d.registrations.filter((g) => !(g.candidate && !hasEntries(g) && (g.date < todayISO() || !(d.runner_watch || []).some((w) => w.date === g.date && normName(w.name) === normName(g.name)))));
   };
   const fields = (o) => ({
     name: String(o.name || '').trim(), date: o.date, end_date: o.end_date && o.end_date > o.date ? o.end_date : null, place: o.place?.trim() || null, province: o.province?.trim() || null,
@@ -698,15 +713,15 @@ export function demoApi(storage = globalThis.localStorage) {
         country: String(data.country || '').trim() || null, modality: data.modality || 'Carretera', subtype: data.subtype || null, km, url: String(data.url || '').trim() || null, price, deadline: data.deadline || null,
         notes: String(data.notes || '').trim().slice(0, 500) || null };
       if (!id) {
-        const same = d.runner_watch.find((w) => w.runner_id === me.id && w.date === row.date && w.name.toLowerCase() === name.toLowerCase());
+        const same = d.runner_watch.find((w) => w.runner_id === me.id && w.date === row.date && normName(w.name) === normName(name));
         if (same) return same.id;
         if (d.runner_watch.filter((w) => w.runner_id === me.id).length >= 60) throw new Error('demasiadas_guardadas');
-        const w = { id: uuid(), runner_id: me.id, created_at: new Date().toISOString(), ...row }; d.runner_watch.push(w); save(); return w.id;
+        const w = { id: uuid(), runner_id: me.id, created_at: new Date().toISOString(), ...row }; d.runner_watch.push(w); publishWatch(d, row); save(); return w.id;
       }
       const w = d.runner_watch.find((x) => x.id === id && x.runner_id === me.id); if (!w) throw new Error('no_encontrada');
-      Object.assign(w, row); save(); return w.id;
+      Object.assign(w, row); publishWatch(d, row); cleanCandidates(d); save(); return w.id;
     },
-    async runnerWatchDelete(code, id) { const me = byCode(code), d = load(); d.runner_watch = (d.runner_watch || []).filter((w) => !(w.id === id && w.runner_id === me.id)); save(); },
+    async runnerWatchDelete(code, id) { const me = byCode(code), d = load(); d.runner_watch = (d.runner_watch || []).filter((w) => !(w.id === id && w.runner_id === me.id)); cleanCandidates(d); save(); },
     async runnerPing(code) { const me = byCode(code); me.last_seen = new Date().toISOString(); save(); },
     async runnerChronicles(code) { const me = byCode(code); return clone((load().chronicles || []).filter((x) => x.runner_id === me.id).map((x) => x.race_key)); },
     async runnerChroniclesTeam(code) {
@@ -735,18 +750,19 @@ export function demoApi(storage = globalThis.localStorage) {
       if (name.length < 3 || name.length > 120) throw new Error('nombre_no_valido');
       if (!reg.date || reg.date < pastLimit()) throw new Error('fecha_no_valida');
       if (reg.end_date && reg.end_date < reg.date) throw new Error('fecha_no_valida');
-      const race = reg.date < todayISO() && d.races.find((x) => x.date === reg.date && x.name.toLowerCase() === name.toLowerCase());
+      const race = reg.date < todayISO() && d.races.find((x) => x.date === reg.date && normName(x.name) === normName(name));
       if (race) { // ya está en resultados: se le añade a esa
         if (!d.results.some((x) => x.race_id === race.id && x.runner_id === me.id)) d.results.push({ id: uuid(), race_id: race.id, runner_id: me.id, runner_name: me.name, category: category || null, position: null, podium_type: 'suelta' });
         save(); return race.id;
       }
-      let g = d.registrations.find((x) => x.date === reg.date && x.name.toLowerCase() === name.toLowerCase());
+      let g = d.registrations.find((x) => x.date === reg.date && normName(x.name) === normName(name));
       if (!g) {
         g = { id: uuid(), created_at: new Date().toISOString(), created_by: me.id, ...fields({ ...reg, name }) };
         d.registrations.push(g);
       }
       d.registration_entries = d.registration_entries.filter((e) => !(e.registration_id === g.id && e.runner_id === me.id));
       d.registration_entries.push({ registration_id: g.id, runner_id: me.id, category: category || null, created_at: new Date().toISOString() });
+      g.candidate = false;
       if (g.created_by === me.id) logc(me.name, 'insert', `creó la inscripción ${g.name} (${g.date})`);
       save(); return g.id;
     },
@@ -755,6 +771,7 @@ export function demoApi(storage = globalThis.localStorage) {
       const prev = d.registration_entries.find((e) => e.registration_id === regId && e.runner_id === me.id); // como la base de datos: solo cambia la categoría
       d.registration_entries = d.registration_entries.filter((e) => !(e.registration_id === regId && e.runner_id === me.id));
       d.registration_entries.push({ ...(prev || { created_at: new Date().toISOString() }), registration_id: regId, runner_id: me.id, category: category || null });
+      const gj = d.registrations.find((x) => x.id === regId); if (gj) gj.candidate = false;
       save();
     },
     async runnerSetPaid(code, regId, paid, amount, date) {

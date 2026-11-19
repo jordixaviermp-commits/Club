@@ -696,4 +696,44 @@ select pg_temp.check((select count(*) from runner_watch where runner_id = :'tmpi
 insert into runners (id, name, code) values (:'tmpid', 'Temporal Watch', 'codigo-temporal-0001');
 delete from runners where id = :'tmpid';
 select pg_temp.check((select count(*) from runner_watch where runner_id = :'tmpid') = 0, 'por valorar: al borrar al corredor se borra lo suyo');
+-- por valorar → Carreras: se crea sin inscritos ni dueño, sin duplicados, y se limpia sola
+insert into runners (name, code) values ('Valorador Uno', 'codigo-valorador-uno-01'), ('Valorador Dos', 'codigo-valorador-dos-02');
+select (select count(*) from change_log) as logn0 \gset
+set role anon;
+select runner_watch_save('codigo-valorador-uno-01', null, jsonb_build_object('name', 'Gran Fondo Monzón Prueba', 'date', (current_date + 60)::text, 'place', 'Monzón', 'province', 'Huesca',
+  'modality', 'Carretera', 'subtype', 'Ciclodeportiva', 'km', '120', 'price', '30', 'notes', 'privado', 'url', 'https://ejemplo.org/x')) as w1 \gset
+select pg_temp.check((select count(*) from jsonb_array_elements(runner_view('codigo-valorador-dos-02')->'registrations') g where g->>'name' = 'Gran Fondo Monzón Prueba' and g->>'place' = 'Monzón' and jsonb_array_length(g->'entries') = 0 and g->>'notes' is null and coalesce((g->>'mine_created')::boolean, false) = false) = 1,
+  'por valorar→carreras: otro corredor la encuentra con sus datos, sin inscritos, sin notas y sin dueño');
+reset role;
+select pg_temp.check((select created_by is null and candidate and subtype = 'Ciclodeportiva' and km = 120 from registrations where name = 'Gran Fondo Monzón Prueba'), 'por valorar→carreras: sin dueño, marcada como candidata, con disciplina y km');
+select pg_temp.check((select count(*) from change_log) = :'logn0', 'por valorar→carreras: no llena el historial de cambios');
+set role anon;
+select runner_watch_save('codigo-valorador-dos-02', null, jsonb_build_object('name', 'gran fondo monzon prueba', 'date', (current_date + 60)::text));
+reset role;
+select pg_temp.check((select count(*) from registrations where public.norm_name(name) = 'granfondomonzonprueba') = 1, 'por valorar→carreras: otro corredor la guarda con otra grafía y no se duplica');
+set role anon;
+select runner_create_registration('codigo-valorador-dos-02', jsonb_build_object('name', 'GRAN FONDO MONZON PRUEBA!', 'date', (current_date + 60)::text), 'M40') as rid \gset
+reset role;
+select pg_temp.check((select count(*) from registrations where public.norm_name(name) = 'granfondomonzonprueba') = 1 and (select id::text from registrations where public.norm_name(name) = 'granfondomonzonprueba') = :'rid', 'por valorar→carreras: inscribirse usa la que ya existe');
+select pg_temp.check((select not candidate and created_by is null from registrations where id = :'rid'), 'por valorar→carreras: al apuntarse alguien deja de ser candidata');
+set role anon;
+select runner_watch_delete('codigo-valorador-uno-01', :'w1');
+reset role;
+select pg_temp.check((select count(*) from registrations where public.norm_name(name) = 'granfondomonzonprueba') = 1, 'por valorar→carreras: con inscritos no se borra al descartarla');
+-- dos corredores valoran la misma; solo desaparece cuando ya no la valora nadie
+set role anon;
+select runner_watch_save('codigo-valorador-uno-01', null, jsonb_build_object('name', 'Solo Valorar Candidata', 'date', (current_date + 30)::text)) as w3 \gset
+select runner_watch_save('codigo-valorador-dos-02', null, jsonb_build_object('name', 'Solo Valorar Candidata', 'date', (current_date + 30)::text)) as w4 \gset
+select runner_watch_delete('codigo-valorador-uno-01', :'w3');
+reset role;
+select pg_temp.check((select count(*) from registrations where name = 'Solo Valorar Candidata') = 1, 'por valorar→carreras: si otro aún la valora, sigue en Carreras');
+set role anon;
+select runner_watch_delete('codigo-valorador-dos-02', :'w4');
+reset role;
+select pg_temp.check((select count(*) from registrations where name = 'Solo Valorar Candidata') = 0, 'por valorar→carreras: cuando nadie la valora, desaparece');
+-- una candidata cuya fecha ya pasó sin inscritos se limpia al abrir la app
+insert into registrations (name, date, candidate) values ('Candidata Vieja', current_date - 2, true);
+select auto_promote_registrations();
+select pg_temp.check((select count(*) from registrations where name = 'Candidata Vieja') = 0, 'por valorar→carreras: la que ya pasó sin inscritos se limpia sola');
+select pg_temp.check(public.norm_name('Marxa del Montsení – 2ª Ç!') = 'marxadelmontseni2c', 'nombre normalizado sin tildes ni signos');
 \echo TODAS LAS PRUEBAS SQL OK

@@ -1221,7 +1221,7 @@ export function yearInsights(year, races, runners, registrations = [], today = '
   const active = current.filter((r) => r.races > 0);
   const hist = HIST_BUCKETS.map(([label, lo, hi]) => ({ label, runners: current.filter((r) => r.races >= lo && r.races <= hi).length }));
   const cal = yr.map((r) => ({ id: r.id, name: r.name, date: r.date, end_date: r.end_date || null, modality: r.modality, subtype: r.subtype || '', n: (r.results || []).length }));
-  const up = registrations.filter((g) => yearOf(g.date) === year && !g.suspended && today && g.date >= today);
+  const up = registrations.filter((g) => yearOf(g.date) === year && !g.suspended && today && g.date >= today && (g.entries || []).length);   // sin las candidatas de «Por valorar» (nadie apuntado)
   const rate = s.totals.participations ? Math.round((s.totals.podiums / s.totals.participations) * 100) : 0;
   return {
     summary: s, weekdays, days, multiDay, withKm,
