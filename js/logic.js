@@ -256,17 +256,19 @@ export function yearSummary(year, races, runners) {
 
   // Carreras de cada mes, repartidas por modalidad (para el gráfico de barras del resumen).
   // `discs`: lo mismo por disciplina (modalidad + formato: «BTT|XCO»), para colorear las barras por formato.
-  const byMonth = Array.from({ length: 12 }, (_, month) => ({ month, total: 0, mods: {}, discs: {}, elev: 0, cost: 0, trip: 0 }));
+  const byMonth = Array.from({ length: 12 }, (_, month) => ({ month, total: 0, mods: {}, discs: {}, elev: 0, cost: 0, trip: 0, parts: 0, km: 0, time: 0, pod: 0, wins: 0 }));
   const byDiscipline = new Map();
   for (const r of yr) {
     const mo = byMonth[Number(String(r.date).slice(5, 7)) - 1];
     const dk = disciplineKey(r.modality, r.subtype);
     const nRes = (r.results || []).length;
     if (mo) { mo.total++; mo.mods[r.modality] = (mo.mods[r.modality] || 0) + 1; mo.discs[dk] = (mo.discs[dk] || 0) + 1; mo.elev += elevOf(r) * nRes; mo.cost += (priceOf(r) ?? 0) * nRes; mo.trip += 2 * (distOf(r)?.km ?? 0) * nRes; }
+    if (mo) { mo.parts += nRes; mo.km += (Number(r.km) || 0) * nRes; mo.time += (r.results || []).reduce((n, x) => n + (Number(x.time_seconds) || 0), 0); }
     const e = byDiscipline.get(dk) || { key: dk, modality: r.modality, subtype: r.subtype || '', races: 0, elevRaces: 0, elevSum: 0, priceRaces: 0, priceSum: 0 };
     e.races++; if (elevOf(r) > 0) { e.elevRaces++; e.elevSum += elevOf(r); } if (priceOf(r) != null) { e.priceRaces++; e.priceSum += priceOf(r); }
     byDiscipline.set(dk, e);
   }
+  for (const pd of podiums) { const mo = byMonth[Number(String(pd.race.date).slice(5, 7)) - 1]; if (mo) { mo.pod++; if (pd.position === 1) mo.wins++; } }
   const disciplines = [...byDiscipline.values()].map((d) => {
     const mine = (x) => disciplineKey(x.race.modality, x.race.subtype) === d.key;
     const { elevSum, priceSum, ...base } = d;

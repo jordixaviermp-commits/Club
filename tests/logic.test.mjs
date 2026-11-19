@@ -657,3 +657,18 @@ test('buscador de poblaciones: se elige la del país y la provincia de la carrer
   assert.deepEqual(pickGeocode(lista.slice(0, 1), 'Barcelona', 'España'), { lat: 43, lon: 1 }, 'si solo hay resultados de otro país (el país por defecto suele no estar cambiado), se usa ese');
   assert.equal(pickGeocode([], 'Huesca'), null); assert.equal(pickGeocode(undefined), null);
 });
+
+test('resumen por mes: participaciones, km, tiempo y podios de cada mes', async () => {
+  const { yearSummary } = await import('../js/logic.js');
+  const runners = [{ id: 'a', name: 'Anna' }, { id: 'b', name: 'Bru' }];
+  const res = (id, n, pos, t) => ({ runner_id: id, runner_name: n, position: pos, time_seconds: t, category: 'M40' });
+  const races = [
+    { id: 'r1', name: 'Uno', date: '2026-03-07', modality: 'BTT', km: 50, results: [res('a', 'Anna', 1, 7200), res('b', 'Bru', 9, 8000)] },
+    { id: 'r2', name: 'Dos', date: '2026-03-21', modality: 'BTT', km: 30, results: [res('a', 'Anna', 3, 4000)] },
+    { id: 'r3', name: 'Tres', date: '2026-05-02', modality: 'Carretera', km: 100, results: [res('b', 'Bru', 2, null)] },
+  ];
+  const m = yearSummary(2026, races, runners).byMonth;
+  assert.equal(m[2].parts, 3); assert.equal(m[2].km, 50 * 2 + 30); assert.equal(m[2].time, 7200 + 8000 + 4000); assert.equal(m[2].pod, 2); assert.equal(m[2].wins, 1);
+  assert.equal(m[4].parts, 1); assert.equal(m[4].km, 100); assert.equal(m[4].time, 0); assert.equal(m[4].pod, 1);
+  assert.equal(m[0].parts, 0);
+});

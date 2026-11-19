@@ -1945,3 +1945,21 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .my-line { display: flex; flex-wrap: wrap; align-items: center; gap: .15rem .9rem; margin: .45rem 0 0; font-size: .8rem; color: var(--muted); }
 .my-line > span { display: inline-flex; align-items: center; gap: .3rem; }
 .my-line .ico { width: 14px; height: 14px; color: var(--sec); } .my-line b { color: var(--text); font-weight: 800; }
+
+/* Clasificaciones: quién lidera cada dato */
+.rb-tabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin: .1rem 0 .7rem; }
+.rb-tab { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: .4rem .1rem .3rem; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--muted); font: inherit; font-size: .66rem; font-weight: 700; cursor: pointer; min-height: 52px; min-width: 0; }
+.rb-tab .ico { width: 19px; height: 19px; } .rb-tab span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rb-tab.on { background: var(--sec); border-color: var(--sec); color: var(--sec-ink); box-shadow: 0 2px 8px color-mix(in srgb, var(--sec) 35%, transparent); }
+.rb-sum { margin: 0 0 .4rem; font-size: .86rem; color: var(--muted); } .rb-sum b { color: var(--text); }
+.rb-months { margin-bottom: .6rem; }
+.rb-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+.rb-row { display: grid; grid-template-columns: 26px 34px minmax(0, 1fr) auto; align-items: center; gap: .55rem; padding: .25rem .3rem; border-radius: 12px; }
+.rb-row.me { background: color-mix(in srgb, var(--sec) 11%, var(--card)); outline: 1.5px solid var(--sec-line); }
+.rb-pos { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: .78rem; font-weight: 800; background: var(--sec-soft); color: var(--sec); border: 1px solid var(--sec-line); }
+.rb-pos.p1 { background: #e3b93c; color: #fff; border-color: #c9a227; } .rb-pos.p2 { background: #aeb8bf; color: #fff; border-color: #939ea6; } .rb-pos.p3 { background: #cd8a4d; color: #fff; border-color: #b0733a; }
+.rb-row .av { width: 34px; height: 34px; font-size: .72rem; border: 0; }
+.rb-main { min-width: 0; display: flex; flex-direction: column; gap: .05rem; } .rb-main small { color: var(--muted); font-size: .74rem; line-height: 1.25; } .rb-name { display: flex; align-items: center; gap: .35rem; min-width: 0; } .rb-you { font-style: normal; padding: 0 .4rem; border-radius: 999px; background: var(--sec); color: var(--sec-ink); font-weight: 800; font-size: .66rem; }
+.rb-val { font-size: .98rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rb-more { margin-top: .6rem; } .rb-more > summary { cursor: pointer; font-weight: 700; color: var(--sec); padding: .3rem 0; } .rb-more .rb-list { margin-top: .4rem; }
+.rb h3 { margin: .8rem 0 .4rem; font-size: .92rem; }
