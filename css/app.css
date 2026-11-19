@@ -1937,3 +1937,11 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .eq-active .link { font-weight: 700; color: var(--sec); }
 .eqdlg h3 { margin: .8rem 0 .4rem; font-size: .95rem; } .eqd-chips { display: flex; flex-wrap: wrap; gap: .4rem; } .eqd-chips .chip { min-height: 38px; }
 .eqdlg .chip.on { background: var(--sec, var(--accent)); border-color: var(--sec, var(--accent)); color: var(--sec-ink, var(--on-accent)); }
+
+/* Mi temporada: podios más pequeños y una sola línea con el tiempo en carrera y los km de viaje */
+.sum-card .pod-row { margin: .5rem 0 0; gap: .3rem .4rem; }
+.sum-card .pod-title { font-size: .92rem; }
+.sum-card .pod-pill { padding: .15rem .55rem .15rem .3rem; font-size: .82rem; gap: .3rem; }
+.my-line { display: flex; flex-wrap: wrap; align-items: center; gap: .15rem .9rem; margin: .45rem 0 0; font-size: .8rem; color: var(--muted); }
+.my-line > span { display: inline-flex; align-items: center; gap: .3rem; }
+.my-line .ico { width: 14px; height: 14px; color: var(--sec); } .my-line b { color: var(--text); font-weight: 800; }

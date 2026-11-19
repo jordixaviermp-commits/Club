@@ -1089,9 +1089,10 @@ function myRacesCard(d, afterSummary = () => '') {
       <a href="#" class="tile t-canc" data-act="goto-sec" data-to="sec-canc"><span class="t-n">${cancelled.length}</span><span class="t-l">Anuladas</span>${ico('ban', 't-ico')}<small>suspendidas</small></a>
     </div>
     ${(() => { const pod = [1, 2, 3].map((k) => list.filter((x) => x.position === k).length), NAMES = [['Oro', 'Oros'], ['Plata', 'Platas'], ['Bronce', 'Bronces']];
-      const myKm = list.reduce((n, r) => n + (Number(r.km) || 0), 0), myElev = list.reduce((n, r) => n + (Number(r.elevation) || 0), 0), myTrip = list.reduce((n, r) => n + 2 * (distanceKm(r)?.km ?? 0), 0);
-      const road = myKm || myElev || myTrip ? `<div class="my-road"><span>${ico('ruler')}<b>${myKm ? kmText(Math.round(myKm)) : '—'}</b> recorridos</span><span>${ico('mountain')}<b>${myElev ? elevText(myElev) : '—'}</b> de subida</span>${myTrip ? `<span title="Ida y vuelta desde un punto a medio camino entre Monzón y Lleida">${ico('compass')}<b>${kmText(myTrip)}</b> de viaje</span>` : ''}</div>` : '';
-      return road + (pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}"><i class="medal m${i + 1}"></i>${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : ''); })()}
+      // una sola línea pequeña: tiempo en carrera y, al lado, km de viaje (ida y vuelta, aprox.)
+      const myTime = list.reduce((n, r) => n + (Number(r.time_seconds) || 0), 0), myTrip = list.reduce((n, r) => n + 2 * (distanceKm(r)?.km ?? 0), 0);
+      const road = myTime || myTrip ? `<p class="my-line">${myTime ? `<span title="Tiempo total en carrera (de las carreras con tiempo)">${ico('timer')}<b>${formatTime(myTime, true)}</b> en carrera</span>` : ''}${myTrip ? `<span title="Ida y vuelta desde un punto a medio camino entre Monzón y Lleida">${ico('compass')}<b>${kmText(myTrip)}</b> de viaje</span>` : ''}</p>` : '';
+      return (pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}"><i class="medal m${i + 1}"></i>${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : '') + road; })()}
   </section>
 
   ${pending.length ? `<section class="card chro-card pend-card has-pend" id="sec-pend"><details class="chro-det" data-open-key="pend"${S.open?.pend ? ' open' : ''}>
