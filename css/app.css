@@ -1965,3 +1965,23 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .rb h3 { margin: .8rem 0 .4rem; font-size: .92rem; }
 .net-tab b { font-size: .74rem; white-space: nowrap; } .net-tab { padding: .5rem .1rem; }
 .rs-filters { display: none; }
+
+/* ===== Modalidad → disciplina (dos niveles) ===== */
+.tp-disc.md-mod li { --dc: var(--mc); }
+.tp-disc.md-mod li > b { font-size: 1.05rem; }
+.rs-stack > span[class^="m-"], .rs-stack > span[class*=" m-"] { --dc: var(--mc); background: var(--mc); }
+.dl-groups { display: grid; gap: .35rem; margin-top: .5rem; }
+.dl-g { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .7rem; font-size: .8rem; color: var(--muted); }
+.dl-g > b { color: var(--text); display: inline-flex; align-items: center; gap: .3rem; min-width: 5.2rem; }
+.dl-g > b .dot { background: var(--mc); }
+.dl-g > span { display: inline-flex; align-items: center; gap: .3rem; }
+.dl-g > span .dot { background: var(--dc); }
+.dl-g em { font-style: normal; font-weight: 800; color: var(--text); }
+.part-mod { flex-basis: 100%; display: flex; align-items: center; gap: .35rem; margin-top: .35rem; font-size: .82rem; font-weight: 800; color: var(--text); }
+.part-mod:first-child { margin-top: 0; }
+.part-mod i { width: .7rem; height: .7rem; border-radius: 3px; background: var(--mc); flex: none; }
+.pg-row.pg-mod { --dc: var(--mc); background: color-mix(in srgb, var(--mc) 16%, var(--card)); border-left: 5px solid var(--mc); margin-top: .5rem; }
+.pg-row.pg-sub { margin-left: 1.1rem; font-size: .92rem; }
+.tp-table tr.tp-mod td { background: var(--bg); font-weight: 800; padding-top: .55rem; }
+.tp-table tr.tp-sub td:first-child { padding-left: 1.1rem; color: var(--muted); }
+.part-brk { flex-basis: 100%; height: 0; }

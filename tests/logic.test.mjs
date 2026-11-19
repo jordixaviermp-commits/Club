@@ -41,7 +41,8 @@ test('resumen anual', () => {
   { const { travelKm, travelRaces, travelApprox, avgDist, ...base } = s.totals;
   assert.deepEqual(base, { races: 3, runners: 3, participations: 4, podiums: 3, wins: 1, km: 0, time: 0, timed: 0, elevation: 0, cost: 0, elevRaces: 0, pricedRaces: 0, avgPrice: 0 }); }
   assert.deepEqual(s.byModality.map((m) => m.modality), ['Carretera', 'BTT', 'Gravel']); // Pista no aparece en 2026
-  assert.deepEqual(s.byModality[1], { modality: 'BTT', races: 1, participations: 2, podiums: 2, wins: 0, runners: 2 });
+  { const { elevation, trip, cost, km, ...base } = s.byModality[1];
+  assert.deepEqual(base, { modality: 'BTT', races: 1, participations: 2, podiums: 2, wins: 0, runners: 2 }); }
   assert.deepEqual(s.countries, [{ name: 'España', races: 2 }, { name: 'Francia', races: 1 }]);
   assert.deepEqual(s.provinces, [{ name: 'Girona', races: 1 }, { name: 'Lleida', races: 1 }]);
   assert.deepEqual(s.missingPlace.map((m) => [m.name, m.missing]), [['Dos', ['provincia']]]);
@@ -671,4 +672,28 @@ test('resumen por mes: participaciones, km, tiempo y podios de cada mes', async 
   assert.equal(m[2].parts, 3); assert.equal(m[2].km, 50 * 2 + 30); assert.equal(m[2].time, 7200 + 8000 + 4000); assert.equal(m[2].pod, 2); assert.equal(m[2].wins, 1);
   assert.equal(m[4].parts, 1); assert.equal(m[4].km, 100); assert.equal(m[4].time, 0); assert.equal(m[4].pod, 1);
   assert.equal(m[0].parts, 0);
+});
+
+test('modalidad → disciplina: las disciplinas cuelgan de su modalidad y «BTT» no es una disciplina más', async () => {
+  const { yearSummary, modalityTree, subLabel, fullLabel } = await import('../js/logic.js');
+  const runners = [{ id: 'a', name: 'Anna' }, { id: 'b', name: 'Bru' }];
+  const res = (id, n, p) => ({ runner_id: id, runner_name: n, position: p, category: 'M40' });
+  const races = [
+    { id: 'r1', name: 'Uno', date: '2026-03-07', modality: 'BTT', subtype: 'XCO', elevation: 800, results: [res('a', 'Anna', 1), res('b', 'Bru', 5)] },
+    { id: 'r2', name: 'Dos', date: '2026-03-14', modality: 'BTT', subtype: 'XCM', results: [res('a', 'Anna', 2)] },
+    { id: 'r3', name: 'Tres', date: '2026-04-11', modality: 'BTT', results: [res('b', 'Bru', 9)] },                       // BTT sin disciplina indicada
+    { id: 'r4', name: 'Cuatro', date: '2026-05-02', modality: 'Carretera', subtype: 'Critérium', results: [res('a', 'Anna', 3)] },
+    { id: 'r5', name: 'Cinco', date: '2026-06-06', modality: 'Gravel', results: [res('b', 'Bru', 4)] },
+  ];
+  const t = modalityTree(yearSummary(2026, races, runners));
+  assert.deepEqual(t.map((m) => [m.modality, m.races]), [['BTT', 3], ['Carretera', 1], ['Gravel', 1]], 'primer nivel: solo modalidades');
+  const btt = t[0];
+  assert.deepEqual(btt.children.map((d) => d.label).sort(), ['Sin formato', 'XCM', 'XCO']);
+  assert.equal(btt.children.at(-1).label, 'Sin formato', 'lo que no tiene disciplina, al final y como hijo de BTT');
+  assert.equal(btt.children.reduce((n, d) => n + d.races, 0), btt.races, 'los hijos suman lo de la modalidad');
+  assert.equal(btt.children.reduce((n, d) => n + d.participations, 0), btt.participations);
+  assert.equal(btt.participations, 4); assert.equal(btt.elevation, 800 * 2); assert.equal(btt.runners, 2);
+  assert.deepEqual(t[2].children, [], 'Gravel no tiene formatos: sin hijos');
+  assert.equal(subLabel('BTT', ''), 'Sin formato'); assert.equal(subLabel('BTT', 'XCO'), 'XCO'); assert.equal(subLabel('Gravel', ''), 'Gravel');
+  assert.equal(fullLabel('BTT', ''), 'BTT · sin formato'); assert.equal(fullLabel('Carretera', 'Critérium'), 'Carretera · Critérium'); assert.equal(fullLabel('Pista', ''), 'Pista');
 });

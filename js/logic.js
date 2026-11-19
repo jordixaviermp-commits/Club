@@ -252,6 +252,10 @@ export function yearSummary(year, races, runners) {
     podiums: podiums.filter((p) => p.race.modality === m).length,
     wins: podiums.filter((p) => p.race.modality === m && p.position === 1).length,
     runners: new Set(parts.filter((p) => p.race.modality === m).map((p) => personKey(p.res))).size,
+    elevation: parts.filter((p) => p.race.modality === m).reduce((n, p) => n + elevOf(p.race), 0),
+    trip: parts.filter((p) => p.race.modality === m).reduce((n, p) => n + 2 * (distOf(p.race)?.km ?? 0), 0),
+    cost: Math.round(parts.filter((p) => p.race.modality === m).reduce((n, p) => n + (priceOf(p.race) ?? 0), 0) * 100) / 100,
+    km: Math.round(parts.filter((p) => p.race.modality === m).reduce((n, p) => n + (Number(p.race.km) || 0), 0) * 10) / 10,
   })).filter((x) => x.modality === 'Carretera' || x.modality === 'BTT' || x.races > 0);
 
   // Carreras de cada mes, repartidas por modalidad (para el gráfico de barras del resumen).
@@ -1326,4 +1330,24 @@ export function watchMatch(w, registrations) {
   const days = new Set(daysOf(w.date, w.end_date));
   const same = registrations.filter((g) => !g.suspended && (days.has(g.date) || g.date === w.date));
   return searchRaces(w.name, same, 1)[0] || null;
+}
+
+// ======================================================================
+//  Modalidad → disciplina: dos niveles que no se mezclan en las estadísticas
+// ======================================================================
+
+/** Nombre de una disciplina dentro de su modalidad: «XCO», «Sin formato» (si la modalidad tiene formatos y no se indicó) o la propia modalidad si no los tiene (Gravel…). */
+export const subLabel = (modality, subtype) => (subtype ? subtype : SUBTYPES[modality] ? 'Sin formato' : modality);
+/** Nombre completo para listas planas: «BTT · XCO», «BTT · sin formato», «Gravel». Nunca «BTT» a secas si BTT tiene formatos. */
+export const fullLabel = (modality, subtype) => (subtype ? `${modality} · ${subtype}` : SUBTYPES[modality] ? `${modality} · sin formato` : modality);
+/**
+ * Árbol de modalidades con sus disciplinas (BTT → XCO, XCM…; Carretera → Critérium, Ciclodeportiva…) a partir de `yearSummary`.
+ * Cada modalidad lleva sus totales; las disciplinas (solo si la modalidad tiene formatos) quedan DENTRO, nunca al mismo nivel.
+ */
+export function modalityTree(s) {
+  return s.byModality.filter((m) => m.races > 0).map((m) => {
+    const kids = SUBTYPES[m.modality] ? s.disciplines.filter((d) => d.modality === m.modality) : [];
+    const order = (d) => (d.subtype ? 0 : 1);
+    return { ...m, children: kids.map((d) => ({ ...d, label: subLabel(d.modality, d.subtype) })).sort((a, b) => order(a) - order(b) || b.races - a.races || a.label.localeCompare(b.label, 'es')) };
+  }).sort((a, b) => b.races - a.races || a.modality.localeCompare(b.modality, 'es'));
 }
