@@ -1,4 +1,5 @@
 // Reglas de negocio puras (sin pantalla ni red). Se prueban con `node --test tests/`.
+import { distanceKm } from './viajes.js';
 
 export const CATEGORIES = ['Sub-23', 'Élite', 'M30', 'M40', 'M50', 'M60'];
 export const MODALITIES = ['Carretera', 'BTT', 'Gravel', 'Ciclocross', 'Pista', 'Otra'];
@@ -207,6 +208,7 @@ const byText = (a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' });
  */
 const elevOf = (r) => (Number(r?.elevation) > 0 ? Number(r.elevation) : 0);
 const priceOf = (r) => (r?.price != null && r.price !== '' && Number(r.price) >= 0 ? Number(r.price) : null);
+const distOf = (r) => distanceKm(r);   // km por carretera (solo ida) desde el punto de salida común, o null
 export function yearSummary(year, races, runners) {
   const yr = races.filter((r) => yearOf(r.date) === year)
     .sort((a, b) => a.date.localeCompare(b.date) || byText(a.name, b.name));
@@ -229,6 +231,11 @@ export function yearSummary(year, races, runners) {
     elevRaces: yr.filter((r) => elevOf(r) > 0).length,       // carreras con desnivel indicado
     pricedRaces: yr.filter((r) => priceOf(r) != null).length, // carreras con precio indicado
     avgPrice: (() => { const l = yr.map(priceOf).filter((x) => x != null); return l.length ? Math.round((l.reduce((a, b) => a + b, 0) / l.length) * 100) / 100 : 0; })(),
+    // desplazamientos (orientativos): ida y vuelta de cada participación desde el punto de salida común
+    travelKm: parts.reduce((n, p) => n + 2 * (distOf(p.race)?.km ?? 0), 0),
+    travelRaces: yr.filter((r) => distOf(r)).length,                      // carreras de las que se sabe dónde son
+    travelApprox: yr.filter((r) => distOf(r)?.src === 'province').length,  // de ellas, solo por su provincia
+    avgDist: (() => { const l = yr.map((r) => distOf(r)?.km).filter((x) => x != null); return l.length ? Math.round(l.reduce((a, b) => a + b, 0) / l.length) : 0; })(),
   };
   // Carreras por formato (Critérium, XCM…), para el resumen.
   const bySubtype = [];
@@ -249,13 +256,13 @@ export function yearSummary(year, races, runners) {
 
   // Carreras de cada mes, repartidas por modalidad (para el gráfico de barras del resumen).
   // `discs`: lo mismo por disciplina (modalidad + formato: «BTT|XCO»), para colorear las barras por formato.
-  const byMonth = Array.from({ length: 12 }, (_, month) => ({ month, total: 0, mods: {}, discs: {}, elev: 0, cost: 0 }));
+  const byMonth = Array.from({ length: 12 }, (_, month) => ({ month, total: 0, mods: {}, discs: {}, elev: 0, cost: 0, trip: 0 }));
   const byDiscipline = new Map();
   for (const r of yr) {
     const mo = byMonth[Number(String(r.date).slice(5, 7)) - 1];
     const dk = disciplineKey(r.modality, r.subtype);
     const nRes = (r.results || []).length;
-    if (mo) { mo.total++; mo.mods[r.modality] = (mo.mods[r.modality] || 0) + 1; mo.discs[dk] = (mo.discs[dk] || 0) + 1; mo.elev += elevOf(r) * nRes; mo.cost += (priceOf(r) ?? 0) * nRes; }
+    if (mo) { mo.total++; mo.mods[r.modality] = (mo.mods[r.modality] || 0) + 1; mo.discs[dk] = (mo.discs[dk] || 0) + 1; mo.elev += elevOf(r) * nRes; mo.cost += (priceOf(r) ?? 0) * nRes; mo.trip += 2 * (distOf(r)?.km ?? 0) * nRes; }
     const e = byDiscipline.get(dk) || { key: dk, modality: r.modality, subtype: r.subtype || '', races: 0, elevRaces: 0, elevSum: 0, priceRaces: 0, priceSum: 0 };
     e.races++; if (elevOf(r) > 0) { e.elevRaces++; e.elevSum += elevOf(r); } if (priceOf(r) != null) { e.priceRaces++; e.priceSum += priceOf(r); }
     byDiscipline.set(dk, e);
@@ -265,7 +272,7 @@ export function yearSummary(year, races, runners) {
     const { elevSum, priceSum, ...base } = d;
     return { ...base, participations: parts.filter(mine).length, podiums: podiums.filter(mine).length, wins: podiums.filter((p) => mine(p) && p.position === 1).length,
       runners: new Set(parts.filter(mine).map((p) => personKey(p.res))).size,
-      elevation: parts.filter(mine).reduce((n, p) => n + elevOf(p.race), 0), cost: Math.round(parts.filter(mine).reduce((n, p) => n + (priceOf(p.race) ?? 0), 0) * 100) / 100,
+      trip: parts.filter(mine).reduce((n, p) => n + 2 * (distOf(p.race)?.km ?? 0), 0), elevation: parts.filter(mine).reduce((n, p) => n + elevOf(p.race), 0), cost: Math.round(parts.filter(mine).reduce((n, p) => n + (priceOf(p.race) ?? 0), 0) * 100) / 100,
       avgElev: d.elevRaces ? Math.round(elevSum / d.elevRaces) : 0, avgPrice: d.priceRaces ? Math.round((priceSum / d.priceRaces) * 100) / 100 : 0 };
   }).sort((a, b) => b.races - a.races || byText(a.key, b.key));
 
@@ -281,14 +288,15 @@ export function yearSummary(year, races, runners) {
 
   // Participaciones por corredor: toda la plantilla (también con 0) y quien ya no está pero corrió ese año.
   const rows = new Map();
-  for (const rn of runners) rows.set(rn.id, { key: rn.id, name: rn.name, current: true, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {}, discs: {}, months: new Set(), km: 0, elev: 0, cost: 0, time: 0, timed: 0 });
+  for (const rn of runners) rows.set(rn.id, { key: rn.id, name: rn.name, current: true, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {}, discs: {}, months: new Set(), km: 0, elev: 0, cost: 0, trip: 0, tripN: 0, tripMax: 0, tripRace: '', time: 0, timed: 0 });
   for (const { race, res } of parts) {
     const k = personKey(res);
-    if (!rows.has(k)) rows.set(k, { key: k, name: res.runner_name, current: false, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {}, discs: {}, months: new Set(), km: 0, elev: 0, cost: 0, time: 0, timed: 0 });
+    if (!rows.has(k)) rows.set(k, { key: k, name: res.runner_name, current: false, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {}, discs: {}, months: new Set(), km: 0, elev: 0, cost: 0, trip: 0, tripN: 0, tripMax: 0, tripRace: '', time: 0, timed: 0 });
     const row = rows.get(k);
     row.races++;
     row.km = Math.round((row.km + (Number(race.km) || 0)) * 10) / 10;
     row.elev += elevOf(race); row.cost = Math.round((row.cost + (priceOf(race) ?? 0)) * 100) / 100;
+    { const dd = distOf(race); if (dd) { row.trip += 2 * dd.km; row.tripN++; if (dd.km > row.tripMax) { row.tripMax = dd.km; row.tripRace = race.name; } } }
     if (Number(res.time_seconds) > 0) { row.time += Number(res.time_seconds); row.timed++; }
     row.mods[race.modality] = (row.mods[race.modality] || 0) + 1;
     { const dk = disciplineKey(race.modality, race.subtype); row.discs[dk] = (row.discs[dk] || 0) + 1; }
@@ -331,10 +339,10 @@ export function yearSummary(year, races, runners) {
   for (const { race } of parts) { const km = Number(race.km) || 0; if (km > 0 && (!longest || km > longest.km)) longest = { km, race: race.name, raceId: race.id, runners: [] }; }
   if (longest) longest.runners = parts.filter((x) => x.race.id === longest.raceId).map((x) => x.res.runner_name).sort(byText);
   // la carrera más dura (más desnivel), la más empinada (metros por km) y la más cara
-  const pick = (score) => { let best = null; for (const { race } of parts) { const v = score(race); if (v > 0 && (!best || v > best.value)) best = { value: v, race: race.name, raceId: race.id, km: Number(race.km) || null, elevation: elevOf(race) || null, price: priceOf(race) }; }
+  const pick = (score) => { let best = null; for (const { race } of parts) { const v = score(race); if (v > 0 && (!best || v > best.value)) best = { value: v, race: race.name, raceId: race.id, km: Number(race.km) || null, elevation: elevOf(race) || null, price: priceOf(race), place: race.place || '' }; }
     if (best) best.runners = parts.filter((x) => x.race.id === best.raceId).map((x) => x.res.runner_name).sort(byText); return best; };
-  const hardest = pick(elevOf), steepest = pick((r) => (Number(r.km) > 0 && elevOf(r) > 0 ? elevOf(r) / Number(r.km) : 0)), priciest = pick((r) => priceOf(r) ?? 0);
-  return { year, totals, longest, hardest, steepest, priciest, byModality, byMonth, bySubtype, disciplines, byCategory, countries, provinces, missingPlace, perRunner, byPodiumType, podiumList };
+  const farthest = pick((r) => distOf(r)?.km ?? 0), hardest = pick(elevOf), steepest = pick((r) => (Number(r.km) > 0 && elevOf(r) > 0 ? elevOf(r) / Number(r.km) : 0)), priciest = pick((r) => priceOf(r) ?? 0);
+  return { year, totals, longest, hardest, steepest, priciest, farthest, byModality, byMonth, bySubtype, disciplines, byCategory, countries, provinces, missingPlace, perRunner, byPodiumType, podiumList };
 }
 
 // ---------- CSV ----------
@@ -473,9 +481,9 @@ export function socialAudit(year, races, registrations, posts, today, log = null
 // ---------- Cómputo de temporada (dirección) ----------
 
 export const SEASON_COLUMNS = ['Corredor', 'Categoría', 'Contrato', 'Carreras', 'Días de carrera', ...MODALITIES, 'Oros', 'Platas', 'Bronces', 'Podios',
-  'Km', 'Desnivel (m)', 'Tiempo total (h:mm:ss)', 'Carreras con tiempo', 'Provincias', 'Países'];
+  'Km', 'Desnivel (m)', 'Desplazamiento (km, ida y vuelta)', 'Tiempo total (h:mm:ss)', 'Carreras con tiempo', 'Provincias', 'Países'];
 export const SEASON_BONUS_COLUMNS = ['Carreras para el bono', 'Llega al mínimo', 'Tramo alcanzado (carreras)', 'Bono (€)', 'Penalización (€)', 'Saldo (€, + el club debe)', 'Inscritas pendientes'];
-export const SEASON_DETAIL_COLUMNS = ['Corredor', 'Fecha', 'Fecha fin', 'Carrera', 'Lugar', 'Provincia', 'País', 'Modalidad', 'Formato', 'Km', 'Desnivel (m)', 'Precio inscripción (€)', 'Circuito',
+export const SEASON_DETAIL_COLUMNS = ['Corredor', 'Fecha', 'Fecha fin', 'Carrera', 'Lugar', 'Provincia', 'País', 'Modalidad', 'Formato', 'Km', 'Desnivel (m)', 'Precio inscripción (€)', 'Distancia desde la salida (km, ida)', 'Circuito',
   'Categoría', 'Puesto', 'Podio', 'Tipo de podio', 'Tiempo', 'Días', 'Etapas en podio'];
 
 /** Una fila por corredor con lo que ha hecho en la temporada (también quien no ha corrido, con ceros). */
@@ -483,7 +491,7 @@ export function seasonStats(year, races, runners, contractName = (c) => c || '')
   const yr = races.filter((r) => yearOf(r.date) === year);
   const parts = yr.flatMap((race) => (race.results || []).map((res) => ({ race, res })));
   const key = (res) => res.runner_id || 'n:' + normalize(res.runner_name);
-  const mk = (name, cat, contract, id = null) => ({ id, name, cat, contract, races: 0, days: 0, mods: {}, p: [0, 0, 0], km: 0, elev: 0, time: 0, timed: 0, prov: new Set(), ctry: new Set() });
+  const mk = (name, cat, contract, id = null) => ({ id, name, cat, contract, races: 0, days: 0, mods: {}, p: [0, 0, 0], km: 0, elev: 0, trip: 0, time: 0, timed: 0, prov: new Set(), ctry: new Set() });
   const rows = new Map(runners.map((r) => [r.id, mk(r.name, r.category || '', contractName(r.contract), r.id)]));
   for (const { race, res } of parts) {
     const k = key(res);
@@ -491,7 +499,7 @@ export function seasonStats(year, races, runners, contractName = (c) => c || '')
     const row = rows.get(k);
     row.races++; row.days += numDays(race.date, race.end_date);
     row.mods[race.modality] = (row.mods[race.modality] || 0) + 1;
-    row.km += Number(race.km) || 0; row.elev += elevOf(race);
+    row.km += Number(race.km) || 0; row.elev += elevOf(race); row.trip += 2 * (distOf(race)?.km ?? 0);
     if (Number(res.time_seconds) > 0) { row.time += Number(res.time_seconds); row.timed++; }
     if (cleanName(race.province)) row.prov.add(cleanName(race.province));
     if (cleanName(race.country)) row.ctry.add(cleanName(race.country));
@@ -507,7 +515,7 @@ export function seasonByRunner(year, races, runners, contractName = (c) => c || 
   return seasonStats(year, races, runners, contractName).map((r) => {
     const b = bonusOf.get(r.id);
     return [r.name, r.cat, r.contract, r.races, r.days, ...MODALITIES.map((m) => r.mods[m] || 0), r.p[0], r.p[1], r.p[2], r.podiums,
-      r.km, r.elev || '', r.timed ? formatTime(r.time) : '', r.timed, r.provinces.join(', '), r.countries.join(', '),
+      r.km, r.elev || '', r.trip || '', r.timed ? formatTime(r.time) : '', r.timed, r.provinces.join(', '), r.countries.join(', '),
       ...(bonuses ? (b ? [b.bonusCount, b.reachesMinimum ? 'Sí' : 'No', b.tier ? b.tier.races : '', b.amount, b.penalty, b.amount - b.penalty, b.planned] : ['', '', '', '', '', '', '']) : [])];
   });
 }
@@ -519,7 +527,7 @@ export function seasonDetail(year, races) {
     for (const res of r.results || []) {
       const pod = isPodium(res.position);
       const stagePods = (res.stage_positions || []).filter((pos, i) => i < (r.stages || []).length && isPodium(pos)).length;
-      out.push([res.runner_name, r.date, r.end_date || '', r.name, r.place || '', r.province || '', r.country || '', r.modality, r.subtype || '', r.km ?? '', r.elevation ?? '', r.price ?? '',
+      out.push([res.runner_name, r.date, r.end_date || '', r.name, r.place || '', r.province || '', r.country || '', r.modality, r.subtype || '', r.km ?? '', r.elevation ?? '', r.price ?? '', distOf(r)?.km ?? '',
         r.race_type === 'circuito' ? (r.circuit || 'Circuito') : r.race_type === 'campeonato' ? 'Campeonato' : '', res.category || '', res.position ?? '',
         pod ? 'Sí' : 'No', pod ? podiumLabel(res.podium_type) : '', res.time_seconds ? formatTime(res.time_seconds) : '', numDays(r.date, r.end_date), stagePods || '']);
     }
@@ -1173,7 +1181,7 @@ export const seenText = (days) => (days == null ? 'no ha abierto la app' : days 
 export const seenLevel = (days) => (days == null ? 'never' : days <= 7 ? 'hot' : days <= 30 ? 'warm' : 'cold');
 
 /** Huecos que no impiden la estadística básica: se piden, pero no cuentan como «datos incompletos». */
-export const SOFT_GAPS = new Set(['km', 'desnivel', 'precio']);
+export const SOFT_GAPS = new Set(['km', 'desnivel', 'precio', 'ubicación']);
 /** Qué le falta a una carrera con resultados para que la memoria y las estadísticas salgan completas. */
 export function raceGaps(r) {
   const out = [];
@@ -1182,6 +1190,7 @@ export function raceGaps(r) {
   if (!(Number(r?.km) > 0)) out.push('km');
   if (!(Number(r?.elevation) > 0)) out.push('desnivel');
   if (r?.price == null || r.price === '') out.push('precio');
+  if (!distanceKm(r)) out.push('ubicación');
   const noPos = (r?.results || []).filter((x) => x.position == null || x.position === '').length;
   if (noPos) out.push(`${noPos} sin puesto`);
   if (!(r?.results || []).length) out.push('sin participantes');
@@ -1267,7 +1276,8 @@ export function yearInsights(year, races, runners, registrations = [], today = '
   const active = current.filter((r) => r.races > 0);
   const hist = HIST_BUCKETS.map(([label, lo, hi]) => ({ label, runners: current.filter((r) => r.races >= lo && r.races <= hi).length }));
   const cal = yr.map((r) => ({ id: r.id, name: r.name, date: r.date, end_date: r.end_date || null, modality: r.modality, subtype: r.subtype || '', n: (r.results || []).length,
-    km: Number(r.km) > 0 ? Number(r.km) : null, elevation: elevOf(r) || null, price: priceOf(r) }));
+    km: Number(r.km) > 0 ? Number(r.km) : null, elevation: elevOf(r) || null, price: priceOf(r),
+    place: r.place || '', dist: distOf(r)?.km ?? null, src: distOf(r)?.src ?? null, bearing: distOf(r)?.bearing ?? null }));
   const withElev = yr.filter((r) => elevOf(r) > 0), both = yr.filter((r) => elevOf(r) > 0 && Number(r.km) > 0);
   const up = registrations.filter((g) => yearOf(g.date) === year && !g.suspended && today && g.date >= today && (g.entries || []).length);   // sin las candidatas de «Por valorar» (nadie apuntado)
   const rate = s.totals.participations ? Math.round((s.totals.podiums / s.totals.participations) * 100) : 0;

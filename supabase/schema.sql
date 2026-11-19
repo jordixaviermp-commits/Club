@@ -429,8 +429,8 @@ begin
             where not r.suspended and coalesce(r.end_date, r.date) < current_date - 3
               and exists (select 1 from registration_entries e where e.registration_id = r.id and e.self_position is not null)
             for update skip locked loop
-    insert into races (name, date, end_date, place, province, country, modality, notes, race_type, circuit, subtype, km, created_by, url, elevation, price)
-    values (g.name, g.date, g.end_date, g.place, g.province, g.country, g.modality, g.notes, g.race_type, g.circuit, g.subtype, g.km, g.created_by, g.url, g.elevation, g.price)
+    insert into races (name, date, end_date, place, province, country, modality, notes, race_type, circuit, subtype, km, created_by, url, elevation, price, lat, lon, geo_key)
+    values (g.name, g.date, g.end_date, g.place, g.province, g.country, g.modality, g.notes, g.race_type, g.circuit, g.subtype, g.km, g.created_by, g.url, g.elevation, g.price, g.lat, g.lon, g.geo_key)
     returning id into v_race;
     insert into results (race_id, runner_id, runner_name, category, position, podium_type, self_reported, time_seconds)
     select v_race, e.runner_id, rn.name, e.category, e.self_position,
@@ -671,7 +671,7 @@ begin
       select jsonb_agg(jsonb_build_object(
                'race_id', r.id, 'name', r.name, 'date', r.date, 'end_date', r.end_date, 'place', r.place,
                'province', r.province, 'country', r.country, 'modality', r.modality, 'stages', r.stages,
-               'race_type', r.race_type, 'circuit', r.circuit, 'subtype', r.subtype, 'km', r.km, 'elevation', r.elevation, 'price', r.price, 'notes', r.notes,
+               'race_type', r.race_type, 'circuit', r.circuit, 'subtype', r.subtype, 'km', r.km, 'elevation', r.elevation, 'price', r.price, 'lat', r.lat, 'lon', r.lon, 'geo_key', r.geo_key, 'notes', r.notes,
                'mine_created', r.created_by = me.id,
                'others', (select count(*) from results o where o.race_id = r.id and o.runner_id is distinct from me.id),
                'category', x.category, 'position', x.position, 'podium_type', x.podium_type,
@@ -682,7 +682,7 @@ begin
     'registrations', coalesce((
       select jsonb_agg(jsonb_build_object(
                'id', g.id, 'name', g.name, 'date', g.date, 'end_date', g.end_date, 'place', g.place,
-               'mine_created', g.created_by = me.id, 'race_type', g.race_type, 'circuit', g.circuit, 'suspended', g.suspended, 'subtype', g.subtype, 'km', g.km, 'url', g.url, 'url_mine', coalesce(g.url_by = me.id, false), 'elevation', g.elevation, 'price', g.price,
+               'mine_created', g.created_by = me.id, 'race_type', g.race_type, 'circuit', g.circuit, 'suspended', g.suspended, 'subtype', g.subtype, 'km', g.km, 'url', g.url, 'url_mine', coalesce(g.url_by = me.id, false), 'elevation', g.elevation, 'price', g.price, 'lat', g.lat, 'lon', g.lon, 'geo_key', g.geo_key,
                'my_result', (select jsonb_build_object('position', e.self_position, 'podium_type', e.self_podium_type, 'time_seconds', e.self_time_seconds)
                                from registration_entries e where e.registration_id = g.id and e.runner_id = me.id and e.self_position is not null),
                'province', g.province, 'country', g.country, 'modality', g.modality, 'notes', g.notes,
@@ -711,7 +711,7 @@ begin
       select jsonb_agg(jsonb_build_object(
                'id', r.id, 'name', r.name, 'date', r.date, 'end_date', r.end_date, 'place', r.place,
                'province', r.province, 'country', r.country, 'modality', r.modality, 'stages', r.stages,
-               'race_type', r.race_type, 'circuit', r.circuit, 'subtype', r.subtype, 'km', r.km, 'elevation', r.elevation, 'price', r.price,
+               'race_type', r.race_type, 'circuit', r.circuit, 'subtype', r.subtype, 'km', r.km, 'elevation', r.elevation, 'price', r.price, 'lat', r.lat, 'lon', r.lon, 'geo_key', r.geo_key,
                'results', coalesce((
                   select jsonb_agg(jsonb_build_object('runner_id', x.runner_id, 'runner_name', x.runner_name, 'category', x.category,
                                    'position', x.position, 'podium_type', x.podium_type, 'stage_positions', x.stage_positions, 'time_seconds', x.time_seconds))
@@ -1488,6 +1488,20 @@ create table if not exists public.runner_watch (
 create index if not exists runner_watch_runner on public.runner_watch (runner_id);
 alter table public.runner_watch enable row level security;
 revoke all on public.runner_watch from anon, authenticated, public;
+
+-- Ubicación de la carrera (coordenadas de su población), para calcular los desplazamientos. Se rellena sola (la dirección, al abrir
+-- el Resumen) cuando la población no está en el listado de la app. `geo_key` = población|provincia con la que se calcularon: si
+-- cambia el lugar de la carrera, esas coordenadas dejan de valer.
+alter table public.registrations add column if not exists lat numeric(8,5);
+alter table public.registrations add column if not exists lon numeric(8,5);
+alter table public.registrations add column if not exists geo_key text;
+alter table public.races add column if not exists lat numeric(8,5);
+alter table public.races add column if not exists lon numeric(8,5);
+alter table public.races add column if not exists geo_key text;
+alter table public.registrations drop constraint if exists registrations_geo_check;
+alter table public.registrations add constraint registrations_geo_check check ((lat is null or lat between -90 and 90) and (lon is null or lon between -180 and 180));
+alter table public.races drop constraint if exists races_geo_check;
+alter table public.races add constraint races_geo_check check ((lat is null or lat between -90 and 90) and (lon is null or lon between -180 and 180));
 
 -- Desnivel positivo (m) y precio de la inscripción (€) de cada carrera: los puede completar cualquiera que los conozca.
 alter table public.registrations add column if not exists elevation integer;

@@ -38,7 +38,8 @@ const races = [
 
 test('resumen anual', () => {
   const s = yearSummary(2026, races, runners);
-  assert.deepEqual(s.totals, { races: 3, runners: 3, participations: 4, podiums: 3, wins: 1, km: 0, time: 0, timed: 0, elevation: 0, cost: 0, elevRaces: 0, pricedRaces: 0, avgPrice: 0 });
+  { const { travelKm, travelRaces, travelApprox, avgDist, ...base } = s.totals;
+  assert.deepEqual(base, { races: 3, runners: 3, participations: 4, podiums: 3, wins: 1, km: 0, time: 0, timed: 0, elevation: 0, cost: 0, elevRaces: 0, pricedRaces: 0, avgPrice: 0 }); }
   assert.deepEqual(s.byModality.map((m) => m.modality), ['Carretera', 'BTT', 'Gravel']); // Pista no aparece en 2026
   assert.deepEqual(s.byModality[1], { modality: 'BTT', races: 1, participations: 2, podiums: 2, wins: 0, runners: 2 });
   assert.deepEqual(s.countries, [{ name: 'España', races: 2 }, { name: 'Francia', races: 1 }]);
@@ -126,7 +127,8 @@ test('podios de etapa: cuentan como tipo «Etapa»', () => {
       { runner_id: 'b', runner_name: 'Biel', position: 7, podium_type: 'general', stage_positions: [null, 1, null, 1] }, // la 4.ª no existe
     ] }];
   const s = yearSummary(2027, races2, runners2);
-  assert.deepEqual(s.totals, { races: 1, runners: 2, participations: 2, podiums: 4, wins: 2, km: 0, time: 0, timed: 0, elevation: 0, cost: 0, elevRaces: 0, pricedRaces: 0, avgPrice: 0 });
+  { const { travelKm, travelRaces, travelApprox, avgDist, ...base } = s.totals;
+  assert.deepEqual(base, { races: 1, runners: 2, participations: 2, podiums: 4, wins: 2, km: 0, time: 0, timed: 0, elevation: 0, cost: 0, elevRaces: 0, pricedRaces: 0, avgPrice: 0 }); }
   assert.deepEqual(s.byPodiumType.map((t) => [t.type, t.podiums, t.wins]),
     [['suelta', 0, 0], ['general', 1, 0], ['campeonato', 0, 0], ['etapa', 3, 2]]);
   assert.deepEqual(s.perRunner.map((r) => [r.name, r.races, r.p1, r.p2, r.p3]), [['Anna', 1, 1, 1, 1], ['Biel', 1, 1, 0, 0]]);
@@ -508,7 +510,7 @@ test('panel Hoy: resultados pendientes, próximas, actividad, calidad e inactivo
   assert.deepEqual(b.upcoming.map((x) => [x.reg.id, x.days]), [['g2', 4]]);
   assert.deepEqual(b.activity.map((x) => x.level), ['hot', 'never', 'cold']);
   assert.deepEqual(b.quality.map((x) => x.race.id), ['r1']);
-  assert.deepEqual(raceGaps(races[0]), ['provincia', 'disciplina', 'km', 'desnivel', 'precio', '1 sin puesto']);
+  assert.deepEqual(raceGaps(races[0]), ['provincia', 'disciplina', 'km', 'desnivel', 'precio', 'ubicación', '1 sin puesto']);
   assert.deepEqual(b.soft.map((x) => x.race.id), ['r2'], 'r2 solo le falta desnivel y precio: aviso suave, no «incompleta»');
   assert.deepEqual(b.idle, ['b']);
   assert.equal(b.counts.results, 1);
@@ -592,7 +594,7 @@ test('desnivel y precio: lectura de formularios, estadísticas, CSV y datos que 
   assert.equal(s.byCategory.find((c) => c.category === 'M40').elev, 2400 + 2400 + 300);   // Anna y Bru en la dura + Anna en la llana
   const i = yearInsights(2026, races, runners, [], '2026-01-01');
   assert.equal(i.withElev, 2); assert.equal(i.avgElev, 1350); assert.equal(i.climb, Math.round(((2400 + 300) / (60 + 100)) * 10) / 10);
-  assert.deepEqual(raceGaps(races[2]), ['provincia', 'disciplina', 'km', 'desnivel', 'precio']);
+  assert.deepEqual(raceGaps(races[2]), ['provincia', 'disciplina', 'km', 'desnivel', 'precio', 'ubicación']);
   assert.ok(!raceGaps(races[3]).includes('precio'), 'precio 0 (gratis) cuenta como indicado');
   assert.deepEqual(missingFields(races[2], { extra: true }).filter((k) => k === 'elevation' || k === 'price'), ['elevation', 'price']);
   assert.ok(!missingFields(races[2]).includes('elevation'), 'sin `extra` no se piden');
@@ -600,4 +602,58 @@ test('desnivel y precio: lectura de formularios, estadísticas, CSV y datos que 
   const back = importResultsCsv(csv).races.find((r) => r.name === 'Dura');
   assert.equal(back.elevation, 2400); assert.equal(back.price, 40); assert.equal(back.km, 60); assert.equal(back.subtype, 'XCM');
   assert.equal(importResultsCsv(csv).races.find((r) => r.name === 'Gratis').price, 0);
+});
+
+test('desplazamientos: poblaciones, distancias desde el punto de salida y estadísticas', async () => {
+  const { ORIGEN, haversineKm, placeCoords, coordsOf, distanceKm, geoKey } = await import('../js/viajes.js');
+  const { yearSummary, yearInsights, raceGaps } = await import('../js/logic.js');
+  const monzon = placeCoords('Monzón').lat ? { lat: 41.9166, lon: 0.199 } : null, lleida = { lat: 41.617, lon: 0.62 };
+  assert.ok(Math.abs(haversineKm(monzon, lleida) - 48) < 3, 'Monzón–Lleida ≈ 48 km en línea recta');
+  assert.ok(Math.abs(haversineKm(ORIGEN, lleida) - 24) < 3 && Math.abs(haversineKm(ORIGEN, monzon) - 24) < 3, 'el punto de salida está a medio camino');
+  assert.equal(placeCoords('MONZON').src, 'town'); assert.equal(placeCoords('Les Borges Blanques').src, 'town'); assert.equal(placeCoords('Seo de Urgel').src, 'town');
+  assert.equal(placeCoords('Sant Celoni (Barcelona)').src, 'town'); assert.equal(placeCoords('Salida y meta en Cervera, Lleida').src, 'town');
+  assert.equal(placeCoords('Pueblo Inventado', 'Huesca').src, 'province'); assert.equal(placeCoords('Pueblo Inventado', 'Zzz'), null); assert.equal(placeCoords('', ''), null);
+  const guardada = { place: 'Pueblo Inventado', province: 'Huesca', lat: 42.5, lon: 0.5 };
+  assert.equal(coordsOf(guardada).src, 'province', 'las coordenadas guardadas solo valen si la clave coincide');
+  assert.deepEqual(coordsOf({ ...guardada, geo_key: geoKey(guardada) }), { lat: 42.5, lon: 0.5, src: 'geo' });
+  assert.equal(coordsOf({ ...guardada, geo_key: geoKey(guardada), place: 'Otro sitio' }).src, 'province', 'si cambia el lugar, vuelven las de la provincia');
+  const bcn = distanceKm({ place: 'Barcelona' }), ll = distanceKm({ place: 'Lleida' });
+  assert.ok(bcn.km > 180 && bcn.km < 200, `Barcelona ≈ 190 km por carretera (salió ${bcn.km})`); assert.ok(bcn.bearing > 90 && bcn.bearing < 125, 'Barcelona queda al este-sureste');
+  assert.ok(ll.km >= 25 && ll.km <= 35); assert.equal(distanceKm({ place: '' }), null);
+  const runners = [{ id: 'a', name: 'Anna' }, { id: 'b', name: 'Bru' }];
+  const res = (id, n, p) => ({ runner_id: id, runner_name: n, position: p, category: 'M40' });
+  const races = [
+    { id: 'r1', name: 'Lejana', date: '2026-03-07', modality: 'Carretera', place: 'Barcelona', results: [res('a', 'Anna', 1), res('b', 'Bru', 5)] },
+    { id: 'r2', name: 'Cerca', date: '2026-04-11', modality: 'BTT', place: 'Lleida', results: [res('a', 'Anna', 9)] },
+    { id: 'r3', name: 'Provincia', date: '2026-05-02', modality: 'BTT', place: 'Pueblo Inventado', province: 'Huesca', results: [res('b', 'Bru', 3)] },
+    { id: 'r4', name: 'Sin sitio', date: '2026-06-06', modality: 'Pista', results: [res('a', 'Anna', 2)] },
+  ];
+  const s = yearSummary(2026, races, runners);
+  const dB = bcn.km, dL = ll.km, dP = distanceKm({ place: 'x', province: 'Huesca' }).km;
+  assert.equal(s.totals.travelRaces, 3); assert.equal(s.totals.travelApprox, 1);
+  assert.equal(s.totals.travelKm, 2 * (dB * 2 + dL + dP), 'ida y vuelta de cada participación');
+  assert.equal(s.totals.avgDist, Math.round((dB + dL + dP) / 3));
+  const anna = s.perRunner.find((r) => r.key === 'a'), bru = s.perRunner.find((r) => r.key === 'b');
+  assert.equal(anna.trip, 2 * (dB + dL)); assert.equal(anna.tripN, 2); assert.equal(anna.tripMax, dB); assert.equal(anna.tripRace, 'Lejana');
+  assert.equal(bru.trip, 2 * (dB + dP));
+  assert.equal(s.farthest.race, 'Lejana'); assert.equal(s.farthest.value, dB); assert.deepEqual(s.farthest.runners, ['Anna', 'Bru']);
+  assert.equal(s.byMonth[2].trip, 2 * dB * 2); assert.equal(s.disciplines.find((d) => d.key === 'Carretera|').trip, 2 * dB * 2);
+  const i = yearInsights(2026, races, runners);
+  assert.equal(i.cal.find((c) => c.id === 'r1').dist, dB); assert.equal(i.cal.find((c) => c.id === 'r4').dist, null);
+  assert.ok(raceGaps(races[3]).includes('ubicación') && !raceGaps(races[0]).includes('ubicación'));
+});
+
+test('buscador de poblaciones: se elige la del país y la provincia de la carrera', async () => {
+  const { pickGeocode } = await import('../js/viajes.js');
+  const lista = [
+    { name: 'Vic', latitude: 43.0, longitude: 1.0, country_code: 'FR', admin1: 'Occitania', admin2: 'Ariège', population: 900 },
+    { name: 'Vic', latitude: 41.93012, longitude: 2.25456, country_code: 'ES', admin1: 'Cataluña', admin2: 'Barcelona', population: 47000 },
+    { name: 'Vic', latitude: 39.5, longitude: -0.4, country_code: 'ES', admin1: 'Comunidad Valenciana', admin2: 'Valencia', population: 120 },
+  ];
+  assert.deepEqual(pickGeocode(lista, 'Barcelona', 'España'), { lat: 41.93012, lon: 2.25456 });
+  assert.deepEqual(pickGeocode(lista, 'Valencia', 'España'), { lat: 39.5, lon: -0.4 }, 'la provincia pesa más que la población');
+  assert.deepEqual(pickGeocode(lista, '', 'España'), { lat: 41.93012, lon: 2.25456 }, 'sin provincia, la más poblada de España');
+  assert.deepEqual(pickGeocode(lista, '', 'Francia'), { lat: 43, lon: 1 });
+  assert.deepEqual(pickGeocode(lista.slice(0, 1), 'Barcelona', 'España'), { lat: 43, lon: 1 }, 'si solo hay resultados de otro país (el país por defecto suele no estar cambiado), se usa ese');
+  assert.equal(pickGeocode([], 'Huesca'), null); assert.equal(pickGeocode(undefined), null);
 });

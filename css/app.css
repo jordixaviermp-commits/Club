@@ -1906,3 +1906,17 @@ details.rcard[open] > .rc-sum { border-bottom: 1px dashed var(--line); }
 .rc-tags .star-btn { margin-top: 0; }
 .rc-body > .type-line { margin-top: .5rem; }
 details.card.rcard.past-reg .rc-name { color: var(--muted); }
+
+/* =====================================================================
+   v163 · Desplazamientos a las carreras
+   ===================================================================== */
+.rs-trip { width: 100%; max-width: 360px; height: auto; display: block; margin: 0 auto; overflow: visible; }
+.rs-trip .tr-ring { fill: none; stroke: var(--line); stroke-width: 1; } .rs-trip .tr-axis { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 4; }
+.rs-trip .tr-t { fill: var(--muted); font-size: 8.5px; } .rs-trip .tr-n { fill: var(--muted); font-size: 9px; font-weight: 800; }
+.rs-trip .tr-dot { fill: var(--dc, var(--sec)); fill-opacity: .82; stroke: var(--card); stroke-width: 1.5; }
+.rs-trip .tr-dot.approx { fill-opacity: .12; stroke: var(--dc, var(--sec)); stroke-width: 2; stroke-dasharray: 3 2; }
+.rs-trip .tr-home { fill: var(--text); stroke: var(--card); stroke-width: 2; }
+.eq-trip { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; margin: .7rem 0 0; padding-top: .6rem; border-top: 1px solid rgba(255, 255, 255, .18); font-size: .85rem; position: relative; z-index: 1; }
+.eq-trip .ico { width: 17px; height: 17px; } .eq-trip b { font-size: 1rem; } .eq-trip small { opacity: .8; }
+.lead.l-compass .lead-i { color: #2f6fd6; }
+.my-road > span[title] .ico { color: #2f6fd6; }

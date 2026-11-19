@@ -10,6 +10,7 @@ import {
 const CODE_KEY = 'monzon-code';
 import { FEDERACIONES, ORDEN_FEDERACIONES } from './seguros.js';
 import { ENLACES_CONTRATO } from './enlaces.js';
+import { ORIGEN, FACTOR_CARRETERA, distanceKm, placeCoords, geoKey, pickGeocode } from './viajes.js';
 import { VERSION } from './version.js';
 const VIEW_KEY = 'monzon-regview';
 const FED_KEY = 'monzon-federacion';
@@ -243,6 +244,7 @@ async function onRoute() {
     }
   }
   if (S.session?.isAdmin && view === 'historial') loadChanges();
+  if (S.session?.isAdmin && ['resumen', 'temporada', 'calidad', 'memoria'].includes(view)) geocodeMissing();
   if (S.session?.isAdmin && view === 'corredores' && id && RFILTERS.some(([f]) => f === id)) S.rfilter = id;
   if (S.session?.isAdmin) {
     if (view === 'inscripciones' && id) S.draft = draftRegistration(id);
@@ -1009,6 +1011,7 @@ const ICO = {
   list: 'M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01',
   star: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
   mountain: 'm8 3 4 8 5-5 5 15H2L8 3z',
+  compass: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM16.2 7.8l-2.1 6.3-6.3 2.1 2.1-6.3z',
   trash: 'M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6',
   plus: 'M12 5v14M5 12h14',
 };
@@ -1086,8 +1089,8 @@ function myRacesCard(d, afterSummary = () => '') {
       <a href="#" class="tile t-canc" data-act="goto-sec" data-to="sec-canc"><span class="t-n">${cancelled.length}</span><span class="t-l">Anuladas</span>${ico('ban', 't-ico')}<small>suspendidas</small></a>
     </div>
     ${(() => { const pod = [1, 2, 3].map((k) => list.filter((x) => x.position === k).length), NAMES = [['Oro', 'Oros'], ['Plata', 'Platas'], ['Bronce', 'Bronces']];
-      const myKm = list.reduce((n, r) => n + (Number(r.km) || 0), 0), myElev = list.reduce((n, r) => n + (Number(r.elevation) || 0), 0);
-      const road = myKm || myElev ? `<div class="my-road"><span>${ico('ruler')}<b>${myKm ? kmText(Math.round(myKm)) : '—'}</b> recorridos</span><span>${ico('mountain')}<b>${myElev ? elevText(myElev) : '—'}</b> de subida</span></div>` : '';
+      const myKm = list.reduce((n, r) => n + (Number(r.km) || 0), 0), myElev = list.reduce((n, r) => n + (Number(r.elevation) || 0), 0), myTrip = list.reduce((n, r) => n + 2 * (distanceKm(r)?.km ?? 0), 0);
+      const road = myKm || myElev || myTrip ? `<div class="my-road"><span>${ico('ruler')}<b>${myKm ? kmText(Math.round(myKm)) : '—'}</b> recorridos</span><span>${ico('mountain')}<b>${myElev ? elevText(myElev) : '—'}</b> de subida</span>${myTrip ? `<span title="Ida y vuelta desde un punto a medio camino entre Monzón y Lleida">${ico('compass')}<b>${kmText(myTrip)}</b> de viaje</span>` : ''}</div>` : '';
       return road + (pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}"><i class="medal m${i + 1}"></i>${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : ''); })()}
   </section>
 
@@ -2499,7 +2502,7 @@ function viewQuality() {
   return frame('Datos incompletos', `
     <section class="card q-head"><div class="ring" style="--p:${pct}"><b>${pct}%</b></div>
       <div><h2>${ok} de ${all} carreras completas</h2><p class="muted small">Temporada ${year}. Provincia, disciplina y puestos completos: así sale bien la memoria para los sponsors. Los km, el desnivel y el precio son opcionales, pero alimentan las estadísticas de subida, la carrera más larga o más dura y el coste de competir.</p></div></section>
-    ${everything.length ? `<div class="q-chips">${[['provincia', 'Sin provincia'], ['disciplina', 'Sin disciplina'], ['sin puesto', 'Sin puesto'], ['km', 'Sin km'], ['desnivel', 'Sin desnivel'], ['precio', 'Sin precio']].map(([k, l]) => count(k) ? `<span class="qchip${SOFT_GAPS.has(k) ? ' soft' : ''}">${l} <b>${count(k)}</b></span>` : '').join('')}</div>` : ''}
+    ${everything.length ? `<div class="q-chips">${[['provincia', 'Sin provincia'], ['disciplina', 'Sin disciplina'], ['sin puesto', 'Sin puesto'], ['km', 'Sin km'], ['desnivel', 'Sin desnivel'], ['precio', 'Sin precio'], ['ubicación', 'Sin ubicación']].map(([k, l]) => count(k) ? `<span class="qchip${SOFT_GAPS.has(k) ? ' soft' : ''}">${l} <b>${count(k)}</b></span>` : '').join('')}</div>` : ''}
     ${b.quality.length ? `<h2 class="sec-h">${ico('alert')} Les falta algo importante</h2><div class="mlist">${b.quality.map(row).join('')}</div>` : (everything.length ? '<p class="card ok-card">✅ Todas tienen provincia, disciplina y puestos.</p>' : '')}
     ${b.soft.length ? `<h2 class="sec-h">${ico('mountain')} Para completar (opcional)</h2><p class="hint">Cualquier corredor que participó puede completarlos desde la carrera («Faltan datos»); tú, desde su ficha.</p><div class="mlist">${b.soft.map(row).join('')}</div>` : ''}
     ${!everything.length ? '<p class="card ok-card">✅ Todas las carreras de la temporada tienen los datos completos.</p>' : ''}`, { back: '#/hoy' });
@@ -2706,6 +2709,7 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
     <p class="sum-hero-t">${ico('flag')}${mod ? esc(modLabel) : 'Todo el equipo'} · Temporada ${S.year}</p>
     <div class="sum-big">${big(T.races, 'Carreras', 'r')}${big(T.runners, 'Corredores', 'c')}${big(T.podiums, 'Podios', 'p')}${big(T.wins, 'Victorias', 'w')}</div>
     <div class="eq-mini${T.elevation ? ' eq-mini5' : ''}">${mini('ruler', T.km ? kmText(T.km) : '—', 'totales', 'km')}${T.elevation ? mini('mountain', elevText(T.elevation), 'de subida', 'el') : ''}${mini('clock', T.timed ? formatTime(T.time, true) : '—', 'en carrera', 'tm')}${mini('users', T.participations, 'particip.', 'pt')}${mini('bars', T.podiums ? `${Math.round((T.podiums / Math.max(1, T.participations)) * 100)} %` : '—', 'podios', 'pc')}</div>
+    ${T.travelKm ? `<p class="eq-trip">${ico('compass')}<b>${esc(kmText(T.travelKm))}</b> de viaje entre todos <small>(ida y vuelta, aprox.)</small></p>` : ''}
   </section>`;
   // tarjetas de líderes: nombre de quien lidera y su cifra; las de «récord» llevan su propio texto
   const lead = (icon, label, score, fmt, cls = icon) => {
@@ -2717,6 +2721,8 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
   const L = s.longest;
   const longestCard = L ? `<div class="lead l-ruler"><span class="lead-i">${ico('ruler')}</span><small>Carrera más larga</small><b>${esc(kmText(L.km))}</b><em class="lead-race">${esc(L.race)}</em><em>${esc(L.runners.slice(0, 2).join(', '))}${L.runners.length > 2 ? ` y ${L.runners.length - 2} más` : ''}</em></div>` : '';
   const H = s.hardest;
+  const F = s.farthest;
+  const farCard = F ? `<div class="lead l-compass"><span class="lead-i">${ico('compass')}</span><small>Carrera más lejana</small><b>${esc(kmText(F.value))}</b><em class="lead-race">${esc(F.race)}</em><em>${esc(F.place || '')}</em></div>` : '';
   const hardestCard = H ? `<div class="lead l-mountain"><span class="lead-i">${ico('mountain')}</span><small>Carrera más dura</small><b>${esc(elevText(H.elevation))}</b><em class="lead-race">${esc(H.race)}</em><em>${esc(H.runners.slice(0, 2).join(', '))}${H.runners.length > 2 ? ` y ${H.runners.length - 2} más` : ''}</em></div>` : '';
   const leaders = [
     lead('flag', 'Más carreras', (r) => r.races, (n) => plu(n, 'carrera', 'carreras')),
@@ -2726,6 +2732,8 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
     lead('route', 'Más kilómetros', (r) => r.km, (n) => kmText(n), 'route'),
     lead('mountain', 'Más desnivel', (r) => r.elev, (n) => elevText(n), 'mountain'),
     hardestCard,
+    lead('compass', 'Se desplaza más', (r) => r.trip, (n) => `${kmText(n)} de viaje`, 'compass'),
+    farCard,
     lead('timer', 'Más tiempo en carrera', (r) => r.time, (n) => formatTime(n, true), 'timer'),
     lead('layers', 'Más versátil', (r) => Object.keys(r.discs || {}).length, (n) => plu(n, 'disciplina distinta', 'disciplinas distintas')),
     lead('calcheck', 'Más constante', (r) => r.months?.size || 0, (n) => plu(n, 'mes con carrera', 'meses con carrera'), 'calcheck'),
@@ -3102,6 +3110,7 @@ const seasonKpis = (pk) => {
     ${k(t.wins, 'victorias', seasonDelta(pk, t.wins, o.wins))}
     ${k(t.km ? kmText(Math.round(t.km)) : '—', 'km recorridos', seasonDelta(pk, Math.round(t.km), Math.round(o.km), (n) => kmText(n)))}
     ${t.elevation || o.elevation ? k(t.elevation ? elevText(t.elevation) : '—', 'desnivel positivo', seasonDelta(pk, t.elevation, o.elevation, (n) => elevText(n))) : ''}
+    ${t.travelKm || o.travelKm ? k(t.travelKm ? kmText(t.travelKm) : '—', 'de desplazamiento (aprox.)', seasonDelta(pk, t.travelKm, o.travelKm, (n) => kmText(n))) : ''}
     ${k(t.timed ? formatTime(t.time, true) : '—', 'tiempo en carrera')}</div>`;
 };
 const disciplineName = (x) => (x.subtype ? `${x.modality} · ${x.subtype}` : x.modality);
@@ -3134,6 +3143,8 @@ const seasonRecords = (pk) => {
     ${s.hardest ? `<tr><td>Carrera más dura (desnivel)</td><td><b>${esc(s.hardest.race)}</b></td><td>${esc(elevText(s.hardest.elevation))}</td></tr>` : ''}
     ${s.steepest && s.steepest.race !== s.hardest?.race ? `<tr><td>Carrera más empinada</td><td><b>${esc(s.steepest.race)}</b></td><td>${Math.round(s.steepest.value)} m/km</td></tr>` : ''}
     ${row('Más metros de subida', who((r) => r.elev), (n) => elevText(n))}
+    ${s.farthest ? `<tr><td>Carrera más lejana</td><td><b>${esc(s.farthest.race)}</b></td><td>${esc(kmText(s.farthest.value))}</td></tr>` : ''}
+    ${row('Más desplazamientos', who((r) => r.trip), (n) => kmText(n))}
     ${row('Más kilómetros', who((r) => r.km), (n) => kmText(n))}${row('Más tiempo en carrera', who((r) => r.time), (n) => formatTime(n, true))}
     ${row('Más versátil (disciplinas distintas)', who((r) => Object.keys(r.discs || {}).length), (n) => `${n}`)}${row('Más constante (meses con carrera)', who((r) => r.months?.size || 0), (n) => `${n}`)}
     </tbody></table>`;
@@ -3164,7 +3175,7 @@ function seasonRunnerRows(pk) {
     return { ...r, cat: rn?.category || '', contract: rn?.contract ? contractLabel(rn.contract) : '', nd: Object.keys(r.discs || {}).length, nm: r.months?.size || 0, pod: r.p1 + r.p2 + r.p3 };
   });
 }
-const TP_COLS = [['name', 'Corredor', 'text'], ['races', 'Carr.'], ['km', 'Km'], ['elev', 'Desn.'], ['cost', '€ insc.'], ['time', 'Tiempo'], ['nd', 'Disc.'], ['p1', '🥇'], ['p2', '🥈'], ['p3', '🥉'], ['nm', 'Meses']];
+const TP_COLS = [['name', 'Corredor', 'text'], ['races', 'Carr.'], ['km', 'Km'], ['elev', 'Desn.'], ['trip', 'Viaje'], ['cost', '€ insc.'], ['time', 'Tiempo'], ['nd', 'Disc.'], ['p1', '🥇'], ['p2', '🥈'], ['p3', '🥉'], ['nm', 'Meses']];
 function viewMemoria() {
   const years = availableYears(S.data.races);
   if (!years.includes(S.year)) S.year = years[0];
@@ -3198,6 +3209,56 @@ function viewMemoria() {
     </article>`, { back: '#/resumen' });
 }
 
+
+// ======================================================================
+//  Ubicación de las carreras (desplazamientos): la dirección busca sola las poblaciones que no están en el listado de la app
+// ======================================================================
+
+const GEO_MISS_KEY = 'monzon-geo-miss';
+/** Busca una población en Open-Meteo (sin clave) y devuelve la que mejor encaja con su provincia y país, o null. */
+async function geocodePlace(place, province, country) {
+  const name = String(place).replace(/\(.*?\)/g, '').split(/[,;/]/)[0].trim();
+  if (name.length < 2) return null;
+  const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=8&language=es&format=json`);
+  if (!res.ok) throw new Error('geocodificador');
+  return pickGeocode((await res.json()).results, province, country);
+}
+/** Las carreras cuya población no está en el listado (y no tienen ya coordenadas guardadas) son las que hay que buscar. */
+function geoPending() {
+  let miss = {}; try { miss = JSON.parse(store.get(GEO_MISS_KEY) || '{}'); } catch { miss = {}; }
+  const out = [];
+  for (const [kind, list] of [['race', S.data?.races || []], ['reg', S.data?.registrations || []]]) for (const r of list) {
+    if (!cleanName(r.place) || (r.lat != null && r.geo_key === geoKey(r))) continue;
+    if (placeCoords(r.place, '')?.src === 'town') continue;
+    if (miss[geoKey(r)]) continue;
+    out.push({ kind, r });
+  }
+  return out;
+}
+let geoBusy = false;
+async function geocodeMissing(max = 12) {
+  if (geoBusy || !S.session?.isAdmin || !S.data || api.mode === 'demo' || !navigator.onLine) return;
+  const todo = geoPending().slice(0, max);
+  if (!todo.length) return;
+  geoBusy = true;
+  let miss = {}; try { miss = JSON.parse(store.get(GEO_MISS_KEY) || '{}'); } catch { miss = {}; }
+  let found = 0;
+  try {
+    for (const { kind, r } of todo) {
+      const key = geoKey(r);
+      if (r.lat != null && r.geo_key === key) continue;
+      try {
+        const c = await geocodePlace(r.place, r.province, r.country);
+        if (c) { const geo = { ...c, geo_key: key }; await api.saveGeo(kind, r.id, geo); Object.assign(r, geo); found++; } else miss[key] = Date.now();
+      } catch { break; }   // sin conexión o servicio caído: se reintenta otro día
+      await new Promise((ok) => setTimeout(ok, 300));
+    }
+  } finally {
+    store.set(GEO_MISS_KEY, JSON.stringify(miss)); geoBusy = false;
+  }
+  if (found && ['resumen', 'temporada', 'calidad', 'memoria'].includes(parseRoute().view)) render();
+}
+
 // ======================================================================
 //  Resumen de la dirección: panel de temporada en cuatro pestañas
 //  Panorama · Podios · Equipo · Alcance (todo filtrable por modalidad y con el año anterior al lado)
@@ -3224,7 +3285,7 @@ function resHero(pk) {
   const t = pk.s.totals, o = pk.prev.totals, i = pk.ins;
   const big = (n, l, d) => `<div class="rs-big"><b>${n}</b><span>${l}</span>${d}</div>`;
   const sub = [i.summary.totals.participations ? `${t.participations} participaciones` : '', i.podiumRate ? `${i.podiumRate} % acaban en podio` : '', i.days > t.races ? `${i.days} días de competición` : '',
-    t.km ? `📏 ${kmText(Math.round(t.km))}` : '', t.elevation ? `⛰️ ${elevText(t.elevation)}` : '', t.timed ? `⏱️ ${formatTime(t.time, true)}` : ''].filter(Boolean);
+    t.km ? `📏 ${kmText(Math.round(t.km))}` : '', t.elevation ? `⛰️ ${elevText(t.elevation)}` : '', t.travelKm ? `🧭 ${kmText(t.travelKm)} de viaje` : '', t.timed ? `⏱️ ${formatTime(t.time, true)}` : ''].filter(Boolean);
   return `<section class="rs-hero">
     <p class="rs-hero-t">${pk.mod ? esc(pk.mod) : 'Todo el equipo'} · temporada ${pk.year}</p>
     <div class="rs-bigs">${big(t.races, 'carreras', rsDelta(pk, t.races, o.races))}${big(t.runners, 'corredores', rsDelta(pk, t.runners, o.runners))}${big(t.podiums, 'podios', rsDelta(pk, t.podiums, o.podiums))}${big(t.wins, 'victorias', rsDelta(pk, t.wins, o.wins))}</div>
@@ -3244,6 +3305,8 @@ function resHighlights(pk) {
     ${tile('calplus', 'Por venir', up.races ? `${up.races} carrera${up.races === 1 ? '' : 's'}` : 'Nada más', up.races ? `${up.entries} inscripcion${up.entries === 1 ? '' : 'es'}` : 'este año', up.races ? '#/inscripciones' : '')}
     ${tile('mountain', 'La más dura', pk.s.hardest ? esc(elevText(pk.s.hardest.elevation)) : '—', pk.s.hardest ? esc(pk.s.hardest.race) : 'sin desnivel indicado', pk.s.hardest ? `#/carreras/${pk.s.hardest.raceId}` : '')}
     ${tile('money', 'Coste de competir', t.cost ? esc(euros(Math.round(t.cost))) : '—', t.cost ? `${esc(euros(Math.round((t.cost / Math.max(1, t.participations)) * 10) / 10))} por inscripción` : 'sin precios indicados')}
+    ${tile('compass', 'Viaje del equipo', t.travelKm ? esc(kmText(t.travelKm)) : '—', t.travelKm ? 'ida y vuelta, aprox.' : 'sin ubicación de las carreras')}
+    ${tile('route', 'La más lejana', pk.s.farthest ? esc(kmText(pk.s.farthest.value)) : '—', pk.s.farthest ? esc(pk.s.farthest.race) : 'sin ubicación', pk.s.farthest ? `#/carreras/${pk.s.farthest.raceId}` : '')}
   </div>`;
 }
 
@@ -3305,7 +3368,7 @@ function resCompare(pk) {
   return `<div class="tp-scroll"><table class="tp-table rs-cmp"><thead><tr><th class="l"></th><th class="num">${pk.year}</th><th class="num">${pk.year - 1}</th><th class="num">Δ</th></tr></thead><tbody>
     ${row('Carreras', t.races, o.races)}${row('Días de competición', ci.days, oi.days)}${row('Corredores que han corrido', t.runners, o.runners)}${row('Participaciones', t.participations, o.participations)}
     ${row('Podios', t.podiums, o.podiums)}${row('Victorias', t.wins, o.wins)}${row('% de podios', ci.podiumRate, oi.podiumRate, (n) => `${n}\u00a0%`)}${row('Km recorridos', Math.round(t.km), Math.round(o.km), (n) => kmText(n))}
-    ${ci.summary.totals.elevation || oi.summary.totals.elevation ? row('Desnivel positivo', ci.summary.totals.elevation, oi.summary.totals.elevation, (n) => elevText(n)) : ''}${t.cost || o.cost ? row('Coste de las inscripciones', Math.round(t.cost), Math.round(o.cost), (n) => euros(n)) : ''}
+    ${ci.summary.totals.elevation || oi.summary.totals.elevation ? row('Desnivel positivo', ci.summary.totals.elevation, oi.summary.totals.elevation, (n) => elevText(n)) : ''}${t.cost || o.cost ? row('Coste de las inscripciones', Math.round(t.cost), Math.round(o.cost), (n) => euros(n)) : ''}${t.travelKm || o.travelKm ? row('Desplazamiento (ida y vuelta)', t.travelKm, o.travelKm, (n) => kmText(n)) : ''}
     ${row('Provincias distintas', pk.s.provinces.length, pk.prev.provinces.length)}${row('Disciplinas distintas', pk.s.disciplines.length, pk.prev.disciplines.length)}</tbody></table></div>`;
 }
 
@@ -3380,7 +3443,7 @@ function resTeam(pk) {
   const cols = [...TP_COLS, ...(pk.mod ? [] : [['bc', 'Bono']])];
   const th = ([k, l, t]) => `<th class="${t === 'text' ? 'l' : 'num'}"><button type="button" class="tp-sort${sort.k === k ? ' on' : ''}" data-act="tp-sort" data-k="${k}">${l}${sort.k === k ? (sort.dir === 1 ? ' ▲' : ' ▼') : ''}</button></th>`;
   const table = `<section class="card rs-card"><h2>Corredores (${rows.length})</h2><div class="tp-scroll"><table class="tp-table tp-runners"><thead><tr>${cols.map(th).join('')}</tr></thead>
-    <tbody>${rows.map((r) => `<tr><td class="l"><a href="#/corredor/${esc(r.key)}"><b>${esc(r.name)}</b></a>${r.cat ? ` <small class="muted">${esc(r.cat)}</small>` : ''}</td><td class="num">${r.races}</td><td class="num">${r.km ? esc(kmText(r.km)) : '—'}</td><td class="num">${r.elev ? esc(elevText(r.elev)) : '—'}</td><td class="num">${r.cost ? esc(euros(r.cost)) : '—'}</td><td class="num">${r.timed ? formatTime(r.time, true) : '—'}</td><td class="num">${r.nd}</td><td class="num">${r.p1 || '·'}</td><td class="num">${r.p2 || '·'}</td><td class="num">${r.p3 || '·'}</td><td class="num">${r.nm}</td>${pk.mod ? '' : `<td class="num">${r.bc}${r.bok === false ? ' ⚠️' : ''}</td>`}</tr>`).join('') || `<tr><td colspan="${cols.length}" class="muted">Sin carreras este año.</td></tr>`}</tbody></table></div>
+    <tbody>${rows.map((r) => `<tr><td class="l"><a href="#/corredor/${esc(r.key)}"><b>${esc(r.name)}</b></a>${r.cat ? ` <small class="muted">${esc(r.cat)}</small>` : ''}</td><td class="num">${r.races}</td><td class="num">${r.km ? esc(kmText(r.km)) : '—'}</td><td class="num">${r.elev ? esc(elevText(r.elev)) : '—'}</td><td class="num">${r.trip ? esc(kmText(r.trip)) : '—'}</td><td class="num">${r.cost ? esc(euros(r.cost)) : '—'}</td><td class="num">${r.timed ? formatTime(r.time, true) : '—'}</td><td class="num">${r.nd}</td><td class="num">${r.p1 || '·'}</td><td class="num">${r.p2 || '·'}</td><td class="num">${r.p3 || '·'}</td><td class="num">${r.nm}</td>${pk.mod ? '' : `<td class="num">${r.bc}${r.bok === false ? ' ⚠️' : ''}</td>`}</tr>`).join('') || `<tr><td colspan="${cols.length}" class="muted">Sin carreras este año.</td></tr>`}</tbody></table></div>
     <p class="hint">Toca una columna para ordenar. ⚠️ = por debajo del mínimo de carreras.</p></section>`;
   return `${part}${money}${cats}${contracts}${table}`;
 }
@@ -3420,6 +3483,39 @@ function resCost(pk) {
     <p class="hint">Suma el precio de la inscripción de cada participación del club (${t.pricedRaces} de ${t.races} carreras con precio indicado). Es lo que costaría inscribirse, no lo que se haya pagado.</p>`;
 }
 
+/** Mapa de desplazamientos: cada carrera según su rumbo y su distancia desde el punto de salida (anillos cada 50/100/200 km). */
+function resTripMap(pk) {
+  const pts = pk.ins.cal.filter((r) => r.dist != null && r.bearing != null);
+  if (!pts.length) return '<p class="hint">Todavía no se sabe dónde son las carreras: se buscan solas al abrir el Resumen.</p>';
+  const W = 320, C = W / 2, maxD = Math.max(...pts.map((r) => r.dist), 40), step = maxD > 260 ? 100 : maxD > 110 ? 50 : 25, top = Math.ceil((maxD * 1.05) / step) * step, R = C - 18;
+  const pos = (r) => ({ x: C + (r.dist / top) * R * Math.sin((r.bearing * Math.PI) / 180), y: C - (r.dist / top) * R * Math.cos((r.bearing * Math.PI) / 180) });
+  const rings = Array.from({ length: top / step }, (_, i) => (i + 1) * step);
+  return `<svg class="rs-trip" viewBox="0 0 ${W} ${W}" role="img" aria-label="Mapa de las carreras según su distancia y dirección desde el punto de salida">
+    ${rings.map((d) => `<circle cx="${C}" cy="${C}" r="${(d / top) * R}" class="tr-ring"/><text x="${C + 3}" y="${C - (d / top) * R + 10}" class="tr-t">${d} km</text>`).join('')}
+    <line x1="${C}" y1="${C - R - 6}" x2="${C}" y2="${C + R + 6}" class="tr-axis"/><line x1="${C - R - 6}" y1="${C}" x2="${C + R + 6}" y2="${C}" class="tr-axis"/>
+    <text x="${C}" y="10" class="tr-n" text-anchor="middle">N</text><text x="${W - 4}" y="${C + 4}" class="tr-n" text-anchor="end">E</text><text x="${C}" y="${W - 3}" class="tr-n" text-anchor="middle">S</text><text x="4" y="${C + 4}" class="tr-n">O</text>
+    ${pts.map((r) => { const q = pos(r); return `<a href="#/carreras/${r.id}"><circle cx="${q.x.toFixed(1)}" cy="${q.y.toFixed(1)}" r="${Math.min(9, 4 + r.n * 1.1)}" class="tr-dot ${discClass(r.modality, r.subtype)}${r.src === 'province' ? ' approx' : ''}"><title>${esc(`${r.name} (${r.place || 'sin lugar'}): ${r.dist} km${r.src === 'province' ? ' · aprox. por provincia' : ''}`)}</title></circle></a>`; }).join('')}
+    <circle cx="${C}" cy="${C}" r="5" class="tr-home"/><text x="${C + 8}" y="${C + 14}" class="tr-t">salida</text></svg>
+    <p class="hint">El centro es el punto de salida (${esc(ORIGEN.nombre)}). Cada punto es una carrera: cuanto más lejos del centro, más km; el tamaño crece con los corredores del club que fueron. Los puntos huecos solo se conocen por su provincia.</p>`;
+}
+/** Cuánto se desplaza el equipo: totales, quién más y las carreras más lejanas. */
+function resTravel(pk) {
+  const t = pk.s.totals, s = pk.s;
+  if (!t.travelRaces) return '<p class="hint">Todavía no se sabe dónde son las carreras. Se busca la población de cada una al abrir el Resumen; si alguna no aparece, revisa su lugar y provincia.</p>';
+  const people = s.perRunner.filter((r) => r.trip > 0).sort((a, b) => b.trip - a.trip), mx = Math.max(1, ...people.map((r) => r.trip));
+  const far = pk.ins.cal.filter((r) => r.dist != null).sort((a, b) => b.dist - a.dist).slice(0, 5), fmx = Math.max(1, ...far.map((r) => r.dist));
+  const pend = S.session?.isAdmin ? geoPending().length : 0;
+  return `<div class="rs-tiles">
+      <div class="rs-tile">${ico('compass')}<small>Viaje del equipo</small><b>${esc(kmText(t.travelKm))}</b><em>ida y vuelta${pk.hasPrev ? ` ${rsDelta(pk, t.travelKm, pk.prev.totals.travelKm, (n) => kmText(n))}` : ''}</em></div>
+      <div class="rs-tile">${ico('route')}<small>Distancia media</small><b>${esc(kmText(t.avgDist))}</b><em>de ida a cada carrera</em></div></div>
+    <h3>Quién se desplaza más</h3>
+    <ol class="rs-rank">${people.slice(0, 8).map((r, k) => `<li><span class="pos">${k + 1}</span><div><a href="#/corredor/${esc(r.key)}"><b>${esc(r.name)}</b></a>
+      <small class="muted">${r.tripN} carrera${r.tripN === 1 ? '' : 's'} · media ${esc(kmText(Math.round(r.trip / 2 / r.tripN)))}${r.tripRace ? ` · la más lejos: ${esc(kmText(r.tripMax))} (${esc(r.tripRace)})` : ''}</small>${bar((r.trip / mx) * 100, 'warm')}</div><span class="rk-m">${esc(kmText(r.trip))}</span></li>`).join('')}</ol>
+    <h3>Las carreras más lejanas</h3>
+    <ol class="rs-rank">${far.map((r, k) => `<li><span class="pos">${k + 1}</span><div><a href="#/carreras/${r.id}"><b>${esc(r.name)}</b></a><small class="muted">${esc(r.place || '—')}${r.src === 'province' ? ' · aprox. (solo se sabe la provincia)' : ''}${r.n ? ` · ${r.n} del club` : ''}</small>${bar((r.dist / fmx) * 100, 'warm')}</div><span class="rk-m">${esc(kmText(r.dist))}</span></li>`).join('')}</ol>
+    <p class="hint">Cálculo orientativo: línea recta desde el punto de salida (${esc(ORIGEN.nombre)}) hasta la población de cada carrera, × ${String(FACTOR_CARRETERA).replace('.', ',')} para estimar la carretera, ida y vuelta, por cada corredor que participó. No cuenta coches compartidos ni el domicilio real de cada uno. ${t.travelRaces} de ${t.races} carreras con ubicación${t.travelApprox ? ` (${t.travelApprox} solo por su provincia)` : ''}${pend ? `; faltan ${pend} por buscar` : ''}.</p>`;
+}
+
 function resReach(pk) {
   const s = pk.s, i = pk.ins, t = s.totals, L = s.longest;
   const where = (title, rows, n = 12) => { const top = rows.slice(0, n), mx = Math.max(1, ...top.map((c) => c.races));
@@ -3441,6 +3537,8 @@ function resReach(pk) {
     ${pk.ins.cal.filter((r) => r.km && r.elevation).length > 1 ? `<section class="card rs-card"><h2>Km frente a desnivel</h2>${resScatter(pk)}</section>` : ''}
     ${(() => { const el = s.perRunner.filter((r) => r.elev > 0).sort((a, b) => b.elev - a.elev).slice(0, 5), ex = Math.max(1, ...el.map((r) => r.elev));
       return el.length ? `<section class="card rs-card"><h2>Quién ha subido más</h2><ol class="rs-rank">${people(el, 'elev', (n) => esc(elevText(n)), ex)}</ol></section>` : ''; })()}
+    <section class="card rs-card"><h2>Desplazamientos</h2>${resTravel(pk)}</section>
+    <section class="card rs-card"><h2>Mapa de desplazamientos</h2>${resTripMap(pk)}</section>
     <section class="card rs-card"><h2>Cuánto cuesta competir</h2>${resCost(pk)}</section>
     ${km.length ? `<section class="card rs-card"><h2>Quién ha recorrido más</h2><ol class="rs-rank">${people(km, 'km', (n) => esc(kmText(n)), kmx)}</ol></section>` : ''}
     ${tm.length ? `<section class="card rs-card"><h2>Más tiempo en carrera</h2><ol class="rs-rank">${people(tm, 'time', (n) => formatTime(n, true), tmx)}</ol></section>` : ''}
@@ -4716,8 +4814,8 @@ const actions = {
   'tp-sort'(el) { const k = el.dataset.k, cur = S.tsort || { k: 'races', dir: -1 }; S.tsort = { k, dir: cur.k === k ? -cur.dir : (k === 'name' ? 1 : -1) }; render(); },
   'tp-csv-runners'() {
     const pk = seasonPack(S.year), rows = seasonRunnerRows(pk), ds = pk.s.disciplines;
-    const head = ['Corredor', 'Categoría', 'Carreras', 'Km', 'Desnivel (m)', 'Coste inscripciones (€)', 'Tiempo (h)', 'Disciplinas distintas', 'Meses con carrera', 'Oros', 'Platas', 'Bronces', 'Podios', ...ds.map((d) => disciplineName(d))];
-    download(`monzon-corredores-${S.year}.csv`, toCsv(rows.sort((a, b) => b.races - a.races).map((r) => [r.name, r.cat, r.races, r.km || 0, r.elev || 0, r.cost || 0, Math.round((r.time || 0) / 36) / 100, r.nd, r.nm, r.p1, r.p2, r.p3, r.pod, ...ds.map((d) => r.discs[d.key] || 0)]), head), 'text/csv;charset=utf-8');
+    const head = ['Corredor', 'Categoría', 'Carreras', 'Km', 'Desnivel (m)', 'Desplazamiento (km, ida y vuelta)', 'Coste inscripciones (€)', 'Tiempo (h)', 'Disciplinas distintas', 'Meses con carrera', 'Oros', 'Platas', 'Bronces', 'Podios', ...ds.map((d) => disciplineName(d))];
+    download(`monzon-corredores-${S.year}.csv`, toCsv(rows.sort((a, b) => b.races - a.races).map((r) => [r.name, r.cat, r.races, r.km || 0, r.elev || 0, r.trip || 0, r.cost || 0, Math.round((r.time || 0) / 36) / 100, r.nd, r.nm, r.p1, r.p2, r.p3, r.pod, ...ds.map((d) => r.discs[d.key] || 0)]), head), 'text/csv;charset=utf-8');
   },
   'tp-csv-disc'() {
     const pk = seasonPack(S.year);

@@ -169,6 +169,8 @@ export function supabaseApi(url, key) {
     /** Crónicas ya pasadas por el corredor (claves «AAAA-MM-DD|nombre»). null = falta el SQL. */
     async runnerChronicles(code) { try { return ok(await sb.rpc('runner_chronicles', { p_code: code })); } catch { return null; } },
     // crónicas ya pasadas por CUALQUIER compañero (para que baste con que la pase uno); null si falta el SQL
+    // coordenadas de la población de una carrera (las busca la dirección); si falta su SQL, se ignora
+    async saveGeo(kind, id, geo) { await sb.from(kind === 'reg' ? 'registrations' : 'races').update({ lat: geo.lat, lon: geo.lon, geo_key: geo.geo_key }).eq('id', id); },
     async runnerSetUrl(code, regId, url) { ok(await sb.rpc('runner_set_registration_url', { p_code: code, p_registration: regId, p_url: url || null })); },
     async runnerWatchList(code) { try { return ok(await sb.rpc('runner_watch_list', { p_code: code })); } catch (e) { if (/PGRST202|Could not find|runner_watch/.test(String(e?.message))) return null; throw e; } },
     async runnerWatchSave(code, id, data) { return ok(await sb.rpc('runner_watch_save', { p_code: code, p_id: id || null, p_data: data })); },
@@ -614,7 +616,7 @@ export function demoApi(storage = globalThis.localStorage) {
         my_results: d.results.filter((x) => x.runner_id === me.id).map((x) => {
           const r = d.races.find((y) => y.id === x.race_id);
           return r && { race_id: r.id, name: r.name, date: r.date, end_date: r.end_date || null, place: r.place, province: r.province,
-            country: r.country, modality: r.modality, stages: r.stages || null, race_type: r.race_type || 'suelta', circuit: r.circuit || null, subtype: r.subtype || null, km: r.km ?? null, elevation: r.elevation ?? null, price: r.price ?? null,
+            country: r.country, modality: r.modality, stages: r.stages || null, race_type: r.race_type || 'suelta', circuit: r.circuit || null, subtype: r.subtype || null, km: r.km ?? null, elevation: r.elevation ?? null, price: r.price ?? null, lat: r.lat ?? null, lon: r.lon ?? null, geo_key: r.geo_key ?? null,
             notes: r.notes || null, mine_created: r.created_by === me.id, others: d.results.filter((y) => y.race_id === r.id && y.runner_id !== me.id).length,
             category: x.category, position: x.position,
             podium_type: x.podium_type, stage_positions: x.stage_positions || null, time_seconds: x.time_seconds || null, self_reported: !!x.self_reported };
@@ -719,6 +721,7 @@ export function demoApi(storage = globalThis.localStorage) {
       if (done) d.chronicles.push({ runner_id: runnerId, race_key: key, done_at: new Date().toISOString() });
       save();
     },
+    async saveGeo(kind, id, geo) { requireAdmin(); const d = load(); const x = (kind === 'reg' ? d.registrations : d.races).find((r) => r.id === id); if (x) { Object.assign(x, { lat: geo.lat, lon: geo.lon, geo_key: geo.geo_key }); save(); } },
     async runnerSetUrl(code, regId, url) {
       const me = byCode(code), d = load(), g = d.registrations.find((x) => x.id === regId);
       if (!g) throw new Error('no_existe');
@@ -767,7 +770,7 @@ export function demoApi(storage = globalThis.localStorage) {
       return clone({
         runners: d.runners.map((r) => ({ id: r.id, name: r.name })).sort((a, b) => a.name.localeCompare(b.name)),
         races: d.races.map((r) => ({ id: r.id, name: r.name, date: r.date, end_date: r.end_date || null, place: r.place, province: r.province,
-          country: r.country, modality: r.modality, stages: r.stages || null, race_type: r.race_type || 'suelta', circuit: r.circuit || null, subtype: r.subtype || null, km: r.km ?? null, elevation: r.elevation ?? null, price: r.price ?? null,
+          country: r.country, modality: r.modality, stages: r.stages || null, race_type: r.race_type || 'suelta', circuit: r.circuit || null, subtype: r.subtype || null, km: r.km ?? null, elevation: r.elevation ?? null, price: r.price ?? null, lat: r.lat ?? null, lon: r.lon ?? null, geo_key: r.geo_key ?? null,
           results: d.results.filter((x) => x.race_id === r.id).map((x) => ({ runner_id: x.runner_id, runner_name: x.runner_name,
             category: x.category, position: x.position, podium_type: x.podium_type, stage_positions: x.stage_positions || null, time_seconds: x.time_seconds || null })) })),
       });
