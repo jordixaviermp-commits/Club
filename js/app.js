@@ -71,9 +71,9 @@ const discClass = (m, sub) => `d-${slug(m)}-${slug(sub) || 'sin'}`;
 /** Tiempo para escribir desde el móvil: tres casillas numéricas (h · min · s), sin dos puntos. El valor se guarda en un campo oculto como «h:mm:ss». */
 const timeFields = (value, hiddenAttrs) => {
   const sec = value ? (typeof value === 'number' ? value : parseTime(value)) : null;
-  const h = sec ? Math.floor(sec / 3600) : '', m = sec ? Math.floor((sec % 3600) / 60) : '', x = sec ? sec % 60 : '';
+  const h = sec ? Math.floor(sec / 3600) : '', m = sec ? Math.floor((sec % 3600) / 60) : '', x = sec ? sec % 60 : 0;
   const part = (k, v, lab, max, ml) => `<label class="tf-p"><input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="${ml}" data-tpart="${k}" data-max="${max}" value="${v === '' ? '' : v}" placeholder="0" aria-label="${lab}"><span>${lab}</span></label>`;
-  return `<span class="tinput" role="group" aria-label="Tiempo: horas, minutos y segundos">${part('h', h, 'horas', 99, 2)}<b>:</b>${part('m', m, 'min', 59, 2)}<b>:</b>${part('s', x, 'seg', 59, 2)}<input type="hidden" ${hiddenAttrs} data-tvalue value="${sec ? esc(formatTime(sec)) : ''}"></span>`;
+  return `<span class="tinput" data-sec="${x}" role="group" aria-label="Tiempo: horas y minutos">${part('h', h, 'horas', 99, 2)}<b>:</b>${part('m', m, 'min', 59, 2)}<input type="hidden" ${hiddenAttrs} data-tvalue value="${sec ? esc(formatTime(sec)) : ''}"></span>`;
 };
 const discLabel = (m, sub) => (!sub ? (SUBTYPES[m] ? `${m} · sin formato` : m) : sub === 'Otra' ? `${m} · Otra` : sub);
 const modText = (x) => [x.modality, x.subtype].filter(Boolean).join(' · ');
@@ -929,7 +929,7 @@ function viewRunnerReport(key) {
         <label>Categoría${catSelect('name="category"', cat || d.me.category || '', 'Categoría')}</label>
       </div>
       <div class="tf-row"><span class="flabel">⏱️ Tu tiempo <small class="muted">(opcional)</small></span>${timeFields(cur?.time_seconds, 'name="time"')}</div>
-      <p class="hint">Escribe solo números en cada casilla, tal como sale en la clasificación: para <b>2:05:30</b> pon 2 · 05 · 30; si fue menos de una hora, deja las horas vacías (45 · 10). Sirve para ver cuántas horas acumula cada uno en Equipo.</p>
+      <p class="hint">Escribe solo números en cada casilla, tal como sale en la clasificación: para <b>2 h 05 min</b> pon 2 · 05; si fue menos de una hora, deja las horas vacías (45 min). Sirve para ver cuántas horas acumula cada uno en Equipo.</p>
       <input type="hidden" name="podium" value="${podiumKind(race, cur?.podium_type)}">
       ${race.race_type === 'circuito' ? `<p class="hint">🏆 Esta carrera es puntuable de <b>${esc(race.circuit || 'un circuito')}</b>. Aquí pones solo tu puesto en <b>esta prueba</b>. Si acabas en el podio de la <b>general final</b>, se pide aparte, al terminar la liga, en <b>Contrato → Plus de bonificación</b>.</p>` : ''}
       <p class="hint">${cur ? `Ahora tienes <b>${isPodium(cur.position) ? medal(cur.position) + ' ' : ''}${cur.position}º</b>. ` : ''}Puedes cambiarlo tú cuando quieras. El puesto <b>no cambia tu bono</b> (cuenta participar); los podios en la general final de una liga (plus) se piden aparte y los confirma la dirección.</p>
@@ -5449,9 +5449,9 @@ $app.addEventListener('input', (ev) => {
     const w = t.closest('.tinput'), v = (k) => w.querySelector(`[data-tpart="${k}"]`);
     t.value = t.value.replace(/\D/g, '');
     if (t.dataset.tpart !== 'h' && t.value.length === 2 && Number(t.value) > 59) t.value = '59';
-    const hid = w.querySelector('[data-tvalue]'), [h, m, x] = ['h', 'm', 's'].map((k) => v(k).value);
-    hid.value = h || m || x ? `${Number(h || 0)}:${String(Number(m || 0)).padStart(2, '0')}:${String(Number(x || 0)).padStart(2, '0')}` : '';
-    if (t.dataset.tpart === 'm' && t.value.length === 2 && ev.inputType !== 'deleteContentBackward') v('s').focus();
+    const hid = w.querySelector('[data-tvalue]'), [h, m] = ['h', 'm'].map((k) => v(k).value), x = Number(w.dataset.sec || 0);   // los segundos que ya hubiera se conservan
+    hid.value = h || m ? `${Number(h || 0)}:${String(Number(m || 0)).padStart(2, '0')}:${String(x).padStart(2, '0')}` : '';
+    if (t.dataset.tpart === 'h' && t.value.length === 2 && ev.inputType !== 'deleteContentBackward') v('m').focus();
     hid.dispatchEvent(new Event('input', { bubbles: true }));
     return;
   }

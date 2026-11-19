@@ -2028,7 +2028,7 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 /* Tiempo con tres casillas numéricas (h · min · seg): se escribe solo con el teclado de números del móvil */
 .tinput { display: flex; align-items: flex-start; gap: .35rem; }
 .tinput > b { align-self: flex-start; padding-top: .55rem; font-size: 1.3rem; color: var(--muted); }
-.tf-p { display: flex; flex-direction: column; align-items: center; gap: .15rem; flex: 1; max-width: 5.5rem; margin: 0; }
+.tf-p { display: flex; flex-direction: column; align-items: center; gap: .15rem; flex: 1; max-width: 6.5rem; margin: 0; }
 .tf-p input { width: 100%; min-height: 52px; text-align: center; font-size: 1.5rem; font-weight: 800; font-variant-numeric: tabular-nums; padding: .2rem; }
 .tf-p span { font-size: .72rem; color: var(--muted); font-weight: 600; }
 .tf-row { display: grid; gap: .3rem; }
