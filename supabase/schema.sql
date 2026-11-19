@@ -417,7 +417,7 @@ drop trigger if exists races_log on public.races;
 create trigger races_log after insert or update or delete on public.races
   for each row execute function public.log_row_change();
 
--- Pasa solas a resultados las inscripciones ya disputadas (3 días después del último día) en las que
+-- Pasa solas a resultados las inscripciones ya disputadas (una semana después del último día) en las que
 -- al menos un inscrito ha puesto su puesto. Solo entran quienes lo pusieron: los demás pueden añadirse
 -- después con «La hice: añadirme». Se ejecuta cuando alguien abre la app (no necesita ningún servicio).
 create or replace function public.auto_promote_registrations()
@@ -426,7 +426,7 @@ declare g registrations; v_race uuid; v_n int := 0;
 begin
   perform set_config('app.skip_log', 'on', true);
   for g in select * from registrations r
-            where not r.suspended and coalesce(r.end_date, r.date) < current_date - 3
+            where not r.suspended and coalesce(r.end_date, r.date) < current_date - 7
               and exists (select 1 from registration_entries e where e.registration_id = r.id and e.self_position is not null)
             for update skip locked loop
     insert into races (name, date, end_date, place, province, country, modality, notes, race_type, circuit, subtype, km, created_by, url, elevation, price, lat, lon, geo_key)

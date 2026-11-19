@@ -334,9 +334,9 @@ select pg_temp.expect_fail($q$select log_change('x','race',null,'insert','x')$q$
 reset role;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
 insert into registrations (id, name, date, province) values
-  ('20000000-0000-0000-0000-000000000080', 'Auto Uno', current_date - 6, 'Huesca'),
-  ('20000000-0000-0000-0000-000000000081', 'Auto Reciente', current_date - 2, null),
-  ('20000000-0000-0000-0000-000000000082', 'Auto Sin Puesto', current_date - 9, null);
+  ('20000000-0000-0000-0000-000000000080', 'Auto Uno', current_date - 9, 'Huesca'),
+  ('20000000-0000-0000-0000-000000000081', 'Auto Reciente', current_date - 5, null),
+  ('20000000-0000-0000-0000-000000000082', 'Auto Sin Puesto', current_date - 12, null);
 insert into registration_entries (registration_id, runner_id, self_position, self_podium_type) values
   ('20000000-0000-0000-0000-000000000080', '10000000-0000-0000-0000-000000000004', 2, 'campeonato'),
   ('20000000-0000-0000-0000-000000000081', '10000000-0000-0000-0000-000000000004', 5, null);
@@ -348,11 +348,11 @@ truncate change_log;
 set role anon;
 select runner_view('DDDDDDDDDD') is not null as vio \gset
 reset role;
-select pg_temp.check((select count(*) from races where name = 'Auto Uno') = 1 and not exists (select 1 from registrations where name = 'Auto Uno'), 'auto: con puesto puesto y 3 días pasados, pasa sola a resultados');
+select pg_temp.check((select count(*) from races where name = 'Auto Uno') = 1 and not exists (select 1 from registrations where name = 'Auto Uno'), 'auto: con puesto puesto y una semana pasada, pasa sola a resultados');
 select pg_temp.check((select count(*) from results x join races r on r.id = x.race_id where r.name = 'Auto Uno') = 1, 'auto: solo entra quien puso su puesto');
 select pg_temp.check((select x.position from results x join races r on r.id = x.race_id where r.name = 'Auto Uno') = 2 and (select x.podium_type from results x join races r on r.id = x.race_id where r.name = 'Auto Uno') = 'campeonato', 'auto: con su puesto y tipo de podio');
 select pg_temp.check((select x.time_seconds from results x join races r on r.id = x.race_id where r.name = 'Auto Uno') = 3725, 'tiempo: el paso automático copia el tiempo del corredor');
-select pg_temp.check(exists (select 1 from registrations where name = 'Auto Reciente'), 'auto: no antes de 3 días');
+select pg_temp.check(exists (select 1 from registrations where name = 'Auto Reciente'), 'auto: no antes de una semana');
 select pg_temp.check(exists (select 1 from registrations where name = 'Auto Sin Puesto'), 'auto: no si nadie puso su puesto');
 select pg_temp.check((select count(*) from change_log where actor = 'Sistema' and action = 'auto_resultados') = 1 and (select count(*) from change_log where summary like '%Auto Uno%' and action in ('insert','delete')) = 0, 'auto: queda una sola línea en el historial');
 -- completar datos: solo lo que falta
@@ -415,7 +415,7 @@ select pg_temp.expect_fail($q$select resolve_correction('$q$ || :'corr' || $q$',
 reset role;
 -- corrección de una inscripción que ya pasó a resultados (se busca por nombre y fecha)
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
-insert into registrations (id, name, date) values ('20000000-0000-0000-0000-000000000095', 'Corrige Despues', current_date - 5);
+insert into registrations (id, name, date) values ('20000000-0000-0000-0000-000000000095', 'Corrige Despues', current_date - 9);
 insert into registration_entries (registration_id, runner_id, self_position) values ('20000000-0000-0000-0000-000000000095', '10000000-0000-0000-0000-000000000004', 4);
 set role anon;
 select set_config('request.jwt.claim.sub', '', false);
