@@ -1233,3 +1233,34 @@ export function yearInsights(year, races, runners, registrations = [], today = '
     first: yr.length ? yr[0].date : null, last: yr.length ? yr[yr.length - 1].date : null,
   };
 }
+
+// ======================================================================
+//  «Por valorar»: carreras que el corredor se guarda para decidir más adelante
+// ======================================================================
+
+/** Estado de una carrera guardada: días que faltan, si ya pasó y cómo va el plazo de inscripción. */
+export function watchInfo(w, today) {
+  const toRace = daysBetween(today, w.date);
+  const past = (w.end_date || w.date) < today;
+  const toDeadline = w.deadline ? daysBetween(today, w.deadline) : null;
+  const deadline = toDeadline === null ? null : toDeadline < 0 ? 'closed' : toDeadline === 0 ? 'today' : toDeadline <= 7 ? 'soon' : 'open';
+  return { toRace, past, toDeadline, deadline, urgent: !past && (deadline === 'soon' || deadline === 'today') };
+}
+/** Orden: primero las que aún no han pasado (por fecha, o por plazo de inscripción si se pide), luego las que ya pasaron. */
+export function sortWatch(list, mode, today) {
+  const rows = list.map((w) => ({ w, i: watchInfo(w, today) }));
+  const byDate = (a, b) => a.w.date.localeCompare(b.w.date) || a.w.name.localeCompare(b.w.name, 'es');
+  const live = rows.filter((x) => !x.i.past), old = rows.filter((x) => x.i.past).sort((a, b) => b.w.date.localeCompare(a.w.date));
+  if (mode === 'deadline') {
+    const open = live.filter((x) => x.i.toDeadline !== null && x.i.toDeadline >= 0).sort((a, b) => a.i.toDeadline - b.i.toDeadline || byDate(a, b));
+    const rest = live.filter((x) => !open.includes(x)).sort(byDate);
+    return [...open, ...rest, ...old];
+  }
+  return [...live.sort(byDate), ...old];
+}
+/** ¿Ya existe esa carrera como inscripción del club? (mismo día y nombre parecido) */
+export function watchMatch(w, registrations) {
+  const days = new Set(daysOf(w.date, w.end_date));
+  const same = registrations.filter((g) => !g.suspended && (days.has(g.date) || g.date === w.date));
+  return searchRaces(w.name, same, 1)[0] || null;
+}

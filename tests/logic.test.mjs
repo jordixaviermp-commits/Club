@@ -542,3 +542,22 @@ test('yearInsights: ritmo, días de la semana, histograma y calendario', async (
   assert.equal(i.cal.length, 3);
   assert.equal(i.first, '2026-03-07');
 });
+
+test('por valorar: estado, orden y coincidencia con inscripciones del club', async () => {
+  const { watchInfo, sortWatch, watchMatch } = await import('../js/logic.js');
+  const today = '2026-11-19';
+  const w = (name, date, extra = {}) => ({ id: name, name, date, ...extra });
+  const items = [w('Lejana', '2027-03-01'), w('Plazo cerca', '2027-02-01', { deadline: '2026-11-24' }), w('Plazo hoy', '2027-01-10', { deadline: '2026-11-19' }),
+    w('Plazo cerrado', '2026-12-20', { deadline: '2026-11-01' }), w('Ya pasó', '2026-10-01'), w('Plazo lejos', '2027-04-01', { deadline: '2027-02-01' })];
+  const i = (n) => watchInfo(items.find((x) => x.name === n), today);
+  assert.equal(i('Plazo cerca').deadline, 'soon'); assert.equal(i('Plazo cerca').toDeadline, 5); assert.ok(i('Plazo cerca').urgent);
+  assert.equal(i('Plazo hoy').deadline, 'today'); assert.ok(i('Plazo hoy').urgent);
+  assert.equal(i('Plazo cerrado').deadline, 'closed'); assert.ok(!i('Plazo cerrado').urgent);
+  assert.equal(i('Plazo lejos').deadline, 'open'); assert.equal(i('Lejana').deadline, null);
+  assert.ok(i('Ya pasó').past); assert.ok(!i('Ya pasó').urgent); assert.equal(i('Lejana').toRace, 102);
+  assert.deepEqual(sortWatch(items, 'date', today).map((x) => x.w.name), ['Plazo cerrado', 'Plazo hoy', 'Plazo cerca', 'Lejana', 'Plazo lejos', 'Ya pasó']);
+  assert.deepEqual(sortWatch(items, 'deadline', today).map((x) => x.w.name), ['Plazo hoy', 'Plazo cerca', 'Plazo lejos', 'Plazo cerrado', 'Lejana', 'Ya pasó']);
+  const regs = [{ id: 'g1', name: 'Gran Fondo Monzón', date: '2027-03-01', entries: [] }, { id: 'g2', name: 'Otra cosa', date: '2027-03-01', entries: [] }, { id: 'g3', name: 'Gran Fondo Monzón', date: '2027-03-01', suspended: true, entries: [] }];
+  assert.equal(watchMatch(w('Gran Fondo Monzon', '2027-03-01'), regs)?.id, 'g1');
+  assert.equal(watchMatch(w('Gran Fondo Monzón', '2027-04-01'), regs), null);
+});

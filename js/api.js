@@ -28,6 +28,13 @@ export function friendlyError(e) {
   if (/PGRST202|Could not find/i.test(msg) && /runner_set_paid/.test(msg)) return 'Para marcar el pago falta activarlo en la base de datos. Avisa a la dirección.';
   if (/importe_no_valido/.test(msg)) return 'Revisa el importe: entre 0 y 10 000 euros.';
   if (/no_inscrito/.test(msg)) return 'Primero tienes que estar apuntado a esa carrera.';
+  if (/PGRST202|Could not find/i.test(msg) && /runner_watch/.test(msg)) return 'Esta función aún no está activada en la base de datos. Avisa a la dirección del club.';
+  if (/enlace_web_no_valido|runner_watch_url_check/.test(msg)) return 'La web tiene que empezar por http:// o https://';
+  if (/precio_no_valido|runner_watch_price_check/.test(msg)) return 'Revisa el precio: entre 0 y 10 000 euros.';
+  if (/plazo_no_valido/.test(msg)) return 'El plazo de inscripción no puede ser después de la carrera.';
+  if (/km_no_validos|runner_watch_km_check/.test(msg)) return 'La distancia tiene que estar entre 0 y 1000 km.';
+  if (/demasiadas_guardadas/.test(msg)) return 'Ya tienes 60 carreras guardadas. Descarta alguna para poder guardar más.';
+  if (/no_encontrada/.test(msg)) return 'Esa carrera guardada ya no existe.';
   if (/solo_direccion|permission denied|42501/.test(msg)) return 'No tienes permiso para hacer esto.';
   if (/Invalid login credentials/i.test(msg)) return 'Email o contraseña incorrectos.';
   if (/duplicate key|unique/i.test(msg)) return 'Hay un corredor repetido en la misma carrera.';
@@ -152,6 +159,9 @@ export function supabaseApi(url, key) {
     /** Crónicas ya pasadas por el corredor (claves «AAAA-MM-DD|nombre»). null = falta el SQL. */
     async runnerChronicles(code) { try { return ok(await sb.rpc('runner_chronicles', { p_code: code })); } catch { return null; } },
     // crónicas ya pasadas por CUALQUIER compañero (para que baste con que la pase uno); null si falta el SQL
+    async runnerWatchList(code) { try { return ok(await sb.rpc('runner_watch_list', { p_code: code })); } catch (e) { if (/PGRST202|Could not find|runner_watch/.test(String(e?.message))) return null; throw e; } },
+    async runnerWatchSave(code, id, data) { return ok(await sb.rpc('runner_watch_save', { p_code: code, p_id: id || null, p_data: data })); },
+    async runnerWatchDelete(code, id) { ok(await sb.rpc('runner_watch_delete', { p_code: code, p_id: id })); },
     async runnerPing(code) { try { await sb.rpc('runner_ping', { p_code: code }); } catch { /* sin el SQL de actividad */ } },
     async runnerChroniclesTeam(code) { try { return ok(await sb.rpc('runner_chronicles_team', { p_code: code })); } catch { return null; } },
     async runnerSetChronicle(code, key, done) { ok(await sb.rpc('runner_chronicle_set', { p_code: code, p_key: key, p_done: !!done })); },
@@ -256,6 +266,16 @@ function demoSeed() {
     registration_entries: registrations.flatMap((g) => g.entries.map((e) => ({ registration_id: g.id, ...e }))),
     races: races.map(({ results, ...r }) => r),
     results: races.flatMap((r) => r.results.map((x) => ({ race_id: r.id, ...x }))),
+    runner_watch: [   // carreras «por valorar» de ejemplo (de Pere)
+      { id: uuid(), runner_id: pere.id, name: 'Gran Fondo Monzón', date: off(52), end_date: null, place: 'Monzón', province: 'Huesca', country: 'España', modality: 'Carretera', subtype: 'Ciclodeportiva', km: 120,
+        url: 'https://example.org/gran-fondo', price: 32, deadline: off(5), notes: 'Subida larga al final. Mirar si hay avituallamiento y si encaja con la preparación.', created_at: ago(24 * 9) },
+      { id: uuid(), runner_id: pere.id, name: 'Open BTT Les Garrigues', date: off(95), end_date: null, place: 'Les Borges Blanques', province: 'Lleida', country: 'España', modality: 'BTT', subtype: 'XCO', km: 38,
+        url: 'https://example.org/open-btt', price: 20, deadline: off(70), notes: null, created_at: ago(24 * 3) },
+      { id: uuid(), runner_id: pere.id, name: 'Volta a la Cerdanya', date: `${y + 1}-06-14`, end_date: null, place: 'Puigcerdà', province: 'Girona', country: 'España', modality: 'Carretera', subtype: 'Ciclodeportiva', km: 95,
+        url: null, price: null, deadline: null, notes: 'Ya hay compañeros apuntados.', created_at: ago(24 * 20) },
+      { id: uuid(), runner_id: pere.id, name: 'Cronoescalada Benasque', date: off(-10), end_date: null, place: 'Benasque', province: 'Huesca', country: 'España', modality: 'Carretera', subtype: 'Contrarreloj', km: 12,
+        url: null, price: 15, deadline: off(-30), notes: null, created_at: ago(24 * 60) },
+    ],
   };
 }
 
@@ -325,7 +345,7 @@ export function demoApi(storage = globalThis.localStorage) {
     async signOut() { admin = false; try { storage.removeItem(DEMO_KEY + '-admin'); } catch { /* nada */ } },
     async resetDemo() { mem = demoSeed(); save(); },
 
-    async loadAll() { requireAdmin(); autoPromote(); return clone(nest({ circuit_podiums: [], announcements: [], announcement_replies: [], correction_requests: [], social_posts: [], chronicles: [], ...load() })); },
+    async loadAll() { requireAdmin(); autoPromote(); const { runner_watch, ...d } = load(); return clone(nest({ circuit_podiums: [], announcements: [], announcement_replies: [], correction_requests: [], social_posts: [], chronicles: [], ...d })); },
     async autoPromote() { requireAdmin(); return autoPromote(); },
     async listChanges() { requireAdmin(); return clone([...(load().change_log || [])].sort((a, b) => b.at.localeCompare(a.at))); },
     async runnerComplete(code, kind, id, data) {
@@ -541,7 +561,7 @@ export function demoApi(storage = globalThis.localStorage) {
     async confirmCircuitPodium(id) { requireAdmin(); const c = (load().circuit_podiums || []).find((x) => x.id === id); if (c) c.status = 'confirmado'; save(); },
     async deleteCircuitPodium(id) { requireAdmin(); const d = load(); d.circuit_podiums = (d.circuit_podiums || []).filter((x) => x.id !== id); save(); },
 
-    async exportAll() { requireAdmin(); return { app: 'cc-monzon', version: 1, exported_at: new Date().toISOString(), ...clone(load()) }; },
+    async exportAll() { requireAdmin(); const { runner_watch, ...rest } = clone(load()); return { app: 'cc-monzon', version: 1, exported_at: new Date().toISOString(), ...rest }; },   // lo «por valorar» es personal: no va en la copia
     async importAll(data) {
       requireAdmin();
       const keep = load().settings || [];
@@ -662,6 +682,31 @@ export function demoApi(storage = globalThis.localStorage) {
       if (done) d.chronicles.push({ runner_id: runnerId, race_key: key, done_at: new Date().toISOString() });
       save();
     },
+    async runnerWatchList(code) { const me = byCode(code); return clone((load().runner_watch || []).filter((w) => w.runner_id === me.id).map(({ runner_id, ...w }) => w).sort((a, b) => a.date.localeCompare(b.date))); },
+    async runnerWatchSave(code, id, data) {
+      const me = byCode(code), d = load(); d.runner_watch = d.runner_watch || [];
+      const name = String(data.name || '').replace(/\s+/g, ' ').trim();
+      if (name.length < 3 || name.length > 120) throw new Error('nombre_no_valido');
+      if (!data.date || data.date < pastLimit()) throw new Error('fecha_no_valida');
+      if (data.end_date && data.end_date < data.date) throw new Error('fecha_no_valida');
+      if (data.deadline && data.deadline > data.date) throw new Error('plazo_no_valido');
+      if (data.url && !/^https?:\/\/\S+$/i.test(String(data.url).trim())) throw new Error('enlace_web_no_valido');
+      const price = data.price === '' || data.price == null ? null : Number(data.price);
+      if (price != null && !(price >= 0 && price <= 10000)) throw new Error('precio_no_valido');
+      const km = parseKm(data.km);
+      const row = { name, date: data.date, end_date: data.end_date && data.end_date !== data.date ? data.end_date : null, place: String(data.place || '').trim() || null, province: String(data.province || '').trim() || null,
+        country: String(data.country || '').trim() || null, modality: data.modality || 'Carretera', subtype: data.subtype || null, km, url: String(data.url || '').trim() || null, price, deadline: data.deadline || null,
+        notes: String(data.notes || '').trim().slice(0, 500) || null };
+      if (!id) {
+        const same = d.runner_watch.find((w) => w.runner_id === me.id && w.date === row.date && w.name.toLowerCase() === name.toLowerCase());
+        if (same) return same.id;
+        if (d.runner_watch.filter((w) => w.runner_id === me.id).length >= 60) throw new Error('demasiadas_guardadas');
+        const w = { id: uuid(), runner_id: me.id, created_at: new Date().toISOString(), ...row }; d.runner_watch.push(w); save(); return w.id;
+      }
+      const w = d.runner_watch.find((x) => x.id === id && x.runner_id === me.id); if (!w) throw new Error('no_encontrada');
+      Object.assign(w, row); save(); return w.id;
+    },
+    async runnerWatchDelete(code, id) { const me = byCode(code), d = load(); d.runner_watch = (d.runner_watch || []).filter((w) => !(w.id === id && w.runner_id === me.id)); save(); },
     async runnerPing(code) { const me = byCode(code); me.last_seen = new Date().toISOString(); save(); },
     async runnerChronicles(code) { const me = byCode(code); return clone((load().chronicles || []).filter((x) => x.runner_id === me.id).map((x) => x.race_key)); },
     async runnerChroniclesTeam(code) {

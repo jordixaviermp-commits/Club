@@ -1797,3 +1797,45 @@ a.rs-tile { border-color: var(--sec-line); background: var(--sec-soft); }
 .tp-disc li { grid-template-columns: minmax(0, 1fr) auto auto auto; } .tp-disc li > .tp-dot { display: none; }
 .tp-disc li > b { grid-column: 1 / -1; font-size: .98rem; } .tp-disc li > .tp-track { grid-column: 1 / -1; grid-row: 2; }
 .tp-disc li > .tp-n:nth-of-type(1) { grid-column: 1; } .tp-disc li > .tp-pod { text-align: right; }
+
+/* =====================================================================
+   v157 · «Por valorar»: carreras guardadas para decidir con calma
+   ===================================================================== */
+.mi-seg { margin-top: .2rem; }
+.mi-seg a { position: relative; }
+.seg-dot { position: absolute; top: 5px; right: 8px; width: 10px; height: 10px; border-radius: 50%; background: #d93025; box-shadow: 0 0 0 2px var(--card); }
+.mi-seg a.on .seg-dot { box-shadow: 0 0 0 2px var(--sec); }
+.wtool { display: flex; align-items: center; justify-content: space-between; gap: .6rem; margin: .2rem 0 .6rem; }
+.wtitle { display: flex; align-items: center; gap: .4rem; margin: 0; font-size: 1.15rem; }
+.wtitle .ico { width: 22px; height: 22px; color: #d99a00; fill: color-mix(in srgb, #e3b93c 35%, transparent); }
+.wtool .btn { display: inline-flex; align-items: center; gap: .3rem; white-space: nowrap; } .wtool .btn .ico, .wempty .btn .ico { width: 17px; height: 17px; }
+.wsum { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: .7rem; }
+.wsum > div { display: flex; flex-direction: column; align-items: center; text-align: center; padding: .55rem .3rem; border-radius: 13px; background: var(--card); border: 1px solid var(--line); }
+.wsum b { font-size: 1.35rem; line-height: 1.1; color: var(--sec); } .wsum span { font-size: .68rem; color: var(--muted); line-height: 1.2; margin-top: .1rem; }
+.wsum .bad { border-color: color-mix(in srgb, #d93025 50%, var(--line)); background: color-mix(in srgb, #d93025 8%, var(--card)); } .wsum .bad b { color: #c0261b; }
+.wsort { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; margin: 0 0 .6rem; font-size: .85rem; } .wsort .chip { min-height: 34px; padding: .2rem .75rem; font-size: .85rem; }
+.wlist { display: grid; gap: 10px; }
+.wcard { --dc: var(--sec); margin: 0; padding: 12px; border-left: 6px solid var(--dc); }
+.wcard.urgent { border-color: color-mix(in srgb, #d93025 55%, var(--line)); border-left-color: #d93025; box-shadow: 0 0 0 2px color-mix(in srgb, #d93025 14%, transparent); }
+.wcard.past { opacity: .75; border-left-style: dashed; }
+.wc-top { display: flex; gap: .7rem; align-items: center; }
+.wc-main { min-width: 0; flex: 1; } .wc-main h3 { margin: 0 0 .1rem; text-transform: uppercase; font-size: 1rem; letter-spacing: .01em; overflow-wrap: anywhere; } .wc-main p { margin: 0; font-size: .86rem; }
+.wc-chips { display: flex; flex-wrap: wrap; gap: .35rem; margin: .55rem 0 0; align-items: center; }
+.wchip { display: inline-flex; align-items: center; gap: .25rem; padding: .12rem .6rem; border-radius: 999px; font-size: .8rem; font-weight: 700; background: var(--bg); border: 1px solid var(--line); color: var(--text); }
+.wchip .ico { width: 14px; height: 14px; color: var(--muted); }
+.wchip.ok { background: color-mix(in srgb, #1b8f52 10%, var(--card)); border-color: color-mix(in srgb, #1b8f52 40%, var(--line)); } .wchip.ok .ico { color: #1b8f52; }
+.wchip.bad { background: color-mix(in srgb, #d93025 11%, var(--card)); border-color: color-mix(in srgb, #d93025 50%, var(--line)); color: #b3261e; } .wchip.bad .ico { color: #d93025; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .wchip.bad { color: #ff9a8b; } } :root[data-theme="dark"] .wchip.bad { color: #ff9a8b; }
+.wc-club { display: flex; align-items: flex-start; gap: .4rem; margin: .6rem 0 0; padding: .4rem .6rem; border-radius: 10px; background: var(--sec-soft); font-size: .85rem; }
+.wc-club .ico { width: 16px; height: 16px; flex: none; margin-top: .15rem; color: var(--sec); } .wc-club.ok { background: color-mix(in srgb, #1b8f52 10%, var(--card)); } .wc-club.ok .ico { color: #1b8f52; }
+.wcard .notes { margin: .55rem 0 0; font-size: .88rem; white-space: pre-wrap; }
+.wc-acts { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .7rem; padding-top: .6rem; border-top: 1px dashed var(--line); }
+.wc-acts .btn { display: inline-flex; align-items: center; gap: .3rem; } .wc-acts .btn .ico { width: 15px; height: 15px; } .wc-acts .btn.primary { margin-right: auto; }
+.wold { margin-top: 1rem; } .wold > summary { cursor: pointer; padding: .1rem 0; } .wold .wcard { margin: .6rem 0 0; }
+.wempty { text-align: center; padding: 22px 16px; } .wempty .we-ic { width: 60px; height: 60px; margin: 0 auto .6rem; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, #e3b93c 22%, var(--card)); color: #c99400; }
+.wempty .we-ic .ico { width: 30px; height: 30px; fill: color-mix(in srgb, #e3b93c 45%, transparent); } .wempty h2 { margin-bottom: .4rem; } .wempty .btn { display: inline-flex; align-items: center; gap: .3rem; margin: .3rem 0 .6rem; }
+.star-btn { display: inline-flex; align-items: center; gap: .25rem; margin-top: .3rem; padding: .2rem .65rem .2rem .5rem; border-radius: 999px; border: 1.5px solid color-mix(in srgb, #c99400 55%, var(--line)); background: color-mix(in srgb, #e3b93c 12%, var(--card)); color: color-mix(in srgb, #8a6400 80%, var(--text)); font: inherit; font-size: .78rem; font-weight: 700; cursor: pointer; text-decoration: none; white-space: nowrap; }
+.star-btn .ico { width: 15px; height: 15px; } .star-btn.on { background: #e3b93c; border-color: #c99400; color: #3b2d00; } .star-btn.on .ico { fill: currentColor; }
+.race-side { display: flex; flex-direction: column; align-items: flex-end; }
+.fed-card .row .star-btn, .card .row .star-btn { margin-top: 0; min-height: 36px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .star-btn { color: #ffd966; } :root:not([data-theme="light"]) .star-btn.on { color: #3b2d00; } } :root[data-theme="dark"] .star-btn { color: #ffd966; } :root[data-theme="dark"] .star-btn.on { color: #3b2d00; }
