@@ -2700,9 +2700,11 @@ function viewRaceEdit() {
 function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods, places, maxOf, more = '' }) {
   const T = s.totals;
   const modLabel = !mod ? '' : mod.includes('|') ? mod.split('|').filter(Boolean).join(' · ') : mod;
-  const filters = `<div class="eq-filters"><label class="year-pick"><select data-year-sel aria-label="Temporada">${years.map((y) => `<option value="${y}"${y === S.year ? ' selected' : ''}>${y}</option>`).join('')}</select>${ico('chevd')}</label>
-    <div class="eq-chips"><button class="chip${mod ? '' : ' on'}" data-act="sum-mod" data-m="all">Todos</button>${all.byModality.map((m) =>
-      `<button class="chip${mod === m.modality ? ' on' : ''}" data-act="sum-mod" data-m="${esc(m.modality)}">${esc(m.modality)}</button>`).join('')}${mod && mod.includes('|') ? `<button class="chip on" data-act="sum-mod" data-m="all" title="Quitar el filtro">${esc(modLabel)} ✕</button>` : ''}</div></div>`;
+  const filterOn = !!mod || S.year !== years[0];
+  const tab = RES_TABS.some(([k]) => k === S.eqTab) ? S.eqTab : 'pan';
+  const filters = `<div class="eq-bar"><nav class="rs-tabs" role="tablist" aria-label="Apartados del resumen del equipo">${RES_TABS.map(([k, l, ic]) => `<button type="button" class="${k === tab ? 'on' : ''}" data-act="eq-tab" data-t="${k}" role="tab" aria-selected="${k === tab}">${ico(ic)}<span>${l}</span></button>`).join('')}</nav>
+      <button type="button" class="eq-fbtn${filterOn ? ' on' : ''}" data-act="eq-filters" aria-label="Filtros${filterOn ? ' (activos)' : ''}" title="Filtros">${icon(ICON_FILTER)}${filterOn ? '<i class="fdot"></i>' : ''}</button></div>
+    ${filterOn ? `<div class="eq-active"><span>${S.year}${mod ? ` · ${esc(modLabel)}` : ''}</span><button type="button" class="link" data-act="eq-clear">Quitar filtros ✕</button></div>` : ''}`;
   const big = (n, label, c) => `<div class="b-${c}"><b>${n}</b><span>${label}</span></div>`;
   const mini = (icon, v, l, c) => `<div class="m-${c}"><i>${ico(icon)}</i><b>${v}</b><small>${l}</small></div>`;
   const hero = `<section class="sum-hero eq-hero ${cls}">
@@ -2805,8 +2807,9 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
       <h3>Últimos podios</h3><ul class="pod-items">${items.slice(0, SHOWN).map(podItem).join('')}</ul>
       ${items.length > SHOWN ? `<details class="pod-more"><summary>Ver los ${items.length - SHOWN} anteriores</summary><ul class="pod-items">${items.slice(SHOWN).map(podItem).join('')}</ul></details>` : ''}`
       : '<p class="muted">Sin podios este año.</p>'}</section>`;
-  return `<div class="eq">${filters}${hero}${leaders ? `<div class="eq-leads-wrap"><div class="leads eq-leads" role="list" aria-label="Líderes y récords del equipo">${leaders}</div><p class="leads-hint">Desliza para ver más récords ›</p></div>` : ''}
-    ${months}${rank}${byMod}${podRunner}${places}${more}</div>`;
+  const leadsBlock = leaders ? `<div class="eq-leads-wrap"><div class="leads eq-leads" role="list" aria-label="Líderes y récords del equipo">${leaders}</div><p class="leads-hint">Desliza para ver más récords ›</p></div>` : '';
+  const body = { pan: `${hero}${leadsBlock}${months}${byMod}`, pod: podRunner, eq: rank, alc: `${places}${more}` }[tab];
+  return `<div class="eq">${filters}${body}</div>`;
 }
 
 /**
@@ -3552,6 +3555,33 @@ function resReach(pk) {
     ${s.bySubtype.length ? `<section class="card rs-card"><h2>Formatos</h2><div class="pills">${s.bySubtype.map((x) => `<span class="pill ${modClass(x.modality)}"><i class="dot"></i>${pk.mod ? '' : `${esc(x.modality)} · `}${esc(x.subtype)} <b>${x.races}</b></span>`).join('')}</div></section>` : ''}`;
 }
 
+
+/** Contenido de la ventana de filtros del Resumen del equipo (temporada, modalidad y, si la hay, disciplina). */
+function eqFilterHtml() {
+  const races = S.team?.races || [], runners = S.team?.runners || [];
+  const years = availableYears(races), mods = yearSummary(S.year, races, runners).byModality.filter((m) => m.races > 0);
+  const cur = S.sumMod && S.sumMod !== 'all' ? S.sumMod : null, curMod = cur ? cur.split('|')[0] : null;
+  const discs = curMod ? yearSummary(S.year, races.filter((r) => r.modality === curMod), runners).disciplines.filter((d) => d.subtype) : [];
+  const chip = (on, kind, val, label) => `<button type="button" class="chip${on ? ' on' : ''}" data-eqf="${kind}:${esc(val)}">${label}</button>`;
+  return `<form method="dialog" class="dlg eqdlg"><h2>Filtros</h2>
+    <h3>Temporada</h3><div class="eqd-chips">${years.map((y) => chip(y === S.year, 'year', y, y)).join('')}</div>
+    <h3>Modalidad</h3><div class="eqd-chips">${chip(!cur, 'mod', 'all', 'Todas')}${mods.map((m) => chip(curMod === m.modality, 'mod', m.modality, esc(m.modality))).join('')}</div>
+    ${discs.length ? `<h3>Disciplina de ${esc(curMod)}</h3><div class="eqd-chips">${chip(cur === curMod, 'mod', curMod, 'Todas')}${discs.map((d) => chip(cur === d.key, 'mod', d.key, esc(d.subtype))).join('')}</div>` : ''}
+    <div class="dlg-actions"><button type="button" class="btn" data-eqf="clear">Quitar filtros</button><button value="" class="btn primary">Listo</button></div></form>`;
+}
+{
+  const dlg = document.getElementById('dialog');
+  dlg.addEventListener('click', (ev) => {
+    const b = ev.target.closest('.eqdlg [data-eqf]'); if (!b) return;
+    ev.preventDefault();
+    const [kind, ...rest] = b.dataset.eqf.split(':'), val = rest.join(':');
+    if (kind === 'year') { S.year = Number(val); if (S.sumMod && S.sumMod !== 'all' && !(S.team?.races || []).some((r) => yearOf(r.date) === S.year && r.modality === S.sumMod.split('|')[0])) S.sumMod = 'all'; }
+    else if (kind === 'mod') S.sumMod = val;
+    else if (kind === 'clear') { S.sumMod = 'all'; S.year = availableYears(S.team?.races || [])[0]; }
+    render(); dlg.innerHTML = eqFilterHtml();
+  });
+}
+
 /** Para los corredores: las mismas estadísticas de desnivel, desplazamientos y coste que ve la dirección, con los datos del equipo. */
 function runnerMoreStats(pk) {
   const t = pk.s.totals, i = pk.ins;
@@ -3567,7 +3597,7 @@ function runnerMoreStats(pk) {
       ${i.cal.filter((r) => r.km && r.elevation).length > 1 ? `<h3>Km frente a desnivel</h3>${resScatter(pk)}` : ''}</section>` : '';
   const trip = t.travelKm ? `<section class="card rs-card"><h2>${ico('compass')} Desplazamientos</h2>${resTravel(pk)}<h3>Mapa de desplazamientos</h3>${resTripMap(pk)}</section>` : '';
   const cost = t.pricedRaces ? `<section class="card rs-card"><h2>${ico('money')} Cuánto cuesta competir</h2>${resCost(pk)}</section>` : '';
-  return `<h2 class="eq-more-h">Más estadísticas del equipo</h2>${climb}${trip}${cost}`;
+  return `${climb}${trip}${cost}`;
 }
 
 function viewSummary() {
@@ -4833,6 +4863,9 @@ const actions = {
     await run(async () => { await api.saveSetting(`cierre_${S.year}`, seasonModel(S.year)); await reload(); }, 'Cierre guardado'); render();
   },
   'sum-mod'(el) { S.sumMod = el.dataset.m; render(); },
+  'eq-tab'(el) { S.eqTab = el.dataset.t; render(); window.scrollTo({ top: 0 }); },
+  'eq-filters'() { const dlg = document.getElementById('dialog'); dlg.innerHTML = eqFilterHtml(); dlg.onclose = null; dlg.showModal(); },
+  'eq-clear'() { S.sumMod = 'all'; S.year = availableYears(S.team?.races || [])[0]; render(); },
   'res-tab'(el) { S.resTab = el.dataset.t; render(); window.scrollTo({ top: 0 }); },
   'pod-view'(el) { S.podView = el.dataset.v; render(); },
   'tp-sort'(el) { const k = el.dataset.k, cur = S.tsort || { k: 'races', dir: -1 }; S.tsort = { k, dir: cur.k === k ? -cur.dir : (k === 'name' ? 1 : -1) }; render(); },

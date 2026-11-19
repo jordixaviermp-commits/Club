@@ -1925,3 +1925,15 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .eq-more-h { margin: 1.4rem 0 .6rem; font-size: 1.15rem; }
 .rs-card > h2 > .ico { width: 20px; height: 20px; flex: none; color: var(--sec); }
 .eq .rs-card { margin-bottom: 12px; }
+
+/* Resumen del equipo (corredor): pestañas y cuadradito de filtros */
+.eq-bar { display: flex; align-items: stretch; gap: 8px; position: sticky; top: calc(58px + env(safe-area-inset-top)); z-index: 4; margin: 0 0 .7rem; }
+.eq-bar .rs-tabs { position: static; flex: 1; min-width: 0; margin: 0; }
+.eq-fbtn { position: relative; flex: none; width: 54px; border: 1px solid var(--sec-line); border-radius: 16px; background: var(--card); color: var(--text); display: grid; place-items: center; cursor: pointer; }
+.eq-fbtn svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.eq-fbtn.on { border-color: var(--sec); color: var(--sec); background: var(--sec-soft); }
+.eq-fbtn .fdot { position: absolute; top: 7px; right: 7px; width: 10px; height: 10px; border-radius: 50%; background: #d93025; box-shadow: 0 0 0 2px var(--card); }
+.eq-active { display: flex; align-items: center; justify-content: space-between; gap: .6rem; margin: -.2rem 0 .7rem; padding: .35rem .8rem; border-radius: 999px; background: var(--sec-soft); border: 1px solid var(--sec-line); font-weight: 700; font-size: .88rem; }
+.eq-active .link { font-weight: 700; color: var(--sec); }
+.eqdlg h3 { margin: .8rem 0 .4rem; font-size: .95rem; } .eqd-chips { display: flex; flex-wrap: wrap; gap: .4rem; } .eqd-chips .chip { min-height: 38px; }
+.eqdlg .chip.on { background: var(--sec, var(--accent)); border-color: var(--sec, var(--accent)); color: var(--sec-ink, var(--on-accent)); }
