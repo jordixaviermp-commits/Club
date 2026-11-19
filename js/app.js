@@ -68,6 +68,13 @@ const modTag = (m, sub) => `<span class="tag ${modClass(m)}">${esc(m)}${sub ? ` 
 const slug = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const discClass = (m, sub) => `d-${slug(m)}-${slug(sub) || 'sin'}`;
 /** Nombre corto de una disciplina: «XCO»; si el formato no la identifica sola, «BTT · Otra». */
+/** Tiempo para escribir desde el móvil: tres casillas numéricas (h · min · s), sin dos puntos. El valor se guarda en un campo oculto como «h:mm:ss». */
+const timeFields = (value, hiddenAttrs) => {
+  const sec = value ? (typeof value === 'number' ? value : parseTime(value)) : null;
+  const h = sec ? Math.floor(sec / 3600) : '', m = sec ? Math.floor((sec % 3600) / 60) : '', x = sec ? sec % 60 : '';
+  const part = (k, v, lab, max, ml) => `<label class="tf-p"><input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="${ml}" data-tpart="${k}" data-max="${max}" value="${v === '' ? '' : v}" placeholder="0" aria-label="${lab}"><span>${lab}</span></label>`;
+  return `<span class="tinput" role="group" aria-label="Tiempo: horas, minutos y segundos">${part('h', h, 'horas', 99, 2)}<b>:</b>${part('m', m, 'min', 59, 2)}<b>:</b>${part('s', x, 'seg', 59, 2)}<input type="hidden" ${hiddenAttrs} data-tvalue value="${sec ? esc(formatTime(sec)) : ''}"></span>`;
+};
 const discLabel = (m, sub) => (!sub ? (SUBTYPES[m] ? `${m} · sin formato` : m) : sub === 'Otra' ? `${m} · Otra` : sub);
 const modText = (x) => [x.modality, x.subtype].filter(Boolean).join(' · ');
 const modLegend = (mods) => `<div class="mod-legend">${MODALITIES.filter((m) => !mods || mods.includes(m))
@@ -921,8 +928,8 @@ function viewRunnerReport(key) {
         <label>Tu puesto<input type="number" name="position" inputmode="numeric" min="1" max="999" required autofocus value="${esc(cur?.position ?? '')}"></label>
         <label>Categoría${catSelect('name="category"', cat || d.me.category || '', 'Categoría')}</label>
       </div>
-      <label>⏱️ Tu tiempo <small class="muted">(opcional)</small><input type="text" name="time" inputmode="numeric" autocomplete="off" placeholder="2:05:30" maxlength="10" value="${esc(cur?.time_seconds ? formatTime(cur.time_seconds) : '')}"></label>
-      <p class="hint">Horas:minutos:segundos, tal como sale en la clasificación (por ejemplo <b>2:05:30</b>, o <b>45:10</b> si fue menos de una hora). Sirve para ver cuántas horas acumula cada uno en Equipo.</p>
+      <div class="tf-row"><span class="flabel">⏱️ Tu tiempo <small class="muted">(opcional)</small></span>${timeFields(cur?.time_seconds, 'name="time"')}</div>
+      <p class="hint">Escribe solo números en cada casilla, tal como sale en la clasificación: para <b>2:05:30</b> pon 2 · 05 · 30; si fue menos de una hora, deja las horas vacías (45 · 10). Sirve para ver cuántas horas acumula cada uno en Equipo.</p>
       <input type="hidden" name="podium" value="${podiumKind(race, cur?.podium_type)}">
       ${race.race_type === 'circuito' ? `<p class="hint">🏆 Esta carrera es puntuable de <b>${esc(race.circuit || 'un circuito')}</b>. Aquí pones solo tu puesto en <b>esta prueba</b>. Si acabas en el podio de la <b>general final</b>, se pide aparte, al terminar la liga, en <b>Contrato → Plus de bonificación</b>.</p>` : ''}
       <p class="hint">${cur ? `Ahora tienes <b>${isPodium(cur.position) ? medal(cur.position) + ' ' : ''}${cur.position}º</b>. ` : ''}Puedes cambiarlo tú cuando quieras. El puesto <b>no cambia tu bono</b> (cuenta participar); los podios en la general final de una liga (plus) se piden aparte y los confirma la dirección.</p>
@@ -2681,7 +2688,7 @@ function viewRaceEdit() {
           <select data-p="${i}" data-pf="podium_type" aria-label="Tipo de podio" ${pod ? '' : 'disabled'}>
             ${PODIUM_TYPES.map((t) => opt(t.id, { suelta: 'Suelta', general: 'General', campeonato: 'Campeonato' }[t.id] || t.label, p.podium_type)).join('')}</select>
         </div>
-        <label class="res-time">⏱️ Tiempo <input type="text" inputmode="numeric" autocomplete="off" maxlength="10" placeholder="2:05:30" aria-label="Tiempo (h:mm:ss)" data-p="${i}" data-pf="time" value="${esc(p.time || '')}"></label>
+        <div class="res-time"><span class="flabel">⏱️ Tiempo</span>${timeFields(p.time, `data-p="${i}" data-pf="time"`)}</div>
         ${d.stages.length ? `<div class="stage-pos">${d.stages.map((n, j) => `<label><span data-stage-label="${j}">${esc(n)}</span>
           <input type="number" inputmode="numeric" min="1" data-p="${i}" data-sp="${j}" value="${esc(p.stage_positions?.[j] ?? '')}"></label>`).join('')}</div>` : ''}
         </li>`;
@@ -5237,7 +5244,7 @@ const forms = {
     if (!Number.isInteger(position) || position < 1) return toast('Pon un puesto válido (1, 2, 3…).', true);
     const cat = f.category.value || null, pod = f.podium.value;
     const rawTime = f.time.value.trim(), time = rawTime ? parseTime(rawTime) : null;
-    if (rawTime && !time) return toast('Pon el tiempo así: 2:05:30 (horas:minutos:segundos), o déjalo vacío.', true);
+    if (rawTime && !time) return toast('Revisa el tiempo: minutos y segundos van de 0 a 59. Déjalo vacío si no lo sabes.', true);
     const txt = `${position}º${cat ? ' en ' + cat : ''}${time ? ' · ⏱️ ' + formatTime(time) : ''}${position <= 3 && pod === 'campeonato' ? ` · ${podiumLabel(pod)}` : ''}`;
     if (!await confirmAction('Guardar resultado', `Vas a guardar: <b>${esc(txt)}</b>.<br>Si te equivocas, lo puedes cambiar después.`, 'Guardar', 'primary')) return;
     const ok = await run(async () => { await api.runnerReport(S.code, f.dataset.kind, f.dataset.id, position, cat, pod, time); await loadRunner(); return true; },
@@ -5436,6 +5443,16 @@ $app.addEventListener('input', (ev) => {
     if (t.dataset.search === 'runner' && !S.fed) loadFed().then(() => updateSearch('runner'));
     if (t.dataset.search === 'runner') ensureTeamQuiet();
     updateSearch(t.dataset.search);
+    return;
+  }
+  if (t.dataset.tpart) {
+    const w = t.closest('.tinput'), v = (k) => w.querySelector(`[data-tpart="${k}"]`);
+    t.value = t.value.replace(/\D/g, '');
+    if (t.dataset.tpart !== 'h' && t.value.length === 2 && Number(t.value) > 59) t.value = '59';
+    const hid = w.querySelector('[data-tvalue]'), [h, m, x] = ['h', 'm', 's'].map((k) => v(k).value);
+    hid.value = h || m || x ? `${Number(h || 0)}:${String(Number(m || 0)).padStart(2, '0')}:${String(Number(x || 0)).padStart(2, '0')}` : '';
+    if (t.dataset.tpart === 'm' && t.value.length === 2 && ev.inputType !== 'deleteContentBackward') v('s').focus();
+    hid.dispatchEvent(new Event('input', { bubbles: true }));
     return;
   }
   if (t.dataset.rf && S.rdraft) {
