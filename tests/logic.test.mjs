@@ -697,3 +697,11 @@ test('modalidad → disciplina: las disciplinas cuelgan de su modalidad y «BTT�
   assert.equal(subLabel('BTT', ''), 'Sin formato'); assert.equal(subLabel('BTT', 'XCO'), 'XCO'); assert.equal(subLabel('Gravel', ''), 'Gravel');
   assert.equal(fullLabel('BTT', ''), 'BTT · sin formato'); assert.equal(fullLabel('Carretera', 'Critérium'), 'Carretera · Critérium'); assert.equal(fullLabel('Pista', ''), 'Pista');
 });
+
+test('el tiempo de las tres casillas (h:mm:ss, con horas 0) se entiende', async () => {
+  const { parseTime } = await import('../js/logic.js');
+  assert.equal(parseTime('0:45:10'), 2710);
+  assert.equal(parseTime('2:05:30'), 7530);
+  assert.equal(parseTime('0:00:30'), 30);
+  assert.equal(parseTime('0:61:00'), null);
+});
