@@ -320,9 +320,9 @@ export function demoApi(storage = globalThis.localStorage) {
     d.change_log.push({ id: uuid(), at: new Date().toISOString(), actor, entity: 'race', action, summary });
     d.change_log = d.change_log.slice(-300);
   };
-  /** Pasa solas a resultados las inscripciones disputadas hace más de 3 días con algún puesto puesto por un inscrito. */
+  /** Pasa solas a resultados las inscripciones disputadas hace más de una semana con algún puesto puesto por un inscrito. */
   const autoPromote = () => {
-    const d = load(); const t = new Date(); t.setDate(t.getDate() - 3); const limit = todayISO(t); let n = 0;
+    const d = load(); const t = new Date(); t.setDate(t.getDate() - 7); const limit = todayISO(t); let n = 0;
     for (const g of [...d.registrations]) {
       if (g.suspended || (g.end_date || g.date) >= limit) continue;
       const ents = d.registration_entries.filter((e) => e.registration_id === g.id && e.self_position);

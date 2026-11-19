@@ -2034,3 +2034,11 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .tf-row { display: grid; gap: .3rem; }
 .res-time { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
 .res-time .tf-p input { min-height: 44px; font-size: 1.2rem; }
+
+/* Plazo orientativo de una semana (resultados y crónica) */
+.wk-chip { display: inline-flex; align-items: center; gap: .3rem; padding: .1rem .55rem; border-radius: 999px; font-size: .74rem; font-weight: 700; background: var(--sec-soft); color: var(--sec); border: 1px solid var(--sec-line); margin: .15rem .3rem .15rem 0; }
+.wk-chip .ico { width: 13px; height: 13px; }
+.wk-chip.soon { background: #fff2d9; color: #8a5a00; border-color: #f0cf8a; }
+.wk-chip.over { background: var(--bg); color: var(--muted); border-color: var(--line); font-weight: 600; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .wk-chip.soon { background: #3a2c0c; color: #ffd98a; border-color: #6b5320; } }
+:root[data-theme="dark"] .wk-chip.soon { background: #3a2c0c; color: #ffd98a; border-color: #6b5320; }

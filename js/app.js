@@ -1109,15 +1109,15 @@ function myRacesCard(d, afterSummary = () => '') {
   ${pending.length ? `<section class="card chro-card pend-card has-pend" id="sec-pend"><details class="chro-det" data-open-key="pend"${S.open?.pend ? ' open' : ''}>
     <summary><span class="chro-ic">${ico('flag')}</span><b class="chro-t">Sin resultado</b>
       <span class="chro-tag pend">${pending.length} ${pending.length === 1 ? 'pendiente' : 'pendientes'}${ico('go')}</span></summary>
-    <p class="hint">Pon tu puesto: en cuanto lo pongas <b>ya cuenta para el bono</b>. Si no fuiste, pulsa «No fui: borrarme».</p>
+    <p class="hint">Pon tu puesto: en cuanto lo pongas <b>ya cuenta para el bono</b>. Si no fuiste, pulsa «No fui: borrarme». ${WEEK_RULE}</p>
     <ul class="mini-list">${pending.map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`,
       edit: editMine(g),
-      below: S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a><button type="button" class="btn ghost small" data-act="r-leave" data-id="${g.id}">No fui: borrarme</button>` })).join('')}</ul>
+      below: weekChip(g.end_date || g.date, today) + (S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a><button type="button" class="btn ghost small" data-act="r-leave" data-id="${g.id}">No fui: borrarme</button>`) })).join('')}</ul>
   </details></section>` : ''}
   ${sent.length ? `<section class="card chro-card sent-card"><details class="chro-det" data-open-key="sent"${S.open?.sent ? ' open' : ''}>
     <summary><span class="chro-ic">${ico('check')}</span><b class="chro-t">Resultado enviado</b>
       <span class="chro-tag ok">${sent.length}${ico('go')}</span></summary>
-    <p class="hint">Lo que pones vale tal cual y ya cuenta para tu bono; nadie tiene que validarlo. A los 3 días de la carrera pasa solo a la clasificación del equipo (se espera por si otros compañeros ponen también su resultado). Mientras tanto puedes cambiar el puesto o el tiempo.</p>
+    <p class="hint">Lo que pones vale tal cual y ya cuenta para tu bono; nadie tiene que validarlo. Una semana después de la carrera pasa solo a la clasificación del equipo (se espera por si otros compañeros ponen también su resultado). Mientras tanto puedes cambiar el puesto o el tiempo.</p>
     <ul class="mini-list">${sent.map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, edit: editMine(g),
       below: `<span class="badge-sent">${g.my_result.position}º${g.my_result.time_seconds ? ' · ' + formatTime(g.my_result.time_seconds) : ''} · ya cuenta</span>${S.preview ? '' : `<a class="edit-btn" href="#/resultado/reg_${g.id}">${ico('pen')}Cambiar</a>`}` })).join('')}</ul>
   </details></section>` : ''}
@@ -1157,7 +1157,12 @@ function myRacesCard(d, afterSummary = () => '') {
 
 
 /** Aviso del contrato al apuntarse a una carrera ya corrida (mensaje automático) y al pasar la crónica. */
-const CHRONICLE_RULE = 'Según el contrato, de cada carrera hay que hacer la <b>crónica</b>, <b>pasar los resultados</b> y <b>enviar fotos</b>. <b>Basta con que la pase uno</b> de los que corristeis: si ya la ha pasado un compañero, no tienes que hacerla.';
+/** Plazo orientativo de una semana para poner el resultado y hacer la crónica. Pasada la semana NO se cierra nada: sigue abierto. */
+const WEEK_RULE = 'Tienes <b>una semana</b> desde la carrera para poner el resultado y hacer la crónica. Si pasa, no pasa nada: sigue abierto para que lo hagas cuando puedas.';
+const weekChip = (date, today) => { const n = Math.round((new Date(today + 'T12:00:00Z') - new Date(String(date).slice(0, 10) + 'T12:00:00Z')) / 864e5);
+  if (n < 0) return '';
+  return n <= 7 ? `<span class="wk-chip${n >= 6 ? ' soon' : ''}">${ico('clock', 't-i')}${n >= 7 ? 'último día de la semana' : `te ${7 - n === 1 ? 'queda 1 día' : `quedan ${7 - n} días`}`}</span>` : `<span class="wk-chip over">${ico('clock', 't-i')}pasó la semana · sigue abierto</span>`; };
+const CHRONICLE_RULE = 'Según el contrato, de cada carrera hay que hacer la <b>crónica</b>, <b>pasar los resultados</b> y <b>enviar fotos</b>. <b>Basta con que la pase uno</b> de los que corristeis: si ya la ha pasado un compañero, no tienes que hacerla. ' + WEEK_RULE;
 const chronicleReminder = (name) => choose('✍️ Recuerda tu crónica', `${name ? `<b>${esc(name)}</b><br>` : ''}${CHRONICLE_RULE}<br>Cuando lo hayas enviado, márcala como pasada en <b>Mi temporada</b>.`, [{ label: 'Entendido', value: true, kind: 'primary' }]);
 
 /** Crónicas del corredor: pendientes y pasadas, pequeña y con un desplegable para marcarlas. */
@@ -1347,7 +1352,7 @@ function runnerRegCard(g, opts = {}) {
       <div class="rc-body">
       <div class="rc-tags">${modTag(g.modality, g.subtype)}${open && !mine && !g.suspended && !S.preview ? starBtn(g, 'w-add-reg', ['id', g.id]) : ''}</div>${typeTag(g)}
       ${g.suspended ? `<p class="state-tag">${ico('ban', 't-i')}Suspendida: cuenta para el mínimo de carreras, no para el bono</p>` : ''}
-      ${open || g.suspended ? '' : `<p class="state-tag">${mine && g.my_result ? `${ico('check', 't-i')}Ya disputada · tu resultado está enviado` : `${ico('flag', 't-i')}Ya disputada · pendiente de resultados`}</p>
+      ${open || g.suspended ? '' : `<p class="state-tag">${mine && g.my_result ? `${ico('check', 't-i')}Ya disputada · tu resultado está enviado` : `${ico('flag', 't-i')}Ya disputada · pendiente de resultados`} ${weekChip(g.end_date || g.date, today)}</p>
         ${mine && !S.preview ? (g.my_result ? `<p class="mine-created">Tu resultado: ${g.my_result.position}º (enviado) · <a href="#/resultado/reg_${g.id}">${ico('pen', 't-i')}Cambiar</a></p>`
           : `<p class="row"><a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>
              <button class="btn ghost small" data-act="r-leave" data-id="${g.id}">No fui: borrarme</button></p>`) : ''}
@@ -2121,7 +2126,7 @@ function viewPublications() {
       ${a.resPending.length > 1 ? `<button class="btn ghost" data-act="pub-all-res">✓ Marcar todas como publicadas</button>` : ''}
       ${a.resPending.map((x) => resCard(x)).join('')}` : '<p class="empty small">No hay resultados pendientes de publicar. 🎉</p>'}
     ${a.waiting.length ? `<h2 class="section">🕓 A la espera de los resultados (${a.waiting.length})</h2>
-      <p class="hint">Ya se han corrido, pero los corredores aún no han puesto su puesto (tienen 3 días; luego pasan solas a resultados).</p>
+      <p class="hint">Ya se han corrido, pero los corredores aún no han puesto su puesto (tienen una semana; luego pasan solas a resultados, y quien no lo puso lo puede poner después).</p>
       ${a.waiting.map((x) => `<article class="card"><p><b>${esc(x.reg.name)}</b> · ${esc(when(x.reg))}<br><small class="muted">terminó ${ago(x.days)} · ${x.people} inscrito${x.people === 1 ? '' : 's'}</small></p><a class="btn small ghost" href="#/inscripciones/${x.reg.id}">Abrir</a></article>`).join('')}` : ''}
     ${a.resDone.length ? `<details class="card"><summary><b>✅ Resultados ya publicados (${a.resDone.length})</b></summary><ul class="mini-list">${a.resDone.map((x) => `<li><div><b>${esc(x.race.name)}</b><small class="muted">${esc(when(x.race))}</small></div>
       <label class="check"><input type="checkbox" data-act-change="post" data-key="${esc(x.key)}" checked> ✓</label></li>`).join('')}</ul><p class="hint">Quita la marca si te equivocaste.</p></details>` : ''}
