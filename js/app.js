@@ -2963,17 +2963,18 @@ function viewInstagram() {
   if (!S.ig || S.ig.loading) return head('<p class="empty">Cargando…</p>');
   if (S.ig.missing) return head('<p class="card warn">Aún no está activado: falta ejecutar en Supabase <code>supabase/cambios/2026-11-14-instagram.sql</code> (ver docs/instagram-captura.md).</p>');
   if (S.ig.failed) return head(`<p class="card warn">${esc(S.ig.failed)}</p>`);
-  const period = S.igPeriod || 'all', tab = S.igTab || 'per', sort = S.igSort || 'views';
+  const period = S.igPeriod || 'all', sort = S.igSort || 'views';
   const [from, to] = igRange(period);
   const g = igSummary(S.ig.rows, from, to), t = g.totals, prev = igPrevTotals(S.ig.rows, from, to), P = igPeriods(S.ig.rows, from, to);
+  const tab = S.igTab || (P.list.length ? 'per' : 'res');
   const periods = [['all', 'Todo lo guardado'], ['30', 'Últimos 30 días'], ['month', 'Este mes'], ['year', `Año ${S.year}`]];
   const label = g.nDays ? `${dateEs(g.first)} – ${dateEs(g.last)}` : 'sin datos en este periodo';
-  const periodBar = `<div class="years no-print">${periods.map(([k, l]) => `<button class="chip${k === period ? ' on' : ''}" data-act="ig-period" data-p="${k}">${l}</button>`).join('')}</div>`;
+  const periodName = (periods.find(([k]) => k === period) || periods[0])[1];
   const noData = !g.nDays && !g.account && !g.audience && !g.posts.length;
 
   const dlt = (cur, old) => (prev && old ? `${cur >= old ? '+' : '−'}${Math.round((Math.abs(cur - old) / old) * 100)} % vs periodo anterior` : '');
-  const kpi = (v, l, note = '') => `<div class="rp-kpi"><b>${v}</b><span>${l}</span>${note ? `<em class="rp-d">${note}</em>` : ''}</div>`;
-  const rep = (inner) => `<section class="card report ig-sec">${inner}</section>`;
+  const kpi = (v, l, note = '', cls = '') => `<div class="rp-kpi ${cls}"><b>${v}</b><span>${l}</span>${note ? `<em class="rp-d">${note}</em>` : ''}</div>`;
+  const rep = (inner) => `<section class="card rs-card ig-sec">${inner}</section>`;
   const maxOf = (a) => Math.max(1, ...a);
   const pct = (a, b) => (b ? `${Math.round((a / b) * 100)} %` : '—');
   const bar = (name, v, max, suffix = '') => `<li class="ig-row"><span class="ig-name">${esc(name)}</span><span class="ig-track"><i style="width:${Math.max(2, (v / max) * 100)}%"></i></span><b>${nf(v)}${suffix}</b></li>`;
@@ -2987,8 +2988,8 @@ function viewInstagram() {
   const chart = (ser, title, note = '') => `<h2>${title}</h2><div class="ig-bars${useDays ? ' dense' : ''}" role="img" aria-label="${esc(title)}">${ser.map((x, i) => `<div class="ig-col" title="${esc(x.name)}: ${nf(x.v)}"><i style="height:${Math.max(2, (x.v / smax) * 100)}%"></i>${!useDays || (i % 7 === 0 && ser.length - 1 - i > 3) || i === ser.length - 1 ? `<small>${esc(x.name)}</small>` : '<small></small>'}</div>`).join('')}</div>${note}`;
   const hero = rep(`<h2>@hinacoclubciclistamonzon <small class="muted">· ${esc(label)}</small></h2><div class="rp-kpis">
     ${acc ? kpi(nf(acc.followers), 'Seguidores', acc.delta != null ? `${acc.delta >= 0 ? '+' : '−'}${Math.abs(acc.delta)} desde ${igShort(acc.since)}` : `a ${igShort(acc.until)}`) : ''}
-    ${g.nDays ? kpi(nf(t.views), 'Visualizaciones', dlt(t.views, prev?.views)) : ''}${g.nDays && t.reachAvg ? kpi(nf(t.reachAvg), 'Alcance medio diario', 'personas distintas') : ''}
-    ${g.nDays ? kpi(nf(t.interactions), 'Interacciones', dlt(t.interactions, prev?.interactions)) : ''}${g.nDays ? kpi(nf(t.follows), 'Nuevos seguidores', dlt(t.follows, prev?.follows)) : ''}
+    ${g.nDays ? kpi(nf(t.views), 'Visualizaciones', dlt(t.views, prev?.views), 'in-hero') : ''}${g.nDays && t.reachAvg ? kpi(nf(t.reachAvg), 'Alcance medio diario', 'personas distintas', 'in-hero') : ''}
+    ${g.nDays ? kpi(nf(t.interactions), 'Interacciones', dlt(t.interactions, prev?.interactions), 'in-hero') : ''}${g.nDays ? kpi(nf(t.follows), 'Nuevos seguidores', dlt(t.follows, prev?.follows), 'in-hero') : ''}
     ${t.taps ? kpi(nf(t.taps), 'Toques en el perfil') : ''}${g.nDays ? kpi(nf(Math.round(t.views / g.nDays)), 'Visualizaciones por día', 'media') : ''}</div>
     ${acc?.media != null ? `<p class="rp-note" style="margin:0">${nf(acc.media)} publicaciones en total · siguiendo a ${nf(acc.following)}.</p>` : ''}`);
   const evo = g.nDays ? rep(chart(series, `Visualizaciones ${useDays ? 'por día' : 'por mes'}`, g.nDays < 30 ? `<p class="rp-note">Solo hay ${g.nDays} día${g.nDays === 1 ? '' : 's'} guardado${g.nDays === 1 ? '' : 's'}: el histórico crece cada día que la captura se ejecuta.</p>` : '')) : '';
@@ -3081,12 +3082,19 @@ function viewInstagram() {
     ${A.countries ? `<h3 class="ig-h">Países</h3><ul class="ig-list tight">${pctList(A.countries, 6).map(([k, v], i, arr) => bar(IG_COUNTRY[k] || k, v, arr[0][1], ' %')).join('')}</ul>` : ''}`) : '';
   const hoursP = P.topHours ? rep(`<h2>¿Cuándo están más activos los seguidores?</h2><ul class="ig-list tight">${P.topHours.list.map((h) => `<li class="ig-post"><b>${esc(h)}</b></li>`).join('')}</ul><p class="rp-note">Según Insights (${esc(plabel(P.topHours))}), hora de España. Para publicar cuando más gente está conectada.</p>`) : '';
   const panels = { per, res: noData ? noDataMsg : resumen, con: (noData && !postsP) ? noDataMsg : `${postsP}${noData ? '' : contenido}`, aud: (noData && !audP && !hoursP) ? noDataMsg : `${audP}${hoursP}${noData || audP ? '' : audiencia}` };
-  const tabs = [['per', 'Periodos'], ['res', 'Diario'], ['con', 'Contenido'], ['aud', 'Audiencia']];
+  const tabs = [['per', 'Periodos', 'cal'], ['res', 'Diario', 'bars'], ['con', 'Contenido', 'list'], ['aud', 'Audiencia', 'users']];
+  const filterOn = period !== 'all';
+  const big = (v, l) => `<div class="rs-big"><b>${v}</b><span>${l}</span></div>`;
+  const igHero = g.nDays ? `<section class="rs-hero ig-hero no-print"><p class="rs-hero-t">Instagram · ${esc(periodName)}</p>
+      <div class="rs-bigs">${big(nf(t.views), 'visualiz.')}${big(t.reachAvg ? nf(t.reachAvg) : '—', 'alcance/día')}${big(nf(t.interactions), 'interacc.')}${big(nf(t.follows), 'nuevos seg.')}</div>
+      <p class="rs-hero-s">${esc(label)}${acc?.media != null ? ` · ${nf(acc.media)} publicaciones` : ''}${t.pctNonFollowers != null ? ` · ${t.pctNonFollowers} % de no seguidores` : ''}</p></section>` : '';
   return head(`
-    <div class="no-print">${periodBar}
-      <div class="years">${tabs.map(([k, l]) => `<button class="chip${k === tab ? ' on' : ''}" data-act="ig-tab" data-t="${k}">${l}</button>`).join('')}</div>
-      <div class="row-btns rp-actions"><button class="btn primary" data-act="print-report">🖨️ Imprimir o guardar PDF</button><button class="btn" data-act="ig-csv">📊 Excel</button></div>
-      <p class="hint">Para añadir datos, mándale a Claude la captura de Instagram → Insights y él los vuelca aquí: se suman y salen en gráficos. El PDF incluye todas las partes (Periodos, Diario, Contenido y Audiencia), listo para el dossier de memorias o para enseñar a un patrocinador: en el cuadro de imprimir elige «Guardar como PDF».</p></div>
+    <div class="no-print">${igHero}
+      <div class="eq-bar"><nav class="rs-tabs" role="tablist" aria-label="Apartados de Instagram">${tabs.map(([k, l, ic]) => `<button type="button" class="${k === tab ? 'on' : ''}" data-act="ig-tab" data-t="${k}" role="tab" aria-selected="${k === tab}">${ico(ic)}<span>${l}</span></button>`).join('')}</nav>
+        <button type="button" class="eq-fbtn${filterOn ? ' on' : ''}" data-act="ig-filters" aria-label="Periodo${filterOn ? ' (filtrado)' : ''}" title="Periodo">${icon(ICON_FILTER)}${filterOn ? '<i class="fdot"></i>' : ''}</button></div>
+      ${filterOn ? `<div class="eq-active"><span>${esc(periodName)}</span><button type="button" class="link" data-act="ig-period" data-p="all">Quitar filtro ✕</button></div>` : ''}
+      <div class="ig-tools"><button class="btn" data-act="print-report">${ico('file')} PDF</button><button class="btn" data-act="ig-csv">${ico('db')} Excel</button></div>
+      <details class="ig-help"><summary>${ico('info')} Cómo se añaden datos</summary><p class="hint">Mándale a Claude la captura de Instagram → Insights y él los vuelca aquí: se suman y salen en gráficos. El PDF incluye todas las partes (Periodos, Diario, Contenido y Audiencia), listo para el dossier de memorias o para enseñar a un patrocinador: en el cuadro de imprimir elige «Guardar como PDF».</p></details></div>
     <div class="print-only ig-title"><b>Club Ciclista Monzón · Estadísticas de Instagram</b><span>${esc(label)}</span></div>
     ${tabs.map(([k, l]) => `<div class="ig-panel${k === tab ? '' : ' off'}"><h2 class="print-only ig-part">${l}</h2>${panels[k]}</div>`).join('')}
     <p class="rp-note">Fuente: Instagram (estadísticas de la cuenta profesional del club). Alcance = personas distintas que vieron el contenido; las visualizaciones cuentan también las repeticiones.</p>`);
@@ -3607,6 +3615,18 @@ function eqFilterHtml() {
     render(); dlg.innerHTML = eqFilterHtml();
   });
 }
+
+// ---------- Instagram: periodo en el cuadradito de filtros ----------
+const IG_PERIODS = (year) => [['all', 'Todo lo guardado'], ['30', 'Últimos 30 días'], ['month', 'Este mes'], ['year', `Año ${year}`]];
+function igFilterHtml() {
+  const cur = S.igPeriod || 'all';
+  return `<form method="dialog" class="dlg eqdlg"><h2>Periodo</h2><div class="eqd-chips">${IG_PERIODS(S.year).map(([k, l]) => `<button type="button" class="chip${k === cur ? ' on' : ''}" data-igp="${k}">${l}</button>`).join('')}</div>
+    <div class="dlg-actions"><button type="button" class="btn" data-igp="all">Quitar filtro</button><button value="" class="btn primary">Listo</button></div></form>`;
+}
+document.getElementById('dialog').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-igp]'); if (!b) return;
+  ev.preventDefault(); S.igPeriod = b.dataset.igp; render(); document.getElementById('dialog').innerHTML = igFilterHtml();
+});
 
 // ---------- Clasificaciones: quién lidera cada cosa, con gráfico mes a mes ----------
 const hoursOf = (sec) => formatTime(sec, true);
@@ -4950,6 +4970,9 @@ const actions = {
   'sum-mod'(el) { S.sumMod = el.dataset.m; render(); },
   'eq-tab'(el) { S.eqTab = el.dataset.t; render(); window.scrollTo({ top: 0 }); },
   'eq-metric'(el) { S.eqMetric = el.dataset.k; render(); },
+  'ig-filters'() {
+    const dlg = document.getElementById('dialog'); dlg.innerHTML = igFilterHtml(); dlg.onclose = null; dlg.showModal();
+  },
   'eq-filters'() { const dlg = document.getElementById('dialog'); dlg.innerHTML = eqFilterHtml(); dlg.onclose = null; dlg.showModal(); },
   'eq-clear'() { S.sumMod = 'all'; S.year = availableYears(eqSource().races)[0]; render(); },
   'res-tab'(el) { S.resTab = el.dataset.t; render(); window.scrollTo({ top: 0 }); },

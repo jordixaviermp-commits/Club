@@ -1985,3 +1985,28 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .tp-table tr.tp-mod td { background: var(--bg); font-weight: 800; padding-top: .55rem; }
 .tp-table tr.tp-sub td:first-child { padding-left: 1.1rem; color: var(--muted); }
 .part-brk { flex-basis: 100%; height: 0; }
+
+/* ===== Instagram rediseñada: mismo lenguaje que Resumen (cabecera, pestañas, tarjetas) ===== */
+.ig-hero { background: radial-gradient(120% 140% at 100% 0, #ff8fb4 0, transparent 55%), linear-gradient(135deg, #b3245a, #5e1236); box-shadow: 0 8px 24px rgba(150, 30, 80, .28); }
+.ig-tools { display: flex; gap: .5rem; margin: 0 0 .6rem; }
+.ig-tools .btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: .4rem; min-height: 40px; border-color: var(--sec-line); background: var(--sec-soft); color: var(--sec); font-weight: 700; }
+.ig-tools .ico, .ig-help summary .ico { width: 18px; height: 18px; }
+.ig-help { margin: 0 0 .8rem; font-size: .85rem; }
+.ig-help summary { display: inline-flex; align-items: center; gap: .35rem; cursor: pointer; color: var(--muted); font-weight: 600; }
+.ig-help .hint { margin: .4rem 0 0; }
+.ig-sec { margin-top: 0; }
+.ig-sec .rp-kpi { background: var(--card); border: 1px solid var(--line); border-top: 4px solid var(--sec); border-radius: 14px; padding: .6rem .5rem; box-shadow: 0 1px 3px rgba(0, 0, 0, .04); }
+.ig-sec .rp-kpi b { font-size: 1.35rem; font-variant-numeric: tabular-nums; }
+.ig-col i, .ig-track i, .ig-split i.nf, .ig-track.gstack i.f, .ig-stackcol i.f, .ig-hstack i.f { background: var(--sec); }
+.ig-legend .dot.b { background: var(--sec); }
+.ig-rank { background: var(--sec-soft); color: var(--sec); }
+.ig-h { text-transform: uppercase; letter-spacing: .05em; font-size: .72rem; }
+.ig-list > li:not(.ig-row):not(:last-child) { padding-bottom: .6rem; border-bottom: 1px solid var(--line); }
+.ig-panel > .card { margin-bottom: 12px; }
+@media print { .ig-hero, .ig-tools, .ig-help { display: none; } .ig-sec { border: 0; box-shadow: none; } }
+.ig-sec > h2 { flex-wrap: wrap; } .ig-sec h2 small { flex-basis: 100%; margin-left: calc(5px + .45rem); }
+.ig-sec .rp-kpi { border-top: 1px solid var(--line); box-shadow: inset 0 4px 0 var(--sec); padding-top: .75rem; }
+.ig-panel .rp-kpi.in-hero { display: none; } @media print { .ig-panel .rp-kpi.in-hero { display: flex; } }
+.ig-sec .pills { flex-direction: column; align-items: stretch; }
+.ig-sec .pill { background: var(--sec-soft); border: 1px solid var(--sec-line); color: var(--text); border-radius: 12px; padding: .45rem .7rem; }
+.net-tab.on { background: var(--sec); border-color: var(--sec); color: var(--sec-ink); }
