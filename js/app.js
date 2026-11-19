@@ -1242,7 +1242,8 @@ function runnerScreen(sub) {
 /** Aviso de la vista previa de la dirección (en todas las pantallas del corredor). */
 const previewBanner = () => (S.session?.isAdmin && S.preview ? `<p class="card warn">👁️ <b>Vista previa</b> de ${esc(S.preview.name)}: no se puede apuntar ni borrar.
   <a href="#/corredores">Salir</a>${S.preview.sqlOk ? '' : '<br><b>⚠️ Falta ejecutar en Supabase el SQL de «Mis carreras»</b> (supabase/cambios/2026-11-11-mis-carreras.sql).'}</p>` : '');
-const runnerTitle = () => (S.session?.isAdmin && S.preview ? `Vista de ${S.preview.name}` : 'CC Monzón');
+/** Título de la barra de arriba del corredor: «Hola, Pere» (el escudo ya dice que es del club). */
+const runnerTitle = () => (S.session?.isAdmin && S.preview ? `Vista de ${S.preview.name}` : S.runnerData?.me?.name ? `Hola, ${cleanName(S.runnerData.me.name).split(' ')[0]}` : 'CC Monzón');
 
 /** Tarjeta de una carrera ya disputada (con resultados), para el calendario. */
 function doneRaceCard(r, { admin = false, meId = null } = {}) {
@@ -1428,7 +1429,6 @@ function viewRunnerMine() {
   return frame(runnerTitle(), `
     ${previewBanner()}
     ${S.preview ? '' : miTabs('mi')}
-    <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
     ${myRacesCard(d, () => chronicleCard(d))}
     ${installHint()}
     ${S.preview ? '' : `<p class="center"><button class="link muted" data-act="r-forget">No soy ${esc(me.name)}</button></p>`}
