@@ -1839,3 +1839,10 @@ a.rs-tile { border-color: var(--sec-line); background: var(--sec-soft); }
 .race-side { display: flex; flex-direction: column; align-items: flex-end; }
 .fed-card .row .star-btn, .card .row .star-btn { margin-top: 0; min-height: 36px; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .star-btn { color: #ffd966; } :root:not([data-theme="light"]) .star-btn.on { color: #3b2d00; } } :root[data-theme="dark"] .star-btn { color: #ffd966; } :root[data-theme="dark"] .star-btn.on { color: #3b2d00; }
+
+/* Nombre del corredor en la barra de arriba: entero, y si no cabe se desliza de ida y vuelta (como el texto de la lupa) */
+header.top h1.greet { overflow: hidden; text-overflow: clip; }
+header.top h1.greet > span { display: inline-block; white-space: nowrap; }
+header.top h1.greet.scroll > span { animation: greet-slide var(--dur, 8s) ease-in-out infinite alternate; }
+@keyframes greet-slide { 0%, 18% { transform: translateX(0); } 82%, 100% { transform: translateX(calc(-1 * var(--ov, 0px))); } }
+@media (prefers-reduced-motion: reduce) { header.top h1.greet.scroll > span { animation: none; } header.top h1.greet { text-overflow: ellipsis; } }

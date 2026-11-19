@@ -429,7 +429,7 @@ function frame(title, body, { back, actions = '', rtab = null, noSearch = false 
     ${api.mode === 'demo' ? `<div class="demo-bar">Modo demostración: datos de prueba guardados solo en este móvil.</div>` : ''}
     <header class="top">
       ${back ? `<a class="back" href="${back}" aria-label="Volver">‹</a>` : '<img class="logo" src="icons/logo.png" alt="">'}
-      <h1>${esc(title)}</h1>${actions}${(admin && rtab === null && !back && S.data) || rtab !== null ? (noSearch ? '' : searchButton()) + accidentButton() : ''}${rtab !== null ? newsBell() : ''}
+      ${rtab !== null && !S.preview && S.runnerData?.me?.name && title === runnerTitle() ? `<h1 class="greet" aria-label="${esc(title)}" title="${esc(title)}"><span>${esc(title)}</span></h1>` : `<h1>${esc(title)}</h1>`}${actions}${(admin && rtab === null && !back && S.data) || rtab !== null ? (noSearch ? '' : searchButton()) + accidentButton() : ''}${rtab !== null ? newsBell() : ''}
     </header>
     <main>${body}</main>
     ${tabs}`;
@@ -448,6 +448,14 @@ async function checkVersion() {
     }
   } catch { /* sin acceso a la caché: solo se enseña la versión */ }
 }
+
+/** Si el nombre de la barra de arriba no cabe, se desliza de ida y vuelta para poder leerlo entero. */
+function fitGreeting() {
+  const h = $app.querySelector('h1.greet'); if (!h) return;
+  const t = h.firstElementChild, over = Math.ceil(t.scrollWidth - h.clientWidth);
+  if (over > 2) { h.style.setProperty('--ov', `${over + 6}px`); h.style.setProperty('--dur', `${Math.max(6, Math.round(over / 18) + 5)}s`); h.classList.add('scroll'); }
+}
+window.addEventListener('resize', () => { const h = $app.querySelector('h1.greet'); if (h) { h.classList.remove('scroll'); fitGreeting(); } });
 
 function render() {
   const { view } = parseRoute();
@@ -468,6 +476,7 @@ function render() {
   else if (S.code && S.runnerData) html = runnerScreen(view);
   else html = viewWelcome();
   $app.innerHTML = html;
+  fitGreeting();
   if ($app.querySelector('#app-ver')) checkVersion();
   document.body.classList.toggle('has-tabs', !!$app.querySelector('nav.tabs'));
   // color de la sección: cada pestaña tiene el suyo
@@ -857,7 +866,7 @@ function updateSearch(scope) {
     if (box) box.innerHTML = raceListHtml();
   } else if (scope === 'rname') {
     const box = $app.querySelector('#dup-list');
-    if (box) box.innerHTML = dupSuggestions(S.rdraft?.name || '', S.runnerData.registrations, true);
+    if (box) box.innerHTML = S.rdraft?.wk != null ? watchDupSuggestions(S.rdraft.name || '') : dupSuggestions(S.rdraft?.name || '', S.runnerData.registrations, true);
   }
 }
 
@@ -1242,7 +1251,8 @@ function runnerScreen(sub) {
 /** Aviso de la vista previa de la dirección (en todas las pantallas del corredor). */
 const previewBanner = () => (S.session?.isAdmin && S.preview ? `<p class="card warn">👁️ <b>Vista previa</b> de ${esc(S.preview.name)}: no se puede apuntar ni borrar.
   <a href="#/corredores">Salir</a>${S.preview.sqlOk ? '' : '<br><b>⚠️ Falta ejecutar en Supabase el SQL de «Mis carreras»</b> (supabase/cambios/2026-11-11-mis-carreras.sql).'}</p>` : '');
-const runnerTitle = () => (S.session?.isAdmin && S.preview ? `Vista de ${S.preview.name}` : 'CC Monzón');
+/** Título de la barra de arriba del corredor: «Hola, Pere Soler» con el nombre completo (hay nombres repetidos); si no cabe, se desliza solo. */
+const runnerTitle = () => (S.session?.isAdmin && S.preview ? `Vista de ${S.preview.name}` : S.runnerData?.me?.name ? `Hola, ${cleanName(S.runnerData.me.name)}` : 'CC Monzón');
 
 /** Tarjeta de una carrera ya disputada (con resultados), para el calendario. */
 function doneRaceCard(r, { admin = false, meId = null } = {}) {
@@ -1428,7 +1438,6 @@ function viewRunnerMine() {
   return frame(runnerTitle(), `
     ${previewBanner()}
     ${S.preview ? '' : miTabs('mi')}
-    <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
     ${myRacesCard(d, () => chronicleCard(d))}
     ${installHint()}
     ${S.preview ? '' : `<p class="center"><button class="link muted" data-act="r-forget">No soy ${esc(me.name)}</button></p>`}
@@ -1469,7 +1478,7 @@ function watchCard(w, i) {
     <div class="wc-top">${dateBadge(w)}<div class="wc-main"><h3>${esc(w.name)}</h3>
       <p class="muted">${esc(when(w))}${place(w) ? ' · ' + esc(place(w)) : ''} · <b>${when_}</b></p></div></div>
     <div class="wc-chips">${modTag(w.modality, w.subtype)}${w.km ? `<span class="wchip">${ico('ruler')}${esc(kmText(w.km))}</span>` : ''}${w.price != null ? `<span class="wchip">${ico('euro')}${esc(euros(w.price))}</span>` : ''}${dl ? `<span class="wchip ${dl[0]}">${ico('clock')}${dl[1]}</span>` : ''}</div>
-    ${mine ? `<p class="wc-club ok">${ico('check')}<span>Ya estás apuntado. Puedes quitarla de aquí.</span></p>` : g ? `<p class="wc-club">${ico('users')}<span>Ya está en el club: <b>${others.length}</b> apuntado${others.length === 1 ? '' : 's'}${others.length ? ` (${esc(others.map((e) => e.name).slice(0, 4).join(', '))}${others.length > 4 ? '…' : ''})` : ''}</span></p>` : ''}
+    ${mine ? `<p class="wc-club ok">${ico('check')}<span>Ya estás apuntado. Puedes quitarla de aquí.</span></p>` : g ? `<p class="wc-club">${ico('users')}<span>${others.length ? `Ya está en Carreras: <b>${others.length}</b> apuntado${others.length === 1 ? '' : 's'} (${esc(others.map((e) => e.name).slice(0, 4).join(', '))}${others.length > 4 ? '…' : ''})` : 'Está en Carreras: nadie se ha apuntado todavía'}</span></p>` : ''}
     ${w.notes ? `<p class="notes">${esc(w.notes)}</p>` : ''}
     <div class="wc-acts">${i.past ? '' : mine ? '' : `<button class="btn primary small" data-act="w-sign" data-id="${w.id}">${g ? 'Apuntarme' : 'Inscribirme'}</button>`}
       ${w.url ? `<a class="btn small" href="${esc(w.url)}" target="_blank" rel="noopener noreferrer">${ico('ext')}Web</a>` : ''}
@@ -1489,14 +1498,14 @@ function viewWatch() {
     const first = [...live].sort((a, b) => a.w.date.localeCompare(b.w.date))[0];
     body = !w.length ? `<section class="card wempty"><div class="we-ic">${ico('star')}</div><h2>Tu lista para decidir con calma</h2>
         <p>Guarda aquí las carreras que te gustan pero en las que aún <b>no</b> te inscribes: con su fecha, su web, el precio, el plazo de inscripción y tus notas. Cuando te decidas, un toque y te apuntas.</p>
-        <p class="hint">Es solo tuyo: ni la dirección ni tus compañeros la ven.</p><a class="btn primary" href="#/valorar/nueva">${ico('plus')}Guardar una carrera</a>
+        <p class="hint">La lista es solo tuya: tu precio, plazo y notas no los ve nadie. La carrera (sin tu nombre) se crea también en Carreras para que otros la encuentren y no se duplique.</p><a class="btn primary" href="#/valorar/nueva">${ico('plus')}Guardar una carrera</a>
         <p class="hint">Desde <a href="#/federaciones">Federaciones</a> también puedes guardarlas con la estrella ☆.</p></section>`
       : `<section class="wsum"><div><b>${live.length}</b><span>por valorar</span></div><div class="${next && next.i.urgent ? 'bad' : ''}"><b>${next ? (next.i.toDeadline === 0 ? 'Hoy' : `${next.i.toDeadline} d`) : '—'}</b><span>${next ? `plazo: ${esc(next.w.name.length > 22 ? next.w.name.slice(0, 21) + '…' : next.w.name)}` : 'sin plazos próximos'}</span></div>
           <div><b>${first ? (first.i.toRace === 0 ? 'Hoy' : `${first.i.toRace} d`) : '—'}</b><span>${first ? `la primera: ${esc(first.w.name.length > 20 ? first.w.name.slice(0, 19) + '…' : first.w.name)}` : 'ninguna próxima'}</span></div></section>
         ${live.length > 1 ? `<div class="wsort"><span class="muted">Ordenar:</span><button class="chip${mode === 'date' ? ' on' : ''}" data-act="w-sort" data-m="date">Por fecha</button><button class="chip${mode === 'deadline' ? ' on' : ''}" data-act="w-sort" data-m="deadline">Por plazo de inscripción</button></div>` : ''}
         <div class="wlist">${live.map((x) => watchCard(x.w, x.i)).join('') || '<p class="empty small">Nada próximo: todo lo guardado ya pasó.</p>'}</div>
         ${old.length ? `<details class="card wold"><summary><b>Ya pasaron (${old.length})</b> <span class="muted">· quítalas cuando quieras</span></summary>${old.map((x) => watchCard(x.w, x.i)).join('')}</details>` : ''}
-        <p class="hint center">Es solo tuyo: ni la dirección ni tus compañeros ven esta lista.</p>`;
+        <p class="hint center">La lista es solo tuya. La carrera (sin tu nombre) está también en Carreras para que otros la encuentren.</p>`;
   }
   return frame(runnerTitle(), `${miTabs('valorar')}
     <div class="toolbar wtool"><h2 class="wtitle">${ico('star')}Por valorar</h2>${Array.isArray(w) ? `<a class="btn primary" href="#/valorar/nueva">${ico('plus')}Guardar carrera</a>` : ''}</div>
@@ -1513,12 +1522,13 @@ function viewWatchForm(id) {
       country: item?.country || DEFAULT_COUNTRY, modality: item?.modality || 'Carretera', subtype: item?.subtype || '', km: item?.km ?? '', url: item?.url || '', price: item?.price ?? '', deadline: item?.deadline || '', notes: item?.notes || '' });
   }
   const d = S.rdraft, editing = !!item;
+  if (!S.fed && !editing) loadFed().then(() => updateSearch('rname'));
   const detail = `${SUBTYPES[d.modality] ? `<div class="disc-field"><span class="flabel">Disciplina de ${esc(d.modality)}</span>${radioChips('data-rf', 'subtype', [['', 'Sin decidir'], ...SUBTYPES[d.modality].map((x) => [x, esc(x)])], d.subtype)}</div>` : ''}
     <label class="flabel-l">Distancia (km)<input type="number" inputmode="decimal" step="0.1" min="0.1" max="1000" data-rf="km" value="${esc(d.km ?? '')}" placeholder="85"></label>`;
   return frame(editing ? 'Editar carrera guardada' : 'Guardar una carrera', `
     <form class="stack rform" data-form="w-save">
       ${fsec(1, 'flag', 'Qué carrera es', `<label class="flabel-l">Nombre de la carrera<input data-rf="name" value="${esc(d.name)}" required minlength="3" maxlength="120" autocomplete="off" placeholder="Gran Fondo…"></label>
-        ${editing ? '' : `<p class="hint">¿Está en el calendario de las federaciones? Desde <a href="#/federaciones">Federaciones</a> la guardas con la estrella ☆ y ya viene rellenada.</p>`}`, '#1f6fd1')}
+        ${editing ? '' : `<div id="dup-list">${watchDupSuggestions(d.name)}</div><p class="hint">¿Está en el calendario de las federaciones? También la puedes guardar con la estrella ☆ desde <a href="#/federaciones">Federaciones</a>.</p>`}`, '#1f6fd1')}
       ${fsec(2, 'cal', 'Cuándo y dónde', `<label class="flabel-l">${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-rf="date" value="${esc(d.date)}" min="${pastLimit()}" required></label>
         <label class="check"><input type="checkbox" data-rf-multi ${d.multi ? 'checked' : ''}> Carrera de varios días (por etapas)</label>
         ${d.multi ? `<label class="flabel-l">Último día<input type="date" data-rf="end_date" value="${esc(d.end_date)}" min="${esc(d.date || pastLimit())}" required></label>` : ''}
@@ -1530,9 +1540,23 @@ function viewWatchForm(id) {
           <label class="flabel-l">Inscripciones hasta<input type="date" data-rf="deadline" value="${esc(d.deadline)}" ${d.date ? `max="${esc(d.date)}"` : ''}></label></div>
         <label class="flabel-l">Notas<textarea data-rf="notes" rows="3" maxlength="500" placeholder="Qué te gusta, qué dudas tienes, con quién iría…">${esc(d.notes || '')}</textarea></label>`, '#8e44ad')}
       <button class="btn primary big-save">${editing ? 'Guardar cambios' : 'Guardar en «Por valorar»'}</button>
-      <p class="hint">Solo la ves tú. Cuando te decidas, desde la lista pulsas «Inscribirme» y se crea la inscripción con estos datos.</p>
+      <p class="hint">Tu precio, plazo y notas solo los ves tú. La carrera (sin tu nombre) se crea también en Carreras para que otros la encuentren ya con sus datos y no se duplique. Cuando te decidas, pulsas «Apuntarme» desde la lista.</p>
     </form>
     ${editing ? `<button class="btn danger ghost block" data-act="w-del" data-id="${item.id}" data-back="1">${ico('trash')}Descartar esta carrera</button>` : ''}`, { back: '#/mi/valorar', rtab: 'mi' });
+}
+
+
+/** Mientras se escribe el nombre en «Por valorar»: lo que ya está en Carreras o en los calendarios de las federaciones (para no duplicar). */
+function watchDupSuggestions(name) {
+  if (normalize(name).length < 3 || !S.runnerData) return '';
+  const regs = S.runnerData.registrations, today = todayISO();
+  const club = searchRaces(name, regs.filter((g) => g.date >= today && !g.suspended)).slice(0, 4);
+  const fed = S.fed?.races ? fedMatches(name, regs, 4) : [];
+  if (!club.length && !fed.length) return '';
+  return `<div class="dup">${club.length ? `<p><b>⚠️ ¿Es alguna de estas? Ya están en Carreras:</b></p><ul class="mini-list">${club.map((g) => miniRow(g,
+      watchSaved(g) ? '<span class="done">✓ Ya la tienes</span>' : `<button type="button" class="btn primary small" data-act="w-add-reg" data-id="${g.id}" data-go="1">Guardar esta</button>`)).join('')}</ul>` : ''}
+    ${fed.length ? `<p><b>En el calendario de las federaciones</b> (rellena los datos con un toque):</p><ul class="mini-list">${fed.map((r) => miniRow(r,
+      `<button type="button" class="btn small" data-act="fill-fed" data-i="${S.fed.races.indexOf(r)}">Usar estos datos</button>`)).join('')}</ul>` : ''}</div>`;
 }
 
 /** Estrella para guardar una carrera (calendario de las federaciones o inscripciones del club) en «Por valorar». */
@@ -1586,6 +1610,7 @@ function viewRegistrations() {
   const card = (g) => `<a class="card race link-card ${g.date < today ? 'past-reg ' : ''}${modClass(g.modality)}" href="#/inscripciones/${g.id}">
       <div class="race-head"><div><h3>${esc(g.name)}</h3>
       <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality, g.subtype)}</div>${typeTag(g)}${pubTags(g)}
+      ${g.candidate && !g.entries.length ? '<p class="state-tag">⭐ Sin inscritos: algún corredor la está valorando</p>' : ''}
       ${g.suspended ? '<p class="state-tag">⛔ Suspendida: cuenta para el mínimo, no para el bono</p>' : g.date < today ? `<p class="state-tag">🏁 Ya disputada${g.entries.some((e) => e.self_position) ? ` · 📝 ${g.entries.filter((e) => e.self_position).length} de ${g.entries.length} han puesto su resultado` : ''}</p>` : ''}
       <p class="count">👥 ${g.entries.length} del club${g.entries.length ? ': ' +
         esc(g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p>
@@ -4244,13 +4269,16 @@ const actions = {
   'w-sort'(el) { S.watchSort = el.dataset.m; render(); },
   async 'w-add-fed'(el) {
     const r = S.fed?.races[Number(el.dataset.i)]; if (!r) return;
-    const ok = await run(async () => { await api.runnerWatchSave(S.code, null, watchFrom(r, `Calendario: ${srcNote(r)}`.slice(0, 500))); await loadWatch(); return true; }, 'Guardada en «Por valorar»');
+    const g = watchMatch(r, S.runnerData.registrations);   // si ya está en Carreras (aunque con otro nombre), se guarda esa para no duplicarla
+    const data = g ? { ...watchFrom(g, `Calendario: ${srcNote(r)}`.slice(0, 500)), url: watchFrom(r).url } : watchFrom(r, `Calendario: ${srcNote(r)}`.slice(0, 500));
+    const ok = await run(async () => { await api.runnerWatchSave(S.code, null, data); await loadWatch(); return true; }, 'Guardada en «Por valorar»');
     if (ok) render();
   },
   async 'w-add-reg'(el) {
     const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id); if (!g) return;
     const ok = await run(async () => { await api.runnerWatchSave(S.code, null, watchFrom(g, String(g.notes || '').slice(0, 500))); await loadWatch(); return true; }, 'Guardada en «Por valorar»');
-    if (ok) render();
+    if (!ok) return;
+    if (el.dataset.go) { S.rdraft = null; go('#/mi/valorar'); } else render();
   },
   async 'r-new-fed'(el) {
     const r = S.fed.races[Number(el.dataset.i)];
@@ -4260,7 +4288,8 @@ const actions = {
   'fill-fed'(el) {
     const r = S.fed.races[Number(el.dataset.i)];
     const vals = { name: r.name, date: r.date, place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY, modality: r.modality, ...circuitOf(r) };
-    if (S.rdraft && parseRoute().view === 'nueva') Object.assign(S.rdraft, vals);
+    if (S.rdraft && S.rdraft.wk != null && parseRoute().view === 'valorar') { Object.assign(S.rdraft, vals, { subtype: vals.subtype || S.rdraft.subtype }); if (/^https?:\/\/\S+$/i.test(r.url || '') && !S.rdraft.url) S.rdraft.url = r.url; }
+    else if (S.rdraft && parseRoute().view === 'nueva') Object.assign(S.rdraft, vals);
     else if (S.draft) Object.assign(S.draft, vals, { notes: S.draft.notes || srcNote(r) });
     render();
   },
@@ -4715,10 +4744,21 @@ const forms = {
   },
   async 'w-save'() {
     const d = S.rdraft; if (!d || d.wk == null) return;
-    const name = cleanName(d.name);
+    let name = cleanName(d.name);
     if (name.length < 3) return toast('Pon el nombre de la carrera.', true);
     if (!d.date) return toast('Falta la fecha.', true);
     if (d.multi && !d.end_date) return toast('Falta el último día.', true);
+    if (d.wk === 'nueva') {   // ¿ya está en Carreras con otro nombre? Se usa esa para no duplicarla
+      const same = watchMatch({ name, date: d.date, end_date: d.multi ? d.end_date : null }, S.runnerData.registrations);
+      const sameName = same && normalize(same.name).replace(/[^a-z0-9]/g, '') === normalize(name).replace(/[^a-z0-9]/g, '');
+      if (sameName) { name = same.name; d.name = same.name; }   // es la misma escrita distinto: se usa el nombre de Carreras
+      else if (same) {
+        const c = await choose('¿Es esta carrera?', `Ya hay <b>${esc(same.name)}</b> en Carreras esos días (${esc(when(same))}).`, [
+          { label: 'Sí, guardar esa', value: 'use', kind: 'primary' }, { label: 'No, es otra: guardar la mía', value: 'mine' }]);
+        if (!c) return;
+        if (c === 'use') { name = same.name; d.date = same.date; d.name = same.name; }
+      }
+    }
     if (d.deadline && d.deadline > d.date) return toast('El plazo de inscripción no puede ser después de la carrera.', true);
     if (String(d.km ?? '').trim() !== '' && parseKm(d.km) === null) return toast('La distancia tiene que estar entre 0 y 1000 km.', true);
     let url = String(d.url || '').trim(); if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
