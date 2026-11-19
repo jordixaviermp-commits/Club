@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError, cleanWeb } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, disciplineKey, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  directorBoard, groupMessage, watchInfo, sortWatch, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
+  directorBoard, groupMessage, watchInfo, sortWatch, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -288,7 +288,7 @@ const ADMIN_TABS = [
 const ADMIN_GROUP = { '': 'hoy', hoy: 'hoy', avisos: 'hoy', mensajes: 'hoy', calidad: 'hoy', actividad: 'hoy', noticias: 'hoy', historial: 'hoy',
   inscripciones: 'inscripciones', carreras: 'inscripciones', federaciones: 'inscripciones',
   corredores: 'corredores', contratos: 'corredores', computo: 'corredores', informe: 'corredores', bonos: 'corredores', corredor: 'corredores', docs: 'corredores',
-  resumen: 'resumen', instagram: 'resumen', datos: 'resumen', temporada: 'resumen', memoria: 'resumen', vista: 'corredores', equipo: 'resumen',
+  resumen: 'resumen', instagram: 'redes', datos: 'resumen', temporada: 'resumen', memoria: 'resumen', vista: 'corredores', equipo: 'resumen',
   redes: 'redes', semana: 'redes', publicaciones: 'redes' };
 const SEC_OF = { hoy: 'hoy', inscripciones: 'car', corredores: 'eq', resumen: 'res', redes: 'red', '': 'car', federaciones: 'fed', mi: 'hoy', contrato: 'eq', equipo: 'res', noticias: 'hoy', carrera: 'car', nueva: 'car' };
 const icon = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
@@ -319,6 +319,7 @@ const adminScreens = () => [
   ['📊', 'Cómputo de la temporada', '#/computo', 'computo fin temporada descargar csv excel control cerrar'],
   ['🖨️', 'Informe de temporada', '#/informe', 'informe imprimir pdf bono saldo penalizacion cierre hojas corredor'],
   ['💶', 'Bonos', '#/bonos', 'bonos bonificacion minimo penalizacion tramos plus circuito condiciones'],
+  ['📈', 'Estadísticas de Instagram (en Redes)', '#/instagram', 'instagram estadisticas seguidores alcance interacciones visualizaciones publicaciones redes'],
   ['📱', 'Redes: panel de historias, avisos y resultados', '#/redes', 'redes instagram historia post resultados avisos publicar pendiente encargado panel'],
   ['📸', 'Publicaciones en redes (control detallado)', '#/publicaciones', 'redes instagram historia post resultados publicar anomalias encargado'],
   ['📅', 'Próximas carreras (para redes)', '#/semana', 'semana redes avisar encargado proximas'],
@@ -1089,9 +1090,10 @@ function myRacesCard(d, afterSummary = () => '') {
       <a href="#" class="tile t-canc" data-act="goto-sec" data-to="sec-canc"><span class="t-n">${cancelled.length}</span><span class="t-l">Anuladas</span>${ico('ban', 't-ico')}<small>suspendidas</small></a>
     </div>
     ${(() => { const pod = [1, 2, 3].map((k) => list.filter((x) => x.position === k).length), NAMES = [['Oro', 'Oros'], ['Plata', 'Platas'], ['Bronce', 'Bronces']];
-      const myKm = list.reduce((n, r) => n + (Number(r.km) || 0), 0), myElev = list.reduce((n, r) => n + (Number(r.elevation) || 0), 0), myTrip = list.reduce((n, r) => n + 2 * (distanceKm(r)?.km ?? 0), 0);
-      const road = myKm || myElev || myTrip ? `<div class="my-road"><span>${ico('ruler')}<b>${myKm ? kmText(Math.round(myKm)) : '—'}</b> recorridos</span><span>${ico('mountain')}<b>${myElev ? elevText(myElev) : '—'}</b> de subida</span>${myTrip ? `<span title="Ida y vuelta desde un punto a medio camino entre Monzón y Lleida">${ico('compass')}<b>${kmText(myTrip)}</b> de viaje</span>` : ''}</div>` : '';
-      return road + (pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}"><i class="medal m${i + 1}"></i>${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : ''); })()}
+      // una sola línea pequeña: tiempo en carrera y, al lado, km de viaje (ida y vuelta, aprox.)
+      const myTime = list.reduce((n, r) => n + (Number(r.time_seconds) || 0), 0), myTrip = list.reduce((n, r) => n + 2 * (distanceKm(r)?.km ?? 0), 0);
+      const road = myTime || myTrip ? `<p class="my-line">${myTime ? `<span title="Tiempo total en carrera (de las carreras con tiempo)">${ico('timer')}<b>${formatTime(myTime, true)}</b> en carrera</span>` : ''}${myTrip ? `<span title="Ida y vuelta desde un punto a medio camino entre Monzón y Lleida">${ico('compass')}<b>${kmText(myTrip)}</b> de viaje</span>` : ''}</p>` : '';
+      return (pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}"><i class="medal m${i + 1}"></i>${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : '') + road; })()}
   </section>
 
   ${pending.length ? `<section class="card chro-card pend-card has-pend" id="sec-pend"><details class="chro-det" data-open-key="pend"${S.open?.pend ? ' open' : ''}>
@@ -1976,7 +1978,7 @@ function socialAdminCard() {
 /** Pestañas de la zona de redes (se repiten arriba en Panel, Calendario y Publicaciones). */
 function netTabs(on) {
   let pend = 0, due = 0; try { pend = socialPending(); due = pubDue(); } catch { /* sin datos aún */ }
-  return `<nav class="net-tabs no-print" aria-label="Redes">${[['panel', '📋', 'Panel', '#/redes', pend], ['cal', '📅', 'Calendario', '#/semana', 0], ['pub', '📸', 'Publicaciones', '#/publicaciones', due]]
+  return `<nav class="net-tabs no-print" aria-label="Redes">${[['panel', '📋', 'Panel', '#/redes', pend], ['cal', '📅', 'Calendario', '#/semana', 0], ['pub', '📸', 'Publicar', '#/publicaciones', due], ['ig', '📈', 'Instagram', '#/instagram', 0]]
     .map(([k, i, l, h, n]) => `<a class="net-tab${on === k ? ' on' : ''}" href="${h}"><span aria-hidden="true">${i}</span><b>${l}</b>${n ? `<em>${n}</em>` : ''}</a>`).join('')}</nav>`;
 }
 
@@ -2697,7 +2699,7 @@ function viewRaceEdit() {
 // ======================================================================
 
 /** Resumen del equipo en la pantalla Equipo del corredor: filtros simples, cifras grandes, líderes con icono, modalidades, mes + formatos y clasificación compacta. */
-function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods, places, maxOf, more = '' }) {
+function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods, places, maxOf, more = '', board = '' }) {
   const T = s.totals;
   const modLabel = !mod ? '' : mod.includes('|') ? mod.split('|').filter(Boolean).join(' · ') : mod;
   const filterOn = !!mod || S.year !== years[0];
@@ -2743,15 +2745,15 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
   // participación del equipo, compacta: una barra repartida (por disciplina o por categoría) y globos debajo
   const pview = S.partView === 'cat' ? 'cat' : 'disc';
   const partItems = pview === 'disc'
-    ? all.disciplines.map((x) => ({ key: x.key, cls: discClass(x.modality, x.subtype), label: x.subtype ? (x.subtype === 'Otra' ? `${x.modality} · Otra` : x.subtype) : x.modality, n: x.participations, tip: `${x.runners} corredor${x.runners === 1 ? '' : 'es'} · ${x.races} carrera${x.races === 1 ? '' : 's'}` })).filter((x) => x.n)
+    ? modalityTree(all).flatMap((m) => (m.children.length ? m.children : [{ modality: m.modality, subtype: '', key: disciplineKey(m.modality, ''), label: m.modality, participations: m.participations, runners: m.runners, races: m.races }])).map((x) => ({ key: x.key, mod: x.modality, cls: discClass(x.modality, x.subtype), label: x.label, n: x.participations, tip: `${x.runners} corredor${x.runners === 1 ? '' : 'es'} · ${x.races} carrera${x.races === 1 ? '' : 's'}` })).filter((x) => x.n)
     : s.byCategory.map((c) => ({ key: '', cls: `d-cat-${slug(c.category) || 'sin'}`, label: c.category || 'Sin categoría', n: c.participations, tip: `${c.runners} corredor${c.runners === 1 ? '' : 'es'}${c.km ? ` · ${kmText(c.km)}` : ''}` }));
   const partTot = partItems.reduce((n, x) => n + x.n, 0) || 1;
   const byMod = `<section class="card eq-mod"><div class="part-head"><h2>Participación</h2>
       <div class="seg-sw part-sw" role="group" aria-label="Ver la participación por"><button type="button" class="${pview === 'disc' ? 'on' : ''}" data-act="part-view" data-v="disc">Disciplina</button><button type="button" class="${pview === 'cat' ? 'on' : ''}" data-act="part-view" data-v="cat">Categoría</button></div></div>
     <div class="part-bar" role="img" aria-label="Participaciones del equipo por ${pview === 'disc' ? 'disciplina' : 'categoría'}">${partItems.map((x) => `<span class="${x.cls}" style="flex:${x.n}" title="${esc(x.label)}: ${x.n} (${x.tip})">${x.n / partTot >= 0.09 ? x.n : ''}</span>`).join('')}</div>
-    <div class="part-chips">${partItems.map((x) => (x.key
+    <div class="part-chips">${partItems.map((x, i) => `${pview === 'disc' && SUBTYPES[x.mod] && (i === 0 || partItems[i - 1].mod !== x.mod) ? `<span class="part-mod ${modClass(x.mod)}"><i></i>${esc(x.mod)} <b>${partItems.filter((y) => y.mod === x.mod).reduce((n, y) => n + y.n, 0)}</b></span>` : pview === 'disc' && i > 0 && partItems[i - 1].mod !== x.mod ? '<span class="part-brk"></span>' : ''}${(x.key
       ? `<button type="button" class="part-chip ${x.cls}${mod === x.key ? ' sel' : ''}" data-act="sum-mod" data-m="${esc(x.key)}" title="${esc(x.tip)}"><i></i>${esc(x.label)} <b>${x.n}</b></button>`
-      : `<span class="part-chip ${x.cls}" title="${esc(x.tip)}"><i></i>${esc(x.label)} <b>${x.n}</b></span>`)).join('')}</div>
+      : `<span class="part-chip ${x.cls}" title="${esc(x.tip)}"><i></i>${esc(x.label)} <b>${x.n}</b></span>`)}`).join('')}</div>
 </section>`;
   // carreras por mes + formatos más comunes
   const maxMonth = maxOf(s.byMonth.map((m) => m.total));
@@ -2761,8 +2763,7 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
     <div class="mchart" role="img" aria-label="Carreras de cada mes, por disciplina">${s.byMonth.map((m) => `<div class="mc${m.total ? '' : ' none'}"><div class="mc-area"><em>${m.total || ''}</em>
       <div class="mc-stack" style="height:${m.total ? (m.total / maxMonth) * 100 : 0}%">${Object.entries(m.discs).sort(([x], [y]) => discOrder(y) - discOrder(x)).map(([k, n]) => { const [dm, ds] = k.split('|');
         return `<span class="${discClass(dm, ds)}" style="flex:${n}" title="${esc(discLabel(dm, ds))}: ${n}"></span>`; }).join('')}</div></div><b>${MES[m.month]}</b></div>`).join('')}</div>
-    <h3>Carreras por disciplina</h3>
-    <div class="pills fmt-pills">${s.disciplines.map((x) => `<span class="pill ${discClass(x.modality, x.subtype)}"><i class="dot"></i>${esc(discLabel(x.modality, x.subtype))} <b>${x.races}</b></span>`).join('')}</div></section>`;
+    <h3>Carreras por modalidad y disciplina</h3>${discLegend(s.disciplines, true)}</section>`;
   // clasificación: cuatro primeros y el resto desplegado
   const active = people.filter((r) => r.races > 0), idle = people.filter((r) => !r.races && r.current);
   const maxR = maxOf(active.map((r) => r.races));
@@ -2800,15 +2801,16 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
   const SHOWN = 5;
   const podRunner = `<section class="card eq-pods"><h2>Podios${mod ? ` · ${esc(modLabel)}` : ' del año'}</h2>
     ${pl.length ? `<div class="pod-tot">${[1, 2, 3].map((k) => { const n = pl.filter((x) => x.position === k).length; return n ? `<span class="pod-pill m${k}"><i class="medal m${k}"></i>${n} ${['Oro', 'Plata', 'Bronce'][k - 1]}${n === 1 ? '' : 's'}</span>` : ''; }).join('')}</div>
-      <div class="seg-sw pod-sw" role="group" aria-label="Ver los podios por"><button type="button" class="${view === 'cat' ? 'on' : ''}" data-act="pod-view" data-v="cat">Por categoría</button><button type="button" class="${view === 'disc' ? 'on' : ''}" data-act="pod-view" data-v="disc">Por disciplina</button></div>
-      <p class="hint">${view === 'cat' ? 'El puesto es el de su <b>categoría</b>: un 1º de M40 es el primero entre los M40.' : 'Podios de cada disciplina, sumando todas las categorías.'}</p>
+      <div class="seg-sw pod-sw" role="group" aria-label="Ver los podios por"><button type="button" class="${view === 'cat' ? 'on' : ''}" data-act="pod-view" data-v="cat">Por categoría</button><button type="button" class="${view === 'disc' ? 'on' : ''}" data-act="pod-view" data-v="disc">Por modalidad</button></div>
+      <p class="hint">${view === 'cat' ? 'El puesto es el de su <b>categoría</b>: un 1º de M40 es el primero entre los M40.' : 'Podios de cada modalidad y, debajo, de sus disciplinas (suman todas las categorías).'}</p>
       <ul class="pg-list">${view === 'cat' ? rowsCat.map((g) => grpRow(esc(g.k), g.m, g.list.length)).join('')
-        : rowsDisc.map((g) => { const [dm, ds] = g.k.split('|'); return grpRow(esc(ds ? `${dm} · ${ds}` : dm), g.m, g.list.length, discClass(dm, ds)); }).join('')}</ul>
+        : [...new Set(rowsDisc.map((g) => g.k.split('|')[0]))].map((dm) => { const ch = rowsDisc.filter((g) => g.k.split('|')[0] === dm), all3 = ch.flatMap((g) => g.list);
+            return grpRow(`<b>${esc(dm)}</b>`, medalsOf(all3), all3.length, `pg-mod ${modClass(dm)}`) + (SUBTYPES[dm] ? ch.map((g) => { const ds = g.k.split('|')[1]; return grpRow(esc(subLabel(dm, ds)), g.m, g.list.length, `pg-sub ${discClass(dm, ds)}`); }).join('') : ''); }).join('')}</ul>
       <h3>Últimos podios</h3><ul class="pod-items">${items.slice(0, SHOWN).map(podItem).join('')}</ul>
       ${items.length > SHOWN ? `<details class="pod-more"><summary>Ver los ${items.length - SHOWN} anteriores</summary><ul class="pod-items">${items.slice(SHOWN).map(podItem).join('')}</ul></details>` : ''}`
       : '<p class="muted">Sin podios este año.</p>'}</section>`;
   const leadsBlock = leaders ? `<div class="eq-leads-wrap"><div class="leads eq-leads" role="list" aria-label="Líderes y récords del equipo">${leaders}</div><p class="leads-hint">Desliza para ver más récords ›</p></div>` : '';
-  const body = { pan: `${hero}${leadsBlock}${months}${byMod}`, pod: podRunner, eq: rank, alc: `${places}${more}` }[tab];
+  const body = { pan: `${hero}${leadsBlock}${months}${byMod}`, pod: podRunner, eq: `${board}${idle.length ? `<p class="muted small">Sin carreras todavía${mod ? ` de ${esc(modLabel)}` : ''}: ${names(idle, 40)}.</p>` : ''}`, alc: `${places}${more}` }[tab];
   return `<div class="eq">${filters}${body}</div>`;
 }
 
@@ -2924,15 +2926,14 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
     ${admin && s.missingPlace.length ? `<div class="warn"><b>Faltan datos en ${s.missingPlace.length} carrera${s.missingPlace.length === 1 ? '' : 's'}:</b>
       <ul>${s.missingPlace.map((m) => `<li><a href="#/carreras/${m.id}">${esc(m.name)}</a> (${formatRange(m.date, m.end_date, false)}): sin ${m.missing.join(' ni ')}</li>`).join('')}</ul></div>` : ''}</section>`;
 
-  const more = runnerMoreStats(resPack(S.year, mod, { races, runners, registrations: S.runnerData?.registrations || [] }));
-  return summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods, places, maxOf, more });
+  const pkR = resPack(S.year, mod, { races, runners, registrations: S.runnerData?.registrations || [] });
+  return summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods, places, maxOf, more: runnerMoreStats(pkR), board: rankingBoard(pkR, { me }) });
 }
 
 // ======================================================================
-//  Estadísticas de Instagram (Resumen → Instagram)
+//  Estadísticas de Instagram (Redes → Instagram)
 // ======================================================================
 
-const resumenTabs = (on) => `<div class="years subtabs no-print"><a class="chip${on === 'club' ? ' on' : ''}" href="#/resumen">📊 Resumen</a><a class="chip${on === 'ig' ? ' on' : ''}" href="#/instagram">📸 Instagram</a></div>`;
 const nf = (n) => (n == null ? '—' : Number(n).toLocaleString('de-DE'));   // 5.200 (el «es-ES» no pone el punto en 4 cifras)
 const IG_MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const igShort = (iso) => `${Number(iso.slice(8))} ${IG_MES[Number(iso.slice(5, 7)) - 1]} ${iso.slice(2, 4)}`;
@@ -2958,7 +2959,7 @@ async function loadIg(force = false) {
 
 function viewInstagram() {
   if (!S.ig) loadIg();
-  const head = (inner) => frame('Instagram', `${resumenTabs('ig')}${inner}`);
+  const head = (inner) => frame('Redes', `${netTabs('ig')}${inner}`);
   if (!S.ig || S.ig.loading) return head('<p class="empty">Cargando…</p>');
   if (S.ig.missing) return head('<p class="card warn">Aún no está activado: falta ejecutar en Supabase <code>supabase/cambios/2026-11-14-instagram.sql</code> (ver docs/instagram-captura.md).</p>');
   if (S.ig.failed) return head(`<p class="card warn">${esc(S.ig.failed)}</p>`);
@@ -3117,14 +3118,30 @@ const seasonKpis = (pk) => {
     ${t.travelKm || o.travelKm ? k(t.travelKm ? kmText(t.travelKm) : '—', 'de desplazamiento (aprox.)', seasonDelta(pk, t.travelKm, o.travelKm, (n) => kmText(n))) : ''}
     ${k(t.timed ? formatTime(t.time, true) : '—', 'tiempo en carrera')}</div>`;
 };
-const disciplineName = (x) => (x.subtype ? `${x.modality} · ${x.subtype}` : x.modality);
-/** Disciplinas del año: una fila con color, carreras, participaciones, corredores y podios. */
-const seasonDisciplines = (pk, { cost = false } = {}) => {
-  const list = pk.s.disciplines, mx = Math.max(1, ...list.map((x) => x.races));
-  const xtra = (x) => [x.elevation ? `${ico('mountain')}${elevText(x.elevation)}${x.avgElev ? ` · media ${elevText(x.avgElev)}` : ''}` : '', cost && x.avgPrice ? `${ico('euro')}inscripción media ${euros(x.avgPrice)}` : ''].filter(Boolean);
-  return `<ul class="tp-disc">${list.map((x) => `<li class="${discClass(x.modality, x.subtype)}"><i class="tp-dot"></i><b>${esc(disciplineName(x))}</b>
+const disciplineName = (x) => fullLabel(x.modality, x.subtype);
+/** Filas de un grupo (de modalidades o de disciplinas): barra de color, carreras, participaciones, corredores y podios. */
+const statRows = (list, { cost = false, byMod = false } = {}) => {
+  const mx = Math.max(1, ...list.map((x) => x.races));
+  const xtra = (x) => [x.elevation ? `${ico('mountain')}${elevText(x.elevation)}${x.avgElev ? ` · media ${elevText(x.avgElev)}` : ''}` : '', x.trip ? `${ico('compass')}${kmText(x.trip)} de viaje` : '', cost && x.avgPrice ? `${ico('euro')}inscripción media ${euros(x.avgPrice)}` : '',
+    cost && byMod && x.cost ? `${ico('money')}${euros(Math.round(x.cost))} en inscripciones` : ''].filter(Boolean);
+  return `<ul class="tp-disc${byMod ? ' md-mod' : ''}">${list.map((x) => `<li class="${byMod ? modClass(x.modality) : discClass(x.modality, x.subtype)}"><i class="tp-dot"></i><b>${esc(byMod ? x.modality : x.label || subLabel(x.modality, x.subtype))}</b>
     <span class="tp-track"><i style="width:${(x.races / mx) * 100}%"></i></span>
     <span class="tp-n"><b>${x.races}</b> carr.</span><span class="tp-n">${x.participations} part.</span><span class="tp-n">${x.runners} corr.</span><span class="tp-n tp-pod">🏆 ${x.podiums}${x.wins ? ` · 🥇 ${x.wins}` : ''}</span>${xtra(x).length ? `<span class="tp-xtra">${xtra(x).map((t) => `<i>${t}</i>`).join('')}</span>` : ''}</li>`).join('') || '<li class="muted">Sin carreras este año.</li>'}</ul>`;
+};
+/** Nivel 1: las modalidades (BTT, Carretera, Gravel…), una barra repartida y sus cifras. Las disciplinas NO salen aquí: cuelgan de cada modalidad. */
+const modalityOverview = (pk, opts = {}) => {
+  const tree = modalityTree(pk.s), tot = tree.reduce((n, m) => n + m.races, 0) || 1;
+  return `${tree.length ? `<div class="rs-stack">${tree.map((m) => `<span class="${modClass(m.modality)}" style="flex:${m.races}" title="${esc(m.modality)}: ${m.races}">${m.races / tot > 0.08 ? m.races : ''}</span>`).join('')}</div>` : ''}${statRows(tree, { ...opts, byMod: true })}`;
+};
+/** Nivel 2: una por modalidad con formatos, con sus disciplinas dentro (BTT → XCO, XCM, Rally…; Carretera → Critérium, Ciclodeportiva…). */
+const disciplineBlocks = (pk, opts = {}) => modalityTree(pk.s).filter((m) => m.children.length).map((m) => {
+  const tot = m.children.reduce((n, d) => n + d.races, 0) || 1;
+  return { modality: m.modality, html: `<div class="rs-stack">${m.children.map((d) => `<span class="${discClass(d.modality, d.subtype)}" style="flex:${d.races}" title="${esc(d.label)}: ${d.races}">${d.races / tot > 0.08 ? d.races : ''}</span>`).join('')}</div>${statRows(m.children, opts)}` };
+});
+/** Leyenda agrupada: cada modalidad con sus disciplinas debajo, nunca todas mezcladas al mismo nivel. */
+const discLegend = (disciplines, counts = false) => {
+  const g = new Map(); for (const d of disciplines) (g.get(d.modality) || g.set(d.modality, []).get(d.modality)).push(d);
+  return `<div class="dl-groups">${[...g].map(([m, list]) => `<span class="dl-g"><b class="${modClass(m)}"><i class="dot"></i>${esc(m)}${counts ? ` <em>${list.reduce((n, d) => n + d.races, 0)}</em>` : ''}</b>${SUBTYPES[m] ? list.map((d) => `<span class="${discClass(d.modality, d.subtype)}"><i class="dot"></i>${esc(subLabel(m, d.subtype))}${counts ? ` <em>${d.races}</em>` : ''}</span>`).join('') : ''}</span>`).join('')}</div>`;
 };
 /** Podios por categoría y por disciplina (tablas cortas con medallas). */
 const seasonPodiums = (pk) => {
@@ -3132,8 +3149,18 @@ const seasonPodiums = (pk) => {
   const group = (keyFn) => { const g = new Map(); for (const x of pl) { const k = keyFn(x); (g.get(k) || g.set(k, []).get(k)).push(x); } return [...g].map(([k, list]) => ({ k, list, m: medalsOf(list) })).sort((a, b) => b.list.length - a.list.length || b.m[0] - a.m[0]); };
   const tbl = (rows, lab) => `<table class="tp-table"><thead><tr><th>${lab}</th><th>🥇</th><th>🥈</th><th>🥉</th><th>Total</th></tr></thead><tbody>${rows.map((g) => `<tr><td>${g.label}</td><td>${g.m[0]}</td><td>${g.m[1]}</td><td>${g.m[2]}</td><td><b>${g.list.length}</b></td></tr>`).join('') || '<tr><td colspan="5" class="muted">Sin podios</td></tr>'}</tbody></table>`;
   const cat = group((x) => x.category || 'Sin categoría').map((g) => ({ ...g, label: esc(g.k) }));
-  const disc = group((x) => disciplineKey(x.modality, x.subtype)).map((g) => { const [m, sub] = g.k.split('|'); return { ...g, label: esc(sub ? `${m} · ${sub}` : m) }; });
-  return `<div class="tp-two"><div><h3>Por categoría</h3>${tbl(cat, 'Categoría')}</div><div><h3>Por disciplina</h3>${tbl(disc, 'Disciplina')}</div></div>
+  // por modalidad y, dentro, por disciplina (la fila de la modalidad suma las de sus disciplinas)
+  const sum = (list) => ({ list, m: medalsOf(list) });
+  const discRows = [];
+  for (const [m, mlist] of [...pl.reduce((g, x) => (g.get(x.modality) || g.set(x.modality, []).get(x.modality)).push(x) && g, new Map())].sort((a, b) => b[1].length - a[1].length)) {
+    discRows.push({ ...sum(mlist), label: `<b>${esc(m)}</b>`, cls: 'tp-mod' });
+    if (SUBTYPES[m]) {
+      const g = new Map(); for (const x of mlist) (g.get(x.subtype || '') || g.set(x.subtype || '', []).get(x.subtype || '')).push(x);
+      for (const [sub, l] of [...g].sort((a, b) => (a[0] ? 0 : 1) - (b[0] ? 0 : 1) || b[1].length - a[1].length)) discRows.push({ ...sum(l), label: esc(subLabel(m, sub)), cls: 'tp-sub' });
+    }
+  }
+  const tblD = (rows) => `<table class="tp-table"><thead><tr><th>Modalidad y disciplina</th><th>🥇</th><th>🥈</th><th>🥉</th><th>Total</th></tr></thead><tbody>${rows.map((g) => `<tr class="${g.cls}"><td>${g.label}</td><td>${g.m[0]}</td><td>${g.m[1]}</td><td>${g.m[2]}</td><td><b>${g.list.length}</b></td></tr>`).join('') || '<tr><td colspan="5" class="muted">Sin podios este año.</td></tr>'}</tbody></table>`;
+  return `<div class="tp-two"><div><h3>Por categoría</h3>${tbl(cat, 'Categoría')}</div><div><h3>Por modalidad y disciplina</h3>${tblD(discRows)}</div></div>
     <p class="hint">El puesto es el de la categoría del corredor (un 1º de M40 es el primero entre los M40).</p>`;
 };
 /** Récords del equipo (quién lidera cada cosa). */
@@ -3203,7 +3230,8 @@ function viewMemoria() {
       <section class="mem-sec"><h2>La temporada en cifras</h2>${seasonKpis(pk)}</section>
       <section class="mem-sec"><h2>Carreras por mes</h2>${seasonMonths(pk)}</section>
       ${pk.s.totals.elevation ? `<section class="mem-sec"><h2>Metros de subida</h2><p class="rp-note">${esc(elevText(pk.s.totals.elevation))} de desnivel positivo entre todos${memIns.climb ? ` · ${String(memIns.climb).replace('.', ',')} m de subida por km de media` : ''}${pk.s.hardest ? ` · la más dura, ${esc(pk.s.hardest.race)} (${esc(elevText(pk.s.hardest.elevation))})` : ''}.</p>${seasonElevMonths(pk)}</section>` : ''}
-      <section class="mem-sec"><h2>Disciplinas</h2>${seasonDisciplines(pk)}</section>
+      <section class="mem-sec"><h2>Por modalidad</h2>${modalityOverview(pk)}</section>
+      ${disciplineBlocks(pk).map((b) => `<section class="mem-sec"><h2>${esc(b.modality)}: por disciplina</h2>${b.html}</section>`).join('')}
       <section class="mem-sec"><h2>Podios</h2>${seasonPodiums(pk)}</section>
       <section class="mem-sec"><h2>Récords del equipo</h2>${seasonRecords(pk)}</section>
       <section class="mem-sec"><h2>Dónde hemos competido</h2>${seasonReach(pk)}</section>
@@ -3296,7 +3324,7 @@ function resHero(pk) {
   const sub = [i.summary.totals.participations ? `${t.participations} participaciones` : '', i.podiumRate ? `${i.podiumRate} % acaban en podio` : '', i.days > t.races ? `${i.days} días de competición` : '',
     t.km ? `📏 ${kmText(Math.round(t.km))}` : '', t.elevation ? `⛰️ ${elevText(t.elevation)}` : '', t.travelKm ? `🧭 ${kmText(t.travelKm)} de viaje` : '', t.timed ? `⏱️ ${formatTime(t.time, true)}` : ''].filter(Boolean);
   return `<section class="rs-hero">
-    <p class="rs-hero-t">${pk.mod ? esc(pk.mod) : 'Todo el equipo'} · temporada ${pk.year}</p>
+    <p class="rs-hero-t">${pk.mod ? esc(pk.mod.split('|').filter(Boolean).join(' · ')) : 'Todo el equipo'} · temporada ${pk.year}</p>
     <div class="rs-bigs">${big(t.races, 'carreras', rsDelta(pk, t.races, o.races))}${big(t.runners, 'corredores', rsDelta(pk, t.runners, o.runners))}${big(t.podiums, 'podios', rsDelta(pk, t.podiums, o.podiums))}${big(t.wins, 'victorias', rsDelta(pk, t.wins, o.wins))}</div>
     ${sub.length ? `<p class="rs-hero-s">${sub.map(esc).join(' · ')}</p>` : ''}
     ${pk.hasPrev ? `<p class="rs-hero-p">Flechas: frente a ${pk.year - 1}</p>` : ''}</section>`;
@@ -3352,8 +3380,7 @@ function resHeat(pk) {
     }).join('');
     return `<div class="hrow"><b>${m}</b><div class="hcells">${cells}</div></div>`;
   }).join('');
-  const legend = pk.s.disciplines.map((d) => `<span class="${discClass(d.modality, d.subtype)}"><i class="dot"></i>${esc(disciplineName(d))}</span>`).join('');
-  return `<div class="rs-heat">${rows}</div><div class="mod-legend">${legend}<span class="hl-we"><i class="dot"></i>fin de semana</span></div>`;
+  return `<div class="rs-heat">${rows}</div>${discLegend(pk.s.disciplines)}<div class="mod-legend"><span class="hl-we"><i class="dot"></i>fin de semana</span></div>`;
 }
 
 /** Reparto de carreras por día de la semana. */
@@ -3364,11 +3391,6 @@ function resWeekdays(pk) {
 }
 
 /** Barra apilada con el reparto por disciplina + la lista con sus cifras. */
-function resDisciplines(pk) {   // (con desnivel medio y precio medio de la inscripción)
-  const list = pk.s.disciplines, tot = list.reduce((n, d) => n + d.races, 0) || 1;
-  return `${list.length ? `<div class="rs-stack">${list.map((d) => `<span class="${discClass(d.modality, d.subtype)}" style="flex:${d.races}" title="${esc(disciplineName(d))}: ${d.races}">${d.races / tot > 0.08 ? d.races : ''}</span>`).join('')}</div>` : ''}${seasonDisciplines(pk, { cost: true })}`;
-}
-
 /** Año actual frente al anterior, métrica a métrica. */
 function resCompare(pk) {
   if (!pk.hasPrev) return `<p class="hint">Todavía no hay datos de ${pk.year - 1} para comparar.</p>`;
@@ -3387,7 +3409,8 @@ function resPanorama(pk) {
     <section class="card rs-card"><h2>Carreras por mes</h2>${seasonMonths(pk)}</section>
     ${pk.s.totals.elevation ? `<section class="card rs-card"><h2>Metros de subida por mes</h2>${seasonElevMonths(pk)}<p class="hint">Desnivel positivo sumado de todos los participantes en cada mes.</p></section>` : ''}
     <section class="card rs-card"><h2>Calendario del año</h2><p class="hint">Cada casilla es un día. Toca una carrera para abrirla.</p>${resHeat(pk)}</section>
-    <section class="card rs-card"><h2>Por disciplina</h2>${resDisciplines(pk)}</section>
+    <section class="card rs-card"><h2>Por modalidad</h2>${modalityOverview(pk, { cost: true })}</section>
+    ${disciplineBlocks(pk, { cost: true }).map((b) => `<section class="card rs-card"><h2><i class="dot ${modClass(b.modality)}"></i>${esc(b.modality)}: por disciplina</h2>${b.html}</section>`).join('')}
     <section class="card rs-card"><h2>Días de la semana</h2>${resWeekdays(pk)}</section>
     <section class="card rs-card"><h2>Frente a ${pk.year - 1}</h2>${resCompare(pk)}</section>`;
 }
@@ -3421,7 +3444,7 @@ function resTeam(pk) {
   const i = pk.ins, s = pk.s, year = pk.year;
   const pct = pctOf(i.activeCount, i.rosterSize), mx = Math.max(1, ...i.hist.map((h) => h.runners));
   const part = `<section class="card rs-card"><h2>Participación</h2><div class="rs-part"><div class="ring" style="--p:${pct}"><b>${pct}%</b></div>
-      <div><p><b>${i.activeCount} de ${i.rosterSize}</b> corredores han corrido${pk.mod ? ` ${esc(pk.mod)}` : ''} en ${year}.</p>
+      <div><p><b>${i.activeCount} de ${i.rosterSize}</b> corredores han corrido${pk.mod ? ` ${esc(pk.mod.split('|').filter(Boolean).join(' · '))}` : ''} en ${year}.</p>
       <p class="muted small">${s.totals.participations} participaciones: <b>${i.avgPart ? String(i.avgPart).replace('.', ',') : 0}</b> corredores por carrera.</p></div></div>
     <div class="rs-hist">${i.hist.map((h) => `<div><em>${h.runners || ''}</em><span style="height:${(h.runners / mx) * 100}%"></span><b>${h.label}</b></div>`).join('')}</div><p class="hint">Cuántos corredores han hecho cada número de carreras.</p>
     ${i.idle.length ? `<p class="small"><b>Sin ninguna carrera (${i.idle.length}):</b> ${i.idle.sort(byName).map((r) => `<a href="#/corredor/${r.key}">${esc(r.name)}</a>`).join(', ')}.</p>` : '<p class="small">✅ Todos han corrido alguna vez este año.</p>'}</section>`;
@@ -3454,7 +3477,7 @@ function resTeam(pk) {
   const table = `<section class="card rs-card"><h2>Corredores (${rows.length})</h2><div class="tp-scroll"><table class="tp-table tp-runners"><thead><tr>${cols.map(th).join('')}</tr></thead>
     <tbody>${rows.map((r) => `<tr><td class="l"><a href="#/corredor/${esc(r.key)}"><b>${esc(r.name)}</b></a>${r.cat ? ` <small class="muted">${esc(r.cat)}</small>` : ''}</td><td class="num">${r.races}</td><td class="num">${r.km ? esc(kmText(r.km)) : '—'}</td><td class="num">${r.elev ? esc(elevText(r.elev)) : '—'}</td><td class="num">${r.trip ? esc(kmText(r.trip)) : '—'}</td><td class="num">${r.cost ? esc(euros(r.cost)) : '—'}</td><td class="num">${r.timed ? formatTime(r.time, true) : '—'}</td><td class="num">${r.nd}</td><td class="num">${r.p1 || '·'}</td><td class="num">${r.p2 || '·'}</td><td class="num">${r.p3 || '·'}</td><td class="num">${r.nm}</td>${pk.mod ? '' : `<td class="num">${r.bc}${r.bok === false ? ' ⚠️' : ''}</td>`}</tr>`).join('') || `<tr><td colspan="${cols.length}" class="muted">Sin carreras este año.</td></tr>`}</tbody></table></div>
     <p class="hint">Toca una columna para ordenar. ⚠️ = por debajo del mínimo de carreras.</p></section>`;
-  return `${part}${money}${cats}${contracts}${table}`;
+  return `${rankingBoard(pk)}${part}${money}${cats}${contracts}${table}`;
 }
 
 // ---------- Alcance: dónde, cuánto y qué formatos ----------
@@ -3520,6 +3543,7 @@ function resTravel(pk) {
     <h3>Quién se desplaza más</h3>
     <ol class="rs-rank">${people.slice(0, 8).map((r, k) => `<li><span class="pos">${k + 1}</span><div>${personTag(r.key, r.name)}
       <small class="muted">${r.tripN} carrera${r.tripN === 1 ? '' : 's'} · media ${esc(kmText(Math.round(r.trip / 2 / r.tripN)))}${r.tripRace ? ` · la más lejos: ${esc(kmText(r.tripMax))} (${esc(r.tripRace)})` : ''}</small>${bar((r.trip / mx) * 100, 'warm')}</div><span class="rk-m">${esc(kmText(r.trip))}</span></li>`).join('')}</ol>
+    <h3>Km de viaje del equipo, mes a mes</h3>${monthBars(pk, 'trip', kmShort)}
     <h3>Las carreras más lejanas</h3>
     <ol class="rs-rank">${far.map((r, k) => `<li><span class="pos">${k + 1}</span><div><a href="${raceHref(r.id)}"><b>${esc(r.name)}</b></a><small class="muted">${esc(r.place || '—')}${r.src === 'province' ? ' · aprox. (solo se sabe la provincia)' : ''}${r.n ? ` · ${r.n} del club` : ''}</small>${bar((r.dist / fmx) * 100, 'warm')}</div><span class="rk-m">${esc(kmText(r.dist))}</span></li>`).join('')}</ol>
     <p class="hint">Cálculo orientativo: línea recta desde el punto de salida (${esc(ORIGEN.nombre)}) hasta la población de cada carrera, × ${String(FACTOR_CARRETERA).replace('.', ',')} para estimar la carretera, ida y vuelta, por cada corredor que participó. No cuenta coches compartidos ni el domicilio real de cada uno. ${t.travelRaces} de ${t.races} carreras con ubicación${t.travelApprox ? ` (${t.travelApprox} solo por su provincia)` : ''}${pend ? `; faltan ${pend} por buscar` : ''}.</p>`;
@@ -3548,6 +3572,7 @@ function resReach(pk) {
       return el.length ? `<section class="card rs-card"><h2>Quién ha subido más</h2><ol class="rs-rank">${people(el, 'elev', (n) => esc(elevText(n)), ex)}</ol></section>` : ''; })()}
     <section class="card rs-card"><h2>Desplazamientos</h2>${resTravel(pk)}</section>
     <section class="card rs-card"><h2>Mapa de desplazamientos</h2>${resTripMap(pk)}</section>
+    ${resTimeCard(pk)}
     <section class="card rs-card"><h2>Cuánto cuesta competir</h2>${resCost(pk)}</section>
     ${km.length ? `<section class="card rs-card"><h2>Quién ha recorrido más</h2><ol class="rs-rank">${people(km, 'km', (n) => esc(kmText(n)), kmx)}</ol></section>` : ''}
     ${tm.length ? `<section class="card rs-card"><h2>Más tiempo en carrera</h2><ol class="rs-rank">${people(tm, 'time', (n) => formatTime(n, true), tmx)}</ol></section>` : ''}
@@ -3557,8 +3582,9 @@ function resReach(pk) {
 
 
 /** Contenido de la ventana de filtros del Resumen del equipo (temporada, modalidad y, si la hay, disciplina). */
+const eqSource = () => (S.session?.isAdmin && !S.preview ? { races: S.data?.races || [], runners: S.data?.runners || [] } : { races: S.team?.races || [], runners: S.team?.runners || [] });
 function eqFilterHtml() {
-  const races = S.team?.races || [], runners = S.team?.runners || [];
+  const { races, runners } = eqSource();
   const years = availableYears(races), mods = yearSummary(S.year, races, runners).byModality.filter((m) => m.races > 0);
   const cur = S.sumMod && S.sumMod !== 'all' ? S.sumMod : null, curMod = cur ? cur.split('|')[0] : null;
   const discs = curMod ? yearSummary(S.year, races.filter((r) => r.modality === curMod), runners).disciplines.filter((d) => d.subtype) : [];
@@ -3575,17 +3601,76 @@ function eqFilterHtml() {
     const b = ev.target.closest('.eqdlg [data-eqf]'); if (!b) return;
     ev.preventDefault();
     const [kind, ...rest] = b.dataset.eqf.split(':'), val = rest.join(':');
-    if (kind === 'year') { S.year = Number(val); if (S.sumMod && S.sumMod !== 'all' && !(S.team?.races || []).some((r) => yearOf(r.date) === S.year && r.modality === S.sumMod.split('|')[0])) S.sumMod = 'all'; }
+    if (kind === 'year') { S.year = Number(val); if (S.sumMod && S.sumMod !== 'all' && !eqSource().races.some((r) => yearOf(r.date) === S.year && r.modality === S.sumMod.split('|')[0])) S.sumMod = 'all'; }
     else if (kind === 'mod') S.sumMod = val;
-    else if (kind === 'clear') { S.sumMod = 'all'; S.year = availableYears(S.team?.races || [])[0]; }
+    else if (kind === 'clear') { S.sumMod = 'all'; S.year = availableYears(eqSource().races)[0]; }
     render(); dlg.innerHTML = eqFilterHtml();
   });
+}
+
+// ---------- Clasificaciones: quién lidera cada cosa, con gráfico mes a mes ----------
+const hoursOf = (sec) => formatTime(sec, true);
+const EQ_METRICS = [
+  { k: 'races', label: 'Carreras', ico: 'flag', val: (r) => r.races, fmt: (n) => `${n}`, month: 'parts', mfmt: (n) => `${n}`, sum: true, unit: 'carreras',
+    det: (r) => `${r.months?.size || 0} mes${(r.months?.size || 0) === 1 ? '' : 'es'} con carrera`, hint: 'Carreras en las que ha participado este año (cada una cuenta una vez).' },
+  { k: 'pod', label: 'Podios', ico: 'trophy', val: (r) => r.p1 + r.p2 + r.p3, fmt: (n) => `${n}`, month: 'pod', mfmt: (n) => `${n}`, sum: true, unit: 'podios',
+    det: (r) => `${r.p1 ? `🥇${r.p1} ` : ''}${r.p2 ? `🥈${r.p2} ` : ''}${r.p3 ? `🥉${r.p3}` : ''}`.trim(), hint: 'Podios (1º, 2º o 3º) de su categoría, también en etapas.' },
+  { k: 'wins', label: 'Victorias', ico: 'medal', val: (r) => r.p1, fmt: (n) => `${n}`, month: 'wins', mfmt: (n) => `${n}`, sum: true, unit: 'victorias',
+    det: (r) => `${r.p1 + r.p2 + r.p3} podio${r.p1 + r.p2 + r.p3 === 1 ? '' : 's'} en total`, hint: 'Primeros puestos de su categoría.' },
+  { k: 'km', label: 'Km', ico: 'ruler', val: (r) => r.km, fmt: (n) => kmText(Math.round(n)), month: 'km', mfmt: (n) => kmShort(n), sum: true, unit: 'km',
+    det: (r) => `${r.races} carrera${r.races === 1 ? '' : 's'}`, hint: 'Kilómetros de las carreras en las que ha participado (solo las que tienen distancia indicada).' },
+  { k: 'elev', label: 'Desnivel', ico: 'mountain', val: (r) => r.elev, fmt: (n) => elevText(n), month: 'elev', mfmt: (n) => kmShort(n), sum: true, unit: 'm',
+    det: (r) => `media ${elevText(Math.round(r.elev / Math.max(1, r.races)))} por carrera`, hint: 'Desnivel positivo de las carreras en las que ha participado (solo las que lo tienen indicado).' },
+  { k: 'trip', label: 'Viaje', ico: 'compass', val: (r) => r.trip, fmt: (n) => kmText(n), month: 'trip', mfmt: (n) => kmShort(n), sum: true, unit: 'km',
+    det: (r) => `media ${kmText(Math.round(r.trip / 2 / Math.max(1, r.tripN)))} de ida por carrera`, hint: 'Km de desplazamiento (ida y vuelta, estimados desde un punto a medio camino entre Monzón y Lleida). Orientativo.' },
+  { k: 'time', label: 'Tiempo', ico: 'timer', val: (r) => r.time, fmt: (n) => hoursOf(n), month: 'time', mfmt: (n) => `${Math.round(n / 3600)}h`, sum: true, unit: 'tiempo',
+    det: (r) => `${r.timed} de ${r.races} carrera${r.races === 1 ? '' : 's'} con tiempo`, hint: 'Tiempo total en carrera (solo las carreras en las que se puso el tiempo).' },
+  { k: 'cost', label: 'Gasto', ico: 'money', val: (r) => r.cost, fmt: (n) => euros(n), month: 'cost', mfmt: (n) => `${Math.round(n)}`, sum: true, unit: '€',
+    det: (r) => `media ${euros(Math.round((r.cost / Math.max(1, r.races)) * 10) / 10)} por carrera`, hint: 'Lo que costarían las inscripciones de las carreras en las que ha participado (precios indicados; no lo que haya pagado).' },
+  { k: 'disc', label: 'Versátil', ico: 'layers', val: (r) => Object.keys(r.discs || {}).length, fmt: (n) => `${n}`, sum: false,
+    det: (r) => Object.keys(r.discs || {}).map((k) => { const [m, sub] = k.split('|'); return sub || m; }).slice(0, 4).join(', '), hint: 'Disciplinas distintas en las que ha corrido.' },
+  { k: 'mon', label: 'Meses', ico: 'calcheck', val: (r) => r.months?.size || 0, fmt: (n) => `${n}`, sum: false,
+    det: (r) => `${r.races} carreras`, hint: 'Meses distintos del año con alguna carrera.' },
+];
+/** Cifra compacta para las barras de cada mes: 4,3k, 840… */
+const kmShort = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1).replace('.', ',')}k` : `${Math.round(n)}`);
+/** Barras de un dato mes a mes (suma de todo el equipo). */
+function monthBars(pk, key, mfmt, cls = '') {
+  const m = pk.s.byMonth, mx = Math.max(1, ...m.map((x) => x[key] || 0));
+  return `<div class="rs-wk rs-elev rb-months ${cls}" role="img" aria-label="Evolución mes a mes">${m.map((x) => `<div><em>${x[key] ? mfmt(x[key]) : ''}</em><span style="height:${((x[key] || 0) / mx) * 100}%"></span><b>${MES3[x.month].slice(0, 1).toUpperCase()}</b></div>`).join('')}</div>`;
+}
+/** Clasificación del equipo: eliges un dato (carreras, desnivel, viaje, tiempo…) y ves quién lidera, con barras y cómo va el equipo mes a mes. */
+function rankingBoard(pk, { me = null } = {}) {
+  const m = EQ_METRICS.find((x) => x.k === S.eqMetric) || EQ_METRICS[0];
+  const rows = pk.s.perRunner.map((r) => ({ r, v: m.val(r) })).filter((x) => x.v > 0).sort((a, b) => b.v - a.v || a.r.name.localeCompare(b.r.name, 'es'));
+  const mx = rows[0]?.v || 1, total = rows.reduce((n, x) => n + x.v, 0);
+  const tabs = `<div class="rb-tabs" role="tablist" aria-label="Qué clasificar">${EQ_METRICS.map((x) => `<button type="button" class="rb-tab${x.k === m.k ? ' on' : ''}" data-act="eq-metric" data-k="${x.k}" role="tab" aria-selected="${x.k === m.k}">${ico(x.ico)}<span>${x.label}</span></button>`).join('')}</div>`;
+  const row = ({ r, v }, i) => `<li class="rb-row${me && r.key === me ? ' me' : ''}"><span class="rb-pos p${Math.min(i + 1, 4)}">${i + 1}</span>${avatar(r.name)}<div class="rb-main"><span class="rb-name">${personTag(r.key, r.name)}${me && r.key === me ? '<i class="rb-you">tú</i>' : ''}</span><small>${m.det(r)}</small><span class="rs-bar warm"><i style="width:${(v / mx) * 100}%"></i></span></div><b class="rb-val">${m.fmt(v)}</b></li>`;
+  const top = rows.slice(0, 8), rest = rows.slice(8);
+  const sum = !rows.length ? '' : m.sum ? `Entre todos <b>${m.fmt(total)}</b> · media por corredor <b>${['races', 'pod', 'wins'].includes(m.k) ? String(Math.round((total / rows.length) * 10) / 10).replace('.', ',') : m.fmt(Math.round(total / rows.length))}</b> · ${rows.length} corredor${rows.length === 1 ? '' : 'es'}` : `Lidera <b>${esc(rows[0].r.name)}</b> con <b>${m.fmt(rows[0].v)}</b>`;
+  return `<section class="card rs-card rb"><h2>Clasificaciones</h2>${tabs}
+    ${rows.length ? `<p class="rb-sum">${sum}</p>${m.month ? `<h3>Todo el equipo, mes a mes</h3>${monthBars(pk, m.month, m.mfmt)}` : ''}
+      <h3>${esc(m.label)}: quién lidera</h3><ol class="rb-list">${top.map(row).join('')}</ol>
+      ${rest.length ? `<details class="rb-more"><summary>Ver los ${rest.length} restantes</summary><ol class="rb-list" start="9">${rest.map((x, i) => row(x, i + 8)).join('')}</ol></details>` : ''}`
+      : `<p class="empty">Todavía no hay datos de «${esc(m.label)}» este año.</p>`}
+    <p class="hint">${esc(m.hint)}</p></section>`;
+}
+/** Tiempo en carrera del equipo: totales y cobertura (la clasificación y el gráfico mes a mes están en «Clasificaciones»). */
+function resTimeCard(pk) {
+  const t = pk.s.totals;
+  if (!t.timed) return '';
+  const per = Math.round(t.time / t.timed);
+  return `<section class="card rs-card"><h2>${ico('timer')} Tiempo en carrera</h2>
+    <div class="rs-tiles"><div class="rs-tile">${ico('timer')}<small>Tiempo total</small><b>${esc(hoursOf(t.time))}</b><em>entre todos${pk.hasPrev && pk.prev.totals.time ? ` ${rsDelta(pk, t.time, pk.prev.totals.time, (n) => hoursOf(n))}` : ''}</em></div>
+      <div class="rs-tile">${ico('timer')}<small>Media por carrera</small><b>${esc(hoursOf(per))}</b><em>${t.timed} de ${t.participations} participaciones con tiempo</em></div></div>
+    <h3>Tiempo del equipo, mes a mes</h3>${monthBars(pk, 'time', (n) => `${Math.round(n / 3600)}h`)}
+    <p class="hint">Solo cuentan las carreras en las que el corredor puso su tiempo. Quién ha estado más tiempo, en «Clasificaciones» (Tiempo).</p></section>`;
 }
 
 /** Para los corredores: las mismas estadísticas de desnivel, desplazamientos y coste que ve la dirección, con los datos del equipo. */
 function runnerMoreStats(pk) {
   const t = pk.s.totals, i = pk.ins;
-  if (!t.elevation && !t.travelKm && !t.pricedRaces) return '';
+  if (!t.elevation && !t.travelKm && !t.pricedRaces && !t.timed) return '';
   const el = pk.s.perRunner.filter((r) => r.elev > 0).sort((a, b) => b.elev - a.elev).slice(0, 5), ex = Math.max(1, ...el.map((r) => r.elev));
   const rank = (rows, key, fmt, mx) => rows.map((r, k) => `<li><span class="pos">${k + 1}</span><div>${personTag(r.key, r.name)}${bar((r[key] / mx) * 100, 'warm')}</div><span class="rk-m">${fmt(r[key])}</span></li>`).join('');
   const climb = t.elevation ? `<section class="card rs-card"><h2>${ico('mountain')} Desnivel</h2>
@@ -3597,7 +3682,7 @@ function runnerMoreStats(pk) {
       ${i.cal.filter((r) => r.km && r.elevation).length > 1 ? `<h3>Km frente a desnivel</h3>${resScatter(pk)}` : ''}</section>` : '';
   const trip = t.travelKm ? `<section class="card rs-card"><h2>${ico('compass')} Desplazamientos</h2>${resTravel(pk)}<h3>Mapa de desplazamientos</h3>${resTripMap(pk)}</section>` : '';
   const cost = t.pricedRaces ? `<section class="card rs-card"><h2>${ico('money')} Cuánto cuesta competir</h2>${resCost(pk)}</section>` : '';
-  return `${climb}${trip}${cost}`;
+  return `${climb}${trip}${resTimeCard(pk)}${cost}`;
 }
 
 function viewSummary() {
@@ -3605,19 +3690,19 @@ function viewSummary() {
   if (!years.includes(S.year)) S.year = years[0];
   const base = yearSummary(S.year, S.data.races, S.data.runners);
   const mods = base.byModality.filter((m) => m.races > 0);
-  if (S.sumMod && S.sumMod !== 'all' && !mods.some((m) => m.modality === S.sumMod)) S.sumMod = 'all';
+  if (S.sumMod && S.sumMod !== 'all' && !mods.some((m) => m.modality === S.sumMod.split('|')[0])) S.sumMod = 'all';
   const mod = S.sumMod && S.sumMod !== 'all' ? S.sumMod : null;
+  const modLabel = mod ? mod.split('|').filter(Boolean).join(' · ') : '';
   const tab = RES_TABS.some(([k]) => k === S.resTab) ? S.resTab : 'pan';
   const pk = resPack(S.year, mod);
   const body = { pan: resPanorama, pod: resPodiums, eq: resTeam, alc: resReach }[tab](pk);
-  return frame('Resumen', `${resumenTabs('club')}
-    <nav class="rs-tabs" role="tablist" aria-label="Apartados del resumen">${RES_TABS.map(([k, l, ic]) => `<button type="button" class="${k === tab ? 'on' : ''}" data-act="res-tab" data-t="${k}" role="tab" aria-selected="${k === tab}">${ico(ic)}<span>${l}</span></button>`).join('')}</nav>
-    <div class="rs-filters">${yearPicker(years)}${mods.length > 1 ? `<div class="years mod-chips" role="tablist" aria-label="Modalidad"><button class="chip${mod ? '' : ' on'}" data-act="sum-mod" data-m="all">Todas</button>
-      ${mods.map((m) => `<button class="chip mchip ${modClass(m.modality)}${mod === m.modality ? ' on' : ''}" data-act="sum-mod" data-m="${esc(m.modality)}"><i class="dot"></i>${esc(m.modality)}</button>`).join('')}</div>` : ''}</div>
+  const filterOn = !!mod || S.year !== years[0];
+  return frame('Resumen', `<div class="eq-bar"><nav class="rs-tabs" role="tablist" aria-label="Apartados del resumen">${RES_TABS.map(([k, l, ic]) => `<button type="button" class="${k === tab ? 'on' : ''}" data-act="res-tab" data-t="${k}" role="tab" aria-selected="${k === tab}">${ico(ic)}<span>${l}</span></button>`).join('')}</nav>
+      <button type="button" class="eq-fbtn${filterOn ? ' on' : ''}" data-act="eq-filters" aria-label="Filtros${filterOn ? ' (activos)' : ''}" title="Filtros">${icon(ICON_FILTER)}${filterOn ? '<i class="fdot"></i>' : ''}</button></div>
+    ${filterOn ? `<div class="eq-active"><span>${S.year}${mod ? ` · ${esc(modLabel)}` : ''}</span><button type="button" class="link" data-act="eq-clear">Quitar filtros ✕</button></div>` : ''}
     ${body}
     <section class="card rs-card rs-links"><h2>Informes y exportar</h2>
       <a class="rs-link" href="#/memoria">${ico('book')}<span><b>Memoria para sponsors</b><small>Una página limpia para imprimir o PDF, sin bonos ni contratos</small></span>${ico('go')}</a>
-      <a class="rs-link" href="#/instagram">${ico('share')}<span><b>Estadísticas de Instagram</b><small>Seguidores, alcance e interacciones</small></span>${ico('go')}</a>
       <a class="rs-link" href="#/computo">${ico('money')}<span><b>Cómputo de la temporada</b><small>Bonos, control antes de cerrar e informe por corredor</small></span>${ico('go')}</a>
       <a class="rs-link" href="#/calidad">${ico('list')}<span><b>Datos incompletos</b><small>Carreras a las que les falta algo</small></span>${ico('go')}</a>
       <div class="row-btns"><button class="btn" data-act="csv-year">📊 Resultados ${S.year} (Excel)</button><button class="btn" data-act="tp-csv-runners">📊 Corredores</button><button class="btn" data-act="tp-csv-disc">📊 Disciplinas</button></div></section>
@@ -4864,8 +4949,9 @@ const actions = {
   },
   'sum-mod'(el) { S.sumMod = el.dataset.m; render(); },
   'eq-tab'(el) { S.eqTab = el.dataset.t; render(); window.scrollTo({ top: 0 }); },
+  'eq-metric'(el) { S.eqMetric = el.dataset.k; render(); },
   'eq-filters'() { const dlg = document.getElementById('dialog'); dlg.innerHTML = eqFilterHtml(); dlg.onclose = null; dlg.showModal(); },
-  'eq-clear'() { S.sumMod = 'all'; S.year = availableYears(S.team?.races || [])[0]; render(); },
+  'eq-clear'() { S.sumMod = 'all'; S.year = availableYears(eqSource().races)[0]; render(); },
   'res-tab'(el) { S.resTab = el.dataset.t; render(); window.scrollTo({ top: 0 }); },
   'pod-view'(el) { S.podView = el.dataset.v; render(); },
   'tp-sort'(el) { const k = el.dataset.k, cur = S.tsort || { k: 'races', dir: -1 }; S.tsort = { k, dir: cur.k === k ? -cur.dir : (k === 'name' ? 1 : -1) }; render(); },

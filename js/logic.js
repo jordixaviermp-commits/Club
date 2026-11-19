@@ -252,21 +252,27 @@ export function yearSummary(year, races, runners) {
     podiums: podiums.filter((p) => p.race.modality === m).length,
     wins: podiums.filter((p) => p.race.modality === m && p.position === 1).length,
     runners: new Set(parts.filter((p) => p.race.modality === m).map((p) => personKey(p.res))).size,
+    elevation: parts.filter((p) => p.race.modality === m).reduce((n, p) => n + elevOf(p.race), 0),
+    trip: parts.filter((p) => p.race.modality === m).reduce((n, p) => n + 2 * (distOf(p.race)?.km ?? 0), 0),
+    cost: Math.round(parts.filter((p) => p.race.modality === m).reduce((n, p) => n + (priceOf(p.race) ?? 0), 0) * 100) / 100,
+    km: Math.round(parts.filter((p) => p.race.modality === m).reduce((n, p) => n + (Number(p.race.km) || 0), 0) * 10) / 10,
   })).filter((x) => x.modality === 'Carretera' || x.modality === 'BTT' || x.races > 0);
 
   // Carreras de cada mes, repartidas por modalidad (para el gráfico de barras del resumen).
   // `discs`: lo mismo por disciplina (modalidad + formato: «BTT|XCO»), para colorear las barras por formato.
-  const byMonth = Array.from({ length: 12 }, (_, month) => ({ month, total: 0, mods: {}, discs: {}, elev: 0, cost: 0, trip: 0 }));
+  const byMonth = Array.from({ length: 12 }, (_, month) => ({ month, total: 0, mods: {}, discs: {}, elev: 0, cost: 0, trip: 0, parts: 0, km: 0, time: 0, pod: 0, wins: 0 }));
   const byDiscipline = new Map();
   for (const r of yr) {
     const mo = byMonth[Number(String(r.date).slice(5, 7)) - 1];
     const dk = disciplineKey(r.modality, r.subtype);
     const nRes = (r.results || []).length;
     if (mo) { mo.total++; mo.mods[r.modality] = (mo.mods[r.modality] || 0) + 1; mo.discs[dk] = (mo.discs[dk] || 0) + 1; mo.elev += elevOf(r) * nRes; mo.cost += (priceOf(r) ?? 0) * nRes; mo.trip += 2 * (distOf(r)?.km ?? 0) * nRes; }
+    if (mo) { mo.parts += nRes; mo.km += (Number(r.km) || 0) * nRes; mo.time += (r.results || []).reduce((n, x) => n + (Number(x.time_seconds) || 0), 0); }
     const e = byDiscipline.get(dk) || { key: dk, modality: r.modality, subtype: r.subtype || '', races: 0, elevRaces: 0, elevSum: 0, priceRaces: 0, priceSum: 0 };
     e.races++; if (elevOf(r) > 0) { e.elevRaces++; e.elevSum += elevOf(r); } if (priceOf(r) != null) { e.priceRaces++; e.priceSum += priceOf(r); }
     byDiscipline.set(dk, e);
   }
+  for (const pd of podiums) { const mo = byMonth[Number(String(pd.race.date).slice(5, 7)) - 1]; if (mo) { mo.pod++; if (pd.position === 1) mo.wins++; } }
   const disciplines = [...byDiscipline.values()].map((d) => {
     const mine = (x) => disciplineKey(x.race.modality, x.race.subtype) === d.key;
     const { elevSum, priceSum, ...base } = d;
@@ -1324,4 +1330,24 @@ export function watchMatch(w, registrations) {
   const days = new Set(daysOf(w.date, w.end_date));
   const same = registrations.filter((g) => !g.suspended && (days.has(g.date) || g.date === w.date));
   return searchRaces(w.name, same, 1)[0] || null;
+}
+
+// ======================================================================
+//  Modalidad → disciplina: dos niveles que no se mezclan en las estadísticas
+// ======================================================================
+
+/** Nombre de una disciplina dentro de su modalidad: «XCO», «Sin formato» (si la modalidad tiene formatos y no se indicó) o la propia modalidad si no los tiene (Gravel…). */
+export const subLabel = (modality, subtype) => (subtype ? subtype : SUBTYPES[modality] ? 'Sin formato' : modality);
+/** Nombre completo para listas planas: «BTT · XCO», «BTT · sin formato», «Gravel». Nunca «BTT» a secas si BTT tiene formatos. */
+export const fullLabel = (modality, subtype) => (subtype ? `${modality} · ${subtype}` : SUBTYPES[modality] ? `${modality} · sin formato` : modality);
+/**
+ * Árbol de modalidades con sus disciplinas (BTT → XCO, XCM…; Carretera → Critérium, Ciclodeportiva…) a partir de `yearSummary`.
+ * Cada modalidad lleva sus totales; las disciplinas (solo si la modalidad tiene formatos) quedan DENTRO, nunca al mismo nivel.
+ */
+export function modalityTree(s) {
+  return s.byModality.filter((m) => m.races > 0).map((m) => {
+    const kids = SUBTYPES[m.modality] ? s.disciplines.filter((d) => d.modality === m.modality) : [];
+    const order = (d) => (d.subtype ? 0 : 1);
+    return { ...m, children: kids.map((d) => ({ ...d, label: subLabel(d.modality, d.subtype) })).sort((a, b) => order(a) - order(b) || b.races - a.races || a.label.localeCompare(b.label, 'es')) };
+  }).sort((a, b) => b.races - a.races || a.modality.localeCompare(b.modality, 'es'));
 }

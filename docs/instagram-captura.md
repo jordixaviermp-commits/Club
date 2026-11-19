@@ -1,7 +1,7 @@
 # Estadísticas de Instagram en la app
 
 **Modo manual (decidido el 14/11/2026).** La dirección manda a Claude una captura de Instagram → Insights y Claude **vuelca los números**
-como una fila `period` en `ig_snapshots`; la app los suma y los pinta (Resumen → Instagram → Periodos). No hay captura automática (se descartó por coste).
+como una fila `period` en `ig_snapshots`; la app los suma y los pinta (Redes → Instagram → Periodos). No hay captura automática (se descartó por coste).
 
 SQL necesario (una vez): `supabase/cambios/2026-11-15-instagram-periodos.sql` (admite el tipo `period` en `ig_save`).
 
@@ -66,7 +66,7 @@ Al repetir una fila se **fusionan** los campos (no se pisa con vacíos).
 1. Ejecutar en Supabase `supabase/cambios/2026-11-14-instagram.sql` (Copy raw file, pegar, Run). Al final sale el **token**: copiarlo.
 2. Dárselo a Claude con el formulario seguro de credenciales (cabecera `x-ig-token`, host del proyecto Supabase). No pegarlo en el chat.
 3. Claude crea la tarea diaria y hace una primera captura de los últimos 30 días.
-4. La pestaña de la app (Resumen → Instagram) lee `ig_snapshots`.
+4. La pestaña de la app (Redes → Instagram) lee `ig_snapshots`.
 
 ## Qué enseña la pestaña de Instagram frente a la app (Insights)
 
