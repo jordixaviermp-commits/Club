@@ -736,4 +736,41 @@ insert into registrations (name, date, candidate) values ('Candidata Vieja', cur
 select auto_promote_registrations();
 select pg_temp.check((select count(*) from registrations where name = 'Candidata Vieja') = 0, 'por valorar→carreras: la que ya pasó sin inscritos se limpia sola');
 select pg_temp.check(public.norm_name('Marxa del Montsení – 2ª Ç!') = 'marxadelmontseni2c', 'nombre normalizado sin tildes ni signos');
+-- web de la carrera: la pone cualquiera si está vacía; después solo quien la puso
+set role anon;
+select runner_create_registration('codigo-valorador-uno-01', jsonb_build_object('name', 'Carrera Con Web', 'date', (current_date + 45)::text, 'url', 'https://carrera.example/web'), 'M40') as rweb \gset
+select pg_temp.check((select g->>'url' = 'https://carrera.example/web' and (g->>'url_mine')::boolean from jsonb_array_elements(runner_view('codigo-valorador-uno-01')->'registrations') g where g->>'name' = 'Carrera Con Web'), 'web: el que la crea la ve y es suya');
+select pg_temp.check((select g->>'url' = 'https://carrera.example/web' and not (g->>'url_mine')::boolean from jsonb_array_elements(runner_view('codigo-valorador-dos-02')->'registrations') g where g->>'name' = 'Carrera Con Web'), 'web: los demás la ven (y no es suya)');
+select pg_temp.expect_fail($q$select runner_set_registration_url('codigo-valorador-dos-02', '$q$ || :'rweb' || $q$', 'https://otra.example')$q$, 'web: otro corredor no pisa la que ya hay');
+select runner_set_registration_url('codigo-valorador-uno-01', :'rweb', 'https://carrera.example/nueva');
+reset role;
+select pg_temp.check((select url = 'https://carrera.example/nueva' from registrations where id = :'rweb'), 'web: quien la puso puede cambiarla');
+set role anon;
+select pg_temp.expect_fail($q$select runner_set_registration_url('codigo-valorador-uno-01', '$q$ || :'rweb' || $q$', 'javascript:alert(1)')$q$, 'web: solo http(s)');
+select pg_temp.expect_fail($q$select runner_set_registration_url('codigo-falso', '$q$ || :'rweb' || $q$', 'https://x.example')$q$, 'web: enlace falso rechazado');
+select runner_set_registration_url('codigo-valorador-uno-01', :'rweb', '');
+reset role;
+select pg_temp.check((select url is null and url_by is null from registrations where id = :'rweb'), 'web: quien la puso puede quitarla');
+set role anon;
+select runner_set_registration_url('codigo-valorador-dos-02', :'rweb', 'https://dos.example');
+reset role;
+select pg_temp.check((select url = 'https://dos.example' from registrations where id = :'rweb'), 'web: si está vacía la puede poner cualquiera');
+set role anon;
+-- guardada en «Por valorar» con web: se comparte; no pisa la que ya existe
+select runner_watch_save('codigo-valorador-uno-01', null, jsonb_build_object('name', 'Carrera Con Web', 'date', (current_date + 45)::text, 'url', 'https://uno.example'));
+reset role;
+select pg_temp.check((select url = 'https://dos.example' from registrations where id = :'rweb'), 'web: Por valorar no pisa la web que ya había');
+set role anon;
+select runner_watch_save('codigo-valorador-uno-01', null, jsonb_build_object('name', 'Valorada Con Web', 'date', (current_date + 50)::text, 'url', 'https://valorada.example')) as wv \gset
+select pg_temp.check((select g->>'url' = 'https://valorada.example' from jsonb_array_elements(runner_view('codigo-valorador-dos-02')->'registrations') g where g->>'name' = 'Valorada Con Web'), 'web: lo guardado en Por valorar con web se comparte con los demás');
+select runner_watch_save('codigo-valorador-dos-02', null, jsonb_build_object('name', 'Sin Web Aun', 'date', (current_date + 52)::text));
+select runner_watch_save('codigo-valorador-uno-01', null, jsonb_build_object('name', 'Sin Web Aun', 'date', (current_date + 52)::text, 'url', 'https://ahora.example'));
+reset role;
+select pg_temp.check((select url = 'https://ahora.example' from registrations where name = 'Sin Web Aun'), 'web: si otro la guarda con web y la carrera no tenía, queda para todos');
+select pg_temp.expect_fail($q$update registrations set url = 'ftp://mal' where name = 'Sin Web Aun'$q$, 'web: la base de datos rechaza webs que no son http(s)');
+-- al pasar a resultados la web se conserva
+insert into registrations (name, date, url) values ('Con Web Pasada', current_date - 6, 'https://pasada.example') returning id as rpas \gset
+insert into registration_entries (registration_id, runner_id, category, self_position) select :'rpas', id, 'M40', 3 from runners where code = 'codigo-valorador-uno-01';
+select auto_promote_registrations();
+select pg_temp.check((select url = 'https://pasada.example' from races where name = 'Con Web Pasada'), 'web: se conserva al pasar a resultados');
 \echo TODAS LAS PRUEBAS SQL OK

@@ -1,6 +1,6 @@
 // Pantallas de la app. Sin dependencias ni paso de compilación: se sirve tal cual.
 import { CONFIG } from './config.js';
-import { supabaseApi, demoApi, friendlyError } from './api.js';
+import { supabaseApi, demoApi, friendlyError, cleanWeb } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, disciplineKey, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
@@ -898,7 +898,7 @@ const isPastReg = (id) => { const g = S.runnerData?.registrations.find((x) => x.
 /** Pantalla para poner el resultado: de una inscripción (reg_) o de una carrera ya en resultados (race_). */
 const resultHref = (id) => (S.runnerData?.registrations.some((g) => g.id === id) ? `#/resultado/reg_${id}` : `#/resultado/race_${id}`);
 const emptyRunnerDraft = (pre = {}) => ({ name: '', date: '', multi: false, end_date: '', place: '', province: '', country: DEFAULT_COUNTRY,
-  modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', category: '', ...pre });
+  modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', category: '', url: '', ...pre });
 
 /** Formulario para que el corredor ponga o cambie SU resultado. id = «reg_<uuid>» o «race_<uuid>». */
 function viewRunnerReport(key) {
@@ -951,7 +951,9 @@ function viewRunnerNew() {
       ${fsec(3, 'bars', 'Qué tipo de carrera es', `<div class="disc-field"><span class="flabel">Modalidad</span>${modalityChips(d, 'data-rf')}</div>
         ${detailInputs(d, 'data-rf')}
         ${S.runnerData.circuits ? typeFields(d, 'data-rf') : ''}`, '#e07800')}
-      ${fsec(4, 'users', editing ? 'Notas' : 'Tú', editing ? `<label class="flabel-l">Notas<textarea data-rf="notes" rows="2" maxlength="500">${esc(d.notes || '')}</textarea></label>`
+      ${isRace ? '' : fsec(4, 'link', 'Web de la carrera (opcional)', `<label class="flabel-l">Dirección de la web<input type="text" inputmode="url" data-rf="url" value="${esc(d.url || '')}" maxlength="500" placeholder="https://…" autocomplete="off"${d.urlLocked ? ' disabled' : ''}></label>
+        <p class="hint">${d.urlLocked ? 'La puso otro compañero. Si está mal, díselo a la dirección.' : 'La verán todos los corredores para ir directos a inscribirse. Si no la sabes, déjala vacía: otro compañero podrá ponerla.'}</p>`, '#2f6fd6')}
+      ${fsec(5, 'users', editing ? 'Notas' : 'Tú', editing ? `<label class="flabel-l">Notas<textarea data-rf="notes" rows="2" maxlength="500">${esc(d.notes || '')}</textarea></label>`
         : `<label class="flabel-l">Tu categoría${catSelect('data-rf="category" required', d.category, 'Elige tu categoría')}</label>`, '#8e44ad')}
       <button class="btn primary big-save">${editing ? 'Guardar cambios' : 'Añadir y apuntarme'}</button>
       <p class="hint">La dirección del club podrá corregirla o borrarla si hace falta.</p>
@@ -1234,7 +1236,7 @@ function runnerScreen(sub) {
     }
     const g = S.runnerData.registrations.find((x) => x.id === id && x.mine_created);
     if (!g) return frame('Editar carrera', '<p class="empty">Esta carrera no existe o no la añadiste tú.</p>', { back: runnerHref('') });
-    if (S.rdraft?.id !== id) S.rdraft = emptyRunnerDraft({ id, name: g.name, date: g.date, multi: !!g.end_date, end_date: g.end_date || '',
+    if (S.rdraft?.id !== id) S.rdraft = emptyRunnerDraft({ id, url: g.url || '', urlLocked: !!g.url && !g.url_mine, name: g.name, date: g.date, multi: !!g.end_date, end_date: g.end_date || '',
       place: g.place || '', province: g.province || '', country: g.country || DEFAULT_COUNTRY, modality: g.modality, notes: g.notes || '', race_type: g.race_type || 'suelta', circuit: g.circuit || '', subtype: g.subtype || '', km: g.km ?? '' });
     return viewRunnerNew();
   }
@@ -1269,6 +1271,27 @@ function doneRaceCard(r, { admin = false, meId = null } = {}) {
     : `<article class="card race done-race ${modClass(r.modality)}">${inner}</article>`;
 }
 
+
+/** Web de la carrera: botón para ir directo si alguien la puso; si no, invita a ponerla para todos. */
+function webRow(g, canAdd) {
+  if (g.url) return `<div class="web-row"><a class="btn small web-btn" href="${esc(g.url)}" target="_blank" rel="noopener noreferrer">${ico('ext')}Web de la carrera</a>${g.url_mine && !S.preview ? `<button type="button" class="btn small ghost" data-act="r-web" data-id="${g.id}" aria-label="Cambiar la web de la carrera" title="Cambiar la web">${ico('pen')}</button>` : ''}</div>`;
+  if (!canAdd || S.preview) return '';
+  return `<div class="web-row"><button type="button" class="btn small ghost web-add" data-act="r-web" data-id="${g.id}">${ico('link')}¿Conoces su web? Ponla para todos</button></div>`;
+}
+/** Ventana para poner (o cambiar) la web de una carrera. Devuelve la dirección, '' para quitarla, o null si cancela. */
+function askWeb(name, current) {
+  return new Promise((resolve) => {
+    const dlg = document.getElementById('dialog');
+    dlg.innerHTML = `<form method="dialog" class="dlg"><h2>Web de la carrera</h2><p><b>${esc(name)}</b></p>
+      <label>Dirección de la web<input name="url" type="text" inputmode="url" placeholder="https://…" value="${esc(current)}" autocomplete="off" maxlength="500"></label>
+      <p class="hint">La verán todos los corredores del club, para ir directos a inscribirse o ver el recorrido. Pon solo la web oficial de la carrera.</p>
+      <div class="dlg-actions"><button value="save" class="btn primary">Guardar</button>${current ? '<button value="clear" class="btn danger ghost">Quitar la web</button>' : ''}<button value="" class="btn ghost">Cancelar</button></div></form>`;
+    dlg.onclose = () => { const v = dlg.returnValue; resolve(v === 'save' ? dlg.querySelector('input[name="url"]').value.trim() : v === 'clear' ? '' : null); };
+    dlg.returnValue = '';
+    dlg.showModal();
+  });
+}
+
 /** Tarjeta de una inscripción para el corredor: datos, quién va y sus acciones (apuntarse, borrarse, resultado, editar). */
 function runnerRegCard(g) {
   const d = S.runnerData, me = d.me, today = d.today || todayISO();
@@ -1290,6 +1313,7 @@ function runnerRegCard(g) {
         ${!mine && g.date >= pastLimit() ? `<div class="row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">La hice: apuntarme</button></div>` : ''}`}
       ${g.notes ? `<p class="notes">${esc(g.notes)}</p>` : ''}
+      ${webRow(g, open && !g.suspended)}
       ${mates}
       ${edit}
       ${mine && !S.preview && !g.suspended && (open || !g.my_result) ? `<button type="button" class="pay-btn${mine.paid ? ' on' : ''}" data-act="r-paid" data-id="${g.id}">${ico('euro')}<span>${mine.paid ? `Pagada${mine.paid_amount != null ? ' · ' + euros(mine.paid_amount) : ''}` : 'Marcar como pagada'}</span></button>` : ''}
@@ -1498,7 +1522,7 @@ function viewWatch() {
     const first = [...live].sort((a, b) => a.w.date.localeCompare(b.w.date))[0];
     body = !w.length ? `<section class="card wempty"><div class="we-ic">${ico('star')}</div><h2>Tu lista para decidir con calma</h2>
         <p>Guarda aquí las carreras que te gustan pero en las que aún <b>no</b> te inscribes: con su fecha, su web, el precio, el plazo de inscripción y tus notas. Cuando te decidas, un toque y te apuntas.</p>
-        <p class="hint">La lista es solo tuya: tu precio, plazo y notas no los ve nadie. La carrera (sin tu nombre) se crea también en Carreras para que otros la encuentren y no se duplique.</p><a class="btn primary" href="#/valorar/nueva">${ico('plus')}Guardar una carrera</a>
+        <p class="hint">La lista es solo tuya: tu precio, plazo y notas no los ve nadie. La carrera (con su web, sin tu nombre) se crea también en Carreras para que otros la encuentren y no se duplique.</p><a class="btn primary" href="#/valorar/nueva">${ico('plus')}Guardar una carrera</a>
         <p class="hint">Desde <a href="#/federaciones">Federaciones</a> también puedes guardarlas con la estrella ☆.</p></section>`
       : `<section class="wsum"><div><b>${live.length}</b><span>por valorar</span></div><div class="${next && next.i.urgent ? 'bad' : ''}"><b>${next ? (next.i.toDeadline === 0 ? 'Hoy' : `${next.i.toDeadline} d`) : '—'}</b><span>${next ? `plazo: ${esc(next.w.name.length > 22 ? next.w.name.slice(0, 21) + '…' : next.w.name)}` : 'sin plazos próximos'}</span></div>
           <div><b>${first ? (first.i.toRace === 0 ? 'Hoy' : `${first.i.toRace} d`) : '—'}</b><span>${first ? `la primera: ${esc(first.w.name.length > 20 ? first.w.name.slice(0, 19) + '…' : first.w.name)}` : 'ninguna próxima'}</span></div></section>
@@ -1536,11 +1560,12 @@ function viewWatchForm(id) {
         <label class="flabel-l">Provincia<input data-rf="province" list="dl-prov" value="${esc(d.province)}" autocomplete="off"></label>`, '#0f9d8a')}
       ${fsec(3, 'bars', 'Qué tipo de carrera es', `<div class="disc-field"><span class="flabel">Modalidad</span>${modalityChips(d, 'data-rf')}</div>${detail}`, '#e07800')}
       ${fsec(4, 'euro', 'Para decidir', `<label class="flabel-l">Web de la carrera<input type="text" inputmode="url" data-rf="url" value="${esc(d.url)}" maxlength="500" placeholder="https://…" autocomplete="off"></label>
+        <p class="hint">La web se comparte: les saldrá a los demás en Carreras con un botón para ir directos.</p>
         <div class="grid2"><label class="flabel-l">Precio (€)<input type="number" inputmode="decimal" step="0.5" min="0" max="10000" data-rf="price" value="${esc(d.price ?? '')}" placeholder="25"></label>
           <label class="flabel-l">Inscripciones hasta<input type="date" data-rf="deadline" value="${esc(d.deadline)}" ${d.date ? `max="${esc(d.date)}"` : ''}></label></div>
         <label class="flabel-l">Notas<textarea data-rf="notes" rows="3" maxlength="500" placeholder="Qué te gusta, qué dudas tienes, con quién iría…">${esc(d.notes || '')}</textarea></label>`, '#8e44ad')}
       <button class="btn primary big-save">${editing ? 'Guardar cambios' : 'Guardar en «Por valorar»'}</button>
-      <p class="hint">Tu precio, plazo y notas solo los ves tú. La carrera (sin tu nombre) se crea también en Carreras para que otros la encuentren ya con sus datos y no se duplique. Cuando te decidas, pulsas «Apuntarme» desde la lista.</p>
+      <p class="hint">Tu precio, plazo y notas solo los ves tú. La carrera (con su web, sin tu nombre) se crea también en Carreras para que otros la encuentren ya con sus datos y no se duplique. Cuando te decidas, pulsas «Apuntarme» desde la lista.</p>
     </form>
     ${editing ? `<button class="btn danger ghost block" data-act="w-del" data-id="${item.id}" data-back="1">${ico('trash')}Descartar esta carrera</button>` : ''}`, { back: '#/mi/valorar', rtab: 'mi' });
 }
@@ -1752,7 +1777,7 @@ function viewFed() {
 function draftRegistration(id) {
   if (id === 'nueva') {
     const pre = S.prefill; S.prefill = null;   // viene de «Carreras de las federaciones»
-    return { kind: 'reg', id: null, name: '', date: '', place: '', province: '', country: DEFAULT_COUNTRY, modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', notes: '', people: [], ...pre };
+    return { kind: 'reg', id: null, name: '', date: '', place: '', province: '', country: DEFAULT_COUNTRY, modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', url: '', notes: '', people: [], ...pre };
   }
   const g = S.data.registrations.find((x) => x.id === id);
   if (!g) return null;
@@ -1770,7 +1795,9 @@ function raceFields(d) {
         <label class="flabel-l">País<input data-f="country" list="dl-country" value="${esc(d.country || '')}"></label></div>`, '#0f9d8a')}
     ${fsec(3, 'bars', 'Qué tipo de carrera es', `<div class="disc-field"><span class="flabel">Modalidad</span>${modalityChips(d, 'data-f')}</div>
       ${detailInputs(d, 'data-f')}
-      ${typeFields(d, 'data-f')}`, '#e07800')}`;
+      ${typeFields(d, 'data-f')}`, '#e07800')}
+    ${fsec(4, 'link', 'Web de la carrera', `<label class="flabel-l">Dirección de la web<input type="text" inputmode="url" data-f="url" value="${esc(d.url || '')}" maxlength="500" placeholder="https://…" autocomplete="off"></label>
+      <p class="hint">Les sale a todos los corredores con un botón «Web de la carrera». ${d.url ? `<a href="${esc(d.url)}" target="_blank" rel="noopener noreferrer">Abrirla ↗</a>` : 'Si la dejas vacía, cualquier corredor que la conozca podrá ponerla.'}</p>`, '#2f6fd6')}`;
 }
 
 function addRunnerSelect(d) {
@@ -2565,7 +2592,7 @@ function yearPicker(years) {
 }
 
 function draftRace(id) {
-  if (id === 'nueva') return { kind: 'race', id: null, name: '', date: '', place: '', province: '', country: DEFAULT_COUNTRY, modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', notes: '', people: [], stages: [] };
+  if (id === 'nueva') return { kind: 'race', id: null, name: '', date: '', place: '', province: '', country: DEFAULT_COUNTRY, modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', url: '', notes: '', people: [], stages: [] };
   const r = S.data.races.find((x) => x.id === id);
   if (!r) return null;
   const stages = (r.stages || []).map((_, i) => stageName(r, i));
@@ -4129,7 +4156,8 @@ function draftPayload() {
     end_date: d.multi && d.end_date ? d.end_date : null,
     race_type: d.race_type || 'suelta', circuit: d.race_type === 'circuito' ? cleanName(d.circuit) : null,
     suspended: d.kind === 'reg' && !!d.suspended,
-    subtype: SUBTYPES[d.modality]?.includes(d.subtype) ? d.subtype : null, km: parseKm(d.km) };
+    subtype: SUBTYPES[d.modality]?.includes(d.subtype) ? d.subtype : null, km: parseKm(d.km), url: cleanWeb(d.url) };
+  if (base.url === '!') throw new Error('La web no parece una dirección válida. Pon algo como https://nombre-de-la-carrera.com o déjala vacía.');
   if (String(d.km ?? '').trim() !== '' && base.km === null) throw new Error('La distancia tiene que estar entre 0 y 1000 km.');
   if (!base.name) throw new Error('Falta el nombre de la carrera.');
   if (base.race_type === 'circuito' && !base.circuit) throw new Error('Falta el nombre del circuito.');
@@ -4246,6 +4274,13 @@ const actions = {
     if (ok) { S.rdraft = null; go(isRace ? runnerHref('mi') : '#/'); }
   },
   async 'r-new'() { S.rdraft = null; if (!S.fed) loadFed(); go('#/nueva'); },
+  async 'r-web'(el) {
+    const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id); if (!g) return;
+    const v = await askWeb(g.name, g.url_mine ? g.url : ''); if (v === null) return;
+    const u = cleanWeb(v); if (u === '!') return toast('Esa dirección no parece una web. Pon algo como https://nombre-de-la-carrera.com', true);
+    const ok = await run(async () => { await api.runnerSetUrl(S.code, g.id, u); await loadRunner(); return true; }, u ? 'Web guardada: ya la ven todos' : 'Web quitada');
+    if (ok) render();
+  },
   async 'w-sign'(el) {
     const w = (S.watch || []).find((x) => x.id === el.dataset.id); if (!w) return;
     const g = watchMatch(w, S.runnerData.registrations);
@@ -4256,7 +4291,7 @@ const actions = {
       return;
     }
     S.rdraft = emptyRunnerDraft({ name: w.name, date: w.date, multi: !!w.end_date, end_date: w.end_date || '', place: w.place || '', province: w.province || '', country: w.country || DEFAULT_COUNTRY, modality: w.modality,
-      subtype: w.subtype || '', km: w.km ?? '', watchId: w.id });
+      subtype: w.subtype || '', km: w.km ?? '', url: w.url || '', watchId: w.id });
     go('#/nueva');
   },
   async 'w-del'(el) {
@@ -4282,15 +4317,16 @@ const actions = {
   },
   async 'r-new-fed'(el) {
     const r = S.fed.races[Number(el.dataset.i)];
-    S.rdraft = emptyRunnerDraft({ name: r.name, date: r.date, place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY, modality: r.modality, ...circuitOf(r) });
+    S.rdraft = emptyRunnerDraft({ name: r.name, date: r.date, place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY, modality: r.modality, url: /^https?:\/\/\S+$/i.test(r.url || '') ? r.url : '', ...circuitOf(r) });
     go('#/nueva');
   },
   'fill-fed'(el) {
     const r = S.fed.races[Number(el.dataset.i)];
     const vals = { name: r.name, date: r.date, place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY, modality: r.modality, ...circuitOf(r) };
-    if (S.rdraft && S.rdraft.wk != null && parseRoute().view === 'valorar') { Object.assign(S.rdraft, vals, { subtype: vals.subtype || S.rdraft.subtype }); if (/^https?:\/\/\S+$/i.test(r.url || '') && !S.rdraft.url) S.rdraft.url = r.url; }
-    else if (S.rdraft && parseRoute().view === 'nueva') Object.assign(S.rdraft, vals);
-    else if (S.draft) Object.assign(S.draft, vals, { notes: S.draft.notes || srcNote(r) });
+    const web = /^https?:\/\/\S+$/i.test(r.url || '') ? r.url : '';
+    if (S.rdraft && S.rdraft.wk != null && parseRoute().view === 'valorar') Object.assign(S.rdraft, vals, { subtype: vals.subtype || S.rdraft.subtype, url: S.rdraft.url || web });
+    else if (S.rdraft && parseRoute().view === 'nueva') Object.assign(S.rdraft, vals, { url: S.rdraft.url || web });
+    else if (S.draft) Object.assign(S.draft, vals, { url: S.draft.url || web, notes: S.draft.notes || srcNote(r) });
     render();
   },
   async 'r-join-go'(el) {
@@ -4390,7 +4426,7 @@ const actions = {
   'fed-create'(el) {
     const r = S.fed.races[Number(el.dataset.i)];
     S.prefill = { name: r.name, date: r.date, place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY,
-      modality: r.modality, ...circuitOf(r), notes: srcNote(r) };
+      modality: r.modality, url: /^https?:\/\/\S+$/i.test(r.url || '') ? r.url : '', ...circuitOf(r), notes: srcNote(r) };
     go('#/inscripciones/nueva');
   },
   async 'insc-menu'() {
@@ -4773,6 +4809,7 @@ const forms = {
     if (d.multi && !d.end_date) return toast('Falta el último día.', true);
     if (!d.id && !d.category) return toast('Elige tu categoría para apuntarte.', true);
     if (d.race_type === 'circuito' && !cleanName(d.circuit)) return toast('Falta el nombre del circuito.', true);
+    if (!d.kind && cleanWeb(d.url) === '!') return toast('La web no parece una dirección válida. Pon algo como https://nombre-de-la-carrera.com o déjala vacía.', true);
     if (d.id && d.kind === 'race') { // editar una carrera propia que ya está en resultados
       const subtype = SUBTYPES[d.modality]?.includes(d.subtype) ? d.subtype : null;
       if (String(d.km ?? '').trim() !== '' && parseKm(d.km) === null) return toast('La distancia tiene que estar entre 0 y 1000 km.', true);
@@ -4790,6 +4827,8 @@ const forms = {
         await api.runnerUpdate(S.code, d.id, { name, date: d.date, end_date: d.multi ? d.end_date : null, place: cleanName(d.place),
           province: cleanName(d.province), country: d.country, modality: d.modality, notes: d.notes || '' });
         await setMyRaceType(d.id, d); await setMyDetails(d.id, d);
+        const cur = S.runnerData.registrations.find((x) => x.id === d.id)?.url || '';
+        if (!d.urlLocked && cleanWeb(d.url) !== '!' && (cleanWeb(d.url) || '') !== cur) await api.runnerSetUrl(S.code, d.id, cleanWeb(d.url));
         await loadRunner(); return true;
       }, 'Carrera actualizada');
       if (ok) { S.rdraft = null; go('#/'); }
@@ -4801,12 +4840,12 @@ const forms = {
       const choice = await choose('¿Es esta carrera?', `Ya hay <b>${esc(same.name)}</b> el mismo día (${esc(when(same))}).`, [
         { label: 'Sí, apuntarme a esa', value: 'join', kind: 'primary' }, { label: 'No, es otra: crearla', value: 'create' }]);
       if (!choice) return;
-      if (choice === 'join') return actions['r-join-go']({ dataset: { id: same.id } });
+      if (choice === 'join') { if (cleanWeb(d.url) && cleanWeb(d.url) !== '!' && !same.url) await api.runnerSetUrl(S.code, same.id, cleanWeb(d.url)).catch(() => {}); return actions['r-join-go']({ dataset: { id: same.id } }); }
     }
     const past = d.date < todayISO();
     const id = await run(async () => {
       const newId = await api.runnerCreate(S.code, { name, date: d.date, end_date: d.multi ? d.end_date : null, place: cleanName(d.place),
-        province: cleanName(d.province), country: d.country, modality: d.modality }, d.category || null);
+        province: cleanName(d.province), country: d.country, modality: d.modality, url: cleanWeb(d.url) || '' }, d.category || null);
       if (newId && d.race_type && d.race_type !== 'suelta') await setMyRaceType(newId, d);
       if (newId) await setMyDetails(newId, d);
       if (d.watchId) { await api.runnerWatchDelete(S.code, d.watchId).catch(() => {}); await loadWatch(); }   // ya no está «por valorar»
@@ -4991,7 +5030,7 @@ document.addEventListener('visibilitychange', async () => {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['w-sign', 'w-del', 'w-add-fed', 'w-add-reg', 'chro-toggle', 'chro-all', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
+const RUNNER_ACTIONS = new Set(['r-web', 'w-sign', 'w-del', 'w-add-fed', 'w-add-reg', 'chro-toggle', 'chro-all', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
 // los enlaces de la ventana emergente (p. ej. las carreras de un compañero) cierran la ventana al navegar
 document.getElementById('dialog').addEventListener('click', (ev) => { if (ev.target.closest('a[href^="#/"]')) ev.currentTarget.close(); });
 $app.addEventListener('click', (ev) => {
