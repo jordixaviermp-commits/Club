@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, disciplineKey, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  directorBoard, groupMessage, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
+  directorBoard, groupMessage, watchInfo, sortWatch, watchMatch, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -234,6 +234,7 @@ async function onRoute() {
       if (sub === 'equipo' || (sub === '' && S.regView === 'cal' && !S.team)) loadTeam();
       if (sub === 'federaciones' && !S.fed) loadFed();
       if (sub === 'contrato') loadMyDocs();
+      if (sub === 'mi' && !S.preview) loadWatch().then(() => { if (parseRoute().view === 'mi' && !S.rdraft?.wk) render(); });
       if (sub === 'noticias') enterNews();
       if (sub === 'nueva' && !S.team) loadTeam();
       if (sub === 'carrera' && !S.team) loadTeam();
@@ -262,7 +263,7 @@ async function loadChron() {
 }
 async function loadRunner() {
   if (!S.session?.isAdmin) api.runnerPing?.(S.code).catch(() => {});   // actividad: última vez que abrió la app
-  try { S.runnerData = await api.runnerView(S.code); await loadNews(); await loadCorrections(); await loadChron(); }
+  try { S.runnerData = await api.runnerView(S.code); await loadNews(); await loadCorrections(); await loadChron(); await loadWatch(); }
   catch (e) {
     S.runnerData = null;
     if (/enlace_no_valido/.test(String(e?.message))) { store.del(CODE_KEY); S.code = null; }
@@ -328,6 +329,7 @@ const adminScreens = () => [
 const runnerScreens = () => [
   ['🏠', 'Carreras', runnerHref(''), 'carreras proximas apuntarme buscar crear nueva calendario'],
   ['🏁', 'Federaciones y ligas', runnerHref('federaciones'), 'federaciones ligas calendario fcc fac catalana aragonesa'],
+  ['⭐', 'Por valorar: carreras guardadas para decidir', '#/mi/valorar', 'por valorar guardar guardadas carrera favorita estrella decidir inscribirme plazo precio lista pendiente'],
   ['🧍', 'Mi temporada', runnerHref('mi'), 'mi temporada resultados carreras hechas puesto tiempo bono'],
   ['📄', 'Contrato y bonificación', runnerHref('contrato'), 'contrato bonificacion bono licencia ropa pedido documentos plus'],
   ['📊', 'Equipo', runnerHref('equipo'), 'equipo ranking estadistica categorias km tiempo podios'],
@@ -420,7 +422,7 @@ function frame(title, body, { back, actions = '', rtab = null, noSearch = false 
   const admin = S.session?.isAdmin;
   const tabs = rtab !== null
     ? `<nav class="tabs">${RUNNER_TABS.map(([v, label, d]) =>
-      `<a href="${runnerHref(v)}" class="${v === rtab ? 'on' : ''}">${icon(d)}<span>${label}</span></a>`).join('')}</nav>`
+      `<a href="${runnerHref(v)}" class="${v === rtab ? 'on' : ''}">${icon(d)}${v === 'mi' && !S.preview && watchUrgent() ? `<b class="tab-n" title="Plazo de inscripción a punto de cerrarse">${watchUrgent()}</b>` : ''}<span>${label}</span></a>`).join('')}</nav>`
     : admin ? `<nav class="tabs">${ADMIN_TABS.map(([v, label, d]) =>
       `<a href="#/${v}" class="${(ADMIN_GROUP[view] || 'hoy') === v ? 'on' : ''}">${icon(d)}${v === 'redes' && S.data && socialPending() ? `<b class="tab-n">${socialPending()}</b>` : ''}${v === 'hoy' && S.data && todayCount() ? `<b class="tab-n">${todayCount()}</b>` : ''}<span>${label}</span></a>`).join('')}</nav>` : '';
   return `
@@ -918,7 +920,7 @@ function viewRunnerReport(key) {
 const podiumKind = (race, current) => (PODIUM_TYPES.some((t) => t.id === current) ? current : race?.race_type === 'campeonato' ? 'campeonato' : 'suelta');
 
 function viewRunnerNew() {
-  if (!S.rdraft) S.rdraft = emptyRunnerDraft({ name: S.q.runner || '' });
+  if (!S.rdraft || S.rdraft.wk != null) S.rdraft = emptyRunnerDraft({ name: S.q.runner || '' });
   const d = S.rdraft;
   const editing = !!d.id, isRace = d.kind === 'race';
   const reg = editing && !isRace ? S.runnerData.registrations.find((x) => x.id === d.id) : null;
@@ -990,6 +992,9 @@ const ICO = {
   db: 'M12 8c4.4 0 8-1.3 8-3s-3.6-3-8-3-8 1.3-8 3 3.6 3 8 3zM4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',
   send: 'M22 2L11 13M22 2l-7 20-4-9-9-4z',
   list: 'M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01',
+  star: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
+  trash: 'M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6',
+  plus: 'M12 5v14M5 12h14',
 };
 const ico = (k, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${ICO[k]}"/></svg>`;
 /** Medalla de podio dibujada (sin emoji): círculo oro / plata / bronce con el puesto. */
@@ -1225,6 +1230,7 @@ function runnerScreen(sub) {
     return viewRunnerNew();
   }
   if (sub === 'mi') return viewRunnerMine();
+  if (sub === 'valorar' && !S.preview) return viewWatchForm(parseRoute().id || 'nueva');
   if (sub === 'contrato') return viewRunnerContract();
   if (sub === 'noticias') return viewNews();
   if (sub === 'carrera') return viewRunnerRace(S.session?.isAdmin && S.preview ? parseRoute().rest : parseRoute().id);
@@ -1265,7 +1271,7 @@ function runnerRegCard(g) {
     return `<article class="card race ${open ? '' : 'past-reg '}${modClass(g.modality)}">
       <div class="race-head"><div><h3>${esc(g.name)}</h3>
         <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}${soon ? ` <span class="soon${daysTo(g.date) <= 7 ? ' now' : ''}">${ico('clock', 't-i')}${daysToText(daysTo(g.date))}</span>` : ''}</p></div>
-        <div class="race-side">${modTag(g.modality, g.subtype)}</div></div>${typeTag(g)}
+        <div class="race-side">${modTag(g.modality, g.subtype)}${open && !mine && !g.suspended && !S.preview ? starBtn(g, 'w-add-reg', ['id', g.id]) : ''}</div></div>${typeTag(g)}
       ${g.suspended ? `<p class="state-tag">${ico('ban', 't-i')}Suspendida: cuenta para el mínimo de carreras, no para el bono</p>` : ''}
       ${open || g.suspended ? '' : `<p class="state-tag">${ico('flag', 't-i')}Ya disputada · pendiente de resultados</p>
         ${mine && !S.preview ? (g.my_result ? `<p class="mine-created">Tu resultado: ${g.my_result.position}º (enviado) · <a href="#/resultado/reg_${g.id}">${ico('pen', 't-i')}Cambiar</a></p>`
@@ -1418,8 +1424,10 @@ function licenseCard() {
 
 function viewRunnerMine() {
   const d = S.runnerData, me = d.me;
+  if (!S.preview && parseRoute().id === 'valorar') return viewWatch();
   return frame(runnerTitle(), `
     ${previewBanner()}
+    ${S.preview ? '' : miTabs('mi')}
     <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
     ${myRacesCard(d, () => chronicleCard(d))}
     ${installHint()}
@@ -1427,6 +1435,116 @@ function viewRunnerMine() {
     ${themeLine()}${versionLine()}`,
   { rtab: 'mi' });
 }
+
+
+// ======================================================================
+//  Por valorar: las carreras que me gustan y aún no me inscribo (personal de cada corredor)
+// ======================================================================
+
+const watchToday = () => S.runnerData?.today || todayISO();
+async function loadWatch() {
+  if (S.preview || !S.code) return;
+  try { const l = await api.runnerWatchList(S.code); S.watch = Array.isArray(l) ? l : null; } catch { S.watch = undefined; }   // null = falta el SQL
+}
+/** Cuántas guardadas tienen el plazo de inscripción a punto de cerrarse (para el aviso de la pestaña). */
+const watchUrgent = () => (Array.isArray(S.watch) ? S.watch.filter((w) => watchInfo(w, watchToday()).urgent).length : 0);
+const watchKey = (g) => `${g.date}|${normalize(g.name)}`;
+const watchSaved = (g) => (Array.isArray(S.watch) ? S.watch.find((w) => watchKey(w) === watchKey(g)) : null);
+
+/** Selector de arriba de «Mi temporada»: Mi temporada | Por valorar. */
+const miTabs = (cur) => {
+  const live = Array.isArray(S.watch) ? S.watch.filter((w) => !watchInfo(w, watchToday()).past).length : 0, u = watchUrgent();
+  return `<div class="seg2 mi-seg" role="tablist" aria-label="Mi temporada"><a href="#/mi" class="${cur === 'mi' ? 'on' : ''}" role="tab" aria-selected="${cur === 'mi'}">${ico('calcheck')}Mi temporada</a>
+    <a href="#/mi/valorar" class="${cur === 'valorar' ? 'on' : ''}" role="tab" aria-selected="${cur === 'valorar'}">${ico('star')}Por valorar${live ? `<b>${live}</b>` : ''}${u ? '<i class="seg-dot" title="Plazo de inscripción a punto de cerrarse"></i>' : ''}</a></div>`;
+};
+
+/** Tarjeta de una carrera guardada. */
+function watchCard(w, i) {
+  const regs = S.runnerData.registrations, g = watchMatch(w, regs), me = S.runnerData.me.id;
+  const mine = g && (g.entries || []).some((e) => e.runner_id === me), others = g ? (g.entries || []).filter((e) => e.runner_id !== me) : [];
+  const dl = i.deadline && { closed: ['bad', 'Plazo cerrado'], today: ['bad', '¡Último día para inscribirse!'], soon: ['bad', `Plazo: ${i.toDeadline} día${i.toDeadline === 1 ? '' : 's'}`],
+    open: ['ok', `Plazo hasta el ${dayMon(w.deadline)}`] }[i.deadline];
+  const when_ = i.past ? 'Ya pasó' : i.toRace === 0 ? 'Hoy' : i.toRace === 1 ? 'Mañana' : `En ${i.toRace} días`;
+  return `<article class="card wcard ${discClass(w.modality, w.subtype)}${i.past ? ' past' : ''}${i.urgent ? ' urgent' : ''}">
+    <div class="wc-top">${dateBadge(w)}<div class="wc-main"><h3>${esc(w.name)}</h3>
+      <p class="muted">${esc(when(w))}${place(w) ? ' · ' + esc(place(w)) : ''} · <b>${when_}</b></p></div></div>
+    <div class="wc-chips">${modTag(w.modality, w.subtype)}${w.km ? `<span class="wchip">${ico('ruler')}${esc(kmText(w.km))}</span>` : ''}${w.price != null ? `<span class="wchip">${ico('euro')}${esc(euros(w.price))}</span>` : ''}${dl ? `<span class="wchip ${dl[0]}">${ico('clock')}${dl[1]}</span>` : ''}</div>
+    ${mine ? `<p class="wc-club ok">${ico('check')}<span>Ya estás apuntado. Puedes quitarla de aquí.</span></p>` : g ? `<p class="wc-club">${ico('users')}<span>Ya está en el club: <b>${others.length}</b> apuntado${others.length === 1 ? '' : 's'}${others.length ? ` (${esc(others.map((e) => e.name).slice(0, 4).join(', '))}${others.length > 4 ? '…' : ''})` : ''}</span></p>` : ''}
+    ${w.notes ? `<p class="notes">${esc(w.notes)}</p>` : ''}
+    <div class="wc-acts">${i.past ? '' : mine ? '' : `<button class="btn primary small" data-act="w-sign" data-id="${w.id}">${g ? 'Apuntarme' : 'Inscribirme'}</button>`}
+      ${w.url ? `<a class="btn small" href="${esc(w.url)}" target="_blank" rel="noopener noreferrer">${ico('ext')}Web</a>` : ''}
+      <a class="btn small ghost" href="#/valorar/${w.id}">${ico('pen')}Editar</a>
+      <button class="btn small ghost" data-act="w-del" data-id="${w.id}">${ico('trash')}${i.past || mine ? 'Quitar' : 'Descartar'}</button></div></article>`;
+}
+
+function viewWatch() {
+  const w = S.watch, today = watchToday();
+  let body;
+  if (w === undefined) body = '<p class="empty">Cargando…</p>';
+  else if (w === null) body = '<p class="card warn">Esta función aún no está activada: avisa a la dirección del club.</p>';
+  else {
+    const mode = S.watchSort === 'deadline' ? 'deadline' : 'date';
+    const list = sortWatch(w, mode, today), live = list.filter((x) => !x.i.past), old = list.filter((x) => x.i.past);
+    const next = live.filter((x) => x.i.toDeadline !== null && x.i.toDeadline >= 0).sort((a, b) => a.i.toDeadline - b.i.toDeadline)[0];
+    const first = [...live].sort((a, b) => a.w.date.localeCompare(b.w.date))[0];
+    body = !w.length ? `<section class="card wempty"><div class="we-ic">${ico('star')}</div><h2>Tu lista para decidir con calma</h2>
+        <p>Guarda aquí las carreras que te gustan pero en las que aún <b>no</b> te inscribes: con su fecha, su web, el precio, el plazo de inscripción y tus notas. Cuando te decidas, un toque y te apuntas.</p>
+        <p class="hint">Es solo tuyo: ni la dirección ni tus compañeros la ven.</p><a class="btn primary" href="#/valorar/nueva">${ico('plus')}Guardar una carrera</a>
+        <p class="hint">Desde <a href="#/federaciones">Federaciones</a> también puedes guardarlas con la estrella ☆.</p></section>`
+      : `<section class="wsum"><div><b>${live.length}</b><span>por valorar</span></div><div class="${next && next.i.urgent ? 'bad' : ''}"><b>${next ? (next.i.toDeadline === 0 ? 'Hoy' : `${next.i.toDeadline} d`) : '—'}</b><span>${next ? `plazo: ${esc(next.w.name.length > 22 ? next.w.name.slice(0, 21) + '…' : next.w.name)}` : 'sin plazos próximos'}</span></div>
+          <div><b>${first ? (first.i.toRace === 0 ? 'Hoy' : `${first.i.toRace} d`) : '—'}</b><span>${first ? `la primera: ${esc(first.w.name.length > 20 ? first.w.name.slice(0, 19) + '…' : first.w.name)}` : 'ninguna próxima'}</span></div></section>
+        ${live.length > 1 ? `<div class="wsort"><span class="muted">Ordenar:</span><button class="chip${mode === 'date' ? ' on' : ''}" data-act="w-sort" data-m="date">Por fecha</button><button class="chip${mode === 'deadline' ? ' on' : ''}" data-act="w-sort" data-m="deadline">Por plazo de inscripción</button></div>` : ''}
+        <div class="wlist">${live.map((x) => watchCard(x.w, x.i)).join('') || '<p class="empty small">Nada próximo: todo lo guardado ya pasó.</p>'}</div>
+        ${old.length ? `<details class="card wold"><summary><b>Ya pasaron (${old.length})</b> <span class="muted">· quítalas cuando quieras</span></summary>${old.map((x) => watchCard(x.w, x.i)).join('')}</details>` : ''}
+        <p class="hint center">Es solo tuyo: ni la dirección ni tus compañeros ven esta lista.</p>`;
+  }
+  return frame(runnerTitle(), `${miTabs('valorar')}
+    <div class="toolbar wtool"><h2 class="wtitle">${ico('star')}Por valorar</h2>${Array.isArray(w) ? `<a class="btn primary" href="#/valorar/nueva">${ico('plus')}Guardar carrera</a>` : ''}</div>
+    ${body}`, { rtab: 'mi' });
+}
+
+/** Formulario para guardar o corregir una carrera por valorar. */
+function viewWatchForm(id) {
+  if (!Array.isArray(S.watch)) return frame('Por valorar', `<p class="card warn">Esta función aún no está activada: avisa a la dirección del club.</p>`, { back: '#/mi/valorar' });
+  const item = id === 'nueva' ? null : S.watch.find((x) => x.id === id);
+  if (id !== 'nueva' && !item) return frame('Por valorar', '<p class="empty">Esa carrera ya no está en tu lista.</p>', { back: '#/mi/valorar' });
+  if (S.rdraft?.wk !== id) {
+    S.rdraft = emptyRunnerDraft({ wk: id, name: item?.name || S.q.runner || '', date: item?.date || '', multi: !!item?.end_date, end_date: item?.end_date || '', place: item?.place || '', province: item?.province || '',
+      country: item?.country || DEFAULT_COUNTRY, modality: item?.modality || 'Carretera', subtype: item?.subtype || '', km: item?.km ?? '', url: item?.url || '', price: item?.price ?? '', deadline: item?.deadline || '', notes: item?.notes || '' });
+  }
+  const d = S.rdraft, editing = !!item;
+  const detail = `${SUBTYPES[d.modality] ? `<div class="disc-field"><span class="flabel">Disciplina de ${esc(d.modality)}</span>${radioChips('data-rf', 'subtype', [['', 'Sin decidir'], ...SUBTYPES[d.modality].map((x) => [x, esc(x)])], d.subtype)}</div>` : ''}
+    <label class="flabel-l">Distancia (km)<input type="number" inputmode="decimal" step="0.1" min="0.1" max="1000" data-rf="km" value="${esc(d.km ?? '')}" placeholder="85"></label>`;
+  return frame(editing ? 'Editar carrera guardada' : 'Guardar una carrera', `
+    <form class="stack rform" data-form="w-save">
+      ${fsec(1, 'flag', 'Qué carrera es', `<label class="flabel-l">Nombre de la carrera<input data-rf="name" value="${esc(d.name)}" required minlength="3" maxlength="120" autocomplete="off" placeholder="Gran Fondo…"></label>
+        ${editing ? '' : `<p class="hint">¿Está en el calendario de las federaciones? Desde <a href="#/federaciones">Federaciones</a> la guardas con la estrella ☆ y ya viene rellenada.</p>`}`, '#1f6fd1')}
+      ${fsec(2, 'cal', 'Cuándo y dónde', `<label class="flabel-l">${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-rf="date" value="${esc(d.date)}" min="${pastLimit()}" required></label>
+        <label class="check"><input type="checkbox" data-rf-multi ${d.multi ? 'checked' : ''}> Carrera de varios días (por etapas)</label>
+        ${d.multi ? `<label class="flabel-l">Último día<input type="date" data-rf="end_date" value="${esc(d.end_date)}" min="${esc(d.date || pastLimit())}" required></label>` : ''}
+        <label class="flabel-l">Lugar<input data-rf="place" value="${esc(d.place)}" maxlength="120" placeholder="Ciudad o pueblo"></label>
+        <label class="flabel-l">Provincia<input data-rf="province" list="dl-prov" value="${esc(d.province)}" autocomplete="off"></label>`, '#0f9d8a')}
+      ${fsec(3, 'bars', 'Qué tipo de carrera es', `<div class="disc-field"><span class="flabel">Modalidad</span>${modalityChips(d, 'data-rf')}</div>${detail}`, '#e07800')}
+      ${fsec(4, 'euro', 'Para decidir', `<label class="flabel-l">Web de la carrera<input type="text" inputmode="url" data-rf="url" value="${esc(d.url)}" maxlength="500" placeholder="https://…" autocomplete="off"></label>
+        <div class="grid2"><label class="flabel-l">Precio (€)<input type="number" inputmode="decimal" step="0.5" min="0" max="10000" data-rf="price" value="${esc(d.price ?? '')}" placeholder="25"></label>
+          <label class="flabel-l">Inscripciones hasta<input type="date" data-rf="deadline" value="${esc(d.deadline)}" ${d.date ? `max="${esc(d.date)}"` : ''}></label></div>
+        <label class="flabel-l">Notas<textarea data-rf="notes" rows="3" maxlength="500" placeholder="Qué te gusta, qué dudas tienes, con quién iría…">${esc(d.notes || '')}</textarea></label>`, '#8e44ad')}
+      <button class="btn primary big-save">${editing ? 'Guardar cambios' : 'Guardar en «Por valorar»'}</button>
+      <p class="hint">Solo la ves tú. Cuando te decidas, desde la lista pulsas «Inscribirme» y se crea la inscripción con estos datos.</p>
+    </form>
+    ${editing ? `<button class="btn danger ghost block" data-act="w-del" data-id="${item.id}" data-back="1">${ico('trash')}Descartar esta carrera</button>` : ''}`, { back: '#/mi/valorar', rtab: 'mi' });
+}
+
+/** Estrella para guardar una carrera (calendario de las federaciones o inscripciones del club) en «Por valorar». */
+function starBtn(r, kind, ref) {
+  if (S.preview || !Array.isArray(S.watch)) return '';
+  const saved = watchSaved(r);
+  return saved ? `<a class="star-btn on" href="#/mi/valorar" title="Guardada en «Por valorar»" aria-label="Guardada en Por valorar: abrir la lista">${ico('star')}<span>Guardada</span></a>`
+    : `<button type="button" class="star-btn" data-act="${kind}" data-${ref[0]}="${esc(ref[1])}" title="Guardar para valorar más adelante" aria-label="Guardar ${esc(r.name)} en Por valorar">${ico('star')}<span>Valorar</span></button>`;
+}
+/** Lo que se guarda al marcar una carrera con la estrella. */
+const watchFrom = (r, note = '') => ({ name: r.name, date: r.date, end_date: r.end_date || '', place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY, modality: r.modality, subtype: r.subtype || '', km: r.km ?? '',
+  url: /^https?:\/\/\S+$/i.test(r.url || '') ? r.url : '', notes: note });
 
 /** «Contrato»: el contrato de la temporada (y otros documentos) y el bono que marca. */
 function viewRunnerContract() {
@@ -1585,7 +1703,7 @@ function viewFed() {
         ${esc(r.source === 'LIGA' ? '' : r.discipline || '')}${r.kind === 'Ocio' ? ' · ocio' : ''}${r.info ? `${r.source === 'LIGA' ? '' : ' · '}<span class="muted">${esc(r.info)}</span>` : ''}</p>
       <div class="row">
         ${r.url ? `<a class="btn small" href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">Ver en la web ↗</a>` : ''}
-        ${action(r)}
+        ${action(r)}${runner ? starBtn(r, 'w-add-fed', ['i', f.races.indexOf(r)]) : ''}
       </div></article>`;
   }).join('');
   const updated = f.updated_at ? new Date(f.updated_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
@@ -4103,6 +4221,37 @@ const actions = {
     if (ok) { S.rdraft = null; go(isRace ? runnerHref('mi') : '#/'); }
   },
   async 'r-new'() { S.rdraft = null; if (!S.fed) loadFed(); go('#/nueva'); },
+  async 'w-sign'(el) {
+    const w = (S.watch || []).find((x) => x.id === el.dataset.id); if (!w) return;
+    const g = watchMatch(w, S.runnerData.registrations);
+    if (g) {   // ya existe en el club: solo apuntarse
+      const cat = await askCategory(g.name); if (!cat) return;
+      const ok = await run(async () => { await api.runnerJoin(S.code, g.id, cat); await api.runnerWatchDelete(S.code, w.id).catch(() => {}); await loadWatch(); await loadRunner(); return true; }, '¡Apuntado! La he quitado de «Por valorar»');
+      if (ok) go('#/');
+      return;
+    }
+    S.rdraft = emptyRunnerDraft({ name: w.name, date: w.date, multi: !!w.end_date, end_date: w.end_date || '', place: w.place || '', province: w.province || '', country: w.country || DEFAULT_COUNTRY, modality: w.modality,
+      subtype: w.subtype || '', km: w.km ?? '', watchId: w.id });
+    go('#/nueva');
+  },
+  async 'w-del'(el) {
+    const w = (S.watch || []).find((x) => x.id === el.dataset.id); if (!w) return;
+    if (!await confirmAction('Quitar de «Por valorar»', `Se quita <b>${esc(w.name)}</b> de tu lista. Si te lo piensas mejor, tendrás que volver a guardarla.`, 'Quitar', 'danger')) return;
+    const ok = await run(async () => { await api.runnerWatchDelete(S.code, w.id); await loadWatch(); return true; }, 'Quitada de la lista');
+    if (!ok) return;
+    S.rdraft = null; if (el.dataset.back) go('#/mi/valorar'); else render();
+  },
+  'w-sort'(el) { S.watchSort = el.dataset.m; render(); },
+  async 'w-add-fed'(el) {
+    const r = S.fed?.races[Number(el.dataset.i)]; if (!r) return;
+    const ok = await run(async () => { await api.runnerWatchSave(S.code, null, watchFrom(r, `Calendario: ${srcNote(r)}`.slice(0, 500))); await loadWatch(); return true; }, 'Guardada en «Por valorar»');
+    if (ok) render();
+  },
+  async 'w-add-reg'(el) {
+    const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id); if (!g) return;
+    const ok = await run(async () => { await api.runnerWatchSave(S.code, null, watchFrom(g, String(g.notes || '').slice(0, 500))); await loadWatch(); return true; }, 'Guardada en «Por valorar»');
+    if (ok) render();
+  },
   async 'r-new-fed'(el) {
     const r = S.fed.races[Number(el.dataset.i)];
     S.rdraft = emptyRunnerDraft({ name: r.name, date: r.date, place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY, modality: r.modality, ...circuitOf(r) });
@@ -4119,7 +4268,8 @@ const actions = {
     const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id);
     const cat = S.rdraft?.category || await askCategory(g?.name);
     if (!cat) return;
-    const ok = await run(async () => { await api.runnerJoin(S.code, el.dataset.id, cat); await loadRunner(); return true; }, '¡Apuntado!');
+    const wid = S.rdraft?.watchId;
+    const ok = await run(async () => { await api.runnerJoin(S.code, el.dataset.id, cat); if (wid) { await api.runnerWatchDelete(S.code, wid).catch(() => {}); await loadWatch(); } await loadRunner(); return true; }, '¡Apuntado!');
     S.rdraft = null; go(ok && isPastReg(el.dataset.id) ? resultHref(el.dataset.id) : '#/');
   },
   async 'r-join'(el) {
@@ -4563,6 +4713,20 @@ const forms = {
     }, 'Plantilla renovada');
     if (ok) { f.reset(); render(); }
   },
+  async 'w-save'() {
+    const d = S.rdraft; if (!d || d.wk == null) return;
+    const name = cleanName(d.name);
+    if (name.length < 3) return toast('Pon el nombre de la carrera.', true);
+    if (!d.date) return toast('Falta la fecha.', true);
+    if (d.multi && !d.end_date) return toast('Falta el último día.', true);
+    if (d.deadline && d.deadline > d.date) return toast('El plazo de inscripción no puede ser después de la carrera.', true);
+    if (String(d.km ?? '').trim() !== '' && parseKm(d.km) === null) return toast('La distancia tiene que estar entre 0 y 1000 km.', true);
+    let url = String(d.url || '').trim(); if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
+    const data = { name, date: d.date, end_date: d.multi ? d.end_date : '', place: cleanName(d.place), province: cleanName(d.province), country: d.country, modality: d.modality,
+      subtype: SUBTYPES[d.modality]?.includes(d.subtype) ? d.subtype : '', km: parseKm(d.km), url, price: String(d.price ?? '').trim(), deadline: d.deadline || '', notes: d.notes || '' };
+    const ok = await run(async () => { await api.runnerWatchSave(S.code, d.wk === 'nueva' ? null : d.wk, data); await loadWatch(); return true; }, 'Guardada en «Por valorar»');
+    if (ok) { S.rdraft = null; S.q.runner = ''; go('#/mi/valorar'); }
+  },
   async 'r-create'() {
     const d = S.rdraft;
     const name = cleanName(d.name);
@@ -4605,6 +4769,7 @@ const forms = {
         province: cleanName(d.province), country: d.country, modality: d.modality }, d.category || null);
       if (newId && d.race_type && d.race_type !== 'suelta') await setMyRaceType(newId, d);
       if (newId) await setMyDetails(newId, d);
+      if (d.watchId) { await api.runnerWatchDelete(S.code, d.watchId).catch(() => {}); await loadWatch(); }   // ya no está «por valorar»
       await loadRunner(); return newId || true;
     }, past ? 'Carrera añadida: ahora pon tu resultado' : 'Carrera añadida y te has apuntado');
     if (id) { S.rdraft = null; S.q.runner = ''; go(past ? resultHref(id) : '#/'); }
@@ -4786,7 +4951,7 @@ document.addEventListener('visibilitychange', async () => {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['chro-toggle', 'chro-all', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
+const RUNNER_ACTIONS = new Set(['w-sign', 'w-del', 'w-add-fed', 'w-add-reg', 'chro-toggle', 'chro-all', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
 // los enlaces de la ventana emergente (p. ej. las carreras de un compañero) cierran la ventana al navegar
 document.getElementById('dialog').addEventListener('click', (ev) => { if (ev.target.closest('a[href^="#/"]')) ev.currentTarget.close(); });
 $app.addEventListener('click', (ev) => {

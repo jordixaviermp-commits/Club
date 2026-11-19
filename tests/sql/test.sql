@@ -661,4 +661,39 @@ select runner_ping(:'crcode');
 select runner_ping('codigo-falso');
 reset role;
 select pg_temp.check((select last_seen from runners where code = :'crcode') < now() - interval '9 minutes', 'actividad: no se reescribe dentro de la misma hora');
+-- por valorar: personal de cada corredor, con validación y límite
+select id as wid2 from runners where code = :'crcode2' \gset
+set role anon;
+select runner_watch_save(:'crcode', null, jsonb_build_object('name', 'Gran Fondo Monzón', 'date', (current_date + 40)::text, 'modality', 'Carretera', 'url', 'https://ejemplo.org/gf',
+  'price', '28.5', 'deadline', (current_date + 20)::text, 'km', '120', 'notes', 'Subida larga')) as wid \gset
+select pg_temp.check((select count(*) from jsonb_array_elements(runner_watch_list(:'crcode')) e where e->>'name' = 'Gran Fondo Monzón' and (e->>'price')::numeric = 28.5) = 1, 'por valorar: se guarda y se lista con sus datos');
+select pg_temp.check(runner_watch_list(:'crcode2') = '[]'::jsonb, 'por valorar: el compañero no ve lo mío');
+select pg_temp.check(not (runner_watch_list(:'crcode')->0 ? 'runner_id'), 'por valorar: no se devuelve el id del corredor');
+select pg_temp.check(runner_watch_save(:'crcode', null, jsonb_build_object('name', 'gran fondo monzón', 'date', (current_date + 40)::text)) = :'wid'::uuid, 'por valorar: guardar dos veces la misma no la duplica');
+select pg_temp.expect_fail($q$select runner_watch_save('$q$ || :'crcode2' || $q$', '$q$ || :'wid' || $q$', '{"name":"Robada","date":"$q$ || (current_date + 10)::text || $q$"}')$q$, 'por valorar: el compañero no puede editar la mía');
+select runner_watch_delete(:'crcode2', :'wid');
+select pg_temp.check(jsonb_array_length(runner_watch_list(:'crcode')) = 1, 'por valorar: el compañero no puede borrar la mía');
+select runner_watch_save(:'crcode', :'wid', jsonb_build_object('name', 'Gran Fondo Monzón', 'date', (current_date + 41)::text, 'price', '30'));
+select pg_temp.check((select (e->>'price')::numeric = 30 and e->>'url' is null and e->>'date' = (current_date + 41)::text from jsonb_array_elements(runner_watch_list(:'crcode')) e limit 1), 'por valorar: se corrige');
+select pg_temp.expect_fail($q$select runner_watch_save('$q$ || :'crcode' || $q$', null, '{"name":"Con web mala","date":"$q$ || (current_date + 10)::text || $q$","url":"javascript:alert(1)"}')$q$, 'por valorar: solo enlaces http(s)');
+select pg_temp.expect_fail($q$select runner_watch_save('$q$ || :'crcode' || $q$', null, '{"name":"Precio malo","date":"$q$ || (current_date + 10)::text || $q$","price":"-3"}')$q$, 'por valorar: precio negativo rechazado');
+select pg_temp.expect_fail($q$select runner_watch_save('$q$ || :'crcode' || $q$', null, '{"name":"Plazo tarde","date":"$q$ || (current_date + 10)::text || $q$","deadline":"$q$ || (current_date + 12)::text || $q$"}')$q$, 'por valorar: el plazo no puede ser después de la carrera');
+select pg_temp.expect_fail($q$select runner_watch_save('$q$ || :'crcode' || $q$', null, '{"name":"Sin fecha"}')$q$, 'por valorar: sin fecha no se guarda');
+select pg_temp.expect_fail($q$select runner_watch_save('codigo-falso', null, '{"name":"Falsa","date":"$q$ || (current_date + 10)::text || $q$"}')$q$, 'por valorar: enlace falso rechazado');
+select pg_temp.expect_fail($q$select * from runner_watch$q$, 'por valorar: la tabla no se lee directamente');
+reset role;
+insert into runner_watch (runner_id, name, date) select :'crid'::uuid, 'Relleno ' || i, current_date + 100 from generate_series(1, 59) i;
+select pg_temp.check((select count(*) from runner_watch where runner_id = :'crid') = 60, 'por valorar: relleno de prueba hasta el límite');
+set role anon;
+select pg_temp.expect_fail($q$select runner_watch_save('$q$ || :'crcode' || $q$', null, '{"name":"Una de más","date":"$q$ || (current_date + 11)::text || $q$"}')$q$, 'por valorar: hay un límite de carreras guardadas');
+reset role;
+insert into runners (name, code) values ('Temporal Watch', 'codigo-temporal-0001') returning id as tmpid \gset
+insert into runner_watch (runner_id, name, date) values (:'tmpid', 'De prueba', current_date + 5);
+select set_config('app.skip_log', 'on', false);
+delete from runners where id = :'tmpid';
+select set_config('app.skip_log', 'off', false);
+select pg_temp.check((select count(*) from runner_watch where runner_id = :'tmpid') = 1, 'por valorar: restaurar una copia no borra las guardadas');
+insert into runners (id, name, code) values (:'tmpid', 'Temporal Watch', 'codigo-temporal-0001');
+delete from runners where id = :'tmpid';
+select pg_temp.check((select count(*) from runner_watch where runner_id = :'tmpid') = 0, 'por valorar: al borrar al corredor se borra lo suyo');
 \echo TODAS LAS PRUEBAS SQL OK
