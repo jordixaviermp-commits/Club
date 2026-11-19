@@ -4176,7 +4176,7 @@ function askCategory(name, okLabel = 'Apuntarme', current = '') {
 
 /** Pestañas de arriba de Corredores: plantilla y contratos por tipo. */
 const runnersTabs = (cur) => `<div class="years subtabs">${[['corredores', '👥 Plantilla'], ['contratos', '📄 Contratos'], ['computo', '📊 Cómputo']].map(([v, l]) =>
-  `<a class="chip${cur === v ? ' on' : ''}" href="#/${v}" aria-current="${cur === v}">${l}</a>`).join('')}</div>`;
+  `<a class="chip${cur === v ? ' on' : ''}" href="#/${v}" aria-current="${cur === v}">${l}</a>`).join('')}${(() => { const u = S.data?.settings?.enlaces_direccion?.ropa_respuestas; return u ? `<a class="chip ext" href="${esc(u)}" target="_blank" rel="noopener noreferrer" title="Respuestas del pedido de ropa (se abre en otra pestaña)">👕 Ropa ↗</a>` : ''; })()}</div>`;
 
 /** Cómputo de fin de temporada: lo que ha hecho cada corredor y descarga para Excel. */
 function viewSeasonCount() {
@@ -4456,7 +4456,6 @@ function viewRunners() {
   const f = S.rfilter || 'todos';
   return frame(`Equipo (${all.length})`, `
     ${runnersTabs('corredores')}
-    ${S.data?.settings?.enlaces_direccion?.ropa_respuestas ? clothingLine() : ''}
     <div class="rr-kpis" style="grid-template-columns:repeat(${rfilters().length},1fr)">${rfilters().map(([id, label, cls]) => `<button class="rr-kpi ${cls}${f === id ? ' on' : ''}${id !== 'todos' && !n[id] ? ' zero' : ''}" data-act="r-filter" data-f="${id}" aria-pressed="${f === id}"><b>${n[id]}</b><span>${label}</span></button>`).join('')}</div>
     <div class="toolbar">
       ${searchBox('rlist', 'Buscar corredor…')}
@@ -4468,7 +4467,7 @@ function viewRunners() {
       <summary><b>⚙️ Gestionar plantilla</b> <span class="muted">· añadir, renovar, enlaces, bonos</span></summary>
       <div class="stack">
         <div class="quick"><a class="btn" href="#/bonos">💶 Bonos ${year}</a>${all.length ? '<button class="btn" data-act="all-links">🔗 Copiar todos los enlaces</button>' : ''}</div>
-        ${S.data?.settings?.enlaces_direccion?.ropa_respuestas ? '' : clothingLine()}
+        ${clothingLine()}
         <details class="card">
           <summary><b>+ Añadir corredores</b></summary>
           <form class="stack" data-form="bulk">

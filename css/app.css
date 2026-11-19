@@ -2042,3 +2042,7 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .wk-chip.over { background: var(--bg); color: var(--muted); border-color: var(--line); font-weight: 600; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .wk-chip.soon { background: #3a2c0c; color: #ffd98a; border-color: #6b5320; } }
 :root[data-theme="dark"] .wk-chip.soon { background: #3a2c0c; color: #ffd98a; border-color: #6b5320; }
+
+/* Pestañas de Equipo (Plantilla · Contratos · Cómputo · Ropa) en una sola fila */
+.subtabs:has(.chip.ext) { flex-wrap: nowrap; gap: .2rem; }
+.subtabs:has(.chip.ext) .chip { flex: 1 1 auto; min-width: 0; padding: .4rem .2rem; font-size: .76rem; letter-spacing: -.01em; text-align: center; white-space: nowrap; }
