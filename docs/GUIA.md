@@ -304,3 +304,10 @@ Si algún día te paso una versión nueva de este archivo, se repite este mismo 
   - **Desplazamientos**: km de viaje del equipo (ida y vuelta, aprox.), distancia media, **quién se desplaza más**, **las carreras más lejanas** y el **mapa de desplazamientos**.
   - **Cuánto cuesta competir**: gasto en inscripciones, precio medio, por participación, por disciplina y por mes (es lo que costaría inscribirse, no lo que se haya pagado: lo que paga cada uno sigue siendo solo suyo).
   - Tocando una carrera se abre su detalle. Sin SQL.
+
+- **Resumen del equipo del corredor: pestañas y un cuadradito de filtros (versión 165)**: arriba ya no están los botones de modalidad ni el desplegable del año. Ahora hay una barra de **cuatro pestañas** (como en la dirección) y, a su derecha, un **cuadradito de filtros**. Así se hace mucho menos scroll:
+  - **Panorama**: cabecera con las cifras del equipo, los récords que se deslizan, carreras por mes y participación.
+  - **Podios**: los podios del año por categoría o por disciplina y los últimos.
+  - **Equipo**: la clasificación de corredores.
+  - **Alcance**: dónde se ha competido, y las estadísticas de **desnivel**, **desplazamientos** y **cuánto cuesta competir**.
+  - El cuadradito abre una ventana con **Temporada**, **Modalidad** y, si eliges una, su **Disciplina**; se puede cambiar varias cosas sin que se cierre y «Listo» la cierra. Cuando hay un filtro puesto, el cuadradito lleva un punto rojo y debajo de las pestañas sale una línea con el filtro («2026 · BTT») y «Quitar filtros ✕». La barra se queda fija arriba al bajar. Sin SQL.
