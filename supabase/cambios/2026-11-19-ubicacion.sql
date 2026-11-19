@@ -137,3 +137,5 @@ begin
 end $$;
 
 grant execute on function public.auto_promote_registrations(), public.runner_view(text), public.runner_team(text) to anon, authenticated;
+
+select 'Ubicación: script ejecutado entero' as resultado;
