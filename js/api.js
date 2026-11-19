@@ -142,6 +142,12 @@ export function supabaseApi(url, key) {
     },
     async deleteRegistration(id) { ok(await sb.from('registrations').delete().eq('id', id)); },
     async promoteRegistration(id) { return ok(await sb.rpc('promote_registration', { p_id: id })); },
+    /** La dirección pone o corrige el puesto (y el tiempo) de un corredor en una inscripción ('reg') o una carrera ('race'). position null = borrarlo. */
+    async adminSetResult(kind, id, runnerId, position, podiumType, timeSeconds) {
+      const pod = position && position <= 3 ? (podiumType || 'suelta') : null;
+      if (kind === 'reg') ok(await sb.from('registration_entries').update({ self_position: position || null, self_podium_type: pod, self_time_seconds: position ? (timeSeconds || null) : null, self_reported_at: position ? new Date().toISOString() : null }).eq('registration_id', id).eq('runner_id', runnerId));
+      else ok(await sb.from('results').update({ position: position || null, podium_type: pod || 'suelta', time_seconds: position ? (timeSeconds || null) : null }).eq('race_id', id).eq('runner_id', runnerId));
+    },
 
     async saveRace(race, results) {
       const id = ok(await sb.rpc('save_race', { p_race: race, p_results: results }));
@@ -460,6 +466,15 @@ export function demoApi(storage = globalThis.localStorage) {
       requireAdmin(); const d = load();
       d.registrations = d.registrations.filter((g) => g.id !== id);
       d.registration_entries = d.registration_entries.filter((e) => e.registration_id !== id);
+      save();
+    },
+    async adminSetResult(kind, id, runnerId, position, podiumType, timeSeconds) {
+      requireAdmin(); const d = load();
+      const pod = position && position <= 3 ? (podiumType || 'suelta') : null;
+      if (kind === 'reg') { const e = d.registration_entries.find((x) => x.registration_id === id && x.runner_id === runnerId); if (!e) throw new Error('no_existe');
+        Object.assign(e, { self_position: position || null, self_podium_type: pod, self_time_seconds: position ? (timeSeconds || null) : null }); }
+      else { const r = d.results.find((x) => x.race_id === id && x.runner_id === runnerId); if (!r) throw new Error('no_existe');
+        Object.assign(r, { position: position || null, podium_type: pod || 'suelta', time_seconds: position ? (timeSeconds || null) : null }); }
       save();
     },
     async promoteRegistration(id) {

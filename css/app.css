@@ -2046,3 +2046,18 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 /* Pestañas de Equipo (Plantilla · Contratos · Cómputo · Ropa) en una sola fila */
 .subtabs:has(.chip.ext) { flex-wrap: nowrap; gap: .2rem; }
 .subtabs:has(.chip.ext) .chip { flex: 1 1 auto; min-width: 0; padding: .4rem .2rem; font-size: .76rem; letter-spacing: -.01em; text-align: center; white-space: nowrap; }
+
+/* Resultados editables por la dirección (Redes → Panel) */
+.net-res > summary { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .5rem; cursor: pointer; list-style: none; }
+.net-res > summary::-webkit-details-marker { display: none; }
+.net-res > summary::after { content: '▾'; margin-left: auto; color: var(--muted, #667); }
+.net-res[open] > summary::after { content: '▴'; }
+.net-piece > details.net-res { flex: 1 1 100%; }
+.rs-edit { list-style: none; margin: .5rem 0; padding: 0; display: grid; gap: .5rem; }
+.rs-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .3rem .6rem; padding: .45rem .5rem; border-radius: 10px; background: var(--card); border: 1px solid var(--line); }
+.rs-who { flex: 1 1 100%; font-size: .92rem; }
+.rs-pos { display: flex; flex-direction: column; gap: .15rem; align-items: center; } .rs-pos span { font-size: .72rem; color: var(--muted); font-weight: 600; }
+.rs-pos input { width: 4.2rem; min-height: 44px; text-align: center; font-size: 1.2rem; font-weight: 800; padding: .2rem; }
+.rs-row .tinput { align-items: flex-end; } .rs-row .tinput > b { padding-bottom: .5rem; padding-top: 0; align-self: flex-end; }
+.rs-row .tf-p input { min-height: 44px; font-size: 1.2rem; } .rs-row .tf-p { max-width: 4.6rem; }
+.rs-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .6rem; }

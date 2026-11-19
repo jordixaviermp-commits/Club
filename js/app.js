@@ -2159,6 +2159,18 @@ function viewNetworks() {
         <p class="hint">Basta con que la pase uno: en cuanto alguien la marca, la crónica queda hecha para todos. Marca a quien ya la pasó aunque no lo haya marcado en su perfil.</p></details></li>`;
     }
     const isRes = x.k === 'res', canMark = x.key && (x.k === 'aviso' || isRes);
+    if (isRes && x.people?.length) {   // resultados: desplegable para que la dirección ponga o corrija el puesto y el tiempo de cada uno
+      const ok = `net-res:${x.rkind}:${x.rid}`;
+      const act2 = canMark && (x.st !== 'curso') ? `<label class="check post-check"><input type="checkbox" data-act-change="post" data-key="${esc(x.key)}" ${posted.has(x.key) ? 'checked' : ''}> Publicado</label>` : '';
+      const copy2 = it.kind === 'race' && x.st !== 'ok' && x.st !== 'curso' ? `<button class="btn small" data-act="pub-copy" data-id="${esc(it.id)}">📋 Copiar texto</button>` : '';
+      return `<li class="net-piece ${x.st}"><details class="net-cro net-res" data-open-key="${esc(ok)}"${S.open?.[ok] ? ' open' : ''}><summary><span class="net-k" title="${NET_LABEL.res}">${NET_ICON.res}</span><span class="net-tx">${esc(x.text)}</span><span class="net-glyph" aria-hidden="true">${NET_GLYPH[x.st]}</span></summary>
+        <ul class="rs-edit">${x.people.map((q) => `<li class="rs-row" data-runner="${esc(q.id)}" data-orig="${q.position || ''}|${q.time || ''}" data-podium="${esc(q.podium || '')}">
+          <span class="rs-who"><b>${esc(q.name)}</b>${q.category ? `<small class="muted"> ${esc(q.category)}</small>` : ''}</span>
+          <label class="rs-pos"><span>Puesto</span><input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" autocomplete="off" data-rs="pos" value="${q.position || ''}" placeholder="—" aria-label="Puesto de ${esc(q.name)}"></label>
+          ${timeFields(q.time, 'data-rs="time"')}</li>`).join('')}</ul>
+        <div class="rs-actions"><button type="button" class="btn small primary" data-act="res-admin-save" data-kind="${esc(x.rkind)}" data-id="${esc(x.rid)}">Guardar puestos</button><small class="muted">Vale como si lo hubiera puesto el corredor. Vacío = sin puesto.</small></div></details>
+        ${act2 || copy2 ? `<span class="net-act">${act2}${copy2}</span>` : ''}</li>`;
+    }
     const act = x.k === 'story' ? (x.st === 'pend' ? `<button class="btn small" data-act="pub-story-manual" data-key="${esc(x.key)}">Marcar a mano</button>` : '')
       : canMark && (x.st !== 'curso' || x.k === 'aviso' && posted.has(x.key)) ? `<label class="check post-check"><input type="checkbox" data-act-change="post" data-key="${esc(x.key)}" ${posted.has(x.key) ? 'checked' : ''}> Publicado</label>` : '';
     const copy = isRes && it.kind === 'race' && x.st !== 'ok' && x.st !== 'curso' ? `<button class="btn small" data-act="pub-copy" data-id="${esc(it.id)}">📋 Copiar texto</button>` : '';
@@ -4950,6 +4962,21 @@ const actions = {
   'net-range'(el) { S.netAll = el.dataset.w === '1'; S.netMore = false; render(); },
   'net-more'() { S.netMore = true; render(); },
   async 'info-next'() { await choose('Mis próximas inscripciones', 'Carreras a las que estás apuntado y que aún no se han corrido. <b>Toca una</b> para abrirla: ves quién va, puedes borrarte y, si la añadiste tú, editarla.', [{ label: 'Entendido', value: true, kind: 'primary' }]); },
+  async 'res-admin-save'(el) {
+    const box = el.closest('.net-res'); if (!box) return;
+    const changes = [];
+    for (const row of box.querySelectorAll('.rs-row')) {
+      const posTxt = row.querySelector('[data-rs="pos"]').value.trim(), timeTxt = row.querySelector('input[data-rs="time"]').value.trim();
+      const position = posTxt ? Number(posTxt) : null, time = timeTxt ? parseTime(timeTxt) : null;
+      if (posTxt && !(Number.isInteger(position) && position >= 1 && position <= 999)) return toast(`Puesto no válido: ${row.querySelector('.rs-who b').textContent}.`, true);
+      if (timeTxt && !time) return toast(`Revisa el tiempo de ${row.querySelector('.rs-who b').textContent}: los minutos van de 0 a 59.`, true);
+      if (`${position || ''}|${time || ''}` !== row.dataset.orig) changes.push({ id: row.dataset.runner, position, time, podium: row.dataset.podium });
+    }
+    if (!changes.length) return toast('No has cambiado nada.');
+    const ok = await run(async () => { for (const c of changes) await api.adminSetResult(el.dataset.kind, el.dataset.id, c.id, c.position, c.podium, c.time); await reload(); return true; },
+      `Guardado: ${changes.length} ${changes.length === 1 ? 'puesto' : 'puestos'}`);
+    if (ok) render();
+  },
   async 'chro-admin-all'(el) { await setChronicleFor(el.dataset.ids.split(','), el.dataset.key, true); },
   'ig-tab'(el) { S.igTab = el.dataset.t; render(); },
   async 'ig-per-del'(el) {

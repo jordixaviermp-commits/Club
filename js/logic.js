@@ -1123,6 +1123,15 @@ export function socialBoard(races, registrations, posted, today, log = null, { b
         } else if (lastDays < 3 || (g.entries || []).some((e) => e.self_position)) pieces.push({ k: 'res', st: 'curso', text: 'Resultados: esperando los puestos de los corredores' });
         else pieces.push({ k: 'res', st: 'pend', text: 'Resultados: nadie ha puesto su puesto, no hay nada que publicar', days: lastDays });
       }
+      // la dirección puede abrir la pieza de resultados y poner o corregir los puestos de cada corredor
+      const resPiece = pieces.find((x) => x.k === 'res');
+      if (resPiece) {
+        const rows = kind === 'race'
+          ? (g.results || []).filter((x) => x.runner_id).map((x) => ({ id: x.runner_id, name: x.runner_name || chron?.nameOf?.(x.runner_id) || '?', category: x.category || '', position: x.position ?? null, podium: x.podium_type || null, time: x.time_seconds || null }))
+          : (g.entries || []).filter((x) => x.runner_id).map((x) => ({ id: x.runner_id, name: x.runner_name || chron?.nameOf?.(x.runner_id) || '?', category: x.category || '', position: x.self_position ?? null, podium: x.self_podium_type || null, time: x.self_time_seconds || null }));
+        if (rows.length) resPiece.people = rows.sort((p, q) => p.name.localeCompare(q.name, 'es'));
+        resPiece.rid = g.id; resPiece.rkind = kind;
+      }
     }
     // crónicas: basta con que la pase uno de los que corrieron (solo si ya existe el SQL y la carrera ya se corrió)
     if (chron && past && !g.suspended) {
