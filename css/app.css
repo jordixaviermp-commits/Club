@@ -1846,3 +1846,10 @@ header.top h1.greet > span { display: inline-block; white-space: nowrap; }
 header.top h1.greet.scroll > span { animation: greet-slide var(--dur, 8s) ease-in-out infinite alternate; }
 @keyframes greet-slide { 0%, 18% { transform: translateX(0); } 82%, 100% { transform: translateX(calc(-1 * var(--ov, 0px))); } }
 @media (prefers-reduced-motion: reduce) { header.top h1.greet.scroll > span { animation: none; } header.top h1.greet { text-overflow: ellipsis; } }
+
+/* Web de la carrera */
+.web-row { display: flex; align-items: center; gap: .4rem; margin: .6rem 0 0; flex-wrap: wrap; }
+.web-btn { display: inline-flex; align-items: center; gap: .35rem; border-color: color-mix(in srgb, #2f6fd6 55%, var(--line)); background: color-mix(in srgb, #2f6fd6 9%, var(--card)); color: color-mix(in srgb, #1c52b0 85%, var(--text)); font-weight: 700; text-decoration: none; }
+.web-btn .ico, .web-add .ico, .web-row .btn .ico { width: 15px; height: 15px; }
+.web-add { display: inline-flex; align-items: center; gap: .35rem; color: var(--muted); border-style: dashed; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .web-btn { color: #8db8ff; } } :root[data-theme="dark"] .web-btn { color: #8db8ff; }
