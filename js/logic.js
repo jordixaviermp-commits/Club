@@ -1323,6 +1323,21 @@ export function watchInfo(w, today) {
   const deadline = toDeadline === null ? null : toDeadline < 0 ? 'closed' : toDeadline === 0 ? 'today' : toDeadline <= 7 ? 'soon' : 'open';
   return { toRace, past, toDeadline, deadline, urgent: !past && (deadline === 'soon' || deadline === 'today') };
 }
+/** Marca (al principio de las notas) de una carrera guardada para el año siguiente cuya fecha aún no es oficial. */
+export const WATCH_TBC = '📅 Fecha por confirmar';
+export const watchTbc = (w) => String(w?.notes || '').startsWith(WATCH_TBC);
+const shiftDay = (iso, n) => new Date(Date.parse(String(iso).slice(0, 10) + 'T12:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+/**
+ * Carrera guardada → la misma para el año siguiente: 52 semanas después (así cae el mismo día de la semana), con la marca
+ * «fecha por confirmar», sin el plazo de inscripción (cambia cada año) y conservando web, precio, distancia y tus notas.
+ */
+export function nextYearWatch(w) {
+  const old = String(w.notes || '').startsWith(WATCH_TBC) ? String(w.notes).split('\n').slice(1).join('\n') : String(w.notes || '');
+  const head = `${WATCH_TBC}: es la del año pasado + 52 semanas, hasta que salga la oficial.`;
+  return { name: w.name, date: shiftDay(w.date, 364), end_date: w.end_date ? shiftDay(w.end_date, 364) : '', place: w.place || '', province: w.province || '', country: w.country || '',
+    modality: w.modality, subtype: w.subtype || '', km: w.km ?? '', elevation: w.elevation ?? '', price: w.price ?? '', url: w.url || '', deadline: '',
+    notes: (old ? `${head}\n${old}` : head).slice(0, 500) };
+}
 /** Orden: primero las que aún no han pasado (por fecha, o por plazo de inscripción si se pide), luego las que ya pasaron. */
 export function sortWatch(list, mode, today) {
   const rows = list.map((w) => ({ w, i: watchInfo(w, today) }));

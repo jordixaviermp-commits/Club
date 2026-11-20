@@ -2061,3 +2061,7 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .rs-row .tinput { align-items: flex-end; } .rs-row .tinput > b { padding-bottom: .5rem; padding-top: 0; align-self: flex-end; }
 .rs-row .tf-p input { min-height: 44px; font-size: 1.2rem; } .rs-row .tf-p { max-width: 4.6rem; }
 .rs-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .6rem; }
+
+/* Buscador del corredor: «Apuntarme» y la estrella de «Por valorar» una sobre otra */
+.mini-acts { display: flex; flex-direction: column; align-items: flex-end; gap: .3rem; flex-shrink: 0; } .mini-acts .star-btn { margin-top: 0; }
+.wchip.tbc { display: inline-block; margin: .15rem 0 0; padding: .1rem .5rem; border-radius: 999px; background: color-mix(in srgb, #e3b93c 18%, var(--card)); font-size: .78rem; font-weight: 700; }
