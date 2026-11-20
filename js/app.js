@@ -1225,27 +1225,24 @@ function chronicleCard(d) {
   </details></section>`;
 }
 
-/** Barra de progreso grande: tramos marcados (carreras e importe), «tú estás aquí» y las inscripciones que aún faltan por correr. */
-function bonusBarBig(st, cfg, planned = 0) {
-  const tiers = st.tiers || tiersFor(cfg, st.contract);
-  const extra = st.extra || 0, total = st.count + extra;
-  const lastTier = Math.max(0, ...tiers.map((t) => t.races));
-  const max = Math.max(lastTier + 6, st.minimum || 0, total + planned + 1, 1);   // deja sitio para el último tramo («22 o más»)
-  const pct = (n) => Math.min(100, (n / max) * 100).toFixed(1);
-  const marks = [...tiers.map((t) => ({ n: t.races, amount: euros(t.amount), min: t.races === st.minimum }))];
-  if (st.minimum && !tiers.some((t) => t.races === st.minimum)) marks.push({ n: st.minimum, amount: 'mínimo', min: true });
-  marks.sort((x, y) => x.n - y.n);
-  return `<div class="bbig" role="img" aria-label="${st.count} carreras hechas${extra ? `, más ${extra} de plus` : ''}; tramos: ${marks.map((m) => `${m.n} carreras`).join(', ')}">
-    <div class="bb-track">
-      ${planned ? `<span class="bb-plan" style="width:${pct(total + planned)}%"></span>` : ''}
-      ${extra ? `<span class="bb-extra" style="width:${pct(total)}%"></span>` : ''}
-      <span class="bb-done${st.reachesMinimum ? ' ok' : ''}" style="width:${pct(st.count)}%"></span>
-      ${marks.map((m) => `<i class="bb-tick${total >= m.n ? ' hit' : ''}${m.min ? ' min' : ''}" style="left:${pct(m.n)}%"></i>`).join('')}
-      <span class="bb-you" style="left:${pct(Math.max(total, 0))}%"><b>${total}</b></span>
+/** Barra de bonificación por zonas reales: pre-mínimo apagado (con la penalización), y un trozo por tramo (12–16, 17–21, 22 o más) con su importe debajo. */
+function bonusZones(st, cfg, planned = 0) {
+  const tiers = tierRanges(st.tiers || tiersFor(cfg, st.contract));
+  if (!tiers.length) return '';
+  const extra = st.extra || 0, total = st.count + extra, first = tiers[0].from, last = tiers[tiers.length - 1].from;
+  const segs = [{ from: 0, units: first, kind: 'pre', range: `0–${first - 1}`, amount: st.penalty ? `−${euros(st.penalty)}` : 'sin bono' },
+    ...tiers.map((t, i) => ({ from: t.from, units: t.to != null ? t.to - t.from + 1 : 6, kind: `t${Math.min(i, 2)}`, range: t.text.replace(' a ', '–'), amount: euros(t.amount) }))];
+  const max = last + 6, pct = (n) => Math.max(0, Math.min(100, (n / max) * 100));
+  const next = st.next, pill = `<b>${total}</b>${next ? `<small>+${st.missingToNext} → ${euros(next.amount)}</small>` : st.tier ? '<small>máximo</small>' : ''}`;
+  return `<div class="bz" role="img" aria-label="${total} carreras${extra ? ` (con ${extra} de plus)` : ''}; tramos: ${tiers.map((t) => `${t.text} carreras ${euros(t.amount)}`).join(', ')}">
+    <div class="bz-bar">
+      ${segs.map((g) => { const fill = Math.max(0, Math.min(1, (total - g.from) / g.units)) * 100;
+        return `<div class="bz-seg ${g.kind}${g.kind === 'pre' && st.reachesMinimum ? ' done' : ''}" style="flex:${g.units}"><i style="width:${fill}%"></i></div>`; }).join('')}
+      ${planned ? `<span class="bz-plan" style="left:${pct(total)}%;width:${Math.max(0, pct(Math.min(max, total + planned)) - pct(total))}%" title="Con tus inscripciones"></span>` : ''}
+      <span class="bz-you" style="left:min(max(${pct(total).toFixed(1)}%, 52px), calc(100% - 52px))">${pill}</span>
     </div>
-    <div class="bb-labels seg">${marks.map((m, i) => { const nx = marks[i + 1], cur = total >= m.n && (!nx || total < nx.n), isTier = tiers.some((t) => t.races === m.n);
-      const range = !isTier ? 'mínimo' : nx ? `${m.n}–${nx.n - 1}` : `${m.n} o más`, at = isTier ? (m.n + (nx ? nx.n : max)) / 2 : m.n;   // cada etiqueta, centrada en su tramo
-      return `<span class="${total >= m.n ? 'hit' : ''}${cur ? ' cur' : ''}" style="left:${pct(at)}%"><b>${range}</b><small>${esc(m.amount)}</small></span>`; }).join('')}</div>`;
+    <div class="bz-labels">${segs.map((g) => `<span class="${g.kind}${g.kind === 'pre' && st.reachesMinimum ? ' done' : ''}${total >= g.from && total < g.from + g.units ? ' cur' : ''}" style="flex:${g.units}"><b>${g.range}</b><small>${esc(g.amount)}</small></span>`).join('')}</div>
+  </div>`;
 }
 
 function runnerBonusCard(d) {
@@ -1258,8 +1255,13 @@ function runnerBonusCard(d) {
   const per = cfg.circuitExtra ?? 4;
   const pendingPlus = (d.circuits || []).filter((x) => x.year >= b.year - 1 && x.status !== 'confirmado').length;
   const plural = (n, one, many) => (n === 1 ? one : many);
-  const support = st.next ? `Faltan <b>${st.missingToNext}</b> ${plural(st.missingToNext, 'carrera', 'carreras')} para el tramo de <b>${euros(st.next.amount)}</b>`
-    : st.tier ? 'Has llegado al <b>tramo máximo</b>' : '';
+  const end = `${b.year}-12-31`, daysLeft = Math.max(0, Math.round((new Date(end + 'T12:00:00Z') - new Date(todayISO() + 'T12:00:00Z')) / 864e5));
+  // una sola frase de estado (antes eran tres: «faltan N para el tramo», el aviso del mínimo y «aún sin tramo»)
+  const msg = !st.reachesMinimum
+    ? (st.penalty ? `<p class="bz-msg bad">${ico('alert')}<span>Te faltan <b>${st.missingToMinimum}</b> para el mínimo (${st.minimum}). Si el 31 de diciembre no llegas: penalización de <b>${euros(st.penalty)}</b>.${daysLeft ? ` <small>Quedan ${daysLeft} días.</small>` : ''}</span></p>`
+        : `<p class="bz-msg">${ico('info')}<span>Te faltan <b>${st.missingToMinimum}</b> para el mínimo (${st.minimum}); con tu contrato no hay penalización.</span></p>`)
+    : st.next ? `<p class="bz-msg ok">${ico('check')}<span>Mínimo cumplido. Te faltan <b>${st.missingToNext}</b> ${plural(st.missingToNext, 'carrera', 'carreras')} para el tramo de <b>${euros(st.next.amount)}</b>.</span></p>`
+      : `<p class="bz-msg ok">${ico('check')}<span>Has llegado al <b>tramo máximo</b> (${euros(st.amount)}).</span></p>`;
   const minChip = st.reachesMinimum ? `<span class="bn-min ok">${ico('check')}Mínimo cumplido (${st.minimum})</span>` : '';
   const chips = [
     st.extra ? `<span class="bn-chip gold">${ico('trophy')}+${st.extra} plus</span>` : '',
@@ -1271,8 +1273,6 @@ function runnerBonusCard(d) {
     <summary>${ico('info')}<span>Ver tramos y normativa</span>${ico('chevd', 'rules-chev')}</summary>
     <div class="rules-body">
       <p class="hint">La <b>bonificación</b> es la ayuda económica del club según las carreras que corras en la temporada (cláusula 3 de tu contrato).${b.contract ? ` Tu contrato: <b>${esc(contractLabel(b.contract).toLowerCase())}</b>.` : ''}</p>
-      <h4>Tramos${st.contract ? ` (${esc(contractLabel(st.contract).toLowerCase())})` : ''}</h4>
-      <ul class="tier-list">${tierRanges(tiers).map((r) => `<li><span>${r.text} carreras</span><b>${euros(r.amount)}</b></li>`).join('')}</ul>
       <h4>Mínimo y penalización</h4>
       <p>Hay que correr al menos <b>${cfg.minimum} carreras</b>. Si no se llega a final de temporada, penalización: ${penaltiesLine(cfg)}.</p>
       <h4>Cómo se cuentan las carreras</h4>
@@ -1283,14 +1283,10 @@ function runnerBonusCard(d) {
     </div></details>`;
   return `<h2 class="blk-title">Tu bonificación ${b.year} ${ico('money')}</h2>
   <section class="card bonus-card">
-    ${st.reachesMinimum ? `<div class="bn-min ok">${ico('check')}Mínimo de contrato cumplido (${st.minimum} carreras)</div>` : ''}
+    <p class="bn-main"><b>${st.count}</b> ${plural(st.count, 'carrera realizada', 'carreras realizadas')}${st.tier ? ` · <span class="bn-amt">${euros(st.amount)}</span>` : ''}</p>
     ${chips ? `<div class="bn-chips">${chips}</div>` : ''}
-    <p class="bn-main"><b>${st.count}</b> ${plural(st.count, 'carrera realizada', 'carreras realizadas')}</p>
-    <p class="bn-tier">${st.tier ? `Tramo actual: <b>${euros(st.amount)}</b>` : 'Aún sin tramo'}</p>
-    ${support ? `<p class="bn-support">${support}</p>` : ''}
-    ${st.reachesMinimum ? '' : penaltyAlert(st, cfg, b.year)}
-    ${bonusBarBig(st, cfg, b.planned || 0)}
-    ${b.contract ? `<p class="bn-contract"><span>Contrato: ${esc(contractLabel(b.contract))}</span></p>` : ''}
+    ${msg}
+    ${bonusZones(st, cfg, b.planned || 0)}
     ${b.planned ? `<p class="hint bn-plan">Con tus ${b.planned} inscripcion${b.planned === 1 ? '' : 'es'} de ${b.year} llegarías a ${proj.bonusCount}${proj.tier ? ` (${euros(proj.amount)})` : ''}${proj.reachesMinimum ? '' : ', aún por debajo del mínimo'}.</p>` : ''}
     ${rules}
   </section>`;
