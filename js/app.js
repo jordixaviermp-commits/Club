@@ -113,6 +113,13 @@ const typeTag = (x) => {
 /** Sección numerada de un formulario (cabecera de color con icono) para que se encuentre cada cosa de un vistazo. */
 /** Sección plegable de un formulario: título con su resumen a la derecha; se abre al tocar (y recuerda si estaba abierta). */
 const fsecD = (key, n, icon, title, preview, body, color, openDefault = false) => `<details class="fsec fsec-d" style="--sc:${color}" data-open-key="${key}"${(S.open?.[key] ?? openDefault) ? ' open' : ''}><summary class="fsec-h"><span class="fsec-n">${n}</span>${ico(icon)}<span class="fsec-tx"><span class="fsec-t">${title}</span><span class="fsec-p">${preview ? esc(preview) : ''}</span></span>${ico('chevd', 'fsec-chev')}</summary><div class="fsec-b">${body}</div></details>`;
+/** Resumen de una línea de cada sección del formulario de carrera (lo que se ve con la sección plegada). */
+const racePreview = (d) => [
+  d.name,
+  [d.date ? formatDate(d.date) : '', d.place || d.province].filter(Boolean).join(' · '),
+  [d.modality, d.subtype, d.km ? kmText(d.km) : ''].filter(Boolean).join(' · '),
+  [d.elevation ? elevText(d.elevation) : '', d.price !== '' && d.price != null ? (Number(d.price) === 0 ? 'Gratis' : `${d.price} €`) : '', d.url ? 'con web' : ''].filter(Boolean).join(' · '),
+];
 const fsec = (n, icon, title, body, color = '#1f6fd1') => `<section class="fsec" style="--sc:${color}"><h3 class="fsec-h"><span class="fsec-n">${n}</span>${ico(icon)}<span>${title}</span></h3><div class="fsec-b">${body}</div></section>`;
 /** Fichas para elegir una opción (en vez de un desplegable): un toque y queda marcada. Son «radio» ocultos, así que todo lo demás funciona igual. */
 const radioChips = (attr, field, options, cur, { required = false, extra = '' } = {}) => `<div class="chips-pick" role="radiogroup">${options.map(([v, l, cls = '', extra = '']) =>
@@ -957,6 +964,7 @@ function viewRunnerNew() {
   const d = S.rdraft;
   const editing = !!d.id, isRace = d.kind === 'race';
   const reg = editing && !isRace ? S.runnerData.registrations.find((x) => x.id === d.id) : null;
+  const pv = racePreview(d);
   const others = isRace ? d.others || 0 : reg ? reg.entries.filter((e) => e.runner_id !== S.runnerData.me.id).length : 0;
   if (!S.fed && !editing) loadFed().then(() => updateSearch('rname'));
   return frame(editing ? 'Editar mi carrera' : 'Añadir carrera', `
@@ -964,29 +972,29 @@ function viewRunnerNew() {
       <details class="rform-help"><summary>${ico('info')}<span>${editing ? 'Qué puedes cambiar aquí' : 'Cómo se añade una carrera'}</span></summary>
         <p class="hint">${editing ? `Puedes corregir los datos de esta carrera porque la añadiste tú${isRace ? ' (aunque ya esté en resultados)' : ''}. Tu puesto lo cambias en «Cambiar mi resultado»; el de los demás lo pone cada uno.`
           : 'Escribe el nombre: si ya existe en el club o en el calendario de las federaciones te saldrá aquí debajo, para no duplicarla.<br>¿Se te olvidó apuntar una carrera que ya hiciste? Añádela igual con su fecha (desde el 1 de enero del año pasado) y luego pon tu resultado.'}</p></details>
-      ${fsec(1, 'flag', 'Qué carrera es', `<label class="flabel-l">Nombre de la carrera<input data-rf="name" value="${esc(d.name)}" required minlength="3" maxlength="120" autocomplete="off"></label>
-        <div id="dup-list">${editing ? '' : dupSuggestions(d.name, S.runnerData.registrations, true)}</div>`, '#1f6fd1')}
-      ${fsec(2, 'cal', 'Cuándo y dónde', `<label class="flabel-l">${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-rf="date" value="${esc(d.date)}" min="${pastLimit()}"${isRace ? ` max="${todayISO()}"` : ''} required></label>
+      ${fsecD('rf1', 1, 'flag', 'Qué carrera es', pv[0], `<label class="flabel-l">Nombre de la carrera<input data-rf="name" value="${esc(d.name)}" required minlength="3" maxlength="120" autocomplete="off"></label>
+        <div id="dup-list">${editing ? '' : dupSuggestions(d.name, S.runnerData.registrations, true)}</div>`, '#1f6fd1', !editing)}
+      ${fsecD('rf2', 2, 'cal', 'Cuándo y dónde', pv[1], `<label class="flabel-l">${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-rf="date" value="${esc(d.date)}" min="${pastLimit()}"${isRace ? ` max="${todayISO()}"` : ''} required></label>
         <label class="check"><input type="checkbox" data-rf-multi ${d.multi ? 'checked' : ''}> Carrera de varios días (por etapas)</label>
         ${d.multi ? `<label class="flabel-l">Último día<input type="date" data-rf="end_date" value="${esc(d.end_date)}" min="${esc(d.date || pastLimit())}" required></label>` : ''}
         <label class="flabel-l">Lugar<input data-rf="place" value="${esc(d.place)}" maxlength="120" placeholder="Ciudad o pueblo"></label>
         <div class="grid2"><label class="flabel-l">Provincia<input data-rf="province" list="dl-prov" value="${esc(d.province)}" autocomplete="off"></label>
-          ${editing ? `<label class="flabel-l">País<input data-rf="country" list="dl-country" value="${esc(d.country || '')}" maxlength="60"></label>` : '<span></span>'}</div>`, '#0f9d8a')}
-      ${fsec(3, 'bars', 'Qué tipo de carrera es', `<div class="disc-field"><span class="flabel">Modalidad</span>${modalityChips(d, 'data-rf')}</div>
+          ${editing ? `<label class="flabel-l">País<input data-rf="country" list="dl-country" value="${esc(d.country || '')}" maxlength="60"></label>` : '<span></span>'}</div>`, '#0f9d8a', !editing)}
+      ${fsecD('rf3', 3, 'bars', 'Qué tipo de carrera es', pv[2], `<div class="disc-field"><span class="flabel">Modalidad</span>${modalityChips(d, 'data-rf')}</div>
         ${detailInputs(d, 'data-rf')}
-        ${S.runnerData.circuits ? typeFields(d, 'data-rf') : ''}`, '#e07800')}
-      ${fsec(4, 'mountain', 'Más datos de la carrera (opcionales)', `<div class="grid2"><label class="flabel-l">Desnivel positivo (m)<input type="text" inputmode="numeric" data-rf="elevation" value="${esc(d.elevation ?? '')}" maxlength="6" placeholder="1200" autocomplete="off"></label>
+        ${S.runnerData.circuits ? typeFields(d, 'data-rf') : ''}`, '#e07800', !editing)}
+      ${fsecD('rf4', 4, 'mountain', 'Más datos (opcionales)', pv[3], `<div class="grid2"><label class="flabel-l">Desnivel positivo (m)<input type="text" inputmode="numeric" data-rf="elevation" value="${esc(d.elevation ?? '')}" maxlength="6" placeholder="1200" autocomplete="off"></label>
         <label class="flabel-l">Precio inscripción (€)<input type="text" inputmode="decimal" data-rf="price" value="${esc(d.price ?? '')}" maxlength="8" placeholder="25" autocomplete="off"></label></div>
         ${isRace ? '' : `<label class="flabel-l">Web de la carrera<input type="text" inputmode="url" data-rf="url" value="${esc(d.url || '')}" maxlength="500" placeholder="https://…" autocomplete="off"></label>`}
         <p class="hint">Los ven todos los corredores y salen en las estadísticas del club (metros de subida, coste de competir…). Si no los sabes, déjalos vacíos: cualquier compañero podrá completarlos después. Para el precio, 0 = gratis.</p>`, '#2f6fd6')}
-      ${fsec(5, 'users', editing ? 'Notas' : 'Tú', editing ? `<label class="flabel-l">Notas<textarea data-rf="notes" rows="2" maxlength="500">${esc(d.notes || '')}</textarea></label>`
-        : `<label class="flabel-l">Tu categoría${catSelect('data-rf="category" required', d.category, 'Elige tu categoría')}</label>`, '#8e44ad')}
+      ${fsecD('rf5', 5, 'users', editing ? 'Notas' : 'Tú', editing ? (d.notes ? 'con notas' : '') : d.category, editing ? `<label class="flabel-l">Notas<textarea data-rf="notes" rows="2" maxlength="500">${esc(d.notes || '')}</textarea></label>`
+        : `<label class="flabel-l">Tu categoría${catSelect('data-rf="category" required', d.category, 'Elige tu categoría')}</label>`, '#8e44ad', !editing)}
       <button class="btn primary big-save">${editing ? 'Guardar cambios' : 'Añadir y apuntarme'}</button>
       <p class="hint">La dirección del club podrá corregirla o borrarla si hace falta.</p>
     </form>
     ${editing ? (others
       ? `<p class="card hint">🗑️ No puedes borrarla: hay ${others} compañero${others === 1 ? '' : 's'} más ${isRace ? 'con resultado en ella' : 'apuntado' + (others === 1 ? '' : 's')}. Si hay que quitarla, pídeselo a la dirección del club.</p>`
-      : '<button class="btn danger ghost block" data-act="r-delete-mine">🗑️ Borrar esta carrera</button>') : ''}`, { back: isRace ? runnerHref('mi') : runnerHref('') });
+      : '<div class="wf-acts"><button class="btn danger ghost" data-act="r-delete-mine">🗑️ Borrar esta carrera</button></div>') : ''}`, { back: isRace ? runnerHref('mi') : runnerHref('') });
 }
 
 
@@ -1920,18 +1928,19 @@ function draftRegistration(id) {
 }
 
 function raceFields(d) {
+  const pv = racePreview(d), open = !d.id;
   return `
-    ${fsec(1, 'flag', 'Qué carrera es', `<label class="flabel-l">Nombre<input data-f="name" value="${esc(d.name)}" required></label>`, '#1f6fd1')}
-    ${fsec(2, 'cal', 'Cuándo y dónde', `<label class="flabel-l">${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-f="date" value="${esc(d.date)}" required></label>
+    ${fsecD('af1', 1, 'flag', 'Qué carrera es', pv[0], `<label class="flabel-l">Nombre<input data-f="name" value="${esc(d.name)}" required></label>`, '#1f6fd1', open)}
+    ${fsecD('af2', 2, 'cal', 'Cuándo y dónde', pv[1], `<label class="flabel-l">${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-f="date" value="${esc(d.date)}" required></label>
       <label class="check"><input type="checkbox" data-act-change="multi" ${d.multi ? 'checked' : ''}> Carrera de varios días (por etapas)</label>
       ${d.multi ? `<label class="flabel-l">Último día<input type="date" data-f="end_date" value="${esc(d.end_date || '')}" min="${esc(d.date || '')}" required></label>` : ''}
       <label class="flabel-l">Lugar<input data-f="place" value="${esc(d.place || '')}"></label>
       <div class="grid2"><label class="flabel-l">Provincia<input data-f="province" list="dl-prov" value="${esc(d.province || '')}" autocomplete="off"></label>
-        <label class="flabel-l">País<input data-f="country" list="dl-country" value="${esc(d.country || '')}"></label></div>`, '#0f9d8a')}
-    ${fsec(3, 'bars', 'Qué tipo de carrera es', `<div class="disc-field"><span class="flabel">Modalidad</span>${modalityChips(d, 'data-f')}</div>
+        <label class="flabel-l">País<input data-f="country" list="dl-country" value="${esc(d.country || '')}"></label></div>`, '#0f9d8a', open)}
+    ${fsecD('af3', 3, 'bars', 'Qué tipo de carrera es', pv[2], `<div class="disc-field"><span class="flabel">Modalidad</span>${modalityChips(d, 'data-f')}</div>
       ${detailInputs(d, 'data-f')}
-      ${typeFields(d, 'data-f')}`, '#e07800')}
-    ${fsec(4, 'link', 'Web, desnivel y precio', `<div class="grid2"><label class="flabel-l">Desnivel positivo (m)<input type="text" inputmode="numeric" data-f="elevation" value="${esc(d.elevation ?? '')}" maxlength="6" placeholder="1200" autocomplete="off"></label>
+      ${typeFields(d, 'data-f')}`, '#e07800', open)}
+    ${fsecD('af4', 4, 'link', 'Web, desnivel y precio', pv[3], `<div class="grid2"><label class="flabel-l">Desnivel positivo (m)<input type="text" inputmode="numeric" data-f="elevation" value="${esc(d.elevation ?? '')}" maxlength="6" placeholder="1200" autocomplete="off"></label>
       <label class="flabel-l">Precio inscripción (€)<input type="text" inputmode="decimal" data-f="price" value="${esc(d.price ?? '')}" maxlength="8" placeholder="25" autocomplete="off"></label></div>
       <label class="flabel-l">Dirección de la web<input type="text" inputmode="url" data-f="url" value="${esc(d.url || '')}" maxlength="500" placeholder="https://…" autocomplete="off"></label>
       <p class="hint">Les sale a todos los corredores con un botón «Web de la carrera». ${d.url ? `<a href="${esc(d.url)}" target="_blank" rel="noopener noreferrer">Abrirla ↗</a>` : 'Si la dejas vacía, cualquier corredor que la conozca podrá ponerla.'}</p>`, '#2f6fd6')}`;
@@ -5714,6 +5723,10 @@ $app.addEventListener('change', async (ev) => {
 $app.addEventListener('toggle', (ev) => {
   const k = ev.target.dataset?.toggleKey; if (k) S[k] = ev.target.open;
   const o = ev.target.dataset?.openKey; if (o) (S.open ||= {})[o] = ev.target.open;
+  if (ev.target.classList?.contains('fsec-d') && /^(rf|af)\d$/.test(o || '')) {   // al plegar una sección de carrera, los resúmenes se ponen al día con lo escrito
+    const dr = o.startsWith('rf') ? S.rdraft : S.draft, pv = dr && racePreview(dr);
+    if (pv) pv.forEach((t, i) => { const el = ev.target.parentElement.querySelector(`[data-open-key="${o.slice(0, 2)}${i + 1}"] .fsec-p`); if (el) el.textContent = t; });
+  }
 }, true);
 // ---------- Textos explicativos plegados ----------
 // Los párrafos de ayuda («hint») no se ven como bloques de texto: quedan en una «i» pequeña que se toca para leerlos. Se hace aquí, una sola vez
