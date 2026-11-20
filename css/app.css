@@ -2326,3 +2326,19 @@ details.tip > .tip-body { align-self: stretch; }
 /* v213: con el buscador de carreras activo se esconden el aviso de la próxima carrera del equipo y el pulso, para que los resultados salgan justo debajo */
 body.rsearch .next-team, body.rsearch #pulse-box { display: none; }
 .toolbar { scroll-margin-top: 4.2rem; }
+
+/* v217: historial visual de inscripciones del equipo (dentro del plegable del equipo) */
+.mv { margin-top: .8rem; padding-top: .7rem; border-top: 1px dashed var(--line); }
+.mv h4 { display: flex; align-items: center; gap: .4rem; margin: 0 0 .5rem; font-size: .95rem; } .mv h4 .ico { width: 16px; height: 16px; color: var(--sec); }
+.mv-bars { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; height: 74px; align-items: end; }
+.mv-b { position: relative; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; gap: 2px; }
+.mv-b span { width: 100%; border-radius: 4px 4px 2px 2px; background: color-mix(in srgb, var(--sec) 45%, var(--card)); display: block; }
+.mv-b.now span { background: var(--sec); }
+.mv-b em { font-style: normal; font-size: .66rem; font-weight: 700; color: var(--text); min-height: .8rem; } .mv-b small { font-size: .58rem; color: var(--muted); white-space: nowrap; }
+.mv-trend { margin: .5rem 0 .6rem; font-size: .8rem; color: var(--muted); } .mv-trend .up { color: #1e8a43; font-weight: 700; } .mv-trend .down { color: #c0261b; font-weight: 700; }
+.mv-list { list-style: none; margin: 0; padding: 0 0 0 .55rem; border-left: 2px solid var(--line); }
+.mv-i { position: relative; display: flex; align-items: flex-start; gap: .5rem; padding: .3rem 0 .3rem .7rem; font-size: .84rem; line-height: 1.25; }
+.mv-dot { position: absolute; left: -1.07rem; top: .55rem; width: .62rem; height: .62rem; border-radius: 50%; background: var(--dc, var(--sec)); box-shadow: 0 0 0 3px var(--card); }
+.mv-tx { flex: 1; min-width: 0; } .mv-tx small { display: block; color: var(--muted); font-size: .72rem; margin-top: .1rem; }
+.mv-ago { flex: none; font-size: .72rem; color: var(--muted); white-space: nowrap; }
+.mv-more { margin-top: .3rem; } .mv-more > summary { cursor: pointer; font-size: .8rem; color: var(--sec); font-weight: 600; padding: .2rem 0 .2rem .3rem; }

@@ -172,6 +172,7 @@ export function supabaseApi(url, key) {
 
     async runnerView(code) { return ok(await sb.rpc('runner_view', { p_code: code })); },
     async runnerTeam(code) { return ok(await sb.rpc('runner_team', { p_code: code })); },
+    async runnerTeamMoves(code) { try { return ok(await sb.rpc('runner_team_moves', { p_code: code })); } catch (e) { if (/PGRST202|Could not find|runner_team_moves/.test(String(e?.message))) return null; throw e; } },
     /** Crónicas ya pasadas por el corredor (claves «AAAA-MM-DD|nombre»). null = falta el SQL. */
     async runnerChronicles(code) { try { return ok(await sb.rpc('runner_chronicles', { p_code: code })); } catch { return null; } },
     // crónicas ya pasadas por CUALQUIER compañero (para que baste con que la pase uno); null si falta el SQL
@@ -274,9 +275,10 @@ function demoSeed() {
     race('Gravel Pirineus', `${y}-06-08`, 'Bourg-Madame', '', 'Gravel', [res(pere, 'M40', 4)]),
     race('Trofeu de Tardor', `${y - 1}-10-12`, 'Reus', 'Tarragona', 'Carretera', [res(pere, 'M40', 1), res(jordi, 'M50', 3)]),
   ];
+  let demoMoveN = 0;   // fechas de inscripción escalonadas para que el historial del equipo tenga algo que enseñar
   const reg = (name, date, place, province, modality, ents) => ({
     id: uuid(), name, date, place, province, country: 'España', modality, notes: null, created_at: null,
-    entries: ents.map(([r, c]) => ({ runner_id: r.id, category: c, created_at: null })) });
+    entries: ents.map(([r, c]) => ({ runner_id: r.id, category: c, created_at: new Date(Date.now() - (demoMoveN++ * 1.9 + 0.2) * 864e5).toISOString() })) });
   const registrations = [
     reg('Volta a la Cerdanya', `${y + 1}-06-14`, 'Puigcerdà', 'Girona', 'Carretera', [[pere, 'M40'], [anna, 'Élite']]),
     reg('BTT Les Garrigues', `${y + 1}-02-22`, 'Les Borges Blanques', 'Lleida', 'BTT', [[marta, 'M30']]),
@@ -805,6 +807,11 @@ export function demoApi(storage = globalThis.localStorage) {
           results: d.results.filter((x) => x.race_id === r.id).map((x) => ({ runner_id: x.runner_id, runner_name: x.runner_name,
             category: x.category, position: x.position, podium_type: x.podium_type, stage_positions: x.stage_positions || null, time_seconds: x.time_seconds || null })) })),
       });
+    },
+    async runnerTeamMoves(code) {
+      byCode(code); const d = load(), nm = Object.fromEntries(d.runners.map((r) => [r.id, r.name]));
+      return clone(d.registration_entries.filter((e) => e.created_at).map((e) => { const g = d.registrations.find((x) => x.id === e.registration_id); return g && !g.suspended ? { runner_id: e.runner_id, name: nm[e.runner_id], race_id: g.id, race: g.name, date: g.date, modality: g.modality, subtype: g.subtype || null, province: g.province || null, at: e.created_at } : null; })
+        .filter(Boolean).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 60));
     },
     async runnerCreate(code, reg, category) {
       const me = byCode(code); const d = load();

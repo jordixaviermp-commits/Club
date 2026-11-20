@@ -1442,3 +1442,21 @@ export function modalityTree(s) {
     return { ...m, children: kids.map((d) => ({ ...d, label: subLabel(d.modality, d.subtype) })).sort((a, b) => order(a) - order(b) || b.races - a.races || a.label.localeCompare(b.label, 'es')) };
   }).sort((a, b) => b.races - a.races || a.modality.localeCompare(b.modality, 'es'));
 }
+
+/**
+ * Historial visual de inscripciones del equipo: las últimas inscripciones (más recientes primero), el número por semana
+ * (las últimas `weeks` semanas, de lunes a domingo; la última barra es la semana en curso) y la tendencia
+ * (inscripciones de las últimas 4 semanas frente a las 4 anteriores).
+ */
+export function teamMoves(moves, now = new Date(), weeks = 8) {
+  const DAY = 864e5, t0 = now.getTime();
+  const sod = (ts) => { const d = new Date(ts); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); };
+  const monday = (ts) => sod(ts) - ((new Date(ts).getUTCDay() + 6) % 7) * DAY;
+  const list = (moves || []).map((m) => ({ ...m, ts: Date.parse(m?.at) })).filter((m) => Number.isFinite(m.ts) && m.ts <= t0 + DAY)
+    .sort((a, b) => b.ts - a.ts).map((m) => ({ ...m, ago: Math.max(0, Math.round((sod(t0) - sod(m.ts)) / DAY)) }));
+  const last = monday(t0);
+  const bars = Array.from({ length: weeks }, (_, i) => ({ start: last - (weeks - 1 - i) * 7 * DAY, n: 0 }));
+  for (const m of list) { const b = bars.find((x) => m.ts >= x.start && m.ts < x.start + 7 * DAY); if (b) b.n++; }
+  const recent = bars.slice(-4).reduce((n, b) => n + b.n, 0), before = bars.slice(-8, -4).reduce((n, b) => n + b.n, 0);
+  return { list, bars, total: bars.reduce((n, b) => n + b.n, 0), recent, before, trend: recent - before };
+}
