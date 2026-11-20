@@ -117,7 +117,7 @@ const radioChips = (attr, field, options, cur, { required = false, extra = '' } 
   `<label class="cpick ${cls}"><input type="radio" name="${attr.replace('data-', '')}-${field}" ${attr}="${field}" value="${esc(v)}"${v === (cur ?? '') ? ' checked' : ''}${required ? ' required' : ''}${extra}><span>${l}</span></label>`).join('')}</div>`;
 const modalityChips = (d, attr) => radioChips(attr, 'modality', MODALITIES.map((m) => [m, `${MOD_ICON[m] || '🏁'} ${esc(m)}`, modClass(m)]), d.modality);
 const RACE_TYPE_SHORT = { suelta: 'Carrera normal', campeonato: 'Campeonato', circuito: 'De un circuito (Copa, Open…)' };
-const detailInputs = (d, attr) => `${SUBTYPES[d.modality] ? `<div class="disc-field"><span class="flabel">Disciplina de ${esc(d.modality)} <b class="req">obligatoria</b></span>${radioChips(attr, 'subtype', SUBTYPES[d.modality].map((x) => [x, esc(x)]), d.subtype, { required: true })}
+const detailInputs = (d, attr) => `${SUBTYPES[d.modality] ? `<div class="disc-field"><span class="flabel">Disciplina de ${esc(d.modality)} <b class="req">obligatoria</b></span>${radioChips(attr, 'subtype', SUBTYPES[d.modality].map((x) => [x, esc(x)]), d.subtype, { required: !d.suspended })}
       <small class="hint">Así el resumen y los gráficos del equipo reparten las carreras por disciplina.</small></div>` : ''}
     <label class="flabel-l">Distancia (km)<input type="number" inputmode="decimal" step="0.1" min="0.1" max="1000" ${attr}="km" value="${esc(d.km ?? '')}" placeholder="85"></label>`;
 /** Nombres de circuitos ya usados (para sugerirlos y no escribirlos de dos maneras). */
@@ -976,6 +976,8 @@ function viewRunnerNew() {
         <label class="flabel-l">Precio inscripción (€)<input type="text" inputmode="decimal" data-rf="price" value="${esc(d.price ?? '')}" maxlength="8" placeholder="25" autocomplete="off"></label></div>
         ${isRace ? '' : `<label class="flabel-l">Web de la carrera<input type="text" inputmode="url" data-rf="url" value="${esc(d.url || '')}" maxlength="500" placeholder="https://…" autocomplete="off"></label>`}
         <p class="hint">Los ven todos los corredores y salen en las estadísticas del club (metros de subida, coste de competir…). Si no los sabes, déjalos vacíos: cualquier compañero podrá completarlos después. Para el precio, 0 = gratis.</p>`, '#2f6fd6')}
+      ${editing && !isRace ? `<div class="susp-box${d.suspended ? ' on' : ''}"><label class="check"><input type="checkbox" data-act-change="r-suspended" ${d.suspended ? 'checked' : ''}> ⛔ La organización ha suspendido esta carrera</label>
+        <p class="hint">${d.suspended ? 'Queda como <b>suspendida</b>: a los inscritos les cuenta para el mínimo de participaciones, pero <b>no para el bono</b>, y no se pasa a resultados. Desmárcalo si se vuelve a celebrar.' : 'Márcalo si te han avisado de que se anula. Cuenta para el mínimo de carreras de los inscritos, pero no para el bono.'}</p></div>` : ''}
       ${fsec(5, 'users', editing ? 'Notas' : 'Tú', editing ? `<label class="flabel-l">Notas<textarea data-rf="notes" rows="2" maxlength="500">${esc(d.notes || '')}</textarea></label>`
         : `<label class="flabel-l">Tu categoría${catSelect('data-rf="category" required', d.category, 'Elige tu categoría')}</label>`, '#8e44ad')}
       <button class="btn primary big-save">${editing ? 'Guardar cambios' : 'Añadir y apuntarme'}</button>
@@ -1305,7 +1307,7 @@ function runnerScreen(sub) {
     }
     const g = S.runnerData.registrations.find((x) => x.id === id && x.mine_created);
     if (!g) return frame('Editar carrera', '<p class="empty">Esta carrera no existe o no la añadiste tú.</p>', { back: runnerHref('') });
-    if (S.rdraft?.id !== id) S.rdraft = emptyRunnerDraft({ id, url: g.url || '', elevation: g.elevation ?? '', price: g.price ?? '', name: g.name, date: g.date, multi: !!g.end_date, end_date: g.end_date || '',
+    if (S.rdraft?.id !== id) S.rdraft = emptyRunnerDraft({ id, suspended: !!g.suspended, url: g.url || '', elevation: g.elevation ?? '', price: g.price ?? '', name: g.name, date: g.date, multi: !!g.end_date, end_date: g.end_date || '',
       place: g.place || '', province: g.province || '', country: g.country || DEFAULT_COUNTRY, modality: g.modality, notes: g.notes || '', race_type: g.race_type || 'suelta', circuit: g.circuit || '', subtype: g.subtype || '', km: g.km ?? '' });
     return viewRunnerNew();
   }
@@ -5272,7 +5274,7 @@ const forms = {
     if (d.id) { // editar una carrera propia
       const ok = await run(async () => {
         await api.runnerUpdate(S.code, d.id, { name, date: d.date, end_date: d.multi ? d.end_date : null, place: cleanName(d.place),
-          province: cleanName(d.province), country: d.country, modality: d.modality, notes: d.notes || '', elevation: parseElev(d.elevation) ?? '', price: parsePrice(d.price) ?? '' });
+          province: cleanName(d.province), country: d.country, modality: d.modality, notes: d.notes || '', suspended: !!d.suspended, elevation: parseElev(d.elevation) ?? '', price: parsePrice(d.price) ?? '' });
         await setMyRaceType(d.id, d); await setMyDetails(d.id, d);
         const cur = S.runnerData.registrations.find((x) => x.id === d.id)?.url || '';
         if (cleanWeb(d.url) !== '!' && (cleanWeb(d.url) || '') !== cur) await api.runnerSetUrl(S.code, d.id, cleanWeb(d.url));
@@ -5593,6 +5595,7 @@ $app.addEventListener('change', async (ev) => {
   }
   if (t.dataset.actChange === 'post') { setPostedKeys([t.dataset.key], t.checked); return; }
   if (t.dataset.actChange === 'chro-admin') { setChronicleFor([t.dataset.runner], t.dataset.key, t.checked); return; }
+  if (t.dataset.actChange === 'r-suspended' && S.rdraft) { S.rdraft.suspended = t.checked; render(); return; }
   if (t.dataset.actChange === 'suspended' && S.draft) { S.draft.suspended = t.checked; render(); return; }
   if (t.dataset.actChange === 'multi') {
     S.draft.multi = t.checked;

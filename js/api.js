@@ -703,7 +703,7 @@ export function demoApi(storage = globalThis.localStorage) {
       if (name.length < 3) throw new Error('nombre_no_valido');
       if (!reg.date) throw new Error('fecha_no_valida');
       if (d.registrations.some((x) => x.id !== id && x.date === reg.date && x.name.toLowerCase() === name.toLowerCase())) throw new Error('ya_existe');
-      Object.assign(g, fields({ ...reg, name })); save();
+      Object.assign(g, fields({ ...reg, name })); if ('suspended' in reg) g.suspended = !!reg.suspended; save();
     },
     async runnerDelete(code, id) {
       const me = byCode(code); const d = load();

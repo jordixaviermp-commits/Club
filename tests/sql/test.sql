@@ -836,4 +836,18 @@ select pg_temp.check((select (runner_social_impact('codigo-valorador-dos-02')->'
 select pg_temp.check(runner_social_impact('codigo-valorador-dos-02')->'posted' @> '["2026-11-01|impacto prueba"]'::jsonb, 'impacto: ve lo publicado');
 select pg_temp.expect_fail($q$select runner_social_impact('codigo-falso')$q$, 'impacto: enlace falso no lee');
 select pg_temp.expect_fail('select * from social_posts', 'impacto: anon sigue sin leer la tabla de publicaciones');
+
+-- el creador marca su carrera como suspendida (y los demás no pueden)
+reset role;
+insert into registrations (id, name, date, created_by) select '20000000-0000-0000-0000-0000000000a7', 'Suspendible Propia', current_date + 4, id from runners where code = 'codigo-valorador-uno-01';
+set role anon;
+select runner_update_registration('codigo-valorador-uno-01', '20000000-0000-0000-0000-0000000000a7', jsonb_build_object('name','Suspendible Propia','date', to_char(current_date + 4,'YYYY-MM-DD'),'suspended', true));
+reset role;
+select pg_temp.check((select suspended from registrations where id = '20000000-0000-0000-0000-0000000000a7'), 'suspender: el creador la marca como suspendida');
+set role anon;
+select runner_update_registration('codigo-valorador-uno-01', '20000000-0000-0000-0000-0000000000a7', jsonb_build_object('name','Suspendible Propia','date', to_char(current_date + 4,'YYYY-MM-DD'),'suspended', false));
+reset role;
+select pg_temp.check(not (select suspended from registrations where id = '20000000-0000-0000-0000-0000000000a7'), 'suspender: y la reabre');
+set role anon;
+select pg_temp.expect_fail($q$select runner_update_registration('codigo-valorador-dos-02', '20000000-0000-0000-0000-0000000000a7', jsonb_build_object('name','Suspendible Propia','date', to_char(current_date + 4,'YYYY-MM-DD'),'suspended', true))$q$, 'suspender: otro corredor no puede');
 \echo TODAS LAS PRUEBAS SQL OK

@@ -2107,3 +2107,8 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .imp-pub { color: #1b7f3b; font-weight: 700; }
 .imp-key { display: none; }
 .imp-act .btn { min-height: 34px; padding: .25rem .7rem; font-size: .82rem; }
+
+/* Corredor: marcar su carrera como suspendida */
+.susp-box { padding: .6rem .75rem; border-radius: 12px; border: 1px solid var(--line); background: var(--card); }
+.susp-box.on { border-color: color-mix(in srgb, #b3261e 45%, var(--line)); background: color-mix(in srgb, #b3261e 8%, var(--card)); }
+.susp-box .hint { margin: .3rem 0 0; }

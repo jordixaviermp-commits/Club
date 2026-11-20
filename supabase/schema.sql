@@ -818,6 +818,8 @@ begin
   where id = p_id;
   if p_reg ? 'elevation' then update registrations set elevation = v_elev where id = p_id; end if;
   if p_reg ? 'price' then update registrations set price = v_price where id = p_id; end if;
+  -- el creador puede marcarla como suspendida (la organización la anula): cuenta para el mínimo, no para el bono
+  if p_reg ? 'suspended' then update registrations set suspended = coalesce((p_reg->>'suspended')::boolean, false) where id = p_id; end if;
 end $$;
 
 -- Un corredor borra una carrera que creó él, solo si no hay otros compañeros apuntados.
