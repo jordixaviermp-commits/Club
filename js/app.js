@@ -1640,7 +1640,7 @@ function watchCard(w, i) {
     <div class="wc-acts">${i.past ? `<button class="btn primary small" data-act="w-repeat" data-id="${w.id}">${ico('star')}Repetir el año que viene</button>` : mine ? '' : `<button class="btn primary small" data-act="w-sign" data-id="${w.id}">${g ? 'Apuntarme' : 'Inscribirme'}</button>`}
       ${w.url ? `<a class="btn small" href="${esc(w.url)}" target="_blank" rel="noopener noreferrer">${ico('ext')}Web</a>` : ''}
       <a class="btn small ghost wc-edit" href="#/valorar/${w.id}" aria-label="Editar" title="Editar">${ico('pen')}</a>
-      <button class="btn small ghost" data-act="w-del" data-id="${w.id}">${ico('trash')}${i.past || mine ? 'Quitar' : 'Descartar'}</button></div></article>`;
+      <button class="btn small ghost wc-edit" data-act="w-del" data-id="${w.id}" aria-label="${i.past || mine ? 'Quitar' : 'Descartar'}" title="${i.past || mine ? 'Quitar' : 'Descartar'}">${ico('trash')}</button></div></article>`;
 }
 
 function viewWatch() {
