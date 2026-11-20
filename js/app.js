@@ -1701,6 +1701,8 @@ function viewWatchForm(id) {
       <button class="btn primary big-save">${editing ? 'Guardar cambios' : 'Guardar en «Por valorar»'}</button>
       <p class="hint">Tu precio, plazo y notas solo los ves tú. La carrera (con su web, sin tu nombre) se crea también en Carreras para que otros la encuentren ya con sus datos y no se duplique. Cuando te decidas, pulsas «Apuntarme» desde la lista.</p>
     </form>
+    ${editing ? `<button class="btn block" data-act="w-repeat" data-id="${item.id}" data-back="1">${ico('cal')}Pasar al año que viene</button>
+    <p class="hint">Si este año no vas, se guarda la misma carrera para el año que viene (52 semanas después, «fecha por confirmar»), con tu web, precio y notas.</p>` : ''}
     ${editing ? `<button class="btn danger ghost block" data-act="w-del" data-id="${item.id}" data-back="1">${ico('trash')}Descartar esta carrera</button>` : ''}`, { back: '#/mi/valorar', rtab: 'mi' });
 }
 
@@ -4797,6 +4799,7 @@ const actions = {
     const next = nextYearWatch(w);
     const ok = await run(async () => { await api.runnerWatchSave(S.code, null, next); await api.runnerWatchDelete(S.code, w.id); await loadWatch(); return true; },
       `Guardada para el año que viene: ${dayMon(next.date)} (por confirmar)`);
+    if (ok && el.dataset.back) { S.rdraft = null; go('#/mi/valorar'); return; }
     if (ok) render();
   },
   async 'w-add-fed'(el) {
