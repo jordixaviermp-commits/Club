@@ -2342,3 +2342,7 @@ body.rsearch .next-team, body.rsearch #pulse-box { display: none; }
 .mv-tx { flex: 1; min-width: 0; } .mv-tx small { display: block; color: var(--muted); font-size: .72rem; margin-top: .1rem; }
 .mv-ago { flex: none; font-size: .72rem; color: var(--muted); white-space: nowrap; }
 .mv-more { margin-top: .3rem; } .mv-more > summary { cursor: pointer; font-size: .8rem; color: var(--sec); font-weight: 600; padding: .2rem 0 .2rem .3rem; }
+
+/* v218: «Carrera que más horas costó» */
+.eq-leads .l-hours { --lc: #e11d48; }
+.rs-tiles > :last-child:nth-child(odd) { grid-column: 1 / -1; }

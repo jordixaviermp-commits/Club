@@ -357,11 +357,14 @@ export function yearSummary(year, races, runners) {
   let longest = null;
   for (const { race } of parts) { const km = Number(race.km) || 0; if (km > 0 && (!longest || km > longest.km)) longest = { km, race: race.name, raceId: race.id, runners: [] }; }
   if (longest) longest.runners = parts.filter((x) => x.race.id === longest.raceId).map((x) => x.res.runner_name).sort(byText);
+  // la carrera que más horas costó: el mayor tiempo de un corredor en una carrera (el MTB suma menos km pero muchas más horas)
+  let longestTime = null;
+  for (const { race, res } of parts) { const t = Number(res.time_seconds) || 0; if (t > 0 && (!longestTime || t > longestTime.seconds)) longestTime = { seconds: t, race: race.name, raceId: race.id, runner: res.runner_name, km: Number(race.km) || null, modality: race.modality }; }
   // la carrera más dura (más desnivel), la más empinada (metros por km) y la más cara
   const pick = (score) => { let best = null; for (const { race } of parts) { const v = score(race); if (v > 0 && (!best || v > best.value)) best = { value: v, race: race.name, raceId: race.id, km: Number(race.km) || null, elevation: elevOf(race) || null, price: priceOf(race), place: race.place || '' }; }
     if (best) best.runners = parts.filter((x) => x.race.id === best.raceId).map((x) => x.res.runner_name).sort(byText); return best; };
   const farthest = pick((r) => distOf(r)?.km ?? 0), hardest = pick(elevOf), steepest = pick((r) => (Number(r.km) > 0 && elevOf(r) > 0 ? elevOf(r) / Number(r.km) : 0)), priciest = pick((r) => priceOf(r) ?? 0);
-  return { year, totals, longest, hardest, steepest, priciest, farthest, byModality, byMonth, bySubtype, disciplines, byCategory, countries, provinces, missingPlace, perRunner, byPodiumType, podiumList };
+  return { year, totals, longest, longestTime, hardest, steepest, priciest, farthest, byModality, byMonth, bySubtype, disciplines, byCategory, countries, provinces, missingPlace, perRunner, byPodiumType, podiumList };
 }
 
 // ---------- CSV ----------

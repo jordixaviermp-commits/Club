@@ -2875,6 +2875,8 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
   const plu = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   const L = s.longest;
   const longestCard = L ? `<div class="lead l-ruler"><span class="lead-i">${ico('ruler')}</span><small>Carrera más larga</small><b>${esc(kmText(L.km))}</b><em class="lead-race">${esc(L.race)}</em><em>${esc(L.runners.slice(0, 2).join(', '))}${L.runners.length > 2 ? ` y ${L.runners.length - 2} más` : ''}</em></div>` : '';
+  const LT = s.longestTime;
+  const timeCard = LT ? `<div class="lead l-hours"><span class="lead-i">${ico('timer')}</span><small>Carrera que más horas costó</small><b>${esc(formatTime(LT.seconds, true))}</b><em class="lead-race">${esc(LT.race)}</em><em>${esc(LT.runner)}</em></div>` : '';
   const H = s.hardest;
   const F = s.farthest;
   const farCard = F ? `<div class="lead l-compass"><span class="lead-i">${ico('compass')}</span><small>Carrera más lejana</small><b>${esc(kmText(F.value))}</b><em class="lead-race">${esc(F.race)}</em><em>${esc(F.place || '')}</em></div>` : '';
@@ -2884,6 +2886,7 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
     lead('trophy', 'Más podios', (r) => r.p1 + r.p2 + r.p3, (n) => plu(n, 'podio', 'podios')),
     lead('medal', 'Más victorias', (r) => r.p1, (n) => plu(n, 'victoria', 'victorias')),
     longestCard,
+    timeCard,
     lead('route', 'Más kilómetros', (r) => r.km, (n) => kmText(n), 'route'),
     lead('route', 'Más km por día', (r) => (r.kmDays ? Math.round((r.km / r.kmDays) * 10) / 10 : 0), (n) => perDayText(n), 'route'),
     lead('timer', 'Más rápido (km/h)', (r) => (r.secTimed ? Math.round((r.kmTimed / (r.secTimed / 3600)) * 10) / 10 : 0), (n) => speedText(n), 'timer'),
@@ -3341,6 +3344,7 @@ const seasonRecords = (pk) => {
   return `<table class="tp-table"><tbody>
     ${row('Más carreras', who((r) => r.races), (n) => `${n}`)}${row('Más podios', who((r) => r.p1 + r.p2 + r.p3), (n) => `${n}`)}${row('Más victorias', who((r) => r.p1), (n) => `${n}`)}
     ${L ? `<tr><td>Carrera más larga</td><td><b>${esc(L.race)}</b></td><td>${esc(kmText(L.km))}</td></tr>` : ''}
+    ${s.longestTime ? `<tr><td>Carrera que más horas costó</td><td><b>${esc(s.longestTime.race)}</b> <small class="muted">${esc(s.longestTime.runner)}</small></td><td>${esc(formatTime(s.longestTime.seconds, true))}</td></tr>` : ''}
     ${s.hardest ? `<tr><td>Carrera más dura (desnivel)</td><td><b>${esc(s.hardest.race)}</b></td><td>${esc(elevText(s.hardest.elevation))}</td></tr>` : ''}
     ${s.steepest && s.steepest.race !== s.hardest?.race ? `<tr><td>Carrera más empinada</td><td><b>${esc(s.steepest.race)}</b></td><td>${Math.round(s.steepest.value)} m/km</td></tr>` : ''}
     ${row('Más metros de subida', who((r) => r.elev), (n) => elevText(n))}
@@ -3512,6 +3516,7 @@ function resHighlights(pk) {
     ${tile('users', 'Media por carrera', i.avgPart ? `${String(i.avgPart).replace('.', ',')}` : '—', 'corredores del club')}
     ${tile('ruler', 'La más larga', L ? esc(kmText(L.km)) : '—', L ? esc(L.race) : 'sin km indicados', L ? `#/carreras/${L.raceId}` : '')}
     ${tile('calplus', 'Por venir', up.races ? `${up.races} carrera${up.races === 1 ? '' : 's'}` : 'Nada más', up.races ? `${up.entries} inscripcion${up.entries === 1 ? '' : 'es'}` : 'este año', up.races ? '#/inscripciones' : '')}
+    ${tile('timer', 'Más horas', pk.s.longestTime ? esc(formatTime(pk.s.longestTime.seconds, true)) : '—', pk.s.longestTime ? esc(pk.s.longestTime.race) : 'sin tiempos indicados', pk.s.longestTime ? `#/carreras/${pk.s.longestTime.raceId}` : '')}
     ${tile('mountain', 'La más dura', pk.s.hardest ? esc(elevText(pk.s.hardest.elevation)) : '—', pk.s.hardest ? esc(pk.s.hardest.race) : 'sin desnivel indicado', pk.s.hardest ? `#/carreras/${pk.s.hardest.raceId}` : '')}
     ${tile('money', 'Coste de competir', t.cost ? esc(euros(Math.round(t.cost))) : '—', t.cost ? `${esc(euros(Math.round((t.cost / Math.max(1, t.participations)) * 10) / 10))} por inscripción` : 'sin precios indicados')}
     ${tile('compass', 'Viaje del equipo', t.travelKm ? esc(kmText(t.travelKm)) : '—', t.travelKm ? 'ida y vuelta, aprox.' : 'sin ubicación de las carreras')}
@@ -3764,6 +3769,7 @@ function resReach(pk) {
     ${km.length ? `<section class="card rs-card"><h2>Quién ha recorrido más</h2><ol class="rs-rank">${people(km, 'km', (n) => esc(kmText(n)), kmx)}</ol></section>` : ''}
     ${tm.length ? `<section class="card rs-card"><h2>Más tiempo en carrera</h2><ol class="rs-rank">${people(tm, 'time', (n) => formatTime(n, true), tmx)}</ol></section>` : ''}
     ${L ? `<section class="card rs-card"><h2>La carrera más larga</h2><p><a class="rname" href="#/carreras/${L.raceId}"><b>${esc(L.race)}</b></a> · <b>${esc(kmText(L.km))}</b></p><p class="muted small">La corrieron: ${esc(L.runners.join(', '))}.</p></section>` : ''}
+    ${s.longestTime ? `<section class="card rs-card"><h2>La carrera que más horas costó</h2><p><a class="rname" href="#/carreras/${s.longestTime.raceId}"><b>${esc(s.longestTime.race)}</b></a> · <b>${esc(formatTime(s.longestTime.seconds, true))}</b></p><p class="muted small">${esc(s.longestTime.runner)}${s.longestTime.km ? ` · ${esc(kmText(s.longestTime.km))}` : ''}. En BTT se hacen menos km pero muchas más horas: por eso va aparte de la más larga.</p></section>` : ''}
     ${s.bySubtype.length ? `<section class="card rs-card"><h2>Formatos</h2><div class="pills">${s.bySubtype.map((x) => `<span class="pill ${modClass(x.modality)}"><i class="dot"></i>${pk.mod ? '' : `${esc(x.modality)} · `}${esc(x.subtype)} <b>${x.races}</b></span>`).join('')}</div></section>` : ''}`;
 }
 
