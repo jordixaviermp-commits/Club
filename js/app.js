@@ -500,6 +500,7 @@ function render() {
   else html = viewWelcome();
   $app.innerHTML = html;
   fitGreeting();
+  syncSearchMode();
   if ($app.querySelector('#app-ver')) checkVersion();
   document.body.classList.toggle('has-tabs', !!$app.querySelector('nav.tabs'));
   // color de la sección: cada pestaña tiene el suyo
@@ -5593,6 +5594,7 @@ $app.addEventListener('input', (ev) => {
     S.q[t.dataset.search] = t.value;
     if (t.dataset.search === 'runner' && !S.fed) loadFed().then(() => updateSearch('runner'));
     if (t.dataset.search === 'runner') ensureTeamQuiet();
+    if (t.dataset.search === 'runner') syncSearchMode();
     updateSearch(t.dataset.search);
     return;
   }
@@ -5752,6 +5754,16 @@ document.addEventListener('click', (ev) => {
   window.addEventListener('afterprint', () => document.querySelectorAll('details.tip, p.tip-body[data-tip-key]').forEach((d) => { if (d.tagName === 'P') d.hidden = d.dataset.wasHidden === '1'; else d.open = d.dataset.wasOpen === '1'; }));
 }
 document.addEventListener('invalid', (ev) => { const d = ev.target.closest?.('details.fsec-d'); if (d && !d.open) d.open = true; }, true);
+// Buscador de carreras del corredor: al activarlo (tocar la lupa o escribir) se esconden el aviso de la próxima carrera del equipo y el pulso del equipo,
+// y el buscador sube arriba: así los resultados quedan justo debajo, a la vista, y no tapados por el teclado del móvil.
+const searchActive = () => normalize(S.q.runner || '').length >= 2 || document.activeElement?.dataset?.search === 'runner';
+const syncSearchMode = () => document.body.classList.toggle('rsearch', searchActive());
+document.addEventListener('focusin', (ev) => {
+  if (ev.target.dataset?.search !== 'runner') return;
+  syncSearchMode();
+  const bar = ev.target.closest('.toolbar'); if (bar) setTimeout(() => bar.scrollIntoView({ block: 'start', behavior: 'smooth' }), 120);
+});
+document.addEventListener('focusout', (ev) => { if (ev.target.dataset?.search === 'runner') setTimeout(syncSearchMode, 150); });
 window.addEventListener('hashchange', onRoute);
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); S.installEvt = e; if (S.runnerData) render(); });
 
