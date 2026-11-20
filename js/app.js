@@ -1087,6 +1087,7 @@ function myRacesCard(d, afterSummary = () => '') {
   const cancelled = mineReg.filter((g) => g.suspended).sort((a, b) => a.date.localeCompare(b.date));
   const years = [...new Set([new Date().getFullYear(), ...results.map((r) => yearOf(r.date))])].sort((a, b) => b - a);
   if (!years.includes(S.myYear)) S.myYear = years[0];
+  const upcomingYear = upcoming.filter((g) => yearOf(g.date) === S.myYear);   // el recuadro es de UNA temporada: las de otros años no se cuentan ahí
   const list = results.filter((r) => yearOf(r.date) === S.myYear);
   const days = list.reduce((n, r) => n + numDays(r.date, r.end_date), 0);
   const row = (r) => {
@@ -1104,7 +1105,7 @@ function myRacesCard(d, afterSummary = () => '') {
   return `
   <section class="card sum-card"><div class="sum-head"><h2>Mis carreras ${S.myYear}</h2>${ico('trophy', 'sum-trophy')}</div>
     <div class="tiles">
-      <a href="#" class="tile t-next" data-act="goto-sec" data-to="sec-next"><span class="t-n">${upcoming.length}</span><span class="t-l">Próximas</span>${ico('cal', 't-ico')}<small>inscrito</small></a>
+      <a href="#" class="tile t-next" data-act="goto-sec" data-to="sec-next"><span class="t-n">${upcomingYear.length}</span><span class="t-l">Próximas</span>${ico('cal', 't-ico')}<small>inscrito</small></a>
       <a href="#" class="tile t-done" data-act="goto-sec" data-to="sec-done"><span class="t-n">${list.length + sent.filter((g) => yearOf(g.date) === S.myYear).length}</span><span class="t-l">Hechas</span>${ico('ok', 't-ico')}<small>${days !== list.length ? `${days} días de competición` : 'con resultado'}</small></a>
       <a href="#" class="tile t-pend${pendingN ? ' alert' : ''}" data-act="goto-sec" data-to="sec-pend"><span class="t-n">${pendingN}</span><span class="t-l">Pendientes</span>${ico('flag', 't-ico')}<small>${pendingN ? 'falta tu resultado' : 'de resultado'}</small></a>
     </div>
@@ -1141,7 +1142,7 @@ function myRacesCard(d, afterSummary = () => '') {
   ${upcoming.length ? `<ul class="mini-list next-hero" id="sec-hero">${mrow(upcoming[0], { href: `${runnerHref('carrera')}/${upcoming[0].id}`, hero: true, pill: `${dleft(upcoming[0])}${myCat(upcoming[0]) ? ` · ${esc(myCat(upcoming[0]))}` : ''}`, edit: editMine(upcoming[0]), below: payChips(upcoming[0]) })}</ul>` : ''}
 
   <details class="card season-block next-block desp" id="sec-next" data-open-key="next"${S.open?.next ? ' open' : ''}>
-    <summary><span class="desp-t">Mis próximas inscripciones <small>(${upcoming.length})</small></span>${ico('chevd', 'desp-chev')}
+    <summary><span class="desp-t">Mis próximas inscripciones <small>(${(() => { const by = new Map(); for (const g of upcoming) by.set(yearOf(g.date), (by.get(yearOf(g.date)) || 0) + 1); return by.size > 1 || (by.size === 1 && !by.has(S.myYear)) ? [...by].sort((x, y) => x[0] - y[0]).map(([y, n]) => `${n} de ${y}`).join(' + ') : upcoming.length; })()})</small></span>${ico('chevd', 'desp-chev')}
       ${upcoming.length ? `<span class="desp-sub">${payLineInline(upcoming)}</span>` : ''}</summary>
     <p class="hint">Carreras a las que estás apuntado y que aún no se han corrido. <b>Toca una</b> para abrirla: ves quién va, puedes borrarte y, si la añadiste tú, editarla.</p>
     ${upcoming.length > 1 ? `<ul class="mini-list">${upcoming.slice(1).map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, pill: `${dleft(g)}${myCat(g) ? ` · ${esc(myCat(g))}` : ''}`, edit: editMine(g), below: payChips(g) })).join('')}</ul>`
@@ -4057,12 +4058,13 @@ function adminRunnerRaces(r, year, forceOpen = false) {
     .sort((a, b) => b.date.localeCompare(a.date));
   const regs = S.data.registrations.filter((g) => g.entries.some((e) => e.runner_id === r.id)).sort((a, b) => a.date.localeCompare(b.date));
   const pending = regs.filter((g) => g.date < today && !g.suspended), upcoming = regs.filter((g) => g.date >= today || g.suspended);
+  const upcomingYear = upcoming.filter((g) => yearOf(g.date) === year);
   const days = races.reduce((n, x) => n + numDays(x.date, x.end_date), 0);
   const key = 'rr-' + r.id;
   const res = (x) => { const y = x.results.find((z) => z.runner_id === r.id);
     return y.position ? `${isPodium(y.position) ? medal(y.position) + ' ' : ''}${y.position}º` : '<span class="muted">sin puesto</span>'; };
   return `<details class="runner-races"${forceOpen || S.open?.[key] ? ' open' : ''} data-open-key="${key}">
-    <summary>Carreras ${year}: <b>${races.length}</b>${days !== races.length ? ` (${days} días)` : ''} · apuntado a ${upcoming.length} próxima${upcoming.length === 1 ? '' : 's'}${pending.length ? ` · ${pending.length} ya disputada${pending.length === 1 ? '' : 's'} sin pasar a resultados` : ''}</summary>
+    <summary>Carreras ${year}: <b>${races.length}</b>${days !== races.length ? ` (${days} días)` : ''} · apuntado a ${upcomingYear.length} próxima${upcomingYear.length === 1 ? '' : 's'}${upcoming.length !== upcomingYear.length ? ` (+${upcoming.length - upcomingYear.length} de otros años)` : ''}${pending.length ? ` · ${pending.length} ya disputada${pending.length === 1 ? '' : 's'} sin pasar a resultados` : ''}</summary>
     <p class="hint">Toca una carrera para abrirla y editarla o borrarla.</p>
     ${races.length ? `<ul class="mini-list">${races.map((x) => miniRow(x, `<a class="pos" href="#/carreras/${x.id}/${r.id}">${res(x)} ✏️</a>`, `#/carreras/${x.id}/${r.id}`)).join('')}</ul>` : `<p class="hint">Sin carreras con resultados en ${year}.</p>`}
     ${pending.length ? `<p class="hint"><b>Ya disputadas, aún sin pasar a resultados</b> (le cuentan para el bono si puso su puesto):</p><ul class="mini-list">${pending.map((g) => miniRow(g, `<a class="btn small" href="#/inscripciones/${g.id}/${r.id}">✏️ Editar</a>`, `#/inscripciones/${g.id}/${r.id}`)).join('')}</ul>` : ''}
