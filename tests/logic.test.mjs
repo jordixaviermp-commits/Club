@@ -40,7 +40,7 @@ const races = [
 test('resumen anual', () => {
   const s = yearSummary(2026, races, runners);
   { const { travelKm, travelRaces, travelApprox, avgDist, ...base } = s.totals;
-  assert.deepEqual(base, { races: 3, runners: 3, participations: 4, podiums: 3, wins: 1, km: 0, time: 0, timed: 0, elevation: 0, cost: 0, elevRaces: 0, pricedRaces: 0, avgPrice: 0 }); }
+  assert.deepEqual(base, { races: 3, runners: 3, participations: 4, podiums: 3, wins: 1, km: 0, kmDays: 0, kmTimed: 0, secTimed: 0, kmRaces: 0, kmBoth: 0, tripBoth: 0, time: 0, timed: 0, elevation: 0, cost: 0, elevRaces: 0, pricedRaces: 0, avgPrice: 0 }); }
   assert.deepEqual(s.byModality.map((m) => m.modality), ['Carretera', 'BTT', 'Gravel']); // Pista no aparece en 2026
   { const { elevation, trip, cost, km, ...base } = s.byModality[1];
   assert.deepEqual(base, { modality: 'BTT', races: 1, participations: 2, podiums: 2, wins: 0, runners: 2 }); }
@@ -130,7 +130,7 @@ test('podios de etapa: cuentan como tipo «Etapa»', () => {
     ] }];
   const s = yearSummary(2027, races2, runners2);
   { const { travelKm, travelRaces, travelApprox, avgDist, ...base } = s.totals;
-  assert.deepEqual(base, { races: 1, runners: 2, participations: 2, podiums: 4, wins: 2, km: 0, time: 0, timed: 0, elevation: 0, cost: 0, elevRaces: 0, pricedRaces: 0, avgPrice: 0 }); }
+  assert.deepEqual(base, { races: 1, runners: 2, participations: 2, podiums: 4, wins: 2, km: 0, kmDays: 0, kmTimed: 0, secTimed: 0, kmRaces: 0, kmBoth: 0, tripBoth: 0, time: 0, timed: 0, elevation: 0, cost: 0, elevRaces: 0, pricedRaces: 0, avgPrice: 0 }); }
   assert.deepEqual(s.byPodiumType.map((t) => [t.type, t.podiums, t.wins]),
     [['suelta', 0, 0], ['general', 1, 0], ['campeonato', 0, 0], ['etapa', 3, 2]]);
   assert.deepEqual(s.perRunner.map((r) => [r.name, r.races, r.p1, r.p2, r.p3]), [['Anna', 1, 1, 1, 1], ['Biel', 1, 1, 0, 0]]);
@@ -728,4 +728,20 @@ test('impacto en redes: historia automática, resultado del corredor, publicado 
   assert.deepEqual(r.rows.map((x) => [x.story, x.mine, x.published, x.cro]), [[true, true, true, false], [true, false, false, false], [false, true, false, true]]);
   assert.deepEqual(r.totals, { races: 3, stories: 2, results: 2, published: 1, chronicles: 1 });
   assert.deepEqual(raceImpact([]).totals, { races: 0, stories: 0, results: 0, published: 0, chronicles: 0 });
+});
+
+test('ratios de resumen: km/día, km/h, min/km, km por carrera y carrera frente a viaje (2 ultras cerca frente a 10 cortas lejos)', async () => {
+  const { yearSummary, avgSpeed } = await import('../js/logic.js');
+  const A = { id: 'a', name: 'Ana' }, B = { id: 'b', name: 'Beto' };
+  const mk = (id, name, date, km, place, province, runner, h) => ({ id, name, date, km, place, province, modality: 'BTT', results: [{ runner_id: runner.id, runner_name: runner.name, position: 5, time_seconds: Math.round(h * 3600) }] });
+  const races = [mk('1', 'Ultra 1', '2026-05-01', 800, 'Fraga', 'Huesca', A, 30), mk('2', 'Ultra 2', '2026-06-01', 800, 'Fraga', 'Huesca', A, 30),
+    ...Array.from({ length: 10 }, (_, i) => mk('c' + i, 'Corta ' + i, `2026-07-${String(i + 1).padStart(2, '0')}`, 30, 'Valencia', 'Valencia', B, 1))];
+  const s = yearSummary(2026, races, [A, B]);
+  const a = s.perRunner.find((r) => r.key === 'a'), b = s.perRunner.find((r) => r.key === 'b');
+  assert.deepEqual([a.km, a.kmRaces, a.kmDays], [1600, 2, 2]);
+  assert.equal(Math.round(a.secTimed / 3600), 60); assert.equal(Math.round(b.secTimed / 3600), 10);
+  assert.ok(a.kmBoth / a.tripBoth > (b.kmBoth / b.tripBoth) * 20, 'carrera/viaje: A compensa mucho más');
+  assert.equal(avgSpeed([{ km: 100, time_seconds: 12600 }]).kmh, 28.6);
+  assert.equal(avgSpeed([{ km: 134, time_seconds: 16320 }]).pace, 122);
+  assert.deepEqual(avgSpeed([{ km: 50 }, { time_seconds: 3600 }]), { km: 0, sec: 0, kmh: 0, pace: 0 });
 });
