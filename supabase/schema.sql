@@ -14,6 +14,7 @@ create table if not exists public.runners (
   code        text not null unique check (length(code) >= 10),  -- enlace personal
   created_at  timestamptz default now()
 );
+alter table public.runners add column if not exists last_seen timestamptz;   -- última vez que abrió la app
 
 create table if not exists public.registrations (          -- inscripciones (carreras futuras)
   id          uuid primary key default gen_random_uuid(),
@@ -416,7 +417,7 @@ drop trigger if exists races_log on public.races;
 create trigger races_log after insert or update or delete on public.races
   for each row execute function public.log_row_change();
 
--- Pasa solas a resultados las inscripciones ya disputadas (3 días después del último día) en las que
+-- Pasa solas a resultados las inscripciones ya disputadas (una semana después del último día) en las que
 -- al menos un inscrito ha puesto su puesto. Solo entran quienes lo pusieron: los demás pueden añadirse
 -- después con «La hice: añadirme». Se ejecuta cuando alguien abre la app (no necesita ningún servicio).
 create or replace function public.auto_promote_registrations()
@@ -425,11 +426,11 @@ declare g registrations; v_race uuid; v_n int := 0;
 begin
   perform set_config('app.skip_log', 'on', true);
   for g in select * from registrations r
-            where not r.suspended and coalesce(r.end_date, r.date) < current_date - 3
+            where not r.suspended and coalesce(r.end_date, r.date) < current_date - 7
               and exists (select 1 from registration_entries e where e.registration_id = r.id and e.self_position is not null)
             for update skip locked loop
-    insert into races (name, date, end_date, place, province, country, modality, notes, race_type, circuit, subtype, km, created_by)
-    values (g.name, g.date, g.end_date, g.place, g.province, g.country, g.modality, g.notes, g.race_type, g.circuit, g.subtype, g.km, g.created_by)
+    insert into races (name, date, end_date, place, province, country, modality, notes, race_type, circuit, subtype, km, created_by, url, elevation, price, lat, lon, geo_key)
+    values (g.name, g.date, g.end_date, g.place, g.province, g.country, g.modality, g.notes, g.race_type, g.circuit, g.subtype, g.km, g.created_by, g.url, g.elevation, g.price, g.lat, g.lon, g.geo_key)
     returning id into v_race;
     insert into results (race_id, runner_id, runner_name, category, position, podium_type, self_reported, time_seconds)
     select v_race, e.runner_id, rn.name, e.category, e.self_position,
@@ -441,6 +442,7 @@ begin
     perform public.log_change('Sistema', 'race', v_race, 'auto_resultados', format('pasó sola a resultados: %s (%s)', g.name, g.date));
     v_n := v_n + 1;
   end loop;
+  perform public.watch_cleanup();   -- quita las «candidatas» (de Por valorar) que ya nadie valora o que ya pasaron sin inscritos
   perform set_config('app.skip_log', 'off', true);
   return v_n;
 end $$;
@@ -455,25 +457,24 @@ declare
   v_prov  text := nullif(left(btrim(coalesce(p_data->>'province', '')), 60), '');
   v_sub   text := nullif(left(btrim(coalesce(p_data->>'subtype', '')), 30), '');
   v_km    numeric := case when coalesce(p_data->>'km', '') ~ '^[0-9]+([.][0-9]+)?$' then (p_data->>'km')::numeric end;
+  v_elev  int := case when coalesce(p_data->>'elevation','') ~ '^[0-9]{1,5}$' and (p_data->>'elevation')::int between 1 and 10000 then (p_data->>'elevation')::int end;
+  v_price numeric := case when coalesce(p_data->>'price','') ~ '^[0-9]{1,5}([.][0-9]{1,2})?$' and (p_data->>'price')::numeric <= 10000 then (p_data->>'price')::numeric end;
 begin
   select id, name into v_runner, v_name from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
   if v_km is not null and not (v_km > 0 and v_km <= 1000) then v_km := null; end if;
   perform set_config('app.actor', v_name, true);
   if p_kind = 'reg' then
-    if not exists (select 1 from registration_entries where registration_id = p_id and runner_id = v_runner)
-       and not exists (select 1 from registrations where id = p_id and created_by = v_runner) then
-      raise exception 'no_es_tuya' using errcode = '42501';
-    end if;
+    -- una inscripción la puede completar cualquier corredor (solo lo que falta): así quien conoce la carrera ayuda a los demás
     update registrations set place = coalesce(nullif(place, ''), v_place), province = coalesce(nullif(province, ''), v_prov),
-           subtype = coalesce(nullif(subtype, ''), v_sub), km = coalesce(km, round(v_km, 1))
+           subtype = coalesce(nullif(subtype, ''), v_sub), km = coalesce(km, round(v_km, 1)), elevation = coalesce(elevation, v_elev), price = coalesce(price, v_price)
      where id = p_id;
   elsif p_kind = 'race' then
     if not exists (select 1 from results where race_id = p_id and runner_id = v_runner) then
       raise exception 'no_es_tuya' using errcode = '42501';
     end if;
     update races set place = coalesce(nullif(place, ''), v_place), province = coalesce(nullif(province, ''), v_prov),
-           subtype = coalesce(nullif(subtype, ''), v_sub), km = coalesce(km, round(v_km, 1))
+           subtype = coalesce(nullif(subtype, ''), v_sub), km = coalesce(km, round(v_km, 1)), elevation = coalesce(elevation, v_elev), price = coalesce(price, v_price)
      where id = p_id;
   else
     raise exception 'tipo_no_valido';
@@ -614,6 +615,14 @@ begin
   end if;
 end $$;
 
+-- Actividad: última vez que el corredor abrió la app (como mucho una escritura por hora).
+create or replace function public.runner_ping(p_code text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  update runners set last_seen = now()
+   where code = p_code and (last_seen is null or last_seen < now() - interval '1 hour');
+end $$;
+
 -- ---------- Funciones de corredores (entran con su enlace personal) ----
 -- Solo ven inscripciones (nombre y categoría de los inscritos) y solo
 -- pueden apuntarse o borrarse a sí mismos en carreras de hoy en adelante.
@@ -662,7 +671,7 @@ begin
       select jsonb_agg(jsonb_build_object(
                'race_id', r.id, 'name', r.name, 'date', r.date, 'end_date', r.end_date, 'place', r.place,
                'province', r.province, 'country', r.country, 'modality', r.modality, 'stages', r.stages,
-               'race_type', r.race_type, 'circuit', r.circuit, 'subtype', r.subtype, 'km', r.km, 'notes', r.notes,
+               'race_type', r.race_type, 'circuit', r.circuit, 'subtype', r.subtype, 'km', r.km, 'elevation', r.elevation, 'price', r.price, 'lat', r.lat, 'lon', r.lon, 'geo_key', r.geo_key, 'notes', r.notes,
                'mine_created', r.created_by = me.id,
                'others', (select count(*) from results o where o.race_id = r.id and o.runner_id is distinct from me.id),
                'category', x.category, 'position', x.position, 'podium_type', x.podium_type,
@@ -673,7 +682,7 @@ begin
     'registrations', coalesce((
       select jsonb_agg(jsonb_build_object(
                'id', g.id, 'name', g.name, 'date', g.date, 'end_date', g.end_date, 'place', g.place,
-               'mine_created', g.created_by = me.id, 'race_type', g.race_type, 'circuit', g.circuit, 'suspended', g.suspended, 'subtype', g.subtype, 'km', g.km,
+               'mine_created', g.created_by = me.id, 'race_type', g.race_type, 'circuit', g.circuit, 'suspended', g.suspended, 'subtype', g.subtype, 'km', g.km, 'url', g.url, 'url_mine', coalesce(g.url_by = me.id, false), 'elevation', g.elevation, 'price', g.price, 'lat', g.lat, 'lon', g.lon, 'geo_key', g.geo_key,
                'my_result', (select jsonb_build_object('position', e.self_position, 'podium_type', e.self_podium_type, 'time_seconds', e.self_time_seconds)
                                from registration_entries e where e.registration_id = g.id and e.runner_id = me.id and e.self_position is not null),
                'province', g.province, 'country', g.country, 'modality', g.modality, 'notes', g.notes,
@@ -702,7 +711,7 @@ begin
       select jsonb_agg(jsonb_build_object(
                'id', r.id, 'name', r.name, 'date', r.date, 'end_date', r.end_date, 'place', r.place,
                'province', r.province, 'country', r.country, 'modality', r.modality, 'stages', r.stages,
-               'race_type', r.race_type, 'circuit', r.circuit, 'subtype', r.subtype, 'km', r.km,
+               'race_type', r.race_type, 'circuit', r.circuit, 'subtype', r.subtype, 'km', r.km, 'elevation', r.elevation, 'price', r.price, 'lat', r.lat, 'lon', r.lon, 'geo_key', r.geo_key,
                'results', coalesce((
                   select jsonb_agg(jsonb_build_object('runner_id', x.runner_id, 'runner_name', x.runner_name, 'category', x.category,
                                    'position', x.position, 'podium_type', x.podium_type, 'stage_positions', x.stage_positions, 'time_seconds', x.time_seconds))
@@ -739,17 +748,21 @@ declare
   v_name text := btrim(regexp_replace(coalesce(p_reg->>'name',''), '\s+', ' ', 'g'));
   v_date date := nullif(p_reg->>'date','')::date;
   v_end  date := nullif(nullif(p_reg->>'end_date',''), p_reg->>'date')::date;
+  v_url  text := nullif(btrim(coalesce(p_reg->>'url','')), '');
+  v_elev int := case when coalesce(p_reg->>'elevation','') ~ '^[0-9]{1,5}$' and (p_reg->>'elevation')::int between 1 and 10000 then (p_reg->>'elevation')::int end;
+  v_price numeric := case when coalesce(p_reg->>'price','') ~ '^[0-9]{1,5}([.][0-9]{1,2})?$' and (p_reg->>'price')::numeric <= 10000 then (p_reg->>'price')::numeric end;
 begin
   select id into v_runner from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
   if length(v_name) < 3 or length(v_name) > 120 then raise exception 'nombre_no_valido'; end if;
   if v_date is null or v_date < make_date(extract(year from current_date)::int - 1, 1, 1) or v_date > current_date + 730 then raise exception 'fecha_no_valida'; end if;
   if v_end is not null and (v_end < v_date or v_end > v_date + 30) then raise exception 'fecha_no_valida'; end if;
+  if v_url is not null and (length(v_url) > 500 or v_url !~* '^https?://[^[:space:]]+$') then raise exception 'enlace_web_no_valido'; end if;
   if (select count(*) from registrations where created_by = v_runner and created_at > now() - interval '1 day') >= 10 then
     raise exception 'demasiadas_carreras';
   end if;
   if v_date < current_date then
-    select id into v_id from races where date = v_date and lower(name) = lower(v_name) limit 1;
+    select id into v_id from races where date = v_date and public.norm_name(name) = public.norm_name(v_name) limit 1;
     if v_id is not null then
       insert into results (race_id, runner_id, runner_name, category)
       select v_id, v_runner, name, nullif(p_category, '') from runners where id = v_runner
@@ -757,15 +770,17 @@ begin
       return v_id;
     end if;
   end if;
-  select id into v_id from registrations where date = v_date and lower(name) = lower(v_name) limit 1;
+  select id into v_id from registrations where date = v_date and public.norm_name(name) = public.norm_name(v_name) limit 1;
   if v_id is null then
-    insert into registrations (name, date, end_date, place, province, country, modality, notes, created_by)
+    insert into registrations (name, date, end_date, place, province, country, modality, notes, created_by, url, url_by, elevation, price)
     values (v_name, v_date, v_end,
             nullif(left(btrim(coalesce(p_reg->>'place','')), 120), ''), nullif(left(btrim(coalesce(p_reg->>'province','')), 60), ''),
             coalesce(nullif(left(btrim(coalesce(p_reg->>'country','')), 60), ''), 'España'),
-            coalesce(nullif(p_reg->>'modality',''), 'Carretera'), nullif(left(btrim(coalesce(p_reg->>'notes','')), 500), ''), v_runner)
+            coalesce(nullif(p_reg->>'modality',''), 'Carretera'), nullif(left(btrim(coalesce(p_reg->>'notes','')), 500), ''), v_runner, v_url, case when v_url is not null then v_runner end, v_elev, v_price)
     returning id into v_id;
   end if;
+  if v_url is not null then update registrations set url = v_url, url_by = v_runner where id = v_id and url is null; end if;
+  if v_elev is not null or v_price is not null then update registrations set elevation = coalesce(elevation, v_elev), price = coalesce(price, v_price) where id = v_id; end if;   -- lo que aporte, si aún no estaba   -- la web que ponga, si aún no tenía
   insert into registration_entries (registration_id, runner_id, category)
   values (v_id, v_runner, nullif(p_category, ''))
   on conflict (registration_id, runner_id) do update set category = excluded.category;
@@ -780,6 +795,8 @@ declare
   v_name text := btrim(regexp_replace(coalesce(p_reg->>'name',''), '\s+', ' ', 'g'));
   v_date date := nullif(p_reg->>'date','')::date;
   v_end  date := nullif(nullif(p_reg->>'end_date',''), p_reg->>'date')::date;
+  v_elev int := case when coalesce(p_reg->>'elevation','') ~ '^[0-9]{1,5}$' and (p_reg->>'elevation')::int between 1 and 10000 then (p_reg->>'elevation')::int end;
+  v_price numeric := case when coalesce(p_reg->>'price','') ~ '^[0-9]{1,5}([.][0-9]{1,2})?$' and (p_reg->>'price')::numeric <= 10000 then (p_reg->>'price')::numeric end;
 begin
   select id into v_runner from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
@@ -799,6 +816,8 @@ begin
     modality = coalesce(nullif(p_reg->>'modality',''), 'Carretera'),
     notes = nullif(left(btrim(coalesce(p_reg->>'notes','')), 500), '')
   where id = p_id;
+  if p_reg ? 'elevation' then update registrations set elevation = v_elev where id = p_id; end if;
+  if p_reg ? 'price' then update registrations set price = v_price where id = p_id; end if;
 end $$;
 
 -- Un corredor borra una carrera que creó él, solo si no hay otros compañeros apuntados.
@@ -827,6 +846,8 @@ declare
   v_end  date := nullif(nullif(p_race->>'end_date',''), p_race->>'date')::date;
   v_type text := coalesce(nullif(p_race->>'race_type',''), 'suelta');
   v_km   numeric := case when coalesce(p_race->>'km', '') ~ '^[0-9]+([.][0-9]+)?$' then (p_race->>'km')::numeric end;
+  v_elev int := case when coalesce(p_race->>'elevation','') ~ '^[0-9]{1,5}$' and (p_race->>'elevation')::int between 1 and 10000 then (p_race->>'elevation')::int end;
+  v_price numeric := case when coalesce(p_race->>'price','') ~ '^[0-9]{1,5}([.][0-9]{1,2})?$' and (p_race->>'price')::numeric <= 10000 then (p_race->>'price')::numeric end;
 begin
   select id, name into v_runner, v_who from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
@@ -852,6 +873,8 @@ begin
     subtype = nullif(left(btrim(coalesce(p_race->>'subtype', '')), 30), ''),
     km = case when v_km > 0 and v_km <= 1000 then round(v_km, 1) end
   where id = p_id;
+  if p_race ? 'elevation' then update races set elevation = v_elev where id = p_id; end if;
+  if p_race ? 'price' then update races set price = v_price where id = p_id; end if;
   perform set_config('app.actor', '', true);
 end $$;
 
@@ -1095,7 +1118,11 @@ begin
                                                        'my_answer', (select a.answer from announcement_replies a where a.announcement_id = n.id and a.runner_id = v_runner),
                                                        'my_guests', (select a.guests from announcement_replies a where a.announcement_id = n.id and a.runner_id = v_runner),
                                                        'yes_count', (select coalesce(count(*) + sum(a.guests), 0) from announcement_replies a where a.announcement_id = n.id and a.answer = 'si'),
-                                                       'no_count', (select count(*) from announcement_replies a where a.announcement_id = n.id and a.answer = 'no'))
+                                                       'no_count', (select count(*) from announcement_replies a where a.announcement_id = n.id and a.answer = 'no'),
+                                                       -- quién asiste (solo nombre y acompañantes), para verlo desplegado
+                                                       'yes_list', (select coalesce(jsonb_agg(jsonb_build_object('name', rn.name, 'guests', a.guests) order by rn.name), '[]'::jsonb)
+                                                                      from announcement_replies a join runners rn on rn.id = a.runner_id
+                                                                     where a.announcement_id = n.id and a.answer = 'si'))
                                     order by n.created_at desc)
                      from (select * from announcements where expires_at is null or expires_at >= current_date
                             order by created_at desc limit 30) n), '[]'::jsonb);
@@ -1328,15 +1355,256 @@ begin
   end if;
 end $$;
 
+-- Crónicas pasadas por cualquier compañero (basta con que la pase uno)
+create or replace function public.runner_chronicles_team(p_code text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare v_runner uuid;
+begin
+  select id into v_runner from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  return coalesce((
+    select jsonb_agg(jsonb_build_object('key', k.race_key, 'by', k.by_name, 'mine', k.mine) order by k.race_key)
+      from (select c.race_key,
+                   (array_agg(r.name order by (c.runner_id = v_runner) desc, c.done_at))[1] as by_name,
+                   bool_or(c.runner_id = v_runner) as mine
+              from chronicles c join runners r on r.id = c.runner_id
+             group by c.race_key) k), '[]'::jsonb);
+end $$;
+
+
+
+-- Web de la carrera: la puede poner, cambiar o quitar cualquier corredor (url_by = quién la tocó por última vez).
+alter table public.registrations add column if not exists url text;
+alter table public.registrations add column if not exists url_by uuid;
+alter table public.races add column if not exists url text;
+alter table public.registrations drop constraint if exists registrations_url_check;
+alter table public.registrations add constraint registrations_url_check check (url is null or (length(url) <= 500 and url ~* '^https?://[^[:space:]]+$'));
+alter table public.races drop constraint if exists races_url_check;
+alter table public.races add constraint races_url_check check (url is null or (length(url) <= 500 and url ~* '^https?://[^[:space:]]+$'));
+
+-- Las carreras que alguien guarda en «Por valorar» se crean también en Carreras (sin inscritos y sin dueño: nadie sabe quién la guardó)
+-- para que otro corredor las encuentre ya con sus datos y no se dupliquen cuando varios se inscriben. Solo se publica la carrera
+-- (nombre, fecha, lugar, modalidad, disciplina y km): web, precio, plazo y notas siguen siendo privados.
+alter table public.registrations add column if not exists candidate boolean default false;
+
+-- Nombre para comparar: sin mayúsculas, tildes ni signos («Gran Fondo Monzón» = «gran fondo monzon»).
+create or replace function public.norm_name(t text)
+returns text language sql immutable as $$
+  select regexp_replace(translate(lower(coalesce(t, '')), 'áàäâãéèëêíìïîóòöôõúùüûñçÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑÇ', 'aaaaaeeeeiiiiooooouuuuncaaaaaeeeeiiiiooooouuuunc'), '[^a-z0-9]', '', 'g')
+$$;
+
+drop function if exists public.watch_publish(text, date, date, text, text, text, text, text, numeric);
+drop function if exists public.watch_publish(uuid, text, date, date, text, text, text, text, text, numeric, text);
+create or replace function public.watch_publish(p_runner uuid, p_name text, p_date date, p_end date, p_place text, p_province text, p_country text, p_modality text, p_subtype text, p_km numeric, p_url text, p_elevation int, p_price numeric)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_prev text := nullif(current_setting('app.skip_log', true), '');
+begin
+  if p_date < current_date then return; end if;
+  if exists (select 1 from registrations where date = p_date and public.norm_name(name) = public.norm_name(p_name)) then
+    -- ya existe: lo que este corredor sepa (web, desnivel, precio) y la carrera aún no tenga, queda para todos
+    if p_url is not null or p_elevation is not null or p_price is not null then
+      perform set_config('app.skip_log', 'on', true);
+      update registrations set url_by = case when url is null and p_url is not null then p_runner else url_by end, url = coalesce(url, p_url),
+             elevation = coalesce(elevation, p_elevation), price = coalesce(price, p_price)
+       where date = p_date and public.norm_name(name) = public.norm_name(p_name);
+      perform set_config('app.skip_log', coalesce(v_prev, 'off'), true);
+    end if;
+    return;
+  end if;
+  perform set_config('app.skip_log', 'on', true);
+  begin
+    insert into registrations (name, date, end_date, place, province, country, modality, subtype, km, candidate, url, url_by, elevation, price)
+    values (p_name, p_date, p_end, p_place, p_province, coalesce(p_country, 'España'), p_modality, p_subtype, p_km, true, p_url, case when p_url is not null then p_runner end, p_elevation, p_price);
+  exception when others then null;   -- si algún dato no encaja, la lista personal se guarda igual
+  end;
+  perform set_config('app.skip_log', coalesce(v_prev, 'off'), true);
+end $$;
+
+
+-- Cualquier corredor puede poner, cambiar o quitar la web de una carrera (url_by guarda quién la tocó por última vez).
+create or replace function public.runner_set_registration_url(p_code text, p_registration uuid, p_url text)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_runner uuid; v_url text := nullif(btrim(coalesce(p_url, '')), ''); v_n int;
+begin
+  select id into v_runner from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  if v_url is not null and (length(v_url) > 500 or v_url !~* '^https?://[^[:space:]]+$') then raise exception 'enlace_web_no_valido'; end if;
+  perform set_config('app.skip_log', 'on', true);
+  update registrations set url = v_url, url_by = case when v_url is null then null else v_runner end
+   where id = p_registration;
+  get diagnostics v_n = row_count;
+  perform set_config('app.skip_log', 'off', true);
+  if v_n = 0 then raise exception 'no_existe'; end if;
+end $$;
+
+-- Borra las candidatas sin inscritos que ya nadie tiene en «Por valorar» (o cuya fecha ya pasó).
+create or replace function public.watch_cleanup()
+returns void language plpgsql security definer set search_path = public as $$
+declare v_prev text := nullif(current_setting('app.skip_log', true), '');
+begin
+  perform set_config('app.skip_log', 'on', true);
+  delete from registrations g
+   where coalesce(g.candidate, false)
+     and not exists (select 1 from registration_entries e where e.registration_id = g.id)
+     and (g.date < current_date
+          or not exists (select 1 from runner_watch w where w.date = g.date and public.norm_name(w.name) = public.norm_name(g.name)));
+  perform set_config('app.skip_log', coalesce(v_prev, 'off'), true);
+end $$;
+
+-- En cuanto alguien se apunta, deja de ser «candidata»: es una inscripción normal.
+create or replace function public.reg_entry_clears_candidate()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare v_prev text := nullif(current_setting('app.skip_log', true), '');
+begin
+  perform set_config('app.skip_log', 'on', true);
+  update registrations set candidate = false where id = new.registration_id and coalesce(candidate, false);
+  perform set_config('app.skip_log', coalesce(v_prev, 'off'), true);
+  return new;
+end $$;
+drop trigger if exists reg_entry_candidate on public.registration_entries;
+create trigger reg_entry_candidate after insert on public.registration_entries for each row execute function public.reg_entry_clears_candidate();
+
+-- ---------- «Por valorar»: carreras que el corredor se guarda para decidir más adelante ----------
+-- Es personal: solo lo ve el propio corredor (sin política de lectura: se accede únicamente con las funciones de abajo,
+-- ni la dirección ni los compañeros lo ven). No lleva clave foránea para que restaurar una copia no lo borre.
+create table if not exists public.runner_watch (
+  id         uuid primary key default gen_random_uuid(),
+  runner_id  uuid not null,
+  name       text not null check (length(btrim(name)) between 3 and 120),
+  date       date not null,
+  end_date   date,
+  place      text check (place is null or length(place) <= 120),
+  province   text check (province is null or length(province) <= 60),
+  country    text check (country is null or length(country) <= 60),
+  modality   text not null default 'Carretera' check (modality in ('Carretera','BTT','Gravel','Ciclocross','Pista','Otra')),
+  subtype    text check (subtype is null or length(subtype) <= 40),
+  km         numeric check (km is null or (km > 0 and km <= 1000)),
+  url        text check (url is null or (length(url) <= 500 and url ~* '^https?://[^[:space:]]+$')),
+  price      numeric check (price is null or (price >= 0 and price <= 10000)),
+  deadline   date,                                                       -- último día para inscribirse
+  notes      text check (notes is null or length(notes) <= 500),
+  created_at timestamptz not null default now()
+);
+create index if not exists runner_watch_runner on public.runner_watch (runner_id);
+alter table public.runner_watch enable row level security;
+revoke all on public.runner_watch from anon, authenticated, public;
+
+-- Ubicación de la carrera (coordenadas de su población), para calcular los desplazamientos. Se rellena sola (la dirección, al abrir
+-- el Resumen) cuando la población no está en el listado de la app. `geo_key` = población|provincia con la que se calcularon: si
+-- cambia el lugar de la carrera, esas coordenadas dejan de valer.
+alter table public.registrations add column if not exists lat numeric(8,5);
+alter table public.registrations add column if not exists lon numeric(8,5);
+alter table public.registrations add column if not exists geo_key text;
+alter table public.races add column if not exists lat numeric(8,5);
+alter table public.races add column if not exists lon numeric(8,5);
+alter table public.races add column if not exists geo_key text;
+alter table public.registrations drop constraint if exists registrations_geo_check;
+alter table public.registrations add constraint registrations_geo_check check ((lat is null or lat between -90 and 90) and (lon is null or lon between -180 and 180));
+alter table public.races drop constraint if exists races_geo_check;
+alter table public.races add constraint races_geo_check check ((lat is null or lat between -90 and 90) and (lon is null or lon between -180 and 180));
+
+-- Desnivel positivo (m) y precio de la inscripción (€) de cada carrera: los puede completar cualquiera que los conozca.
+alter table public.registrations add column if not exists elevation integer;
+alter table public.registrations add column if not exists price numeric(8,2);
+alter table public.races add column if not exists elevation integer;
+alter table public.races add column if not exists price numeric(8,2);
+alter table public.runner_watch add column if not exists elevation integer;
+alter table public.registrations drop constraint if exists registrations_extra_check;
+alter table public.registrations add constraint registrations_extra_check check ((elevation is null or (elevation > 0 and elevation <= 10000)) and (price is null or (price >= 0 and price <= 10000)));
+alter table public.races drop constraint if exists races_extra_check;
+alter table public.races add constraint races_extra_check check ((elevation is null or (elevation > 0 and elevation <= 10000)) and (price is null or (price >= 0 and price <= 10000)));
+alter table public.runner_watch drop constraint if exists runner_watch_elev_check;
+alter table public.runner_watch add constraint runner_watch_elev_check check (elevation is null or (elevation > 0 and elevation <= 10000));
+
+-- Al borrar un corredor se borra lo suyo (salvo al restaurar una copia, que borra y vuelve a crear a todos).
+create or replace function public.runner_watch_cleanup()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if current_setting('app.skip_log', true) = 'on' then return old; end if;
+  delete from runner_watch where runner_id = old.id;
+  return old;
+end $$;
+drop trigger if exists runner_watch_cleanup on public.runners;
+create trigger runner_watch_cleanup after delete on public.runners for each row execute function public.runner_watch_cleanup();
+
+create or replace function public.runner_watch_list(p_code text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare v_runner uuid;
+begin
+  select id into v_runner from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  return coalesce((select jsonb_agg(to_jsonb(w) - 'runner_id' order by w.date, w.created_at) from runner_watch w where w.runner_id = v_runner), '[]'::jsonb);
+end $$;
+
+-- Guarda (p_id nulo) o corrige (p_id) una carrera por valorar. Si ya tenía una con el mismo nombre y fecha, no la duplica.
+create or replace function public.runner_watch_save(p_code text, p_id uuid, p_data jsonb)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  v_runner uuid; v_id uuid;
+  v_name text := btrim(regexp_replace(coalesce(p_data->>'name',''), '\s+', ' ', 'g'));
+  v_date date := nullif(p_data->>'date','')::date;
+  v_end date := nullif(nullif(p_data->>'end_date',''), p_data->>'date')::date;
+  v_deadline date := nullif(p_data->>'deadline','')::date;
+  v_url text := nullif(btrim(coalesce(p_data->>'url','')), '');
+  v_price numeric := nullif(btrim(coalesce(p_data->>'price','')), '')::numeric;
+  v_km numeric := nullif(btrim(coalesce(p_data->>'km','')), '')::numeric;
+  v_elev int := nullif(btrim(coalesce(p_data->>'elevation','')), '')::int;
+  v_mod text := coalesce(nullif(p_data->>'modality',''), 'Carretera');
+begin
+  select id into v_runner from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  if length(v_name) < 3 or length(v_name) > 120 then raise exception 'nombre_no_valido'; end if;
+  if v_date is null or v_date < make_date(extract(year from current_date)::int - 1, 1, 1) or v_date > current_date + 730 then raise exception 'fecha_no_valida'; end if;
+  if v_end is not null and (v_end < v_date or v_end > v_date + 30) then raise exception 'fecha_no_valida'; end if;
+  if v_deadline is not null and (v_deadline > v_date or v_deadline < v_date - 730) then raise exception 'plazo_no_valido'; end if;
+  if v_url is not null and (length(v_url) > 500 or v_url !~* '^https?://[^[:space:]]+$') then raise exception 'enlace_web_no_valido'; end if;
+  if v_price is not null and (v_price < 0 or v_price > 10000) then raise exception 'precio_no_valido'; end if;
+  if v_km is not null and (v_km <= 0 or v_km > 1000) then raise exception 'km_no_validos'; end if;
+  if v_elev is not null and (v_elev <= 0 or v_elev > 10000) then raise exception 'desnivel_no_valido'; end if;
+  if v_mod not in ('Carretera','BTT','Gravel','Ciclocross','Pista','Otra') then raise exception 'modalidad_no_valida'; end if;
+  if p_id is null then
+    select id into v_id from runner_watch where runner_id = v_runner and date = v_date and public.norm_name(name) = public.norm_name(v_name) limit 1;
+    if v_id is not null then return v_id; end if;
+    if (select count(*) from runner_watch where runner_id = v_runner) >= 60 then raise exception 'demasiadas_guardadas'; end if;
+    insert into runner_watch (runner_id, name, date, end_date, place, province, country, modality, subtype, km, url, price, deadline, notes, elevation)
+    values (v_runner, v_name, v_date, v_end, nullif(left(btrim(coalesce(p_data->>'place','')), 120), ''), nullif(left(btrim(coalesce(p_data->>'province','')), 60), ''),
+            nullif(left(btrim(coalesce(p_data->>'country','')), 60), ''), v_mod, nullif(left(btrim(coalesce(p_data->>'subtype','')), 40), ''), v_km, v_url, v_price, v_deadline,
+            nullif(left(btrim(coalesce(p_data->>'notes','')), 500), ''), v_elev)
+    returning id into v_id;
+    perform public.watch_publish(v_runner, v_name, v_date, v_end, nullif(left(btrim(coalesce(p_data->>'place','')), 120), ''), nullif(left(btrim(coalesce(p_data->>'province','')), 60), ''),
+                                 nullif(left(btrim(coalesce(p_data->>'country','')), 60), ''), v_mod, nullif(left(btrim(coalesce(p_data->>'subtype','')), 30), ''), v_km, v_url, v_elev, v_price);
+  else
+    update runner_watch set name = v_name, date = v_date, end_date = v_end, place = nullif(left(btrim(coalesce(p_data->>'place','')), 120), ''),
+           province = nullif(left(btrim(coalesce(p_data->>'province','')), 60), ''), country = nullif(left(btrim(coalesce(p_data->>'country','')), 60), ''), modality = v_mod,
+           subtype = nullif(left(btrim(coalesce(p_data->>'subtype','')), 40), ''), km = v_km, url = v_url, price = v_price, deadline = v_deadline,
+           notes = nullif(left(btrim(coalesce(p_data->>'notes','')), 500), ''), elevation = v_elev
+     where id = p_id and runner_id = v_runner returning id into v_id;
+    if v_id is null then raise exception 'no_encontrada'; end if;
+    perform public.watch_publish(v_runner, v_name, v_date, v_end, nullif(left(btrim(coalesce(p_data->>'place','')), 120), ''), nullif(left(btrim(coalesce(p_data->>'province','')), 60), ''),
+                                 nullif(left(btrim(coalesce(p_data->>'country','')), 60), ''), v_mod, nullif(left(btrim(coalesce(p_data->>'subtype','')), 30), ''), v_km, v_url, v_elev, v_price);
+    perform public.watch_cleanup();
+  end if;
+  return v_id;
+end $$;
+
+create or replace function public.runner_watch_delete(p_code text, p_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_runner uuid;
+begin
+  select id into v_runner from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  delete from runner_watch where id = p_id and runner_id = v_runner;
+  perform public.watch_cleanup();
+end $$;
 
 revoke execute on all functions in schema public from public, anon;
-grant execute on function public.runner_view(text), public.runner_join(text, uuid, text),
+grant execute on function public.runner_set_registration_url(text, uuid, text), public.runner_watch_list(text), public.runner_watch_save(text, uuid, jsonb), public.runner_watch_delete(text, uuid), public.runner_ping(text), public.runner_view(text), public.runner_join(text, uuid, text),
                           public.runner_create_registration(text, jsonb, text),
                           public.runner_update_registration(text, uuid, jsonb), public.runner_delete_registration(text, uuid),
                           public.runner_update_race(text, uuid, jsonb), public.runner_delete_race(text, uuid),
                           public.runner_report_result(text, text, uuid, int, text, text, int),
                           public.runner_documents_list(text), public.runner_get_document(text, uuid), public.runner_contract_template(text), public.runner_get_contract_template(text),
-                          public.runner_team(text), public.runner_chronicles(text), public.runner_chronicle_set(text, text, boolean),
+                          public.runner_team(text), public.runner_chronicles(text), public.runner_chronicles_team(text), public.runner_chronicle_set(text, text, boolean),
                           public.runner_leave(text, uuid), public.runner_set_paid(text, uuid, boolean, numeric, date), public.runner_join_race(text, uuid, text),
                           public.runner_set_race_type(text, uuid, text, text), public.runner_propose_circuit(text, text, int, int, text),
                           public.runner_cancel_circuit(text, uuid), public.runner_news(text), public.runner_set_race_details(text, uuid, text, numeric), public.runner_complete_race(text, text, uuid, jsonb), public.auto_promote_registrations(),

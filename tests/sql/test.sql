@@ -334,9 +334,9 @@ select pg_temp.expect_fail($q$select log_change('x','race',null,'insert','x')$q$
 reset role;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
 insert into registrations (id, name, date, province) values
-  ('20000000-0000-0000-0000-000000000080', 'Auto Uno', current_date - 6, 'Huesca'),
-  ('20000000-0000-0000-0000-000000000081', 'Auto Reciente', current_date - 2, null),
-  ('20000000-0000-0000-0000-000000000082', 'Auto Sin Puesto', current_date - 9, null);
+  ('20000000-0000-0000-0000-000000000080', 'Auto Uno', current_date - 9, 'Huesca'),
+  ('20000000-0000-0000-0000-000000000081', 'Auto Reciente', current_date - 5, null),
+  ('20000000-0000-0000-0000-000000000082', 'Auto Sin Puesto', current_date - 12, null);
 insert into registration_entries (registration_id, runner_id, self_position, self_podium_type) values
   ('20000000-0000-0000-0000-000000000080', '10000000-0000-0000-0000-000000000004', 2, 'campeonato'),
   ('20000000-0000-0000-0000-000000000081', '10000000-0000-0000-0000-000000000004', 5, null);
@@ -348,11 +348,11 @@ truncate change_log;
 set role anon;
 select runner_view('DDDDDDDDDD') is not null as vio \gset
 reset role;
-select pg_temp.check((select count(*) from races where name = 'Auto Uno') = 1 and not exists (select 1 from registrations where name = 'Auto Uno'), 'auto: con puesto puesto y 3 días pasados, pasa sola a resultados');
+select pg_temp.check((select count(*) from races where name = 'Auto Uno') = 1 and not exists (select 1 from registrations where name = 'Auto Uno'), 'auto: con puesto puesto y una semana pasada, pasa sola a resultados');
 select pg_temp.check((select count(*) from results x join races r on r.id = x.race_id where r.name = 'Auto Uno') = 1, 'auto: solo entra quien puso su puesto');
 select pg_temp.check((select x.position from results x join races r on r.id = x.race_id where r.name = 'Auto Uno') = 2 and (select x.podium_type from results x join races r on r.id = x.race_id where r.name = 'Auto Uno') = 'campeonato', 'auto: con su puesto y tipo de podio');
 select pg_temp.check((select x.time_seconds from results x join races r on r.id = x.race_id where r.name = 'Auto Uno') = 3725, 'tiempo: el paso automático copia el tiempo del corredor');
-select pg_temp.check(exists (select 1 from registrations where name = 'Auto Reciente'), 'auto: no antes de 3 días');
+select pg_temp.check(exists (select 1 from registrations where name = 'Auto Reciente'), 'auto: no antes de una semana');
 select pg_temp.check(exists (select 1 from registrations where name = 'Auto Sin Puesto'), 'auto: no si nadie puso su puesto');
 select pg_temp.check((select count(*) from change_log where actor = 'Sistema' and action = 'auto_resultados') = 1 and (select count(*) from change_log where summary like '%Auto Uno%' and action in ('insert','delete')) = 0, 'auto: queda una sola línea en el historial');
 -- completar datos: solo lo que falta
@@ -383,6 +383,7 @@ select runner_reply_news('DDDDDDDDDD', '40000000-0000-0000-0000-000000000001', '
 select runner_reply_news('CCCCCCCCCC', '40000000-0000-0000-0000-000000000001', 'no', 5);
 select pg_temp.check((select (n->>'yes_count')::int from jsonb_array_elements(runner_news('CCCCCCCCCC')) n where n->>'id' = '40000000-0000-0000-0000-000000000001') = 3, 'rsvp: cuenta él y sus 2 acompañantes');
 select pg_temp.check((select (n->>'no_count')::int from jsonb_array_elements(runner_news('DDDDDDDDDD')) n where n->>'id' = '40000000-0000-0000-0000-000000000001') = 1 and (select (n->>'my_guests')::int from jsonb_array_elements(runner_news('CCCCCCCCCC')) n where n->>'id' = '40000000-0000-0000-0000-000000000001') = 0, 'rsvp: un «no» no lleva acompañantes');
+select pg_temp.check((select jsonb_array_length(n->'yes_list') = 1 and (n->'yes_list'->0->>'guests')::int = 2 and (n->'yes_list'->0->>'name') is not null from jsonb_array_elements(runner_news('CCCCCCCCCC')) n where n->>'id' = '40000000-0000-0000-0000-000000000001'), 'rsvp: se ve quién asiste (nombre y acompañantes) y no los que dijeron que no');
 select runner_reply_news('DDDDDDDDDD', '40000000-0000-0000-0000-000000000001', 'no', 0);
 select pg_temp.check((select (n->>'yes_count')::int from jsonb_array_elements(runner_news('DDDDDDDDDD')) n where n->>'id' = '40000000-0000-0000-0000-000000000001') = 0, 'rsvp: puede cambiar su respuesta');
 select pg_temp.expect_fail($q$select runner_reply_news('DDDDDDDDDD', '40000000-0000-0000-0000-000000000002', 'si', 0)$q$, 'rsvp: una noticia que no lo pide no se responde');
@@ -414,7 +415,7 @@ select pg_temp.expect_fail($q$select resolve_correction('$q$ || :'corr' || $q$',
 reset role;
 -- corrección de una inscripción que ya pasó a resultados (se busca por nombre y fecha)
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
-insert into registrations (id, name, date) values ('20000000-0000-0000-0000-000000000095', 'Corrige Despues', current_date - 5);
+insert into registrations (id, name, date) values ('20000000-0000-0000-0000-000000000095', 'Corrige Despues', current_date - 9);
 insert into registration_entries (registration_id, runner_id, self_position) values ('20000000-0000-0000-0000-000000000095', '10000000-0000-0000-0000-000000000004', 4);
 set role anon;
 select set_config('request.jwt.claim.sub', '', false);
@@ -598,6 +599,7 @@ reset role;
 select code as crcode from runners order by name limit 1 \gset
 select id as crid from runners where code = :'crcode' \gset
 select code as crcode2 from runners where code <> :'crcode' limit 1 \gset
+select name as crname from runners where code = :'crcode' \gset
 set role anon;
 select set_config('request.headers', '{}', false);
 select pg_temp.check(runner_chronicles(:'crcode') = '[]'::jsonb, 'crónicas: al principio ninguna');
@@ -611,6 +613,9 @@ select pg_temp.check(runner_chronicles(:'crcode') = '["2026-11-08|vii btt"]'::js
 select pg_temp.expect_fail($q$select runner_chronicles('codigo-falso')$q$, 'crónicas: enlace falso no lee');
 select pg_temp.expect_fail($q$select runner_chronicle_set('codigo-falso', 'abc|def', true)$q$, 'crónicas: enlace falso no marca');
 select pg_temp.expect_fail($q$select runner_chronicle_set('$$ || :'crcode' || $$', 'x', true)$q$, 'crónicas: clave demasiado corta');
+select pg_temp.check((select (e->>'mine')::boolean from jsonb_array_elements(runner_chronicles_team(:'crcode')) e where e->>'key' = '2026-11-08|vii btt') and (select not (e->>'mine')::boolean from jsonb_array_elements(runner_chronicles_team(:'crcode2')) e where e->>'key' = '2026-11-08|vii btt'), 'crónicas: la que pasó un compañero la ve como pasada (y no es suya)');
+select pg_temp.check((select e->>'by' from jsonb_array_elements(runner_chronicles_team(:'crcode2')) e where e->>'key' = '2026-11-08|vii btt') = :'crname', 'crónicas: se sabe quién la pasó');
+select pg_temp.expect_fail($q$select runner_chronicles_team('codigo-falso')$q$, 'crónicas: enlace falso no lee las del equipo');
 select pg_temp.expect_fail('select * from chronicles', 'crónicas: anon no lee la tabla');
 reset role;
 set role authenticated;
@@ -645,4 +650,176 @@ select pg_temp.expect_fail($q$select runner_set_paid('codigo-falso', '20000000-0
 select pg_temp.expect_fail($q$select runner_set_paid('$q$ || :'crcode' || $q$', '20000000-0000-0000-0000-00000000f0a9', true, -5)$q$, 'pago: importe negativo rechazado');
 select pg_temp.expect_fail($q$select runner_set_paid('$q$ || :'crcode2' || $q$', '20000000-0000-0000-0000-00000000f0a9', true, null)$q$, 'pago: sin estar inscrito no se puede marcar');
 reset role;
+-- actividad: abrir la app guarda la última vez (como mucho una vez por hora)
+set role anon;
+select runner_ping(:'crcode');
+reset role;
+select pg_temp.check((select last_seen from runners where code = :'crcode') > now() - interval '1 minute', 'actividad: abrir la app guarda la última vez');
+update runners set last_seen = now() - interval '10 minutes' where code = :'crcode';
+set role anon;
+select runner_ping(:'crcode');
+select runner_ping('codigo-falso');
+reset role;
+select pg_temp.check((select last_seen from runners where code = :'crcode') < now() - interval '9 minutes', 'actividad: no se reescribe dentro de la misma hora');
+-- por valorar: personal de cada corredor, con validación y límite
+select id as wid2 from runners where code = :'crcode2' \gset
+set role anon;
+select runner_watch_save(:'crcode', null, jsonb_build_object('name', 'Gran Fondo Monzón', 'date', (current_date + 40)::text, 'modality', 'Carretera', 'url', 'https://ejemplo.org/gf',
+  'price', '28.5', 'deadline', (current_date + 20)::text, 'km', '120', 'notes', 'Subida larga')) as wid \gset
+select pg_temp.check((select count(*) from jsonb_array_elements(runner_watch_list(:'crcode')) e where e->>'name' = 'Gran Fondo Monzón' and (e->>'price')::numeric = 28.5) = 1, 'por valorar: se guarda y se lista con sus datos');
+select pg_temp.check(runner_watch_list(:'crcode2') = '[]'::jsonb, 'por valorar: el compañero no ve lo mío');
+select pg_temp.check(not (runner_watch_list(:'crcode')->0 ? 'runner_id'), 'por valorar: no se devuelve el id del corredor');
+select pg_temp.check(runner_watch_save(:'crcode', null, jsonb_build_object('name', 'gran fondo monzón', 'date', (current_date + 40)::text)) = :'wid'::uuid, 'por valorar: guardar dos veces la misma no la duplica');
+select pg_temp.expect_fail($q$select runner_watch_save('$q$ || :'crcode2' || $q$', '$q$ || :'wid' || $q$', '{"name":"Robada","date":"$q$ || (current_date + 10)::text || $q$"}')$q$, 'por valorar: el compañero no puede editar la mía');
+select runner_watch_delete(:'crcode2', :'wid');
+select pg_temp.check(jsonb_array_length(runner_watch_list(:'crcode')) = 1, 'por valorar: el compañero no puede borrar la mía');
+select runner_watch_save(:'crcode', :'wid', jsonb_build_object('name', 'Gran Fondo Monzón', 'date', (current_date + 41)::text, 'price', '30'));
+select pg_temp.check((select (e->>'price')::numeric = 30 and e->>'url' is null and e->>'date' = (current_date + 41)::text from jsonb_array_elements(runner_watch_list(:'crcode')) e limit 1), 'por valorar: se corrige');
+select pg_temp.expect_fail($q$select runner_watch_save('$q$ || :'crcode' || $q$', null, '{"name":"Con web mala","date":"$q$ || (current_date + 10)::text || $q$","url":"javascript:alert(1)"}')$q$, 'por valorar: solo enlaces http(s)');
+select pg_temp.expect_fail($q$select runner_watch_save('$q$ || :'crcode' || $q$', null, '{"name":"Precio malo","date":"$q$ || (current_date + 10)::text || $q$","price":"-3"}')$q$, 'por valorar: precio negativo rechazado');
+select pg_temp.expect_fail($q$select runner_watch_save('$q$ || :'crcode' || $q$', null, '{"name":"Plazo tarde","date":"$q$ || (current_date + 10)::text || $q$","deadline":"$q$ || (current_date + 12)::text || $q$"}')$q$, 'por valorar: el plazo no puede ser después de la carrera');
+select pg_temp.expect_fail($q$select runner_watch_save('$q$ || :'crcode' || $q$', null, '{"name":"Sin fecha"}')$q$, 'por valorar: sin fecha no se guarda');
+select pg_temp.expect_fail($q$select runner_watch_save('codigo-falso', null, '{"name":"Falsa","date":"$q$ || (current_date + 10)::text || $q$"}')$q$, 'por valorar: enlace falso rechazado');
+select pg_temp.expect_fail($q$select * from runner_watch$q$, 'por valorar: la tabla no se lee directamente');
+reset role;
+insert into runner_watch (runner_id, name, date) select :'crid'::uuid, 'Relleno ' || i, current_date + 100 from generate_series(1, 59) i;
+select pg_temp.check((select count(*) from runner_watch where runner_id = :'crid') = 60, 'por valorar: relleno de prueba hasta el límite');
+set role anon;
+select pg_temp.expect_fail($q$select runner_watch_save('$q$ || :'crcode' || $q$', null, '{"name":"Una de más","date":"$q$ || (current_date + 11)::text || $q$"}')$q$, 'por valorar: hay un límite de carreras guardadas');
+reset role;
+insert into runners (name, code) values ('Temporal Watch', 'codigo-temporal-0001') returning id as tmpid \gset
+insert into runner_watch (runner_id, name, date) values (:'tmpid', 'De prueba', current_date + 5);
+select set_config('app.skip_log', 'on', false);
+delete from runners where id = :'tmpid';
+select set_config('app.skip_log', 'off', false);
+select pg_temp.check((select count(*) from runner_watch where runner_id = :'tmpid') = 1, 'por valorar: restaurar una copia no borra las guardadas');
+insert into runners (id, name, code) values (:'tmpid', 'Temporal Watch', 'codigo-temporal-0001');
+delete from runners where id = :'tmpid';
+select pg_temp.check((select count(*) from runner_watch where runner_id = :'tmpid') = 0, 'por valorar: al borrar al corredor se borra lo suyo');
+-- por valorar → Carreras: se crea sin inscritos ni dueño, sin duplicados, y se limpia sola
+insert into runners (name, code) values ('Valorador Uno', 'codigo-valorador-uno-01'), ('Valorador Dos', 'codigo-valorador-dos-02');
+select (select count(*) from change_log) as logn0 \gset
+set role anon;
+select runner_watch_save('codigo-valorador-uno-01', null, jsonb_build_object('name', 'Gran Fondo Monzón Prueba', 'date', (current_date + 60)::text, 'place', 'Monzón', 'province', 'Huesca',
+  'modality', 'Carretera', 'subtype', 'Ciclodeportiva', 'km', '120', 'price', '30', 'notes', 'privado', 'url', 'https://ejemplo.org/x')) as w1 \gset
+select pg_temp.check((select count(*) from jsonb_array_elements(runner_view('codigo-valorador-dos-02')->'registrations') g where g->>'name' = 'Gran Fondo Monzón Prueba' and g->>'place' = 'Monzón' and jsonb_array_length(g->'entries') = 0 and g->>'notes' is null and coalesce((g->>'mine_created')::boolean, false) = false) = 1,
+  'por valorar→carreras: otro corredor la encuentra con sus datos, sin inscritos, sin notas y sin dueño');
+reset role;
+select pg_temp.check((select created_by is null and candidate and subtype = 'Ciclodeportiva' and km = 120 from registrations where name = 'Gran Fondo Monzón Prueba'), 'por valorar→carreras: sin dueño, marcada como candidata, con disciplina y km');
+select pg_temp.check((select count(*) from change_log) = :'logn0', 'por valorar→carreras: no llena el historial de cambios');
+set role anon;
+select runner_watch_save('codigo-valorador-dos-02', null, jsonb_build_object('name', 'gran fondo monzon prueba', 'date', (current_date + 60)::text));
+reset role;
+select pg_temp.check((select count(*) from registrations where public.norm_name(name) = 'granfondomonzonprueba') = 1, 'por valorar→carreras: otro corredor la guarda con otra grafía y no se duplica');
+set role anon;
+select runner_create_registration('codigo-valorador-dos-02', jsonb_build_object('name', 'GRAN FONDO MONZON PRUEBA!', 'date', (current_date + 60)::text), 'M40') as rid \gset
+reset role;
+select pg_temp.check((select count(*) from registrations where public.norm_name(name) = 'granfondomonzonprueba') = 1 and (select id::text from registrations where public.norm_name(name) = 'granfondomonzonprueba') = :'rid', 'por valorar→carreras: inscribirse usa la que ya existe');
+select pg_temp.check((select not candidate and created_by is null from registrations where id = :'rid'), 'por valorar→carreras: al apuntarse alguien deja de ser candidata');
+set role anon;
+select runner_watch_delete('codigo-valorador-uno-01', :'w1');
+reset role;
+select pg_temp.check((select count(*) from registrations where public.norm_name(name) = 'granfondomonzonprueba') = 1, 'por valorar→carreras: con inscritos no se borra al descartarla');
+-- dos corredores valoran la misma; solo desaparece cuando ya no la valora nadie
+set role anon;
+select runner_watch_save('codigo-valorador-uno-01', null, jsonb_build_object('name', 'Solo Valorar Candidata', 'date', (current_date + 30)::text)) as w3 \gset
+select runner_watch_save('codigo-valorador-dos-02', null, jsonb_build_object('name', 'Solo Valorar Candidata', 'date', (current_date + 30)::text)) as w4 \gset
+select runner_watch_delete('codigo-valorador-uno-01', :'w3');
+reset role;
+select pg_temp.check((select count(*) from registrations where name = 'Solo Valorar Candidata') = 1, 'por valorar→carreras: si otro aún la valora, sigue en Carreras');
+set role anon;
+select runner_watch_delete('codigo-valorador-dos-02', :'w4');
+reset role;
+select pg_temp.check((select count(*) from registrations where name = 'Solo Valorar Candidata') = 0, 'por valorar→carreras: cuando nadie la valora, desaparece');
+-- una candidata cuya fecha ya pasó sin inscritos se limpia al abrir la app
+insert into registrations (name, date, candidate) values ('Candidata Vieja', current_date - 2, true);
+select auto_promote_registrations();
+select pg_temp.check((select count(*) from registrations where name = 'Candidata Vieja') = 0, 'por valorar→carreras: la que ya pasó sin inscritos se limpia sola');
+select pg_temp.check(public.norm_name('Marxa del Montsení – 2ª Ç!') = 'marxadelmontseni2c', 'nombre normalizado sin tildes ni signos');
+-- web de la carrera: la puede poner, cambiar o quitar cualquier corredor
+set role anon;
+select runner_create_registration('codigo-valorador-uno-01', jsonb_build_object('name', 'Carrera Con Web', 'date', (current_date + 45)::text, 'url', 'https://carrera.example/web'), 'M40') as rweb \gset
+select pg_temp.check((select g->>'url' = 'https://carrera.example/web' from jsonb_array_elements(runner_view('codigo-valorador-uno-01')->'registrations') g where g->>'name' = 'Carrera Con Web'), 'web: el que la crea la ve');
+select pg_temp.check((select g->>'url' = 'https://carrera.example/web' from jsonb_array_elements(runner_view('codigo-valorador-dos-02')->'registrations') g where g->>'name' = 'Carrera Con Web'), 'web: los demás la ven');
+select runner_set_registration_url('codigo-valorador-dos-02', :'rweb', 'https://otra.example');
+reset role;
+select pg_temp.check((select url = 'https://otra.example' from registrations where id = :'rweb'), 'web: cualquier corredor puede cambiar la web');
+set role anon;
+select runner_set_registration_url('codigo-valorador-uno-01', :'rweb', 'https://carrera.example/nueva');
+reset role;
+select pg_temp.check((select url = 'https://carrera.example/nueva' from registrations where id = :'rweb'), 'web: y el otro también');
+set role anon;
+select pg_temp.expect_fail($q$select runner_set_registration_url('codigo-valorador-uno-01', '$q$ || :'rweb' || $q$', 'javascript:alert(1)')$q$, 'web: solo http(s)');
+select pg_temp.expect_fail($q$select runner_set_registration_url('codigo-falso', '$q$ || :'rweb' || $q$', 'https://x.example')$q$, 'web: enlace falso rechazado');
+select runner_set_registration_url('codigo-valorador-dos-02', :'rweb', '');
+reset role;
+select pg_temp.check((select url is null and url_by is null from registrations where id = :'rweb'), 'web: cualquiera puede quitarla');
+set role anon;
+select runner_set_registration_url('codigo-valorador-dos-02', :'rweb', 'https://dos.example');
+reset role;
+select pg_temp.check((select url = 'https://dos.example' from registrations where id = :'rweb'), 'web: y volver a ponerla');
+set role anon;
+-- guardada en «Por valorar» con web: se comparte; no pisa la que ya existe
+select runner_watch_save('codigo-valorador-uno-01', null, jsonb_build_object('name', 'Carrera Con Web', 'date', (current_date + 45)::text, 'url', 'https://uno.example'));
+reset role;
+select pg_temp.check((select url = 'https://dos.example' from registrations where id = :'rweb'), 'web: Por valorar no pisa la web que ya había');
+set role anon;
+select runner_watch_save('codigo-valorador-uno-01', null, jsonb_build_object('name', 'Valorada Con Web', 'date', (current_date + 50)::text, 'url', 'https://valorada.example')) as wv \gset
+select pg_temp.check((select g->>'url' = 'https://valorada.example' from jsonb_array_elements(runner_view('codigo-valorador-dos-02')->'registrations') g where g->>'name' = 'Valorada Con Web'), 'web: lo guardado en Por valorar con web se comparte con los demás');
+select runner_watch_save('codigo-valorador-dos-02', null, jsonb_build_object('name', 'Sin Web Aun', 'date', (current_date + 52)::text));
+select runner_watch_save('codigo-valorador-uno-01', null, jsonb_build_object('name', 'Sin Web Aun', 'date', (current_date + 52)::text, 'url', 'https://ahora.example'));
+reset role;
+select pg_temp.check((select url = 'https://ahora.example' from registrations where name = 'Sin Web Aun'), 'web: si otro la guarda con web y la carrera no tenía, queda para todos');
+select pg_temp.expect_fail($q$update registrations set url = 'ftp://mal' where name = 'Sin Web Aun'$q$, 'web: la base de datos rechaza webs que no son http(s)');
+-- al pasar a resultados la web se conserva
+insert into registrations (name, date, url) values ('Con Web Pasada', current_date - 6, 'https://pasada.example') returning id as rpas \gset
+insert into registration_entries (registration_id, runner_id, category, self_position) select :'rpas', id, 'M40', 3 from runners where code = 'codigo-valorador-uno-01';
+select auto_promote_registrations();
+select pg_temp.check((select url = 'https://pasada.example' from races where name = 'Con Web Pasada'), 'web: se conserva al pasar a resultados');
+-- desnivel y precio de la inscripción (cualquier corredor completa lo que falta de una inscripción)
+set role anon;
+select runner_create_registration('codigo-valorador-uno-01', jsonb_build_object('name', 'Carrera Con Desnivel', 'date', (current_date + 48)::text, 'elevation', '1850', 'price', '27.5'), 'M40') as rdes \gset
+select pg_temp.check((select (g->>'elevation')::int = 1850 and (g->>'price')::numeric = 27.5 from jsonb_array_elements(runner_view('codigo-valorador-dos-02')->'registrations') g where g->>'name' = 'Carrera Con Desnivel'), 'desnivel/precio: se guardan al crear y los demás los ven');
+select runner_create_registration('codigo-valorador-dos-02', jsonb_build_object('name', 'Carrera Con Desnivel', 'date', (current_date + 48)::text, 'elevation', '999', 'price', '99'), 'M40');
+reset role;
+select pg_temp.check((select elevation = 1850 and price = 27.5 from registrations where id = :'rdes'), 'desnivel/precio: lo que aporta otro no pisa lo que ya había');
+set role anon;
+select runner_create_registration('codigo-valorador-uno-01', jsonb_build_object('name', 'Sin Datos Extra', 'date', (current_date + 49)::text, 'elevation', '99999', 'price', '-5'), 'M40') as rsin \gset
+reset role;
+select pg_temp.check((select elevation is null and price is null from registrations where id = :'rsin'), 'desnivel/precio: valores absurdos se ignoran');
+set role anon;
+select runner_complete_race('codigo-valorador-dos-02', 'reg', :'rsin', jsonb_build_object('elevation', '640', 'price', '0'));
+reset role;
+select pg_temp.check((select elevation = 640 and price = 0 from registrations where id = :'rsin'), 'desnivel/precio: un inscrito los completa si faltan (precio 0 = gratis)');
+set role anon;
+select runner_complete_race('codigo-valorador-uno-01', 'reg', :'rsin', jsonb_build_object('elevation', '1', 'price', '50'));
+reset role;
+select pg_temp.check((select elevation = 640 and price = 0 from registrations where id = :'rsin'), 'desnivel/precio: completar no cambia lo que ya está');
+set role anon;
+select runner_update_registration('codigo-valorador-uno-01', :'rsin', jsonb_build_object('name', 'Sin Datos Extra', 'date', (current_date + 49)::text, 'modality', 'Carretera', 'elevation', '700', 'price', '12'));
+reset role;
+select pg_temp.check((select elevation = 700 and price = 12 from registrations where id = :'rsin'), 'desnivel/precio: quien creó la carrera puede corregirlos');
+set role anon;
+select runner_watch_save('codigo-valorador-uno-01', null, jsonb_build_object('name', 'Valorada Con Desnivel', 'date', (current_date + 55)::text, 'elevation', '2100', 'price', '35')) as wvd \gset
+select pg_temp.check((select (g->>'elevation')::int = 2100 and (g->>'price')::numeric = 35 from jsonb_array_elements(runner_view('codigo-valorador-dos-02')->'registrations') g where g->>'name' = 'Valorada Con Desnivel'), 'desnivel/precio: lo guardado en Por valorar se comparte');
+select pg_temp.expect_fail($q$select runner_watch_save('codigo-valorador-uno-01', null, '{"name":"Desnivel absurdo","date":"$q$ || (current_date + 20)::text || $q$","elevation":"20000"}')$q$, 'desnivel/precio: desnivel absurdo rechazado en Por valorar');
+reset role;
+select pg_temp.expect_fail($q$update registrations set elevation = 0 where id = '$q$ || :'rsin' || $q$'$q$, 'desnivel/precio: la base de datos rechaza desniveles no válidos');
+insert into registrations (name, date, elevation, price) values ('Con Datos Pasada', current_date - 6, 1500, 22) returning id as rdp \gset
+insert into registration_entries (registration_id, runner_id, category, self_position) select :'rdp', id, 'M40', 5 from runners where code = 'codigo-valorador-uno-01';
+select auto_promote_registrations();
+select pg_temp.check((select elevation = 1500 and price = 22 from races where name = 'Con Datos Pasada'), 'desnivel/precio: se conservan al pasar a resultados');
+select pg_temp.check((select (r->>'elevation')::int = 1500 and (r->>'price')::numeric = 22 from jsonb_array_elements(runner_team('codigo-valorador-dos-02')->'races') r where r->>'name' = 'Con Datos Pasada'), 'desnivel/precio: el resumen del equipo los incluye');
+-- ubicación de la carrera para los desplazamientos
+reset role;
+insert into registrations (name, date, place, province, lat, lon, geo_key) values ('Con Ubicacion', current_date + 70, 'Pueblo Raro', 'Huesca', 42.01234, 0.55432, 'pueblo raro|huesca') returning id as rgeo \gset
+set role anon;
+select pg_temp.check((select (g->>'lat')::numeric = 42.01234 and (g->>'lon')::numeric = 0.55432 and g->>'geo_key' = 'pueblo raro|huesca' from jsonb_array_elements(runner_view('codigo-valorador-dos-02')->'registrations') g where g->>'name' = 'Con Ubicacion'), 'ubicación: los corredores reciben las coordenadas de la carrera');
+reset role;
+select pg_temp.expect_fail($q$update registrations set lat = 200 where name = 'Con Ubicacion'$q$, 'ubicación: la base de datos rechaza coordenadas imposibles');
+insert into registrations (name, date, place, province, lat, lon, geo_key) values ('Ubicacion Pasada', current_date - 6, 'Pueblo Raro', 'Huesca', 42.01234, 0.55432, 'pueblo raro|huesca') returning id as rgp \gset
+insert into registration_entries (registration_id, runner_id, category, self_position) select :'rgp', id, 'M40', 4 from runners where code = 'codigo-valorador-uno-01';
+select auto_promote_registrations();
+select pg_temp.check((select lat = 42.01234 and lon = 0.55432 and geo_key = 'pueblo raro|huesca' from races where name = 'Ubicacion Pasada'), 'ubicación: se conserva al pasar a resultados');
+select pg_temp.check((select (r->>'lat')::numeric = 42.01234 from jsonb_array_elements(runner_team('codigo-valorador-dos-02')->'races') r where r->>'name' = 'Ubicacion Pasada'), 'ubicación: el resumen del equipo la incluye');
 \echo TODAS LAS PRUEBAS SQL OK

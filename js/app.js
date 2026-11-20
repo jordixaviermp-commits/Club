@@ -1,15 +1,16 @@
 // Pantallas de la app. Sin dependencias ni paso de compilación: se sirve tal cual.
 import { CONFIG } from './config.js';
-import { supabaseApi, demoApi, friendlyError } from './api.js';
+import { supabaseApi, demoApi, friendlyError, cleanWeb } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, disciplineKey, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
+  directorBoard, groupMessage, watchInfo, sortWatch, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
 import { FEDERACIONES, ORDEN_FEDERACIONES } from './seguros.js';
 import { ENLACES_CONTRATO } from './enlaces.js';
+import { ORIGEN, FACTOR_CARRETERA, distanceKm, placeCoords, geoKey, pickGeocode } from './viajes.js';
 import { VERSION } from './version.js';
 const VIEW_KEY = 'monzon-regview';
 const FED_KEY = 'monzon-federacion';
@@ -59,12 +60,21 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const opt = (value, label, sel) => `<option value="${esc(value)}"${value === sel ? ' selected' : ''}>${esc(label)}</option>`;
 /** Clase de color de una modalidad: «m-carretera», «m-btt»… (colores en css/app.css). */
 const modClass = (m) => 'm-' + normalize(m || 'Otra').replace(/[^a-z]/g, '');
+/** «Editar ›» visible en las tarjetas de carrera que se abren para editar (dirección). */
+const editCta = () => `<span class="edit-cta">${ico('pen')}Editar${ico('go')}</span>`;
 /** Etiqueta de modalidad con su formato: «BTT · XCO», «Carretera · Critérium»… */
 const modTag = (m, sub) => `<span class="tag ${modClass(m)}">${esc(m)}${sub ? ` · <b>${esc(sub)}</b>` : ''}</span>`;
 /** Clase de color de una disciplina (modalidad + formato): «d-btt-xco». */
 const slug = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const discClass = (m, sub) => `d-${slug(m)}-${slug(sub) || 'sin'}`;
 /** Nombre corto de una disciplina: «XCO»; si el formato no la identifica sola, «BTT · Otra». */
+/** Tiempo para escribir desde el móvil: tres casillas numéricas (h · min · s), sin dos puntos. El valor se guarda en un campo oculto como «h:mm:ss». */
+const timeFields = (value, hiddenAttrs) => {
+  const sec = value ? (typeof value === 'number' ? value : parseTime(value)) : null;
+  const h = sec ? Math.floor(sec / 3600) : '', m = sec ? Math.floor((sec % 3600) / 60) : '', x = sec ? sec % 60 : 0;
+  const part = (k, v, lab, max, ml) => `<label class="tf-p"><input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="${ml}" data-tpart="${k}" data-max="${max}" value="${v === '' ? '' : v}" placeholder="0" aria-label="${lab}"><span>${lab}</span></label>`;
+  return `<span class="tinput" data-sec="${x}" role="group" aria-label="Tiempo: horas y minutos">${part('h', h, 'horas', 99, 2)}<b>:</b>${part('m', m, 'min', 59, 2)}<input type="hidden" ${hiddenAttrs} data-tvalue value="${sec ? esc(formatTime(sec)) : ''}"></span>`;
+};
 const discLabel = (m, sub) => (!sub ? (SUBTYPES[m] ? `${m} · sin formato` : m) : sub === 'Otra' ? `${m} · Otra` : sub);
 const modText = (x) => [x.modality, x.subtype].filter(Boolean).join(' · ');
 const modLegend = (mods) => `<div class="mod-legend">${MODALITIES.filter((m) => !mods || mods.includes(m))
@@ -95,12 +105,21 @@ const typeTag = (x) => {
   if (x.race_type === 'campeonato') chips.push(`<span class="tag t-champ">${ico('trophy', 't-i')}Campeonato</span>`);
   else if (x.race_type === 'circuito') chips.push(`<span class="tag t-circ">${ico('link', 't-i')}${esc(x.circuit || 'Circuito')}</span>`);
   if (x.km) chips.push(`<span class="tag t-km">${ico('ruler', 't-i')}${kmText(x.km)}</span>`);
+  if (x.elevation) chips.push(`<span class="tag t-elev" title="Desnivel positivo">${ico('mountain', 't-i')}${elevText(x.elevation)}</span>`);
+  if (x.price != null && x.price !== '') chips.push(`<span class="tag t-price" title="Precio de la inscripción">${ico('money', 't-i')}${Number(x.price) === 0 ? 'Gratis' : euros(x.price)}</span>`);
   return chips.length ? `<p class="type-line">${chips.join('')}</p>` : '';
 };
 /** Campos «Disciplina» (según la modalidad: obligatoria en BTT y Carretera) y «Distancia» de los formularios. `attr` = data-f (dirección) o data-rf (corredor). */
-const detailInputs = (d, attr) => `${SUBTYPES[d.modality] ? `<label class="disc-field">Disciplina de ${esc(d.modality)}<select ${attr}="subtype" required><option value="">Elige: ${SUBTYPES[d.modality].filter((x) => x !== 'Otra').slice(0, 3).join(', ')}…</option>${SUBTYPES[d.modality].map((x) => opt(x, x, d.subtype)).join('')}</select>
-      <small class="hint">Así el resumen y los gráficos del equipo reparten las carreras por disciplina.</small></label>` : ''}
-    <label>Distancia (km)<input type="number" inputmode="decimal" step="0.1" min="0.1" max="1000" ${attr}="km" value="${esc(d.km ?? '')}" placeholder="85"></label>`;
+/** Sección numerada de un formulario (cabecera de color con icono) para que se encuentre cada cosa de un vistazo. */
+const fsec = (n, icon, title, body, color = '#1f6fd1') => `<section class="fsec" style="--sc:${color}"><h3 class="fsec-h"><span class="fsec-n">${n}</span>${ico(icon)}<span>${title}</span></h3><div class="fsec-b">${body}</div></section>`;
+/** Fichas para elegir una opción (en vez de un desplegable): un toque y queda marcada. Son «radio» ocultos, así que todo lo demás funciona igual. */
+const radioChips = (attr, field, options, cur, { required = false, extra = '' } = {}) => `<div class="chips-pick" role="radiogroup">${options.map(([v, l, cls = '', extra = '']) =>
+  `<label class="cpick ${cls}"><input type="radio" name="${attr.replace('data-', '')}-${field}" ${attr}="${field}" value="${esc(v)}"${v === (cur ?? '') ? ' checked' : ''}${required ? ' required' : ''}${extra}><span>${l}</span></label>`).join('')}</div>`;
+const modalityChips = (d, attr) => radioChips(attr, 'modality', MODALITIES.map((m) => [m, `${MOD_ICON[m] || '🏁'} ${esc(m)}`, modClass(m)]), d.modality);
+const RACE_TYPE_SHORT = { suelta: 'Carrera normal', campeonato: 'Campeonato', circuito: 'De un circuito (Copa, Open…)' };
+const detailInputs = (d, attr) => `${SUBTYPES[d.modality] ? `<div class="disc-field"><span class="flabel">Disciplina de ${esc(d.modality)} <b class="req">obligatoria</b></span>${radioChips(attr, 'subtype', SUBTYPES[d.modality].map((x) => [x, esc(x)]), d.subtype, { required: true })}
+      <small class="hint">Así el resumen y los gráficos del equipo reparten las carreras por disciplina.</small></div>` : ''}
+    <label class="flabel-l">Distancia (km)<input type="number" inputmode="decimal" step="0.1" min="0.1" max="1000" ${attr}="km" value="${esc(d.km ?? '')}" placeholder="85"></label>`;
 /** Nombres de circuitos ya usados (para sugerirlos y no escribirlos de dos maneras). */
 function circuitNames() {
   const src = S.data && !S.preview ? [...S.data.races, ...S.data.registrations, ...(S.data.circuitPodiums || [])]
@@ -112,7 +131,7 @@ function circuitNames() {
 const circuitList = () => `<datalist id="dl-circuit">${circuitNames().map((c) => `<option value="${esc(c)}">`).join('')}</datalist>`;
 /** Campos «Tipo de carrera» de los formularios. `attr` = data-f (dirección) o data-rf (corredor). */
 const typeFields = (d, attr) => `
-    <label>Tipo de carrera<select ${attr}="race_type" data-retype>${RACE_TYPES.map((t) => opt(t.id, t.label, d.race_type || 'suelta')).join('')}</select></label>
+    <div class="disc-field"><span class="flabel">Tipo de carrera</span>${radioChips(attr, 'race_type', RACE_TYPES.map((t) => [t.id, esc(RACE_TYPE_SHORT[t.id] || t.label)]), d.race_type || 'suelta', { extra: ' data-retype' })}</div>
     ${d.race_type === 'circuito' ? `<label>Nombre del circuito<input ${attr}="circuit" list="dl-circuit" value="${esc(d.circuit || '')}" placeholder="Copa Aragón XCM" maxlength="120" required autocomplete="off"></label>${circuitList()}
       <p class="hint">Escríbelo igual en todas sus pruebas. El podio en la <b>general final</b> de la liga da el <b>plus de bonificación</b> (carreras extra para la bonificación, no para el mínimo).</p>` : ''}
     ${d.race_type === 'campeonato' ? '<p class="hint">Los podios de esta carrera se guardarán como podios de campeonato.</p>' : ''}`;
@@ -225,12 +244,15 @@ async function onRoute() {
       if (sub === 'equipo' || (sub === '' && S.regView === 'cal' && !S.team)) loadTeam();
       if (sub === 'federaciones' && !S.fed) loadFed();
       if (sub === 'contrato') loadMyDocs();
+      if (sub === 'mi' && !S.preview) loadWatch().then(() => { if (parseRoute().view === 'mi' && !S.rdraft?.wk) render(); });
       if (sub === 'noticias') enterNews();
       if (sub === 'nueva' && !S.team) loadTeam();
       if (sub === 'carrera' && !S.team) loadTeam();
     }
   }
   if (S.session?.isAdmin && view === 'historial') loadChanges();
+  if (S.session?.isAdmin && ['resumen', 'temporada', 'calidad', 'memoria'].includes(view)) geocodeMissing();
+  if (S.session?.isAdmin && view === 'corredores' && id && RFILTERS.some(([f]) => f === id)) S.rfilter = id;
   if (S.session?.isAdmin) {
     if (view === 'inscripciones' && id) S.draft = draftRegistration(id);
     if (view === 'carreras' && id) S.draft = draftRace(id);
@@ -242,10 +264,17 @@ async function onRoute() {
 
 /** Crónicas que el corredor ya pasó (Set de claves). null = falta el SQL; undefined = aún sin cargar. */
 async function loadChron() {
-  try { const keys = await api.runnerChronicles(S.code || S.previewCode); S.chron = Array.isArray(keys) ? new Set(keys) : null; } catch { S.chron = null; }
+  const code = S.code || S.previewCode;
+  try {
+    const team = await api.runnerChroniclesTeam(code);   // las pasadas por cualquiera: basta con que la pase uno
+    if (Array.isArray(team)) { S.chron = new Set(team.map((x) => x.key)); S.chronBy = new Map(team.map((x) => [x.key, x])); return; }
+  } catch { /* sin el SQL nuevo: se sigue con las propias */ }
+  S.chronBy = null;
+  try { const keys = await api.runnerChronicles(code); S.chron = Array.isArray(keys) ? new Set(keys) : null; } catch { S.chron = null; }
 }
 async function loadRunner() {
-  try { S.runnerData = await api.runnerView(S.code); await loadNews(); await loadCorrections(); await loadChron(); }
+  if (!S.session?.isAdmin) api.runnerPing?.(S.code).catch(() => {});   // actividad: última vez que abrió la app
+  try { S.runnerData = await api.runnerView(S.code); await loadNews(); await loadCorrections(); await loadChron(); await loadWatch(); }
   catch (e) {
     S.runnerData = null;
     if (/enlace_no_valido/.test(String(e?.message))) { store.del(CODE_KEY); S.code = null; }
@@ -256,12 +285,19 @@ async function loadRunner() {
 // ---------- marco común ----------
 
 const ADMIN_TABS = [
-  ['inscripciones', 'Inscripciones', 'M8 2v3M16 2v3M3 9h18M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z'],
-  ['carreras', 'Carreras', 'M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3'],
+  ['hoy', 'Hoy', 'M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z'],
+  ['inscripciones', 'Carreras', 'M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3'],
+  ['corredores', 'Equipo', 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8'],
   ['resumen', 'Resumen', 'M4 20V10M10 20V4M16 20v-7M22 20H2'],
-  ['corredores', 'Corredores', 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8'],
   ['redes', 'Redes', 'M18 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM8.6 13.5l6.8 4M15.4 6.5l-6.8 4'],
 ];
+/** Pestaña de la dirección a la que pertenece cada pantalla (y su color). */
+const ADMIN_GROUP = { '': 'hoy', hoy: 'hoy', avisos: 'hoy', mensajes: 'hoy', calidad: 'hoy', actividad: 'hoy', noticias: 'hoy', historial: 'hoy',
+  inscripciones: 'inscripciones', carreras: 'inscripciones', federaciones: 'inscripciones',
+  corredores: 'corredores', contratos: 'corredores', computo: 'corredores', informe: 'corredores', bonos: 'corredores', corredor: 'corredores', docs: 'corredores',
+  resumen: 'resumen', instagram: 'redes', datos: 'resumen', temporada: 'resumen', memoria: 'resumen', vista: 'corredores', equipo: 'resumen',
+  redes: 'redes', semana: 'redes', publicaciones: 'redes' };
+const SEC_OF = { hoy: 'hoy', inscripciones: 'car', corredores: 'eq', resumen: 'res', redes: 'red', '': 'car', federaciones: 'fed', mi: 'hoy', contrato: 'eq', equipo: 'res', noticias: 'hoy', carrera: 'car', nueva: 'car' };
 const icon = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
 // Menú de pie de página de los corredores (y de la vista previa de la dirección).
 const RUNNER_TABS = [
@@ -276,14 +312,21 @@ const runnerHref = (sub) => (sub ? `${runnerBase()}/${sub}` : `${runnerBase()}/`
 
 // ---------- Búsqueda rápida (lupa de la cabecera) ----------
 const adminScreens = () => [
+  ['🏠', 'Hoy: lo que tienes por hacer', '#/hoy', 'hoy inicio pendiente por hacer tareas resumen dia'],
+  ['💬', 'Mensaje al equipo (WhatsApp por grupos)', '#/mensajes', 'mensaje whatsapp recordar avisar grupo resultados apuntarse inactivos'],
+  ['📲', 'Actividad: quién usa la app', '#/actividad', 'actividad usa app abierto entrado ultima vez inactivos'],
+  ['🧹', 'Datos incompletos de las carreras', '#/calidad', 'datos incompletos calidad provincia disciplina km puesto falta'],
   ['📋', 'Inscripciones', '#/inscripciones', 'inscripciones apuntarse calendario proximas carreras abiertas'],
   ['🏆', 'Carreras (resultados)', '#/carreras', 'carreras resultados podios historico hechas'],
   ['📊', 'Resumen de la temporada', '#/resumen', 'resumen estadistica categorias podios km modalidad temporada'],
   ['👥', 'Corredores (plantilla)', '#/corredores', 'corredores plantilla categoria enlaces renovar anadir ropa pedido filtros'],
   ['📄', 'Contratos por tipo', '#/contratos', 'contratos contrato nuevo renovacion licencia pdf subir antiguos'],
+  ['📈', 'Resumen: panorama, podios, equipo y alcance', '#/resumen', 'temporada fin de ano disciplinas podios records corredores comparar anterior exportar excel panorama alcance bonos'],
+  ['📘', 'Memoria para sponsors', '#/memoria', 'memoria sponsors patrocinadores informe imprimir pdf temporada resumen'],
   ['📊', 'Cómputo de la temporada', '#/computo', 'computo fin temporada descargar csv excel control cerrar'],
   ['🖨️', 'Informe de temporada', '#/informe', 'informe imprimir pdf bono saldo penalizacion cierre hojas corredor'],
   ['💶', 'Bonos', '#/bonos', 'bonos bonificacion minimo penalizacion tramos plus circuito condiciones'],
+  ['📈', 'Estadísticas de Instagram (en Redes)', '#/instagram', 'instagram estadisticas seguidores alcance interacciones visualizaciones publicaciones redes'],
   ['📱', 'Redes: panel de historias, avisos y resultados', '#/redes', 'redes instagram historia post resultados avisos publicar pendiente encargado panel'],
   ['📸', 'Publicaciones en redes (control detallado)', '#/publicaciones', 'redes instagram historia post resultados publicar anomalias encargado'],
   ['📅', 'Próximas carreras (para redes)', '#/semana', 'semana redes avisar encargado proximas'],
@@ -298,6 +341,7 @@ const adminScreens = () => [
 const runnerScreens = () => [
   ['🏠', 'Carreras', runnerHref(''), 'carreras proximas apuntarme buscar crear nueva calendario'],
   ['🏁', 'Federaciones y ligas', runnerHref('federaciones'), 'federaciones ligas calendario fcc fac catalana aragonesa'],
+  ['⭐', 'Por valorar: carreras guardadas para decidir', '#/mi/valorar', 'por valorar guardar guardadas carrera favorita estrella decidir inscribirme plazo precio lista pendiente'],
   ['🧍', 'Mi temporada', runnerHref('mi'), 'mi temporada resultados carreras hechas puesto tiempo bono'],
   ['📄', 'Contrato y bonificación', runnerHref('contrato'), 'contrato bonificacion bono licencia ropa pedido documentos plus'],
   ['📊', 'Equipo', runnerHref('equipo'), 'equipo ranking estadistica categorias km tiempo podios'],
@@ -390,14 +434,14 @@ function frame(title, body, { back, actions = '', rtab = null, noSearch = false 
   const admin = S.session?.isAdmin;
   const tabs = rtab !== null
     ? `<nav class="tabs">${RUNNER_TABS.map(([v, label, d]) =>
-      `<a href="${runnerHref(v)}" class="${v === rtab ? 'on' : ''}">${icon(d)}<span>${label}</span></a>`).join('')}</nav>`
+      `<a href="${runnerHref(v)}" class="${v === rtab ? 'on' : ''}">${icon(d)}${v === 'mi' && !S.preview && watchUrgent() ? `<b class="tab-n" title="Plazo de inscripción a punto de cerrarse">${watchUrgent()}</b>` : ''}<span>${label}</span></a>`).join('')}</nav>`
     : admin ? `<nav class="tabs">${ADMIN_TABS.map(([v, label, d]) =>
-      `<a href="#/${v}" class="${view === v || (!view && v === 'inscripciones') || (v === 'corredores' && ['contratos', 'computo', 'informe'].includes(view)) || (v === 'resumen' && ['instagram', 'datos'].includes(view)) || (v === 'redes' && ['semana', 'publicaciones'].includes(view)) ? 'on' : ''}">${icon(d)}${v === 'redes' && S.data && socialPending() ? `<b class="tab-n">${socialPending()}</b>` : ''}<span>${label}</span></a>`).join('')}</nav>` : '';
+      `<a href="#/${v}" class="${(ADMIN_GROUP[view] || 'hoy') === v ? 'on' : ''}">${icon(d)}${v === 'redes' && S.data && socialPending() ? `<b class="tab-n">${socialPending()}</b>` : ''}${v === 'hoy' && S.data && todayCount() ? `<b class="tab-n">${todayCount()}</b>` : ''}<span>${label}</span></a>`).join('')}</nav>` : '';
   return `
     ${api.mode === 'demo' ? `<div class="demo-bar">Modo demostración: datos de prueba guardados solo en este móvil.</div>` : ''}
     <header class="top">
       ${back ? `<a class="back" href="${back}" aria-label="Volver">‹</a>` : '<img class="logo" src="icons/logo.png" alt="">'}
-      <h1>${esc(title)}</h1>${actions}${(admin && rtab === null && !back && S.data) || rtab !== null ? (noSearch ? '' : searchButton()) + accidentButton() : ''}${admin && rtab === null && !back && S.data ? bellButton() : ''}${rtab !== null ? newsBell() : ''}
+      ${rtab !== null && !S.preview && S.runnerData?.me?.name && title === runnerTitle() ? `<h1 class="greet" aria-label="${esc(title)}" title="${esc(title)}"><span>${esc(title)}</span></h1>` : `<h1>${esc(title)}</h1>`}${actions}${(admin && rtab === null && !back && S.data) || rtab !== null ? (noSearch ? '' : searchButton()) + accidentButton() : ''}${rtab !== null ? newsBell() : ''}
     </header>
     <main>${body}</main>
     ${tabs}`;
@@ -417,6 +461,14 @@ async function checkVersion() {
   } catch { /* sin acceso a la caché: solo se enseña la versión */ }
 }
 
+/** Si el nombre de la barra de arriba no cabe, se desliza de ida y vuelta para poder leerlo entero. */
+function fitGreeting() {
+  const h = $app.querySelector('h1.greet'); if (!h) return;
+  const t = h.firstElementChild, over = Math.ceil(t.scrollWidth - h.clientWidth);
+  if (over > 2) { h.style.setProperty('--ov', `${over + 6}px`); h.style.setProperty('--dur', `${Math.max(6, Math.round(over / 18) + 5)}s`); h.classList.add('scroll'); }
+}
+window.addEventListener('resize', () => { const h = $app.querySelector('h1.greet'); if (h) { h.classList.remove('scroll'); fitGreeting(); } });
+
 function render() {
   const { view } = parseRoute();
   const admin = S.session?.isAdmin;
@@ -425,18 +477,23 @@ function render() {
   else if (view === 'accidente' && (admin || S.code)) html = viewAccident();
   else if (admin) {
     html = ({
+      '': viewToday, hoy: viewToday, mensajes: viewMessages, calidad: viewQuality, actividad: viewActivity,
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
       carreras: S.draft ? viewRaceEdit : viewRaces,
-      resumen: viewSummary, instagram: viewInstagram, redes: viewNetworks, corredores: viewRunners, contratos: viewContracts, computo: viewSeasonCount, informe: viewSeasonReport, publicaciones: viewPublications, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
+      resumen: viewSummary, temporada: viewSummary, memoria: viewMemoria, instagram: viewInstagram, redes: viewNetworks, corredores: viewRunners, contratos: viewContracts, computo: viewSeasonCount, informe: viewSeasonReport, publicaciones: viewPublications, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
       vista: () => (S.preview && S.runnerData ? runnerScreen(parseRoute().id || '') : viewRunners()),
       equipo: () => (S.preview ? viewTeam() : viewSummary()),
-    }[view] || viewRegistrations)();
+    }[view] || viewToday)();
   } else if (view === 'redes' && store.get(SOCIAL_KEY)) html = viewSocial();
   else if (S.code && S.runnerData) html = runnerScreen(view);
   else html = viewWelcome();
   $app.innerHTML = html;
+  fitGreeting();
   if ($app.querySelector('#app-ver')) checkVersion();
   document.body.classList.toggle('has-tabs', !!$app.querySelector('nav.tabs'));
+  // color de la sección: cada pestaña tiene el suyo
+  document.body.dataset.sec = admin && view !== 'vista' ? ({ hoy: 'hoy', inscripciones: 'car', corredores: 'eq', resumen: 'res', redes: 'red' }[ADMIN_GROUP[view] || 'hoy'])
+    : (SEC_OF[admin ? (parseRoute().id || '') : view] || 'car');
 }
 
 // ---------- En caso de accidente ----------
@@ -665,43 +722,42 @@ function calendarView(regs, card, isMine = () => false, { done = [], doneCard = 
   const shownUp = shown.filter((it) => !it.past).sort((a, b) => a.g.date.localeCompare(b.g.date));
   const shownPast = shown.filter((it) => it.past).sort((a, b) => b.g.date.localeCompare(a.g.date));
   const months = [...new Set(items.flatMap((it) => daysOf(it.g.date, it.g.end_date).map((d) => d.slice(0, 7))))].sort();
+  const discOf = (it) => discClass(it.g.modality, it.g.subtype);
   const cell = (d) => {
     if (!d) return '<span class="cal-cell empty"></span>';
     const list = byDay.get(d) || [];
     const up = list.filter((it) => !it.past);
     const people = list.reduce((n, it) => n + it.people, 0);
-    const mods = new Set(list.map((it) => it.g.modality));
+    const discs = new Set(list.map(discOf));
     const pst = isPosted && list.length ? (list.every((it) => isPosted(it.g)) ? 'posted' : list.some((it) => isPosted(it.g)) ? 'part-posted' : '') : '';
     const cls = ['cal-cell', pst, list.length ? 'has' : '', list.length && !up.length ? 'past-only' : '', d === today ? 'today' : '',
       d === S.calDay ? 'sel' : '', d < today ? 'past' : '', list.some((it) => isMine(it.g)) ? 'mine' : '',
-      list.some((it) => it.g.end_date) ? 'stage' : '', list.length ? (mods.size === 1 ? modClass(list[0].g.modality) : 'multi-mod') : '']
+      list.some((it) => it.g.end_date) ? 'stage' : '', list.length ? (discs.size === 1 ? discOf(list[0]) : 'multi-mod') : '']
       .filter(Boolean).join(' ');
     const label = `${Number(d.slice(8))} de ${MONTH_NAMES[m - 1]}${list.length ? `: ${list.map((it) => `${it.g.name} (${modText(it.g)}${it.past ? ', ya disputada' : ''}, ${it.people} del club)`).join(', ')}` : ''}`;
     return list.length
       ? `<button class="${cls}" data-act="cal-day" data-d="${d}" aria-label="${esc(label)}"><b>${Number(d.slice(8))}</b>
           ${people ? `<i class="cnt">${people}</i>` : ''}
-          <span class="dots">${list.slice(0, 4).map((it) => `<i class="${modClass(it.g.modality)}"></i>`).join('')}</span></button>`
+          <span class="dots">${list.slice(0, 4).map((it) => `<i class="${discOf(it)}"></i>`).join('')}</span></button>`
       : `<span class="${cls}" aria-label="${esc(label)}"><b>${Number(d.slice(8))}</b></span>`;
   };
+  const monthItems = items.filter((it) => touches(it.g, ym));
+  const mineN = monthItems.filter((it) => isMine(it.g)).length;
+  const monthDiscs = [...new Map(monthItems.map((it) => [discOf(it), it.g])).entries()];
   const cardOf = (it) => (it.done ? (doneCard ? doneCard(it.g) : '') : card(it.g));
   return `
     <section class="card cal">
       <div class="cal-head">
-        <button class="icon-btn" data-act="cal-month" data-n="-1" aria-label="Mes anterior">‹</button>
-        <h2>${MONTH_NAMES[m - 1][0].toUpperCase() + MONTH_NAMES[m - 1].slice(1)} ${y}</h2>
-        <button class="icon-btn" data-act="cal-month" data-n="1" aria-label="Mes siguiente">›</button>
+        <button class="icon-btn cal-nav" data-act="cal-month" data-n="-1" aria-label="Mes anterior">‹</button>
+        <div class="cal-title"><h2>${MONTH_NAMES[m - 1][0].toUpperCase() + MONTH_NAMES[m - 1].slice(1)} ${y}</h2>
+          <span class="cal-sub"><b>${monthItems.length}</b> carrera${monthItems.length === 1 ? '' : 's'}${mineN ? ` · <b class="cal-mine">${mineN} mía${mineN === 1 ? '' : 's'}</b>` : ''}</span></div>
+        <button class="icon-btn cal-nav" data-act="cal-month" data-n="1" aria-label="Mes siguiente">›</button>
       </div>
       <div class="cal-grid" role="grid">
         ${['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d) => `<span class="cal-dow">${d}</span>`).join('')}
         ${monthGrid(ym).flat().map(cell).join('')}
       </div>
-      ${modLegend([...new Set(items.map((it) => it.g.modality))])}
-      <div class="state-legend"><span><i class="sl-up"></i>Próxima (inscripción)</span><span><i class="sl-past"></i>Ya disputada</span><span><b class="sl-cnt">3</b> del club</span>${isPosted ? '<span><b class="sl-ok">✓</b> publicada</span><span><b class="sl-half">½</b> alguna sin publicar</span>' : ''}</div>
-      ${months.length ? `<div class="cal-months">${months.map((mm) => {
-        const [yy, mo] = mm.split('-').map(Number);
-        const n = items.filter((it) => touches(it.g, mm)).length;
-        return `<button class="chip${mm === ym ? ' on' : ''}${mm < today.slice(0, 7) ? ' old' : ''}" data-act="cal-goto" data-m="${mm}">${MONTH_NAMES[mo - 1].slice(0, 3)} ${String(yy).slice(2)} · ${n}</button>`;
-      }).join('')}</div>` : ''}
+      ${monthDiscs.length ? `<div class="cal-legend">${monthDiscs.map(([k, g]) => `<span class="${discClass(g.modality, g.subtype)}"><i></i>${esc(discLabel(g.modality, g.subtype))}</span>`).join('')}</div>` : ''}
     </section>
     ${S.calDay ? `<h2 class="section">${formatDate(S.calDay)} <button class="link small" data-act="cal-day" data-d="${S.calDay}">Ver todo el mes</button></h2>` : ''}
     ${shownUp.length ? `<h2 class="section">📅 Próximas (${shownUp.length})</h2>${shownUp.map(cardOf).join('')}` : ''}
@@ -713,9 +769,10 @@ function calendarView(regs, card, isMine = () => false, { done = [], doneCard = 
 //  Buscador «lupa»: encontrar una carrera antes de crearla (para no duplicar)
 // ======================================================================
 
-const searchBox = (scope, placeholder) => `<label class="search">
+const searchBox = (scope, placeholder, { marquee = '' } = {}) => `<label class="search${marquee ? ' has-marquee' : ''}">
   <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-  <input type="search" data-search="${scope}" value="${esc(S.q[scope] || '')}" placeholder="${esc(placeholder)}" autocomplete="off" enterkeyhint="search"></label>`;
+  <input type="search" data-search="${scope}" value="${esc(S.q[scope] || '')}" placeholder="${marquee ? ' ' : esc(placeholder)}" aria-label="${esc(marquee || placeholder)}" autocomplete="off" enterkeyhint="search">
+  ${marquee ? `<span class="ph-marquee" aria-hidden="true"><span>${esc(marquee)}</span></span>` : ''}</label>`;
 
 /** Carreras de las federaciones que aún no están en el club, parecidas a lo buscado. */
 function fedMatches(q, existing, limit = 5) {
@@ -821,7 +878,7 @@ function updateSearch(scope) {
     if (box) box.innerHTML = raceListHtml();
   } else if (scope === 'rname') {
     const box = $app.querySelector('#dup-list');
-    if (box) box.innerHTML = dupSuggestions(S.rdraft?.name || '', S.runnerData.registrations, true);
+    if (box) box.innerHTML = S.rdraft?.wk != null ? watchDupSuggestions(S.rdraft.name || '') : dupSuggestions(S.rdraft?.name || '', S.runnerData.registrations, true);
   }
 }
 
@@ -853,7 +910,7 @@ const isPastReg = (id) => { const g = S.runnerData?.registrations.find((x) => x.
 /** Pantalla para poner el resultado: de una inscripción (reg_) o de una carrera ya en resultados (race_). */
 const resultHref = (id) => (S.runnerData?.registrations.some((g) => g.id === id) ? `#/resultado/reg_${id}` : `#/resultado/race_${id}`);
 const emptyRunnerDraft = (pre = {}) => ({ name: '', date: '', multi: false, end_date: '', place: '', province: '', country: DEFAULT_COUNTRY,
-  modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', category: '', ...pre });
+  modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', category: '', url: '', elevation: '', price: '', ...pre });
 
 /** Formulario para que el corredor ponga o cambie SU resultado. id = «reg_<uuid>» o «race_<uuid>». */
 function viewRunnerReport(key) {
@@ -866,13 +923,13 @@ function viewRunnerReport(key) {
   const cat = kind === 'reg' ? race.entries.find((e) => e.runner_id === d.me.id)?.category : race.category;
   return frame(cur ? 'Cambiar mi resultado' : 'Mi resultado', `${previewBanner()}
     <form class="card stack" data-form="r-report" data-kind="${kind}" data-id="${id}">
-      <div><h3>${esc(race.name)}</h3><p class="muted">${when(race)}${place(race) ? ' · ' + esc(place(race)) : ''} · ${esc(modText(race))}</p></div>
+      <div><h3 class="rname">${esc(race.name)}</h3><p class="muted">${when(race)}${place(race) ? ' · ' + esc(place(race)) : ''} · ${esc(modText(race))}</p></div>
       <div class="grid2">
         <label>Tu puesto<input type="number" name="position" inputmode="numeric" min="1" max="999" required autofocus value="${esc(cur?.position ?? '')}"></label>
         <label>Categoría${catSelect('name="category"', cat || d.me.category || '', 'Categoría')}</label>
       </div>
-      <label>⏱️ Tu tiempo <small class="muted">(opcional)</small><input type="text" name="time" inputmode="numeric" autocomplete="off" placeholder="2:05:30" maxlength="10" value="${esc(cur?.time_seconds ? formatTime(cur.time_seconds) : '')}"></label>
-      <p class="hint">Horas:minutos:segundos, tal como sale en la clasificación (por ejemplo <b>2:05:30</b>, o <b>45:10</b> si fue menos de una hora). Sirve para ver cuántas horas acumula cada uno en Equipo.</p>
+      <div class="tf-row"><span class="flabel">⏱️ Tu tiempo <small class="muted">(opcional)</small></span>${timeFields(cur?.time_seconds, 'name="time"')}</div>
+      <p class="hint">Escribe solo números en cada casilla, tal como sale en la clasificación: para <b>2 h 05 min</b> pon 2 · 05; si fue menos de una hora, deja las horas vacías (45 min). Sirve para ver cuántas horas acumula cada uno en Equipo.</p>
       <input type="hidden" name="podium" value="${podiumKind(race, cur?.podium_type)}">
       ${race.race_type === 'circuito' ? `<p class="hint">🏆 Esta carrera es puntuable de <b>${esc(race.circuit || 'un circuito')}</b>. Aquí pones solo tu puesto en <b>esta prueba</b>. Si acabas en el podio de la <b>general final</b>, se pide aparte, al terminar la liga, en <b>Contrato → Plus de bonificación</b>.</p>` : ''}
       <p class="hint">${cur ? `Ahora tienes <b>${isPodium(cur.position) ? medal(cur.position) + ' ' : ''}${cur.position}º</b>. ` : ''}Puedes cambiarlo tú cuando quieras. El puesto <b>no cambia tu bono</b> (cuenta participar); los podios en la general final de una liga (plus) se piden aparte y los confirma la dirección.</p>
@@ -884,33 +941,35 @@ function viewRunnerReport(key) {
 const podiumKind = (race, current) => (PODIUM_TYPES.some((t) => t.id === current) ? current : race?.race_type === 'campeonato' ? 'campeonato' : 'suelta');
 
 function viewRunnerNew() {
-  if (!S.rdraft) S.rdraft = emptyRunnerDraft({ name: S.q.runner || '' });
+  if (!S.rdraft || S.rdraft.wk != null) S.rdraft = emptyRunnerDraft({ name: S.q.runner || '' });
   const d = S.rdraft;
   const editing = !!d.id, isRace = d.kind === 'race';
   const reg = editing && !isRace ? S.runnerData.registrations.find((x) => x.id === d.id) : null;
   const others = isRace ? d.others || 0 : reg ? reg.entries.filter((e) => e.runner_id !== S.runnerData.me.id).length : 0;
   if (!S.fed && !editing) loadFed().then(() => updateSearch('rname'));
   return frame(editing ? 'Editar mi carrera' : 'Añadir carrera', `
-    <form class="card stack" data-form="r-create">
-      <p class="hint">${editing ? `Puedes corregir los datos de esta carrera porque la añadiste tú${isRace ? ' (aunque ya esté en resultados)' : ''}. Tu puesto lo cambias en «Cambiar mi resultado»; el de los demás lo pone cada uno.`
-        : 'Escribe el nombre: si ya existe en el club o en el calendario de las federaciones te saldrá aquí debajo, para no duplicarla.<br>¿Se te olvidó apuntar una carrera que ya hiciste? Añádela igual con su fecha (desde el 1 de enero del año pasado) y luego pon tu resultado.'}</p>
-      <label>Nombre de la carrera<input data-rf="name" value="${esc(d.name)}" required minlength="3" maxlength="120" autocomplete="off"></label>
-      <div id="dup-list">${editing ? '' : dupSuggestions(d.name, S.runnerData.registrations, true)}</div>
-      <div class="grid2">
-        <label>${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-rf="date" value="${esc(d.date)}" min="${pastLimit()}"${isRace ? ` max="${todayISO()}"` : ''} required></label>
-        <label>Modalidad<select data-rf="modality">${MODALITIES.map((m) => opt(m, m, d.modality)).join('')}</select></label>
-      </div>
-      ${detailInputs(d, 'data-rf')}
-      ${S.runnerData.circuits ? typeFields(d, 'data-rf') : ''}
-      <label class="check"><input type="checkbox" data-rf-multi ${d.multi ? 'checked' : ''}> Carrera de varios días (por etapas)</label>
-      ${d.multi ? `<label>Último día<input type="date" data-rf="end_date" value="${esc(d.end_date)}" min="${esc(d.date || pastLimit())}" required></label>` : ''}
-      <label>Lugar<input data-rf="place" value="${esc(d.place)}" maxlength="120"></label>
-      <div class="grid2">
-        <label>Provincia<input data-rf="province" list="dl-prov" value="${esc(d.province)}" autocomplete="off"></label>
-        ${editing ? `<label>País<input data-rf="country" list="dl-country" value="${esc(d.country || '')}" maxlength="60"></label>` : `<label>Tu categoría${catSelect('data-rf="category" required', d.category, 'Elige tu categoría')}</label>`}
-      </div>
-      ${editing ? `<label>Notas<textarea data-rf="notes" rows="2" maxlength="500">${esc(d.notes || '')}</textarea></label>` : ''}
-      <button class="btn primary">${editing ? 'Guardar cambios' : 'Añadir y apuntarme'}</button>
+    <form class="stack rform" data-form="r-create">
+      <details class="rform-help"><summary>${ico('info')}<span>${editing ? 'Qué puedes cambiar aquí' : 'Cómo se añade una carrera'}</span></summary>
+        <p class="hint">${editing ? `Puedes corregir los datos de esta carrera porque la añadiste tú${isRace ? ' (aunque ya esté en resultados)' : ''}. Tu puesto lo cambias en «Cambiar mi resultado»; el de los demás lo pone cada uno.`
+          : 'Escribe el nombre: si ya existe en el club o en el calendario de las federaciones te saldrá aquí debajo, para no duplicarla.<br>¿Se te olvidó apuntar una carrera que ya hiciste? Añádela igual con su fecha (desde el 1 de enero del año pasado) y luego pon tu resultado.'}</p></details>
+      ${fsec(1, 'flag', 'Qué carrera es', `<label class="flabel-l">Nombre de la carrera<input data-rf="name" value="${esc(d.name)}" required minlength="3" maxlength="120" autocomplete="off"></label>
+        <div id="dup-list">${editing ? '' : dupSuggestions(d.name, S.runnerData.registrations, true)}</div>`, '#1f6fd1')}
+      ${fsec(2, 'cal', 'Cuándo y dónde', `<label class="flabel-l">${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-rf="date" value="${esc(d.date)}" min="${pastLimit()}"${isRace ? ` max="${todayISO()}"` : ''} required></label>
+        <label class="check"><input type="checkbox" data-rf-multi ${d.multi ? 'checked' : ''}> Carrera de varios días (por etapas)</label>
+        ${d.multi ? `<label class="flabel-l">Último día<input type="date" data-rf="end_date" value="${esc(d.end_date)}" min="${esc(d.date || pastLimit())}" required></label>` : ''}
+        <label class="flabel-l">Lugar<input data-rf="place" value="${esc(d.place)}" maxlength="120" placeholder="Ciudad o pueblo"></label>
+        <div class="grid2"><label class="flabel-l">Provincia<input data-rf="province" list="dl-prov" value="${esc(d.province)}" autocomplete="off"></label>
+          ${editing ? `<label class="flabel-l">País<input data-rf="country" list="dl-country" value="${esc(d.country || '')}" maxlength="60"></label>` : '<span></span>'}</div>`, '#0f9d8a')}
+      ${fsec(3, 'bars', 'Qué tipo de carrera es', `<div class="disc-field"><span class="flabel">Modalidad</span>${modalityChips(d, 'data-rf')}</div>
+        ${detailInputs(d, 'data-rf')}
+        ${S.runnerData.circuits ? typeFields(d, 'data-rf') : ''}`, '#e07800')}
+      ${fsec(4, 'mountain', 'Más datos de la carrera (opcionales)', `<div class="grid2"><label class="flabel-l">Desnivel positivo (m)<input type="text" inputmode="numeric" data-rf="elevation" value="${esc(d.elevation ?? '')}" maxlength="6" placeholder="1200" autocomplete="off"></label>
+        <label class="flabel-l">Precio inscripción (€)<input type="text" inputmode="decimal" data-rf="price" value="${esc(d.price ?? '')}" maxlength="8" placeholder="25" autocomplete="off"></label></div>
+        ${isRace ? '' : `<label class="flabel-l">Web de la carrera<input type="text" inputmode="url" data-rf="url" value="${esc(d.url || '')}" maxlength="500" placeholder="https://…" autocomplete="off"></label>`}
+        <p class="hint">Los ven todos los corredores y salen en las estadísticas del club (metros de subida, coste de competir…). Si no los sabes, déjalos vacíos: cualquier compañero podrá completarlos después. Para el precio, 0 = gratis.</p>`, '#2f6fd6')}
+      ${fsec(5, 'users', editing ? 'Notas' : 'Tú', editing ? `<label class="flabel-l">Notas<textarea data-rf="notes" rows="2" maxlength="500">${esc(d.notes || '')}</textarea></label>`
+        : `<label class="flabel-l">Tu categoría${catSelect('data-rf="category" required', d.category, 'Elige tu categoría')}</label>`, '#8e44ad')}
+      <button class="btn primary big-save">${editing ? 'Guardar cambios' : 'Añadir y apuntarme'}</button>
       <p class="hint">La dirección del club podrá corregirla o borrarla si hace falta.</p>
     </form>
     ${editing ? (others
@@ -937,6 +996,10 @@ const ICO = {
   users: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
   calplus: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM12 14v4M10 16h4',
   check: 'M20 6L9 17l-5-5',
+  share: 'M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13',
+  layers: 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
+  calcheck: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM9 16l2 2 4-4',
+  timer: 'M10 2h4M12 14l3-3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z',
   folder: 'M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z',
   money: 'M2 6h20v12H2zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 12h.01M18 12h.01',
   file: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8',
@@ -947,7 +1010,18 @@ const ICO = {
   bars: 'M12 20V10M18 20V4M6 20v-4',
   euro: 'M4 10h12M4 14h9M19 6a7.7 7.7 0 0 0-5.2-2A7.9 7.9 0 0 0 6 12c0 4.4 3.5 8 7.8 8 2 0 3.8-.8 5.2-2',
   chevd: 'M6 9l6 6 6-6',
+  home: 'M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z',
+  alert: 'M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01',
+  msg: 'M21 11.5a8.4 8.4 0 0 1-12.3 7.4L3 21l2.1-5.7A8.4 8.4 0 1 1 21 11.5z',
+  act: 'M22 12h-4l-3 9L9 3l-3 9H2',
+  db: 'M12 8c4.4 0 8-1.3 8-3s-3.6-3-8-3-8 1.3-8 3 3.6 3 8 3zM4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',
+  send: 'M22 2L11 13M22 2l-7 20-4-9-9-4z',
   list: 'M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01',
+  star: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
+  mountain: 'm8 3 4 8 5-5 5 15H2L8 3z',
+  compass: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM16.2 7.8l-2.1 6.3-6.3 2.1 2.1-6.3z',
+  trash: 'M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6',
+  plus: 'M12 5v14M5 12h14',
 };
 const ico = (k, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${ICO[k]}"/></svg>`;
 /** Medalla de podio dibujada (sin emoji): círculo oro / plata / bronce con el puesto. */
@@ -957,10 +1031,11 @@ const mrow = (g, { pill = '', edit = '', below = '', end = '', href = '', hero =
   ${hero ? '<span class="hero-badge">Próxima cita</span>' : ''}
   ${href ? `<a class="mrow-main" href="${href}">` : '<div class="mrow-main">'}
     <span class="mrow-l1"><b class="mrow-name">${esc(g.name)}</b>${pill ? `<span class="pill-next">${pill}</span>` : ''}</span>
-    <span class="mrow-l2"><b class="mrow-date">${esc(when(g))}</b>${place(g) ? `<span class="mrow-place">${esc(place(g))}</span>` : ''}${modTag(g.modality, g.subtype)}${g.km ? `<small class="muted">${kmText(g.km)}</small>` : ''}</span>
+    <span class="mrow-l2"><b class="mrow-date">${esc(when(g))}</b>${place(g) ? `<span class="mrow-place">${esc(place(g))}</span>` : ''}${modTag(g.modality, g.subtype)}${g.km ? `<small class="muted">${kmText(g.km)}</small>` : ''}${g.elevation ? `<small class="muted">▲ ${elevText(g.elevation)}</small>` : ''}</span>
   ${href ? '</a>' : '</div>'}
   ${edit}
-  ${end || (href ? `<span class="mrow-go" aria-hidden="true">${ico('go')}</span>` : '')}
+  ${end}
+  ${href ? `<span class="mrow-go" aria-hidden="true">${ico('go')}</span>` : ''}
   ${below ? `<div class="mrow-below">${below}</div>` : ''}</li>`;
 
 /** «Mis carreras»: sus carreras con resultados por temporada y las apuntadas pendientes de resultado. */
@@ -973,6 +1048,12 @@ function payLine(list) {
   if (!mine.length) return '';
   const paid = mine.filter((e) => e.paid).length, unpaid = mine.length - paid;
   return `<p class="pay-sum"><span class="ok">${ico('euro')}${paid} ${paid === 1 ? 'pagada' : 'pagadas'}</span>${unpaid ? `<span class="wait">${unpaid} sin pagar</span>` : ''}</p>`;
+}
+function payLineInline(list) {
+  const mine = list.map(myEntry).filter(Boolean);
+  if (!mine.length) return '';
+  const paid = mine.filter((e) => e.paid).length, unpaid = mine.length - paid;
+  return `<span class="ok">${ico('euro')}${paid} ${paid === 1 ? 'pagada' : 'pagadas'}</span>${unpaid ? `<span class="wait">${unpaid} sin pagar</span>` : ''}`;
 }
 /** Fila de chips de una inscripción: desde cuándo estoy inscrito y si está pagada (y cuándo). */
 function payChips(g) {
@@ -988,7 +1069,9 @@ function myRacesCard(d, afterSummary = () => '') {
   if (!results) return ''; // base de datos aún sin actualizar
   const today = d.today || todayISO();
   const mineReg = d.registrations.filter((g) => g.entries.some((e) => e.runner_id === d.me.id));
-  const pending = mineReg.filter((g) => g.date < today && !g.suspended);
+  const pastReg = mineReg.filter((g) => g.date < today && !g.suspended);
+  const pending = pastReg.filter((g) => !g.my_result);   // les falta poner el puesto
+  const sent = pastReg.filter((g) => g.my_result);        // ya puso su puesto: cuenta para el bono aunque la dirección aún no la haya pasado a resultados
   const upcoming = mineReg.filter((g) => g.date >= today && !g.suspended).sort((a, b) => a.date.localeCompare(b.date));
   const cancelled = mineReg.filter((g) => g.suspended).sort((a, b) => a.date.localeCompare(b.date));
   const years = [...new Set([new Date().getFullYear(), ...results.map((r) => yearOf(r.date))])].sort((a, b) => b - a);
@@ -1000,43 +1083,57 @@ function myRacesCard(d, afterSummary = () => '') {
     const pos = r.position ? `${isPodium(r.position) ? medalBadge(r.position) : `${r.position}º`}${r.category ? ` <small>${esc(r.category)}</small>` : ''}${r.time_seconds ? `<br><small class="muted">${formatTime(r.time_seconds)}</small>` : ''}${r.self_reported ? '<br><small class="self-res">puesto por ti</small>' : ''}`
       : (S.preview ? '<span class="muted">sin puesto</span>' : `<a class="btn primary small" href="#/resultado/race_${r.race_id}">Poner mi puesto</a>`);
     return mrow(r, { href: `${runnerHref('carrera')}/race_${r.race_id}`,
-      end: `<span class="pos">${pos}${r.mine_created && !S.preview ? `<br><a class="btn small edit-mine" href="#/editar/race_${r.race_id}" aria-label="Editar o borrar ${esc(r.name)}">✏️ Editar</a>` : ''}</span>`,
+      end: `<span class="pos">${pos}${r.mine_created && !S.preview ? `<br><a class="edit-btn" href="#/editar/race_${r.race_id}" aria-label="Editar o borrar ${esc(r.name)}">${ico('pen')}Editar</a>` : ''}</span>`,
       below: stagePods.length ? `<small>${stagePods.map((x) => `${medalBadge(x.p)} ${esc(x.n)}`).join(' · ')}</small>` : '' });
   };
   const myCat = (g) => g.entries.find((e) => e.runner_id === d.me.id)?.category;
-  const editMine = (g) => (g.mine_created && !S.preview ? `<a class="edit-ico" href="#/editar/${g.id}" aria-label="Editar o borrar ${esc(g.name)}">${ico('pen')}</a>` : '');
+  const editMine = (g) => (g.mine_created && !S.preview ? `<a class="edit-ico" href="#/editar/${g.id}" aria-label="Editar o borrar ${esc(g.name)}" title="Editar o borrar">${ico('pen')}</a>` : '');
   const dleft = (g) => { const n = Math.round((new Date(g.date + 'T12:00:00Z') - new Date(today + 'T12:00:00Z')) / 864e5);
     return n === 0 ? 'hoy' : n === 1 ? 'mañana' : `en ${n} días`; };
   return `
   <section class="card sum-card"><div class="sum-head"><h2>Mis carreras ${S.myYear}</h2>${ico('trophy', 'sum-trophy')}</div>
     <div class="tiles">
       <a href="#" class="tile t-next" data-act="goto-sec" data-to="sec-next"><span class="t-n">${upcoming.length}</span><span class="t-l">Próximas</span>${ico('cal', 't-ico')}<small>inscrito</small></a>
-      <a href="#" class="tile t-done" data-act="goto-sec" data-to="sec-done"><span class="t-n">${list.length}</span><span class="t-l">Hechas</span>${ico('ok', 't-ico')}<small>${days !== list.length ? `${days} días de competición` : 'con resultado'}</small></a>
+      <a href="#" class="tile t-done" data-act="goto-sec" data-to="sec-done"><span class="t-n">${list.length + sent.filter((g) => yearOf(g.date) === S.myYear).length}</span><span class="t-l">Hechas</span>${ico('ok', 't-ico')}<small>${days !== list.length ? `${days} días de competición` : 'con resultado'}</small></a>
       <a href="#" class="tile t-pend${pending.length ? ' alert' : ''}" data-act="goto-sec" data-to="sec-pend"><span class="t-n">${pending.length}</span><span class="t-l">Pendientes</span>${ico('flag', 't-ico')}<small>${pending.length ? 'falta tu resultado' : 'de resultado'}</small></a>
       <a href="#" class="tile t-canc" data-act="goto-sec" data-to="sec-canc"><span class="t-n">${cancelled.length}</span><span class="t-l">Anuladas</span>${ico('ban', 't-ico')}<small>suspendidas</small></a>
     </div>
-    ${(() => { const pod = [1, 2, 3].map((k) => list.filter((x) => x.position === k).length), NAMES = [['Oro', 'Oros'], ['Plata', 'Platas'], ['Bronce', 'Bronces']];
-      return pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}"><i class="medal m${i + 1}"></i>${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : ''; })()}
+    ${(() => { const sentYear = sent.filter((g) => yearOf(g.date) === S.myYear).map((g) => ({ position: g.my_result.position, time_seconds: g.my_result.time_seconds })), allMine = [...list, ...sentYear];   // los enviados también cuentan
+      const pod = [1, 2, 3].map((k) => allMine.filter((x) => x.position === k).length), NAMES = [['Oro', 'Oros'], ['Plata', 'Platas'], ['Bronce', 'Bronces']];
+      // una sola línea pequeña: tiempo en carrera y, al lado, km de viaje (ida y vuelta, aprox.)
+      const myTime = allMine.reduce((n, r) => n + (Number(r.time_seconds) || 0), 0), myTrip = list.reduce((n, r) => n + 2 * (distanceKm(r)?.km ?? 0), 0);
+      const road = myTime || myTrip ? `<p class="my-line">${myTime ? `<span title="Tiempo total en carrera (de las carreras con tiempo)">${ico('timer')}<b>${formatTime(myTime, true)}</b> en carrera</span>` : ''}${myTrip ? `<span title="Ida y vuelta desde un punto a medio camino entre Monzón y Lleida">${ico('compass')}<b>${kmText(myTrip)}</b> de viaje</span>` : ''}</p>` : '';
+      return (pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}"><i class="medal m${i + 1}"></i>${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : '') + road; })()}
   </section>
 
   ${pending.length ? `<section class="card chro-card pend-card has-pend" id="sec-pend"><details class="chro-det" data-open-key="pend"${S.open?.pend ? ' open' : ''}>
     <summary><span class="chro-ic">${ico('flag')}</span><b class="chro-t">Sin resultado</b>
       <span class="chro-tag pend">${pending.length} ${pending.length === 1 ? 'pendiente' : 'pendientes'}${ico('go')}</span></summary>
-    <p class="hint">Pon tu puesto: en cuanto lo pongas <b>ya cuenta para el bono</b>. Si no fuiste, ábrela y pulsa «No fui: borrarme».</p>
+    <p class="hint">Pon tu puesto: en cuanto lo pongas <b>ya cuenta para el bono</b>. Si no fuiste, pulsa «No fui: borrarme». ${WEEK_RULE}</p>
     <ul class="mini-list">${pending.map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`,
       edit: editMine(g),
-      below: g.my_result
-        ? `<span class="badge-sent">${g.my_result.position}º${g.my_result.time_seconds ? ' · ' + formatTime(g.my_result.time_seconds) : ''} · ya cuenta</span>`
-        : (S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>`) })).join('')}</ul>
+      below: weekChip(g.end_date || g.date, today) + (S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a><button type="button" class="btn ghost small" data-act="r-leave" data-id="${g.id}">No fui: borrarme</button>`) })).join('')}</ul>
+  </details></section>` : ''}
+  ${sent.length ? `<section class="card chro-card sent-card"><details class="chro-det" data-open-key="sent"${S.open?.sent ? ' open' : ''}>
+    <summary><span class="chro-ic">${ico('check')}</span><b class="chro-t">Resultado enviado</b>
+      <span class="chro-tag ok">${sent.length}${ico('go')}</span></summary>
+    <p class="hint">Lo que pones vale tal cual y ya cuenta para tu bono; nadie tiene que validarlo. Una semana después de la carrera pasa solo a la clasificación del equipo (se espera por si otros compañeros ponen también su resultado). Mientras tanto puedes cambiar el puesto o el tiempo.</p>
+    <ul class="mini-list">${sent.map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, edit: editMine(g),
+      below: `<span class="badge-sent">${g.my_result.position}º${g.my_result.time_seconds ? ' · ' + formatTime(g.my_result.time_seconds) : ''} · ya cuenta</span>${S.preview ? '' : `<a class="edit-btn" href="#/resultado/reg_${g.id}">${ico('pen')}Cambiar</a>`}` })).join('')}</ul>
   </details></section>` : ''}
 
   ${afterSummary()}
 
-  <section class="card season-block next-block" id="sec-next">
-    <h2 class="sec-h">Mis próximas inscripciones <small>(${upcoming.length})</small><button type="button" class="info-btn" data-act="info-next" aria-label="Qué es esto">${ico('info')}</button></h2>
-    ${upcoming.length ? `${payLine(upcoming)}<ul class="mini-list">${upcoming.map((g, i) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, hero: i === 0, pill: `${dleft(g)}${myCat(g) ? ` · ${esc(myCat(g))}` : ''}`, edit: editMine(g), below: payChips(g) })).join('')}</ul>`
+  ${upcoming.length ? `<ul class="mini-list next-hero" id="sec-hero">${mrow(upcoming[0], { href: `${runnerHref('carrera')}/${upcoming[0].id}`, hero: true, pill: `${dleft(upcoming[0])}${myCat(upcoming[0]) ? ` · ${esc(myCat(upcoming[0]))}` : ''}`, edit: editMine(upcoming[0]), below: payChips(upcoming[0]) })}</ul>` : ''}
+
+  <details class="card season-block next-block desp" id="sec-next" data-open-key="next"${S.open?.next ? ' open' : ''}>
+    <summary><span class="desp-t">Mis próximas inscripciones <small>(${upcoming.length})</small></span>${ico('chevd', 'desp-chev')}
+      ${upcoming.length ? `<span class="desp-sub">${payLineInline(upcoming)}</span>` : ''}</summary>
+    <p class="hint">Carreras a las que estás apuntado y que aún no se han corrido. <b>Toca una</b> para abrirla: ves quién va, puedes borrarte y, si la añadiste tú, editarla.</p>
+    ${upcoming.length > 1 ? `<ul class="mini-list">${upcoming.slice(1).map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, pill: `${dleft(g)}${myCat(g) ? ` · ${esc(myCat(g))}` : ''}`, edit: editMine(g), below: payChips(g) })).join('')}</ul>`
+      : upcoming.length ? '<p class="empty small">No tienes más carreras apuntadas: la próxima cita está arriba.</p>'
       : '<p class="empty small">No estás apuntado a ninguna. Búscalas en la pestaña Carreras.</p>'}
-  </section>
+  </details>
 
   ${(() => { const todo = results.filter((x) => missingFields(x).length);
     return todo.length && !S.preview ? `<details class="card season-block"><summary><b>📝 Ayuda a completar tus carreras (${todo.length})</b></summary>
@@ -1049,18 +1146,23 @@ function myRacesCard(d, afterSummary = () => '') {
     <ul class="mini-list">${cancelled.map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, below: '<span class="badge-pend">anulada</span>' })).join('')}</ul>
   </section>` : ''}
 
-  <section class="card season-block done-block" id="sec-done">
-    <h2 class="sec-h">Carreras hechas ${S.myYear} <small>(${list.length}${days !== list.length ? ` · ${days} días para el bono` : ''})</small></h2>
+  <details class="card season-block done-block desp" id="sec-done" data-open-key="done"${S.open?.done ? ' open' : ''}>
+    <summary><span class="desp-t">Carreras hechas ${S.myYear} <small>(${list.length}${days !== list.length ? ` · ${days} días para el bono` : ''})</small></span>${ico('chevd', 'desp-chev')}</summary>
     ${years.length > 1 ? `<div class="years">${years.map((y) => `<button class="chip${y === S.myYear ? ' on' : ''}" data-act="my-year" data-y="${y}">${y}</button>`).join('')}</div>` : ''}
     ${list.length ? `<ul class="mini-list">${list.map(row).join('')}</ul>`
       : `<p class="empty small">Todavía no hay carreras tuyas con resultado en ${S.myYear}.</p>`}
     <p class="hint">Si falta alguna carrera o un puesto, díselo a la dirección del club.${list.some((r) => r.mine_created) && !S.preview ? ' Las que añadiste tú las puedes editar o borrar.' : ''}</p>
-  </section>`;
+  </details>`;
 }
 
 
 /** Aviso del contrato al apuntarse a una carrera ya corrida (mensaje automático) y al pasar la crónica. */
-const CHRONICLE_RULE = 'Según tu contrato, de cada carrera en la que participas debes hacer la <b>crónica</b>, <b>pasar los resultados</b> y <b>enviar fotos</b>.';
+/** Plazo orientativo de una semana para poner el resultado y hacer la crónica. Pasada la semana NO se cierra nada: sigue abierto. */
+const WEEK_RULE = 'Tienes <b>una semana</b> desde la carrera para poner el resultado y hacer la crónica. Si pasa, no pasa nada: sigue abierto para que lo hagas cuando puedas.';
+const weekChip = (date, today) => { const n = Math.round((new Date(today + 'T12:00:00Z') - new Date(String(date).slice(0, 10) + 'T12:00:00Z')) / 864e5);
+  if (n < 0) return '';
+  return n <= 7 ? `<span class="wk-chip${n >= 6 ? ' soon' : ''}">${ico('clock', 't-i')}${n >= 7 ? 'último día de la semana' : `te ${7 - n === 1 ? 'queda 1 día' : `quedan ${7 - n} días`}`}</span>` : `<span class="wk-chip over">${ico('clock', 't-i')}pasó la semana · sigue abierto</span>`; };
+const CHRONICLE_RULE = 'Según el contrato, de cada carrera hay que hacer la <b>crónica</b>, <b>pasar los resultados</b> y <b>enviar fotos</b>. <b>Basta con que la pase uno</b> de los que corristeis: si ya la ha pasado un compañero, no tienes que hacerla. ' + WEEK_RULE;
 const chronicleReminder = (name) => choose('✍️ Recuerda tu crónica', `${name ? `<b>${esc(name)}</b><br>` : ''}${CHRONICLE_RULE}<br>Cuando lo hayas enviado, márcala como pasada en <b>Mi temporada</b>.`, [{ label: 'Entendido', value: true, kind: 'primary' }]);
 
 /** Crónicas del corredor: pendientes y pasadas, pequeña y con un desplegable para marcarlas. */
@@ -1070,7 +1172,8 @@ function chronicleCard(d) {
   const c = chronicleStatus(d, S.chron, d.today || todayISO(), year);
   if (!c.total) return '';
   const plural = (n, a, b) => (n === 1 ? a : b);
-  const li = (x, isDone) => `<li class="chro-row"><span class="chro-name"><b>${esc(x.name)}</b><small class="muted">${esc(formatDate(x.date, false))}${x.place ? ' · ' + esc(x.place) : ''}</small></span>${S.preview ? '' : `<button class="btn small${isDone ? ' ghost' : ' primary'}" data-act="chro-toggle" data-key="${esc(x.key)}" data-done="${isDone ? 0 : 1}">${isDone ? 'Deshacer' : '✓ Ya la pasé'}</button>`}</li>`;
+  const li = (x, isDone) => { const by = S.chronBy?.get(x.key), other = isDone && by && !by.mine;
+    return `<li class="chro-row"><span class="chro-name"><b>${esc(x.name)}</b><small class="muted">${esc(formatDate(x.date, false))}${x.place ? ' · ' + esc(x.place) : ''}${other ? ` · la pasó ${esc(by.by)}` : ''}</small></span>${S.preview || other ? '' : `<button class="btn small${isDone ? ' ghost' : ' primary'}" data-act="chro-toggle" data-key="${esc(x.key)}" data-done="${isDone ? 0 : 1}">${isDone ? 'Deshacer' : '✓ Ya la pasé'}</button>`}</li>`; };
   const pend = c.pending.length;
   return `<section class="card chro-card${pend ? ' has-pend' : ''}"><details class="chro-det" data-open-key="chro"${S.open?.chro ? ' open' : ''}>
     <summary><span class="chro-ic">${ico('book')}</span><b class="chro-t">Crónicas${year === new Date().getFullYear() ? '' : ` <small class="muted">${year}</small>`}</b>
@@ -1159,17 +1262,18 @@ function runnerScreen(sub) {
       const raceId = String(id).slice(5);
       const r = (S.runnerData.my_results || []).find((x) => x.race_id === raceId && x.mine_created);
       if (!r) return frame('Editar carrera', '<p class="empty">Esta carrera no existe o no la añadiste tú.</p>', { back: runnerHref('mi') });
-      if (S.rdraft?.id !== raceId) S.rdraft = emptyRunnerDraft({ id: raceId, kind: 'race', others: r.others || 0, name: r.name, date: r.date, multi: !!r.end_date, end_date: r.end_date || '',
+      if (S.rdraft?.id !== raceId) S.rdraft = emptyRunnerDraft({ id: raceId, kind: 'race', elevation: r.elevation ?? '', price: r.price ?? '', others: r.others || 0, name: r.name, date: r.date, multi: !!r.end_date, end_date: r.end_date || '',
         place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY, modality: r.modality, notes: r.notes || '', race_type: r.race_type || 'suelta', circuit: r.circuit || '', subtype: r.subtype || '', km: r.km ?? '' });
       return viewRunnerNew();
     }
     const g = S.runnerData.registrations.find((x) => x.id === id && x.mine_created);
     if (!g) return frame('Editar carrera', '<p class="empty">Esta carrera no existe o no la añadiste tú.</p>', { back: runnerHref('') });
-    if (S.rdraft?.id !== id) S.rdraft = emptyRunnerDraft({ id, name: g.name, date: g.date, multi: !!g.end_date, end_date: g.end_date || '',
+    if (S.rdraft?.id !== id) S.rdraft = emptyRunnerDraft({ id, url: g.url || '', elevation: g.elevation ?? '', price: g.price ?? '', name: g.name, date: g.date, multi: !!g.end_date, end_date: g.end_date || '',
       place: g.place || '', province: g.province || '', country: g.country || DEFAULT_COUNTRY, modality: g.modality, notes: g.notes || '', race_type: g.race_type || 'suelta', circuit: g.circuit || '', subtype: g.subtype || '', km: g.km ?? '' });
     return viewRunnerNew();
   }
   if (sub === 'mi') return viewRunnerMine();
+  if (sub === 'valorar' && !S.preview) return viewWatchForm(parseRoute().id || 'nueva');
   if (sub === 'contrato') return viewRunnerContract();
   if (sub === 'noticias') return viewNews();
   if (sub === 'carrera') return viewRunnerRace(S.session?.isAdmin && S.preview ? parseRoute().rest : parseRoute().id);
@@ -1181,7 +1285,8 @@ function runnerScreen(sub) {
 /** Aviso de la vista previa de la dirección (en todas las pantallas del corredor). */
 const previewBanner = () => (S.session?.isAdmin && S.preview ? `<p class="card warn">👁️ <b>Vista previa</b> de ${esc(S.preview.name)}: no se puede apuntar ni borrar.
   <a href="#/corredores">Salir</a>${S.preview.sqlOk ? '' : '<br><b>⚠️ Falta ejecutar en Supabase el SQL de «Mis carreras»</b> (supabase/cambios/2026-11-11-mis-carreras.sql).'}</p>` : '');
-const runnerTitle = () => (S.session?.isAdmin && S.preview ? `Vista de ${S.preview.name}` : 'CC Monzón');
+/** Título de la barra de arriba del corredor: «Hola, Pere Soler» con el nombre completo (hay nombres repetidos); si no cabe, se desliza solo. */
+const runnerTitle = () => (S.session?.isAdmin && S.preview ? `Vista de ${S.preview.name}` : S.runnerData?.me?.name ? `Hola, ${cleanName(S.runnerData.me.name)}` : 'CC Monzón');
 
 /** Tarjeta de una carrera ya disputada (con resultados), para el calendario. */
 function doneRaceCard(r, { admin = false, meId = null } = {}) {
@@ -1193,33 +1298,70 @@ function doneRaceCard(r, { admin = false, meId = null } = {}) {
     <p class="count">🏁 Disputada · ${res.length} del club${res.length ? ': ' + esc(res.map((x) => x.runner_name).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p>
     ${pods.length ? `<p class="pods">${pods.map((x) => `${medal(x.position)} ${esc(x.runner_name)}`).join(' · ')}</p>` : ''}
     ${mine ? `<p class="joined-done">✓ Participaste${mine.position ? ` · ${mine.position}º` : ''}</p>` : ''}
-    ${!admin && meId && !mine && r.date >= pastLimit() && !S.preview ? `<p><button class="btn small" data-act="r-join-race" data-id="${r.id}">La hice y no salgo: añadirme</button></p>` : ''}`;
+    ${!admin && meId && !mine && r.date >= pastLimit() && !S.preview ? `<p><button class="btn small" data-act="r-join-race" data-id="${r.id}">La hice y no salgo: añadirme</button></p>` : ''}${admin ? editCta() : ''}`;
   return admin ? `<a class="card race done-race link-card ${modClass(r.modality)}" href="#/carreras/${r.id}">${inner}</a>`
     : `<article class="card race done-race ${modClass(r.modality)}">${inner}</article>`;
 }
 
+
+/** Web de la carrera: botón para ir directo si alguien la puso; si no, invita a ponerla para todos. */
+function webRow(g, canAdd) {
+  if (g.url) return `<div class="web-row"><a class="btn small web-btn" href="${esc(g.url)}" target="_blank" rel="noopener noreferrer">${ico('ext')}Web de la carrera</a>${!S.preview ? `<button type="button" class="btn small ghost" data-act="r-web" data-id="${g.id}" aria-label="Cambiar la web de la carrera" title="Cambiar la web">${ico('pen')}</button>` : ''}</div>`;
+  if (!canAdd || S.preview) return '';
+  return `<div class="web-row"><button type="button" class="btn small ghost web-add" data-act="r-web" data-id="${g.id}">${ico('link')}¿Conoces su web? Ponla para todos</button></div>`;
+}
+/** Ventana para poner (o cambiar) la web de una carrera. Devuelve la dirección, '' para quitarla, o null si cancela. */
+function askWeb(name, current) {
+  return new Promise((resolve) => {
+    const dlg = document.getElementById('dialog');
+    dlg.innerHTML = `<form method="dialog" class="dlg"><h2>Web de la carrera</h2><p><b>${esc(name)}</b></p>
+      <label>Dirección de la web<input name="url" type="text" inputmode="url" placeholder="https://…" value="${esc(current)}" autocomplete="off" maxlength="500"></label>
+      <p class="hint">La verán todos los corredores del club, para ir directos a inscribirse o ver el recorrido. Cualquiera puede cambiarla: pon solo la web oficial de la carrera.</p>
+      <div class="dlg-actions"><button value="save" class="btn primary">Guardar</button>${current ? '<button value="clear" class="btn danger ghost">Quitar la web</button>' : ''}<button value="" class="btn ghost">Cancelar</button></div></form>`;
+    dlg.onclose = () => { const v = dlg.returnValue; resolve(v === 'save' ? dlg.querySelector('input[name="url"]').value.trim() : v === 'clear' ? '' : null); };
+    dlg.returnValue = '';
+    dlg.showModal();
+  });
+}
+
 /** Tarjeta de una inscripción para el corredor: datos, quién va y sus acciones (apuntarse, borrarse, resultado, editar). */
-function runnerRegCard(g) {
+/** Una inscripción para el corredor: una fila con nombre, día, lugar e inscritos que se despliega con toda la información y sus acciones. */
+function runnerRegCard(g, opts = {}) {
   const d = S.runnerData, me = d.me, today = d.today || todayISO();
     const mine = g.entries.find((e) => e.runner_id === me.id);
     const open = g.date >= today;
     const soon = open && !g.suspended && daysTo(g.date) <= 14;
-    const edit = g.mine_created && !S.preview ? `<a class="edit-ico" href="#/editar/${g.id}" aria-label="Añadida por ti: editar o borrar la carrera" title="Añadida por ti: editar o borrar la carrera">${ico('pen')}</a>` : '';
+    const edit = g.mine_created && !S.preview ? `<div class="edit-row"><span class="muted">Añadida por ti</span><a class="edit-btn" href="#/editar/${g.id}" aria-label="Editar o borrar la carrera ${esc(g.name)}">${ico('pen')}Editar</a></div>` : '';
     const mates = g.entries.length ? `<div class="club-row"><span class="count">${ico('users')}${g.entries.length} del club</span><ul class="people">${g.entries.map((e) =>
       `<li class="${e.runner_id === me.id ? 'me' : ''}${e.paid ? ' paid' : ''}">${esc(e.name)}${e.category ? ` <small>${esc(e.category)}</small>` : ''}${e.paid ? `<span class="paid-mark" title="Ha pagado la inscripción" aria-label="ha pagado la inscripción">${ico('euro')}</span>` : ''}</li>`).join('')}</ul></div>` : '';
-    return `<article class="card race ${open ? '' : 'past-reg '}${modClass(g.modality)}">
-      <div class="race-head"><div><h3>${esc(g.name)}</h3>
-        <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}${soon ? ` <span class="soon${daysTo(g.date) <= 7 ? ' now' : ''}">${ico('clock', 't-i')}${daysToText(daysTo(g.date))}</span>` : ''}</p></div>
-        <div class="race-side">${modTag(g.modality, g.subtype)}${edit}</div></div>${typeTag(g)}
+    const key = `rc-${g.id}`, isOpen = !!opts.open || !!S.open?.[key];
+    const chips = [
+      mine && !g.suspended ? `<span class="rc-chip ok">${ico('check')}Inscrito</span>` : '',
+      g.suspended ? `<span class="rc-chip off">${ico('ban')}Suspendida</span>` : '',
+      !open && !g.suspended && mine && !g.my_result ? `<span class="rc-chip warn">${ico('flag')}Falta tu resultado</span>` : '',
+      !open && !g.suspended && !mine ? `<span class="rc-chip off">${ico('flag')}Ya disputada</span>` : '',
+      soon ? `<span class="soon${daysTo(g.date) <= 7 ? ' now' : ''}">${ico('clock', 't-i')}${daysToText(daysTo(g.date))}</span>` : '',
+    ].filter(Boolean).join('');
+    return `<details class="card race rcard ${open ? '' : 'past-reg '}${modClass(g.modality)}" data-open-key="${key}"${isOpen ? ' open' : ''}>
+      <summary class="rc-sum">
+        <span class="rc-main"><b class="rc-name">${esc(g.name)}</b>
+          <span class="rc-sub">${esc(when(g))}${place(g) ? ' · ' + esc(place(g)) : ''}</span>${chips ? `<span class="rc-chips">${chips}</span>` : ''}</span>
+        <span class="rc-ins" title="Inscritos del club"><b>${g.entries.length}</b><small>inscrit${g.entries.length === 1 ? 'o' : 'os'}</small></span>
+        <span class="rc-chev" aria-hidden="true">${ico('chevd')}</span>
+      </summary>
+      <div class="rc-body">
+      <div class="rc-tags">${modTag(g.modality, g.subtype)}${open && !mine && !g.suspended && !S.preview ? starBtn(g, 'w-add-reg', ['id', g.id]) : ''}</div>${typeTag(g)}
       ${g.suspended ? `<p class="state-tag">${ico('ban', 't-i')}Suspendida: cuenta para el mínimo de carreras, no para el bono</p>` : ''}
-      ${open || g.suspended ? '' : `<p class="state-tag">${ico('flag', 't-i')}Ya disputada · pendiente de resultados</p>
+      ${open || g.suspended ? '' : `<p class="state-tag">${mine && g.my_result ? `${ico('check', 't-i')}Ya disputada · tu resultado está enviado` : `${ico('flag', 't-i')}Ya disputada · pendiente de resultados`} ${weekChip(g.end_date || g.date, today)}</p>
         ${mine && !S.preview ? (g.my_result ? `<p class="mine-created">Tu resultado: ${g.my_result.position}º (enviado) · <a href="#/resultado/reg_${g.id}">${ico('pen', 't-i')}Cambiar</a></p>`
           : `<p class="row"><a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>
              <button class="btn ghost small" data-act="r-leave" data-id="${g.id}">No fui: borrarme</button></p>`) : ''}
         ${!mine && g.date >= pastLimit() ? `<div class="row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">La hice: apuntarme</button></div>` : ''}`}
       ${g.notes ? `<p class="notes">${esc(g.notes)}</p>` : ''}
+      ${webRow(g, open && !g.suspended)}
       ${mates}
+      ${edit}
       ${mine && !S.preview && !g.suspended && (open || !g.my_result) ? `<button type="button" class="pay-btn${mine.paid ? ' on' : ''}" data-act="r-paid" data-id="${g.id}">${ico('euro')}<span>${mine.paid ? `Pagada${mine.paid_amount != null ? ' · ' + euros(mine.paid_amount) : ''}` : 'Marcar como pagada'}</span></button>` : ''}
       ${!open || g.suspended ? '' : mine
         ? `<div class="joined-acts">
@@ -1228,7 +1370,8 @@ function runnerRegCard(g) {
              <button class="btn ghost small" data-act="r-ics" data-id="${g.id}" aria-label="Añadir al calendario del móvil">${ico('calplus')}Calendario</button></div>`
         : `<div class="row join-row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">Apuntarme</button></div>`}
-    </article>`;
+      </div>
+    </details>`;
   }
 
 /** Barra de «participaciones futuras» del equipo: cuántas inscripciones hay ya en las próximas carreras, por mes (para animar a apuntarse y a crear carreras). */
@@ -1268,7 +1411,7 @@ function viewRunnerHome() {
   const regs = regFilter(d.registrations, me);
   const upcoming = regs.filter((g) => g.date >= today);
   const past = regs.filter((g) => g.date < today);
-  const card = runnerRegCard;
+  const card = (g) => runnerRegCard(g);
   modFilterBar(d.registrations, me); // calcula S.fd (botón y ventana de filtros)
   const isMine = (g) => (g.entries || []).some((e) => e.runner_id === me.id) || (g.results || []).some((x) => x.runner_id === me.id);
   const done = byMod((S.team?.races || []).filter((r) => (r.results || []).length));
@@ -1277,26 +1420,26 @@ function viewRunnerHome() {
     : `${(() => { const wk = upcoming.filter((g) => daysTo(g.date) <= 7); return wk.length ? `<h2 class="section">📅 Esta semana (${wk.length})</h2>${wk.map(card).join('')}` : ''; })()}
     <h2 class="section">${upcoming.some((g) => daysTo(g.date) <= 7) ? 'Más adelante' : 'Próximas carreras'} (${upcoming.filter((g) => daysTo(g.date) > 7).length || (upcoming.some((g) => daysTo(g.date) <= 7) ? 0 : upcoming.length)})</h2>
     ${upcoming.length ? monthList(upcoming.filter((g) => daysTo(g.date) > 7), card) : `<p class="empty">${filtersOn(me) ? 'Ninguna carrera próxima con estos filtros. <button class="link" data-act="filters-clear">Quitar filtros</button>' : 'Todavía no hay carreras abiertas.'}</p>`}
-    ${past.length ? `<details class="past"><summary>🏁 Ya disputadas, pendientes de resultados (${past.length})</summary>${past.map(card).join('')}</details>` : ''}`;
+    ${past.length ? `<details class="past"><summary>🏁 Ya disputadas${past.some((g) => (g.entries || []).some((e) => e.runner_id === me.id) && !g.my_result) ? ', pendientes de resultados' : ''} (${past.length})</summary>${past.map(card).join('')}</details>` : ''}`;
   return frame(runnerTitle(), `
     ${previewBanner()}
     <div class="toolbar">
-      ${searchBox('runner', 'Buscar carrera…')}
+      ${searchBox('runner', 'Buscar…', { marquee: 'Buscar carrera, corredor, lugar…' })}
+      <button class="btn primary add-btn" data-act="r-new" aria-label="Añadir una carrera que no está" title="Añadir una carrera que no está">＋</button>
       ${S.fd?.has ? `<button type="button" class="icon-btn fbtn${S.fd.active ? ' on' : ''}" data-act="r-filters" aria-label="Filtros${S.fd.active ? ' (activos)' : ''}" title="Filtros">${icon(ICON_FILTER)}${S.fd.active ? '<i class="fdot"></i>' : ''}</button>` : ''}
-      <button class="btn primary add-btn mini" data-act="r-new" aria-label="Añadir una carrera que no está" title="Añadir una carrera que no está">＋ Nueva</button>
+      ${S.preview ? '' : `<a class="icon-btn fbtn ruta-btn" href="ruta/" aria-label="Planificar ruta: sube tu track y mira viento, tiempo y subidas" title="Planificar ruta">${ico('route')}</a>`}
+      <button type="button" class="icon-btn fbtn view-btn${S.regView === 'cal' ? ' on' : ''}" data-act="reg-view" aria-label="${S.regView === 'cal' ? 'Ver como lista' : 'Ver calendario'}" title="${S.regView === 'cal' ? 'Ver como lista' : 'Ver calendario'}">${icon(S.regView === 'cal' ? ICON_LIST : ICON_CAL)}</button>
     </div>
-    ${S.preview ? '' : rutaCard()}
-    <div id="pulse-box">${normalize(S.q.runner || '').length >= 2 ? '' : teamPulse(d)}</div>
+    <div id="pulse-box">${S.regView === 'cal' || normalize(S.q.runner || '').length >= 2 ? '' : teamPulse(d)}</div>
     <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
-    <div class="view-row">${viewSwitch()}</div>
     ${body}`,
   { rtab: '', noSearch: true });
 }
 
-const FIELD_LABELS = { province: 'provincia', km: 'distancia', subtype: 'formato' };
+const FIELD_LABELS = { province: 'provincia', km: 'distancia', subtype: 'formato', elevation: 'desnivel', price: 'precio' };
 /** Formulario para que el corredor rellene SOLO los datos que le faltan a una carrera. kind: 'reg' o 'race'. */
 function completeBox(x, kind, id) {
-  const miss = missingFields(x);
+  const miss = missingFields(x, { extra: true });
   if (!miss.length || S.preview) return '';
   const guess = guessSubtype(x.name, x.modality);
   return `<section class="card complete-box"><h3>📝 Faltan datos: ${miss.map((k) => FIELD_LABELS[k]).join(', ')}</h3>
@@ -1304,6 +1447,8 @@ function completeBox(x, kind, id) {
     <form class="stack" data-form="r-complete" data-kind="${kind}" data-id="${id}">
       ${miss.includes('province') ? `<label>Provincia<input name="province" list="dl-prov" autocomplete="off"></label>` : ''}
       ${miss.includes('km') ? `<label>Distancia (km)<input name="km" type="number" inputmode="decimal" step="0.1" min="0.1" max="1000" placeholder="85"></label>` : ''}
+      ${miss.includes('elevation') ? `<label>Desnivel positivo (m)<input name="elevation" type="text" inputmode="numeric" maxlength="6" placeholder="1200" autocomplete="off"></label>` : ''}
+      ${miss.includes('price') ? `<label>Precio de la inscripción (€) <small class="muted">(0 = gratis)</small><input name="price" type="text" inputmode="decimal" maxlength="8" placeholder="25" autocomplete="off"></label>` : ''}
       ${miss.includes('subtype') ? `<label>Formato<select name="subtype"><option value="">No lo sé</option>${SUBTYPES[x.modality].map((o) => opt(o, o, guess)).join('')}</select></label>` : ''}
       <button class="btn primary">Guardar lo que sé</button></form></section>`;
 }
@@ -1337,7 +1482,7 @@ function viewRunnerRace(id) {
   const g = S.runnerData.registrations.find((x) => x.id === id);
   const back = runnerHref('mi');
   if (!g) return frame('Carrera', `${previewBanner()}<p class="empty">Esta carrera ya no está entre las inscripciones: puede que la dirección ya la haya pasado a resultados. Mírala en «Carreras hechas».</p>`, { back });
-  return frame('Carrera', `${previewBanner()}${runnerRegCard(g)}
+  return frame('Carrera', `${previewBanner()}${runnerRegCard(g, { open: true })}
     ${completeBox(g, 'reg', g.id)}
     ${g.mine_created || S.preview ? '' : '<p class="hint">Solo puede cambiar los datos de una carrera quien la añadió, o la dirección del club.</p>'}`, { back });
 }
@@ -1362,16 +1507,143 @@ function licenseCard() {
 
 function viewRunnerMine() {
   const d = S.runnerData, me = d.me;
+  if (!S.preview && parseRoute().id === 'valorar') return viewWatch();
   return frame(runnerTitle(), `
     ${previewBanner()}
-    <p class="hello">Hola, <b>${esc(me.name)}</b> 👋</p>
+    ${S.preview ? '' : miTabs('mi')}
     ${myRacesCard(d, () => chronicleCard(d))}
-    <a class="btn block" href="${runnerHref('contrato')}">📄 Mi contrato y mi bonificación</a>
     ${installHint()}
     ${S.preview ? '' : `<p class="center"><button class="link muted" data-act="r-forget">No soy ${esc(me.name)}</button></p>`}
     ${themeLine()}${versionLine()}`,
   { rtab: 'mi' });
 }
+
+
+// ======================================================================
+//  Por valorar: las carreras que me gustan y aún no me inscribo (personal de cada corredor)
+// ======================================================================
+
+const watchToday = () => S.runnerData?.today || todayISO();
+async function loadWatch() {
+  if (S.preview || !S.code) return;
+  try { const l = await api.runnerWatchList(S.code); S.watch = Array.isArray(l) ? l : null; } catch { S.watch = undefined; }   // null = falta el SQL
+}
+/** Cuántas guardadas tienen el plazo de inscripción a punto de cerrarse (para el aviso de la pestaña). */
+const watchUrgent = () => (Array.isArray(S.watch) ? S.watch.filter((w) => watchInfo(w, watchToday()).urgent).length : 0);
+const watchKey = (g) => `${g.date}|${normalize(g.name)}`;
+const watchSaved = (g) => (Array.isArray(S.watch) ? S.watch.find((w) => watchKey(w) === watchKey(g)) : null);
+
+/** Selector de arriba de «Mi temporada»: Mi temporada | Por valorar. */
+const miTabs = (cur) => {
+  const live = Array.isArray(S.watch) ? S.watch.filter((w) => !watchInfo(w, watchToday()).past).length : 0, u = watchUrgent();
+  return `<div class="seg2 mi-seg" role="tablist" aria-label="Mi temporada"><a href="#/mi" class="${cur === 'mi' ? 'on' : ''}" role="tab" aria-selected="${cur === 'mi'}">${ico('calcheck')}Mi temporada</a>
+    <a href="#/mi/valorar" class="${cur === 'valorar' ? 'on' : ''}" role="tab" aria-selected="${cur === 'valorar'}">${ico('star')}Por valorar${live ? `<b>${live}</b>` : ''}${u ? '<i class="seg-dot" title="Plazo de inscripción a punto de cerrarse"></i>' : ''}</a></div>`;
+};
+
+/** Tarjeta de una carrera guardada. */
+function watchCard(w, i) {
+  const regs = S.runnerData.registrations, g = watchMatch(w, regs), me = S.runnerData.me.id;
+  const mine = g && (g.entries || []).some((e) => e.runner_id === me), others = g ? (g.entries || []).filter((e) => e.runner_id !== me) : [];
+  const dl = i.deadline && { closed: ['bad', 'Plazo cerrado'], today: ['bad', '¡Último día para inscribirse!'], soon: ['bad', `Plazo: ${i.toDeadline} día${i.toDeadline === 1 ? '' : 's'}`],
+    open: ['ok', `Plazo hasta el ${dayMon(w.deadline)}`] }[i.deadline];
+  const when_ = i.past ? 'Ya pasó' : i.toRace === 0 ? 'Hoy' : i.toRace === 1 ? 'Mañana' : `En ${i.toRace} días`;
+  return `<article class="card wcard ${discClass(w.modality, w.subtype)}${i.past ? ' past' : ''}${i.urgent ? ' urgent' : ''}">
+    <div class="wc-top">${dateBadge(w)}<div class="wc-main"><h3>${esc(w.name)}</h3>
+      <p class="muted">${esc(when(w))}${place(w) ? ' · ' + esc(place(w)) : ''} · <b>${when_}</b></p></div></div>
+    <div class="wc-chips">${modTag(w.modality, w.subtype)}${w.km ? `<span class="wchip">${ico('ruler')}${esc(kmText(w.km))}</span>` : ''}${w.elevation ? `<span class="wchip">${ico('mountain')}${esc(elevText(w.elevation))}</span>` : ''}${w.price != null ? `<span class="wchip">${ico('money')}${Number(w.price) === 0 ? 'Gratis' : esc(euros(w.price))}</span>` : ''}${dl ? `<span class="wchip ${dl[0]}">${ico('clock')}${dl[1]}</span>` : ''}</div>
+    ${mine ? `<p class="wc-club ok">${ico('check')}<span>Ya estás apuntado. Puedes quitarla de aquí.</span></p>` : g ? `<p class="wc-club">${ico('users')}<span>${others.length ? `Ya está en Carreras: <b>${others.length}</b> apuntado${others.length === 1 ? '' : 's'} (${esc(others.map((e) => e.name).slice(0, 4).join(', '))}${others.length > 4 ? '…' : ''})` : 'Está en Carreras: nadie se ha apuntado todavía'}</span></p>` : ''}
+    ${w.notes ? `<p class="notes">${esc(w.notes)}</p>` : ''}
+    <div class="wc-acts">${i.past ? '' : mine ? '' : `<button class="btn primary small" data-act="w-sign" data-id="${w.id}">${g ? 'Apuntarme' : 'Inscribirme'}</button>`}
+      ${w.url ? `<a class="btn small" href="${esc(w.url)}" target="_blank" rel="noopener noreferrer">${ico('ext')}Web</a>` : ''}
+      <a class="btn small ghost" href="#/valorar/${w.id}">${ico('pen')}Editar</a>
+      <button class="btn small ghost" data-act="w-del" data-id="${w.id}">${ico('trash')}${i.past || mine ? 'Quitar' : 'Descartar'}</button></div></article>`;
+}
+
+function viewWatch() {
+  const w = S.watch, today = watchToday();
+  let body;
+  if (w === undefined) body = '<p class="empty">Cargando…</p>';
+  else if (w === null) body = '<p class="card warn">Esta función aún no está activada: avisa a la dirección del club.</p>';
+  else {
+    const mode = S.watchSort === 'deadline' ? 'deadline' : 'date';
+    const list = sortWatch(w, mode, today), live = list.filter((x) => !x.i.past), old = list.filter((x) => x.i.past);
+    const next = live.filter((x) => x.i.toDeadline !== null && x.i.toDeadline >= 0).sort((a, b) => a.i.toDeadline - b.i.toDeadline)[0];
+    const first = [...live].sort((a, b) => a.w.date.localeCompare(b.w.date))[0];
+    body = !w.length ? `<section class="card wempty"><div class="we-ic">${ico('star')}</div><h2>Tu lista para decidir con calma</h2>
+        <p>Guarda aquí las carreras que te gustan pero en las que aún <b>no</b> te inscribes: con su fecha, su web, el precio, el plazo de inscripción y tus notas. Cuando te decidas, un toque y te apuntas.</p>
+        <p class="hint">La lista es solo tuya: tu precio, plazo y notas no los ve nadie. La carrera (con su web, sin tu nombre) se crea también en Carreras para que otros la encuentren y no se duplique.</p><a class="btn primary" href="#/valorar/nueva">${ico('plus')}Guardar una carrera</a>
+        <p class="hint">Desde <a href="#/federaciones">Federaciones</a> también puedes guardarlas con la estrella ☆.</p></section>`
+      : `<section class="wsum"><div><b>${live.length}</b><span>por valorar</span></div><div class="${next && next.i.urgent ? 'bad' : ''}"><b>${next ? (next.i.toDeadline === 0 ? 'Hoy' : `${next.i.toDeadline} d`) : '—'}</b><span>${next ? `plazo: ${esc(next.w.name.length > 22 ? next.w.name.slice(0, 21) + '…' : next.w.name)}` : 'sin plazos próximos'}</span></div>
+          <div><b>${first ? (first.i.toRace === 0 ? 'Hoy' : `${first.i.toRace} d`) : '—'}</b><span>${first ? `la primera: ${esc(first.w.name.length > 20 ? first.w.name.slice(0, 19) + '…' : first.w.name)}` : 'ninguna próxima'}</span></div></section>
+        ${live.length > 1 ? `<div class="wsort"><span class="muted">Ordenar:</span><button class="chip${mode === 'date' ? ' on' : ''}" data-act="w-sort" data-m="date">Por fecha</button><button class="chip${mode === 'deadline' ? ' on' : ''}" data-act="w-sort" data-m="deadline">Por plazo de inscripción</button></div>` : ''}
+        <div class="wlist">${live.map((x) => watchCard(x.w, x.i)).join('') || '<p class="empty small">Nada próximo: todo lo guardado ya pasó.</p>'}</div>
+        ${old.length ? `<details class="card wold"><summary><b>Ya pasaron (${old.length})</b> <span class="muted">· quítalas cuando quieras</span></summary>${old.map((x) => watchCard(x.w, x.i)).join('')}</details>` : ''}
+        <p class="hint center">La lista es solo tuya. La carrera (sin tu nombre) está también en Carreras para que otros la encuentren.</p>`;
+  }
+  return frame(runnerTitle(), `${miTabs('valorar')}
+    <div class="toolbar wtool"><h2 class="wtitle">${ico('star')}Por valorar</h2>${Array.isArray(w) ? `<a class="btn primary" href="#/valorar/nueva">${ico('plus')}Guardar carrera</a>` : ''}</div>
+    ${body}`, { rtab: 'mi' });
+}
+
+/** Formulario para guardar o corregir una carrera por valorar. */
+function viewWatchForm(id) {
+  if (!Array.isArray(S.watch)) return frame('Por valorar', `<p class="card warn">Esta función aún no está activada: avisa a la dirección del club.</p>`, { back: '#/mi/valorar' });
+  const item = id === 'nueva' ? null : S.watch.find((x) => x.id === id);
+  if (id !== 'nueva' && !item) return frame('Por valorar', '<p class="empty">Esa carrera ya no está en tu lista.</p>', { back: '#/mi/valorar' });
+  if (S.rdraft?.wk !== id) {
+    S.rdraft = emptyRunnerDraft({ wk: id, name: item?.name || S.q.runner || '', date: item?.date || '', multi: !!item?.end_date, end_date: item?.end_date || '', place: item?.place || '', province: item?.province || '',
+      country: item?.country || DEFAULT_COUNTRY, modality: item?.modality || 'Carretera', subtype: item?.subtype || '', km: item?.km ?? '', url: item?.url || '', price: item?.price ?? '', elevation: item?.elevation ?? '', deadline: item?.deadline || '', notes: item?.notes || '' });
+  }
+  const d = S.rdraft, editing = !!item;
+  if (!S.fed && !editing) loadFed().then(() => updateSearch('rname'));
+  const detail = `${SUBTYPES[d.modality] ? `<div class="disc-field"><span class="flabel">Disciplina de ${esc(d.modality)}</span>${radioChips('data-rf', 'subtype', [['', 'Sin decidir'], ...SUBTYPES[d.modality].map((x) => [x, esc(x)])], d.subtype)}</div>` : ''}
+    <label class="flabel-l">Distancia (km)<input type="number" inputmode="decimal" step="0.1" min="0.1" max="1000" data-rf="km" value="${esc(d.km ?? '')}" placeholder="85"></label>`;
+  return frame(editing ? 'Editar carrera guardada' : 'Guardar una carrera', `
+    <form class="stack rform" data-form="w-save">
+      ${fsec(1, 'flag', 'Qué carrera es', `<label class="flabel-l">Nombre de la carrera<input data-rf="name" value="${esc(d.name)}" required minlength="3" maxlength="120" autocomplete="off" placeholder="Gran Fondo…"></label>
+        ${editing ? '' : `<div id="dup-list">${watchDupSuggestions(d.name)}</div><p class="hint">¿Está en el calendario de las federaciones? También la puedes guardar con la estrella ☆ desde <a href="#/federaciones">Federaciones</a>.</p>`}`, '#1f6fd1')}
+      ${fsec(2, 'cal', 'Cuándo y dónde', `<label class="flabel-l">${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-rf="date" value="${esc(d.date)}" min="${pastLimit()}" required></label>
+        <label class="check"><input type="checkbox" data-rf-multi ${d.multi ? 'checked' : ''}> Carrera de varios días (por etapas)</label>
+        ${d.multi ? `<label class="flabel-l">Último día<input type="date" data-rf="end_date" value="${esc(d.end_date)}" min="${esc(d.date || pastLimit())}" required></label>` : ''}
+        <label class="flabel-l">Lugar<input data-rf="place" value="${esc(d.place)}" maxlength="120" placeholder="Ciudad o pueblo"></label>
+        <label class="flabel-l">Provincia<input data-rf="province" list="dl-prov" value="${esc(d.province)}" autocomplete="off"></label>`, '#0f9d8a')}
+      ${fsec(3, 'bars', 'Qué tipo de carrera es', `<div class="disc-field"><span class="flabel">Modalidad</span>${modalityChips(d, 'data-rf')}</div>${detail}`, '#e07800')}
+      ${fsec(4, 'euro', 'Para decidir', `<label class="flabel-l">Web de la carrera<input type="text" inputmode="url" data-rf="url" value="${esc(d.url)}" maxlength="500" placeholder="https://…" autocomplete="off"></label>
+        <p class="hint">La web, el precio y el desnivel se comparten: les saldrán a los demás en Carreras. El plazo y tus notas son solo tuyos.</p>
+        <div class="grid2"><label class="flabel-l">Precio (€)<input type="number" inputmode="decimal" step="0.5" min="0" max="10000" data-rf="price" value="${esc(d.price ?? '')}" placeholder="25"></label>
+          <label class="flabel-l">Desnivel positivo (m)<input type="text" inputmode="numeric" data-rf="elevation" value="${esc(d.elevation ?? '')}" maxlength="6" placeholder="1200" autocomplete="off"></label></div>
+        <label class="flabel-l">Inscripciones hasta <small class="muted">(solo lo ves tú)</small><input type="date" data-rf="deadline" value="${esc(d.deadline)}" ${d.date ? `max="${esc(d.date)}"` : ''}></label>
+        <label class="flabel-l">Notas<textarea data-rf="notes" rows="3" maxlength="500" placeholder="Qué te gusta, qué dudas tienes, con quién iría…">${esc(d.notes || '')}</textarea></label>`, '#8e44ad')}
+      <button class="btn primary big-save">${editing ? 'Guardar cambios' : 'Guardar en «Por valorar»'}</button>
+      <p class="hint">Tu precio, plazo y notas solo los ves tú. La carrera (con su web, sin tu nombre) se crea también en Carreras para que otros la encuentren ya con sus datos y no se duplique. Cuando te decidas, pulsas «Apuntarme» desde la lista.</p>
+    </form>
+    ${editing ? `<button class="btn danger ghost block" data-act="w-del" data-id="${item.id}" data-back="1">${ico('trash')}Descartar esta carrera</button>` : ''}`, { back: '#/mi/valorar', rtab: 'mi' });
+}
+
+
+/** Mientras se escribe el nombre en «Por valorar»: lo que ya está en Carreras o en los calendarios de las federaciones (para no duplicar). */
+function watchDupSuggestions(name) {
+  if (normalize(name).length < 3 || !S.runnerData) return '';
+  const regs = S.runnerData.registrations, today = todayISO();
+  const club = searchRaces(name, regs.filter((g) => g.date >= today && !g.suspended)).slice(0, 4);
+  const fed = S.fed?.races ? fedMatches(name, regs, 4) : [];
+  if (!club.length && !fed.length) return '';
+  return `<div class="dup">${club.length ? `<p><b>⚠️ ¿Es alguna de estas? Ya están en Carreras:</b></p><ul class="mini-list">${club.map((g) => miniRow(g,
+      watchSaved(g) ? '<span class="done">✓ Ya la tienes</span>' : `<button type="button" class="btn primary small" data-act="w-add-reg" data-id="${g.id}" data-go="1">Guardar esta</button>`)).join('')}</ul>` : ''}
+    ${fed.length ? `<p><b>En el calendario de las federaciones</b> (rellena los datos con un toque):</p><ul class="mini-list">${fed.map((r) => miniRow(r,
+      `<button type="button" class="btn small" data-act="fill-fed" data-i="${S.fed.races.indexOf(r)}">Usar estos datos</button>`)).join('')}</ul>` : ''}</div>`;
+}
+
+/** Estrella para guardar una carrera (calendario de las federaciones o inscripciones del club) en «Por valorar». */
+function starBtn(r, kind, ref) {
+  if (S.preview || !Array.isArray(S.watch)) return '';
+  const saved = watchSaved(r);
+  return saved ? `<a class="star-btn on" href="#/mi/valorar" title="Guardada en «Por valorar»" aria-label="Guardada en Por valorar: abrir la lista">${ico('star')}<span>Guardada</span></a>`
+    : `<button type="button" class="star-btn" data-act="${kind}" data-${ref[0]}="${esc(ref[1])}" title="Guardar para valorar más adelante" aria-label="Guardar ${esc(r.name)} en Por valorar">${ico('star')}<span>Valorar</span></button>`;
+}
+/** Lo que se guarda al marcar una carrera con la estrella. */
+const watchFrom = (r, note = '') => ({ name: r.name, date: r.date, end_date: r.end_date || '', place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY, modality: r.modality, subtype: r.subtype || '', km: r.km ?? '',
+  elevation: r.elevation ?? '', price: r.price ?? '', url: /^https?:\/\/\S+$/i.test(r.url || '') ? r.url : '', notes: note });
 
 /** «Contrato»: el contrato de la temporada (y otros documentos) y el bono que marca. */
 function viewRunnerContract() {
@@ -1413,11 +1685,13 @@ function viewRegistrations() {
   const card = (g) => `<a class="card race link-card ${g.date < today ? 'past-reg ' : ''}${modClass(g.modality)}" href="#/inscripciones/${g.id}">
       <div class="race-head"><div><h3>${esc(g.name)}</h3>
       <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality, g.subtype)}</div>${typeTag(g)}${pubTags(g)}
+      ${g.candidate && !g.entries.length ? '<p class="state-tag">⭐ Sin inscritos: algún corredor la está valorando</p>' : ''}
       ${g.suspended ? '<p class="state-tag">⛔ Suspendida: cuenta para el mínimo, no para el bono</p>' : g.date < today ? `<p class="state-tag">🏁 Ya disputada${g.entries.some((e) => e.self_position) ? ` · 📝 ${g.entries.filter((e) => e.self_position).length} de ${g.entries.length} han puesto su resultado` : ''}</p>` : ''}
       <p class="count">👥 ${g.entries.length} del club${g.entries.length ? ': ' +
         esc(g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p>
-      ${g.created_by ? `<p class="count">Añadida por ${esc(runnerById(g.created_by)?.name || 'un corredor')}</p>` : ''}</a>`;
-  return frame('Inscripciones', `
+      ${g.created_by ? `<p class="count">Añadida por ${esc(runnerById(g.created_by)?.name || 'un corredor')}</p>` : ''}${editCta()}</a>`;
+  return frame('Carreras', `
+    ${carTabs('inscripciones')}
     <div class="toolbar">
       ${searchBox('admin', 'Buscar inscripción…')}
       <a class="btn primary add-btn" href="#/inscripciones/nueva" aria-label="Nueva inscripción" title="Nueva inscripción">＋</a>
@@ -1529,7 +1803,7 @@ function viewFed() {
         ${esc(r.source === 'LIGA' ? '' : r.discipline || '')}${r.kind === 'Ocio' ? ' · ocio' : ''}${r.info ? `${r.source === 'LIGA' ? '' : ' · '}<span class="muted">${esc(r.info)}</span>` : ''}</p>
       <div class="row">
         ${r.url ? `<a class="btn small" href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">Ver en la web ↗</a>` : ''}
-        ${action(r)}
+        ${action(r)}${runner ? starBtn(r, 'w-add-fed', ['i', f.races.indexOf(r)]) : ''}
       </div></article>`;
   }).join('');
   const updated = f.updated_at ? new Date(f.updated_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
@@ -1553,7 +1827,7 @@ function viewFed() {
 function draftRegistration(id) {
   if (id === 'nueva') {
     const pre = S.prefill; S.prefill = null;   // viene de «Carreras de las federaciones»
-    return { kind: 'reg', id: null, name: '', date: '', place: '', province: '', country: DEFAULT_COUNTRY, modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', notes: '', people: [], ...pre };
+    return { kind: 'reg', id: null, name: '', date: '', place: '', province: '', country: DEFAULT_COUNTRY, modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', url: '', elevation: '', price: '', notes: '', people: [], ...pre };
   }
   const g = S.data.registrations.find((x) => x.id === id);
   if (!g) return null;
@@ -1562,20 +1836,20 @@ function draftRegistration(id) {
 
 function raceFields(d) {
   return `
-    <label>Nombre<input data-f="name" value="${esc(d.name)}" required></label>
-    <div class="grid2">
-      <label>${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-f="date" value="${esc(d.date)}" required></label>
-      <label>Modalidad<select data-f="modality">${MODALITIES.map((m) => opt(m, m, d.modality)).join('')}</select></label>
-    </div>
-    ${detailInputs(d, 'data-f')}
-    ${typeFields(d, 'data-f')}
-    <label class="check"><input type="checkbox" data-act-change="multi" ${d.multi ? 'checked' : ''}> Carrera de varios días (por etapas)</label>
-    ${d.multi ? `<label>Último día<input type="date" data-f="end_date" value="${esc(d.end_date || '')}" min="${esc(d.date || '')}" required></label>` : ''}
-    <label>Lugar<input data-f="place" value="${esc(d.place || '')}"></label>
-    <div class="grid2">
-      <label>Provincia<input data-f="province" list="dl-prov" value="${esc(d.province || '')}" autocomplete="off"></label>
-      <label>País<input data-f="country" list="dl-country" value="${esc(d.country || '')}"></label>
-    </div>`;
+    ${fsec(1, 'flag', 'Qué carrera es', `<label class="flabel-l">Nombre<input data-f="name" value="${esc(d.name)}" required></label>`, '#1f6fd1')}
+    ${fsec(2, 'cal', 'Cuándo y dónde', `<label class="flabel-l">${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-f="date" value="${esc(d.date)}" required></label>
+      <label class="check"><input type="checkbox" data-act-change="multi" ${d.multi ? 'checked' : ''}> Carrera de varios días (por etapas)</label>
+      ${d.multi ? `<label class="flabel-l">Último día<input type="date" data-f="end_date" value="${esc(d.end_date || '')}" min="${esc(d.date || '')}" required></label>` : ''}
+      <label class="flabel-l">Lugar<input data-f="place" value="${esc(d.place || '')}"></label>
+      <div class="grid2"><label class="flabel-l">Provincia<input data-f="province" list="dl-prov" value="${esc(d.province || '')}" autocomplete="off"></label>
+        <label class="flabel-l">País<input data-f="country" list="dl-country" value="${esc(d.country || '')}"></label></div>`, '#0f9d8a')}
+    ${fsec(3, 'bars', 'Qué tipo de carrera es', `<div class="disc-field"><span class="flabel">Modalidad</span>${modalityChips(d, 'data-f')}</div>
+      ${detailInputs(d, 'data-f')}
+      ${typeFields(d, 'data-f')}`, '#e07800')}
+    ${fsec(4, 'link', 'Web, desnivel y precio', `<div class="grid2"><label class="flabel-l">Desnivel positivo (m)<input type="text" inputmode="numeric" data-f="elevation" value="${esc(d.elevation ?? '')}" maxlength="6" placeholder="1200" autocomplete="off"></label>
+      <label class="flabel-l">Precio inscripción (€)<input type="text" inputmode="decimal" data-f="price" value="${esc(d.price ?? '')}" maxlength="8" placeholder="25" autocomplete="off"></label></div>
+      <label class="flabel-l">Dirección de la web<input type="text" inputmode="url" data-f="url" value="${esc(d.url || '')}" maxlength="500" placeholder="https://…" autocomplete="off"></label>
+      <p class="hint">Les sale a todos los corredores con un botón «Web de la carrera». ${d.url ? `<a href="${esc(d.url)}" target="_blank" rel="noopener noreferrer">Abrirla ↗</a>` : 'Si la dejas vacía, cualquier corredor que la conozca podrá ponerla.'}</p>`, '#2f6fd6')}`;
 }
 
 function addRunnerSelect(d) {
@@ -1628,7 +1902,11 @@ async function enterNews() {
 /** Bloque «¿Vienes?» de una noticia que pide confirmación. */
 function rsvpBlock(n) {
   const yes = Number(n.yes_count) || 0;
-  const counts = `<p class="count">👥 ${yes} apuntado${yes === 1 ? '' : 's'}${n.no_count ? ` · ${n.no_count} no van` : ''}</p>`;
+  const who = n.yes_list || [];
+  const counts = who.length
+    ? `<details class="rsvp-who" data-open-key="who-${esc(n.id)}"${S.open?.[`who-${n.id}`] ? ' open' : ''}><summary><span>${ico('users')}<b>${yes} apuntado${yes === 1 ? '' : 's'}</b>${n.no_count ? ` <small class="muted">· ${n.no_count} no van</small>` : ''}</span>${ico('chevd', 'desp-chev')}</summary>
+        <ul class="who-list">${who.map((x) => `<li>${esc(x.name)}${x.guests ? ` <small class="muted">+${x.guests} acompañante${x.guests === 1 ? '' : 's'}</small>` : ''}</li>`).join('')}</ul></details>`
+    : `<p class="count">${ico('users')} ${yes} apuntado${yes === 1 ? '' : 's'}${n.no_count ? ` · ${n.no_count} no van` : ''}</p>`;
   if (S.preview) return `<div class="rsvp"><p class="muted small">Esta noticia pide confirmación («Me apunto / No voy»).</p>${counts}</div>`;
   const mine = n.my_answer === 'si' ? `✅ Te has apuntado${n.my_guests ? ` con ${n.my_guests} acompañante${n.my_guests === 1 ? '' : 's'}` : ''}`
     : n.my_answer === 'no' ? '❌ Has dicho que no vas' : '';
@@ -1720,7 +1998,7 @@ function socialAdminCard() {
 /** Pestañas de la zona de redes (se repiten arriba en Panel, Calendario y Publicaciones). */
 function netTabs(on) {
   let pend = 0, due = 0; try { pend = socialPending(); due = pubDue(); } catch { /* sin datos aún */ }
-  return `<nav class="net-tabs no-print" aria-label="Redes">${[['panel', '📋', 'Panel', '#/redes', pend], ['cal', '📅', 'Calendario', '#/semana', 0], ['pub', '📸', 'Publicaciones', '#/publicaciones', due]]
+  return `<nav class="net-tabs no-print" aria-label="Redes">${[['panel', '📋', 'Panel', '#/redes', pend], ['cal', '📅', 'Calendario', '#/semana', 0], ['pub', '📸', 'Publicar', '#/publicaciones', due], ['ig', '📈', 'Instagram', '#/instagram', 0]]
     .map(([k, i, l, h, n]) => `<a class="net-tab${on === k ? ' on' : ''}" href="${h}"><span aria-hidden="true">${i}</span><b>${l}</b>${n ? `<em>${n}</em>` : ''}</a>`).join('')}</nav>`;
 }
 
@@ -1848,7 +2126,7 @@ function viewPublications() {
       ${a.resPending.length > 1 ? `<button class="btn ghost" data-act="pub-all-res">✓ Marcar todas como publicadas</button>` : ''}
       ${a.resPending.map((x) => resCard(x)).join('')}` : '<p class="empty small">No hay resultados pendientes de publicar. 🎉</p>'}
     ${a.waiting.length ? `<h2 class="section">🕓 A la espera de los resultados (${a.waiting.length})</h2>
-      <p class="hint">Ya se han corrido, pero los corredores aún no han puesto su puesto (tienen 3 días; luego pasan solas a resultados).</p>
+      <p class="hint">Ya se han corrido, pero los corredores aún no han puesto su puesto (tienen una semana; luego pasan solas a resultados, y quien no lo puso lo puede poner después).</p>
       ${a.waiting.map((x) => `<article class="card"><p><b>${esc(x.reg.name)}</b> · ${esc(when(x.reg))}<br><small class="muted">terminó ${ago(x.days)} · ${x.people} inscrito${x.people === 1 ? '' : 's'}</small></p><a class="btn small ghost" href="#/inscripciones/${x.reg.id}">Abrir</a></article>`).join('')}` : ''}
     ${a.resDone.length ? `<details class="card"><summary><b>✅ Resultados ya publicados (${a.resDone.length})</b></summary><ul class="mini-list">${a.resDone.map((x) => `<li><div><b>${esc(x.race.name)}</b><small class="muted">${esc(when(x.race))}</small></div>
       <label class="check"><input type="checkbox" data-act-change="post" data-key="${esc(x.key)}" checked> ✓</label></li>`).join('')}</ul><p class="hint">Quita la marca si te equivocaste.</p></details>` : ''}
@@ -1878,9 +2156,21 @@ function viewNetworks() {
       return `<li class="net-piece ${x.st}"><details class="net-cro" data-open-key="${esc(ok)}"${S.open?.[ok] ? ' open' : ''}><summary><span class="net-k" title="${NET_LABEL.cro}">${NET_ICON.cro}</span><span class="net-tx">${esc(x.text)}</span><span class="net-glyph" aria-hidden="true">${NET_GLYPH[x.st]}</span></summary>
         <ul class="net-people">${x.people.map((q) => `<li><label class="check"><input type="checkbox" data-act-change="chro-admin" data-runner="${esc(q.id)}" data-key="${esc(x.key)}" ${q.done ? 'checked' : ''}> ${esc(q.name)}</label></li>`).join('')}</ul>
         ${missing.length ? `<button class="btn small" data-act="chro-admin-all" data-ids="${esc(missing.join(','))}" data-key="${esc(x.key)}">✓ Todos la pasaron</button>` : ''}
-        <p class="hint">Marca a quien ya la pasó aunque no lo haya marcado en su perfil.</p></details></li>`;
+        <p class="hint">Basta con que la pase uno: en cuanto alguien la marca, la crónica queda hecha para todos. Marca a quien ya la pasó aunque no lo haya marcado en su perfil.</p></details></li>`;
     }
     const isRes = x.k === 'res', canMark = x.key && (x.k === 'aviso' || isRes);
+    if (isRes && x.people?.length) {   // resultados: desplegable para que la dirección ponga o corrija el puesto y el tiempo de cada uno
+      const ok = `net-res:${x.rkind}:${x.rid}`;
+      const act2 = canMark && (x.st !== 'curso') ? `<label class="check post-check"><input type="checkbox" data-act-change="post" data-key="${esc(x.key)}" ${posted.has(x.key) ? 'checked' : ''}> Publicado</label>` : '';
+      const copy2 = it.kind === 'race' && x.st !== 'ok' && x.st !== 'curso' ? `<button class="btn small" data-act="pub-copy" data-id="${esc(it.id)}">📋 Copiar texto</button>` : '';
+      return `<li class="net-piece ${x.st}"><details class="net-cro net-res" data-open-key="${esc(ok)}"${S.open?.[ok] ? ' open' : ''}><summary><span class="net-k" title="${NET_LABEL.res}">${NET_ICON.res}</span><span class="net-tx">${esc(x.text)}</span><span class="net-glyph" aria-hidden="true">${NET_GLYPH[x.st]}</span></summary>
+        <ul class="rs-edit">${x.people.map((q) => `<li class="rs-row" data-runner="${esc(q.id)}" data-orig="${q.position || ''}|${q.time || ''}" data-podium="${esc(q.podium || '')}">
+          <span class="rs-who"><b>${esc(q.name)}</b>${q.category ? `<small class="muted"> ${esc(q.category)}</small>` : ''}</span>
+          <label class="rs-pos"><span>Puesto</span><input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" autocomplete="off" data-rs="pos" value="${q.position || ''}" placeholder="—" aria-label="Puesto de ${esc(q.name)}"></label>
+          ${timeFields(q.time, 'data-rs="time"')}</li>`).join('')}</ul>
+        <div class="rs-actions"><button type="button" class="btn small primary" data-act="res-admin-save" data-kind="${esc(x.rkind)}" data-id="${esc(x.rid)}">Guardar puestos</button><small class="muted">Vale como si lo hubiera puesto el corredor. Vacío = sin puesto.</small></div></details>
+        ${act2 || copy2 ? `<span class="net-act">${act2}${copy2}</span>` : ''}</li>`;
+    }
     const act = x.k === 'story' ? (x.st === 'pend' ? `<button class="btn small" data-act="pub-story-manual" data-key="${esc(x.key)}">Marcar a mano</button>` : '')
       : canMark && (x.st !== 'curso' || x.k === 'aviso' && posted.has(x.key)) ? `<label class="check post-check"><input type="checkbox" data-act-change="post" data-key="${esc(x.key)}" ${posted.has(x.key) ? 'checked' : ''}> Publicado</label>` : '';
     const copy = isRes && it.kind === 'race' && x.st !== 'ok' && x.st !== 'curso' ? `<button class="btn small" data-act="pub-copy" data-id="${esc(it.id)}">📋 Copiar texto</button>` : '';
@@ -2065,7 +2355,7 @@ async function refreshPosts(force = false) {
     const sig = (a) => a.map((x) => x.key).sort().join('\n');
     const changed = sig(rows) !== sig(S.data.socialPosts);
     S.data.socialPosts = rows;
-    if ((changed || force) && ['semana', 'avisos', 'redes', 'inscripciones', ''].includes(parseRoute().view) && !S.draft) render();
+    if ((changed || force) && ['semana', 'avisos', 'redes', 'inscripciones', '', 'hoy'].includes(parseRoute().view) && !S.draft) render();
   } catch { /* sin conexión */ }
 }
 function adminAlerts() {
@@ -2122,8 +2412,182 @@ function viewAlerts() {
       <button class="btn ghost block" data-act="backup-snooze">Recordármelo en 7 días</button>` : ''}
     ${a.noContract.length ? `<h2 class="section">📄 Corredores sin tipo de contrato (${a.noContract.length})</h2>
       <p class="hint">Sin contrato indicado se les aplican los bonos y la penalización de renovación: ${esc(a.noContract.map((r) => r.name).join(', '))}.</p>
-      <a class="btn block" href="#/bonos">Indicarlo en Bonos</a>` : ''}`, { back: '#/inscripciones' });
+      <a class="btn block" href="#/bonos">Indicarlo en Bonos</a>` : ''}`, { back: '#/hoy' });
 }
+
+
+// ======================================================================
+//  Hoy: el panel de la dirección (qué hacer ahora, quién falta, qué viene)
+// ======================================================================
+
+const board = () => directorBoard({ races: S.data.races, registrations: S.data.registrations, runners: S.data.runners }, todayISO());
+/** Lo urgente que marca la pestaña Hoy. */
+const todayCount = () => { try { return alertCount() + board().pendingResults.length; } catch { return 0; } };
+/** Iniciales con un color propio por nombre (siempre el mismo). */
+function avatar(name, cls = '') {
+  const n = cleanName(name) || '?';
+  const ini = n.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+  let h = 0; for (const ch of n) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  return `<span class="av ${cls}" style="--h:${h}" aria-hidden="true">${esc(ini)}</span>`;
+}
+const avatars = (ids, max = 5) => { const names = ids.map((id) => runnerById(id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es'));
+  return `<span class="avs">${names.slice(0, max).map((n) => avatar(n)).join('')}${names.length > max ? `<span class="av more">+${names.length - max}</span>` : ''}</span>`; };
+const namesOf = (ids) => ids.map((id) => runnerById(id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es'));
+const MON3 = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
+/** Fecha en bloque (día grande, mes corto) con el color de la disciplina. */
+const dateBadge = (g) => `<span class="dbadge ${discClass(g.modality, g.subtype)}"><b>${Number(g.date.slice(8, 10))}</b><small>${MON3[Number(g.date.slice(5, 7)) - 1]}</small></span>`;
+const seenDot = (r) => (r && Object.prototype.hasOwnProperty.call(r, 'last_seen') ? (() => { const d = seenDays(r.last_seen); return `<i class="seen s-${seenLevel(d)}" title="${esc(seenText(d))}"></i>`; })() : '');
+const agoDays = (n) => (n === 0 ? 'hoy' : n === 1 ? 'ayer' : `hace ${n} días`);
+
+/** Una tarea del panel Hoy: icono de color, qué pasa y qué hacer. */
+function task({ tone, icon: ic, title, sub = '', href = '', acts = '' }) {
+  const main = `<span class="tc-ico">${ico(ic)}</span><span class="tc-body"><b>${title}</b>${sub ? `<small>${sub}</small>` : ''}</span>${href ? `<span class="tc-go">${ico('go')}</span>` : ''}`;
+  return `<article class="tcard t-${tone}">${href ? `<a class="tc-main" href="${esc(href)}">${main}</a>` : `<div class="tc-main">${main}</div>`}${acts ? `<div class="tc-acts">${acts}</div>` : ''}</article>`;
+}
+const msgBtn = (kind, ref = '', label = 'Recordar por WhatsApp') => `<a class="btn small wa" href="#/mensajes/${kind}${ref ? '/' + ref : ''}">${ico('msg')}${label}</a>`;
+
+function viewToday() {
+  const b = board(), a = adminAlerts(), year = new Date().getFullYear();
+  const per = bonusCfg(year).circuitExtra ?? 4;
+  const rows = rosterRows(), low = rows.filter((x) => x.low);
+  const social = socialPending();
+  const tasks = [];
+  if (a.corrections.length) tasks.push(task({ tone: 'red', icon: 'pen', title: `${a.corrections.length} corrección${a.corrections.length === 1 ? '' : 'es'} de puesto por revisar`, sub: esc(a.corrections.map((c) => runnerById(c.runner_id)?.name).filter(Boolean).join(', ')), href: '#/avisos' }));
+  if (a.circuits.length) tasks.push(task({ tone: 'red', icon: 'trophy', title: `${a.circuits.length} plus de circuito por confirmar`, sub: `+${per} carreras para el bono si lo confirmas`, href: '#/avisos' }));
+  for (const x of b.pendingResults.slice(0, 4)) {
+    const miss = namesOf(x.missing);
+    tasks.push(task({ tone: x.days > 7 ? 'red' : 'amber', icon: 'flag', title: `Faltan ${miss.length} resultado${miss.length === 1 ? '' : 's'} · ${esc(x.reg.name)}`,
+      sub: `Terminó ${agoDays(x.days)} · ${esc(miss.join(', '))}`, href: `#/inscripciones/${x.reg.id}`, acts: msgBtn('results', x.reg.id) }));
+  }
+  if (b.pendingResults.length > 4) tasks.push(task({ tone: 'amber', icon: 'flag', title: `Y ${b.pendingResults.length - 4} carreras más sin todos los resultados`, href: '#/mensajes/results' }));
+  if (social) tasks.push(task({ tone: 'pink', icon: 'share', title: `${social} ${social === 1 ? 'publicación' : 'publicaciones'} de redes pendiente${social === 1 ? '' : 's'}`, sub: 'Historias, avisos, resultados y crónicas', href: '#/redes' }));
+  for (const x of a.backup) tasks.push(task({ tone: 'amber', icon: 'db', title: `Copia de seguridad de ${x.kind === 'data' ? 'datos' : 'documentos'}`, sub: `Última: ${agoText(x.days)}`,
+    acts: `<button class="btn small primary" data-act="${x.kind === 'data' ? 'backup' : 'backup-docs'}">Descargar</button><button class="btn small ghost" data-act="backup-snooze">En 7 días</button>` }));
+  if (b.activity && b.counts.never + b.counts.cold) tasks.push(task({ tone: 'violet', icon: 'act', title: `${b.counts.never + b.counts.cold} corredor${b.counts.never + b.counts.cold === 1 ? ' no usa' : 'es no usan'} la app`,
+    sub: `${b.counts.never ? `${b.counts.never} no la ha${b.counts.never === 1 ? '' : 'n'} abierto nunca` : ''}${b.counts.never && b.counts.cold ? ' · ' : ''}${b.counts.cold ? `${b.counts.cold} hace más de un mes` : ''}`, href: '#/actividad', acts: msgBtn('inactive') }));
+  if (low.length) tasks.push(task({ tone: 'amber', icon: 'alert', title: `${low.length} por debajo del mínimo de carreras`, sub: esc(low.map((x) => x.r.name).sort((p, q) => p.localeCompare(q, 'es')).slice(0, 6).join(', ') + (low.length > 6 ? '…' : '')), href: '#/corredores/bajo', acts: msgBtn('low') }));
+  if (a.noContract.length) tasks.push(task({ tone: 'blue', icon: 'file', title: `${a.noContract.length} sin tipo de contrato`, sub: 'Sin él no se calcula bien el bono', href: '#/bonos' }));
+  if (b.quality.length) tasks.push(task({ tone: 'blue', icon: 'list', title: `${b.quality.length} carrera${b.quality.length === 1 ? '' : 's'} con datos incompletos`, sub: 'Provincia, disciplina, km o puestos: para la memoria', href: '#/calidad' }));
+  const urgent = todayCount();
+  const active = b.activity ? b.activity.filter((x) => x.level === 'hot').length : null;
+  const weekN = b.upcoming.filter((x) => x.days <= 7).length;
+  const dt = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+  const races = S.data.races.filter((r) => yearOf(r.date) === year).length;
+  const up = b.upcoming.map((x) => `<a class="up-row" href="#/inscripciones/${x.reg.id}">${dateBadge(x.reg)}
+      <span class="up-main"><b>${esc(x.reg.name)}</b><small>${x.days === 0 ? 'Hoy' : x.days === 1 ? 'Mañana' : `En ${x.days} días`}${place(x.reg) ? ' · ' + esc(place(x.reg)) : ''}</small>${avatars(x.ids)}</span>
+      <span class="up-n"><b>${x.ids.length}</b><small>del club</small></span></a>`).join('');
+  return frame('Hoy', `
+    <section class="hero-today">
+      <p class="ht-date">${esc(dt)}</p>
+      <h2>${tasks.length ? `Tienes <b>${tasks.length}</b> cosa${tasks.length === 1 ? '' : 's'} por mirar` : 'Todo al día ✅'}</h2>
+      <p class="ht-sub">${urgent ? `${urgent} urgente${urgent === 1 ? '' : 's'} · ` : ''}${weekN ? `${weekN} carrera${weekN === 1 ? '' : 's'} esta semana` : 'Ninguna carrera esta semana'}</p>
+      <div class="ht-kpis">
+        <a href="#/corredores"><b>${S.data.runners.length}</b><span>corredores</span></a>
+        <a href="#/actividad"><b>${active == null ? '—' : `${active}`}</b><span>activos 7 días</span></a>
+        <a href="#/carreras"><b>${races}</b><span>carreras ${year}</span></a>
+        <a href="#/inscripciones"><b>${b.upcoming.reduce((n, x) => n + x.ids.length, 0)}</b><span>inscritos 10 días</span></a>
+      </div>
+    </section>
+    <h2 class="sec-h">${ico('check')} Por hacer</h2>
+    ${tasks.length ? `<div class="tasks">${tasks.join('')}</div>` : '<p class="card ok-card">✅ No tienes nada pendiente. Buen trabajo.</p>'}
+    <h2 class="sec-h">${ico('cal')} Próximos 10 días</h2>
+    ${up ? `<div class="up-list">${up}</div>` : '<p class="empty small">No hay carreras con gente del club en los próximos 10 días.</p>'}
+    ${b.upcoming.length ? `<p class="center">${msgBtn('next', b.upcoming[0].reg.id, `Animar a apuntarse a ${esc(b.upcoming[0].reg.name)}`)}</p>` : ''}
+    <h2 class="sec-h">${ico('layers')} Atajos</h2>
+    <div class="qgrid">
+      <a class="qtile q-cyan" href="#/noticias">${ico('msg')}<b>Noticia</b><small>a todo el equipo</small></a>
+      <a class="qtile q-green" href="#/mensajes/all">${ico('send')}<b>WhatsApp</b><small>mensaje por grupos</small></a>
+      <a class="qtile q-orange" href="#/inscripciones/nueva">${ico('calplus')}<b>Inscripción</b><small>nueva carrera</small></a>
+      <a class="qtile q-violet" href="#/actividad">${ico('act')}<b>Actividad</b><small>quién usa la app</small></a>
+      <a class="qtile q-blue" href="#/calidad">${ico('list')}<b>Datos</b><small>carreras incompletas</small></a>
+      <a class="qtile q-pink" href="#/memoria">${ico('book')}<b>Memoria</b><small>para sponsors</small></a>
+    </div>`, { actions: '' });
+}
+
+// ---------- Actividad: quién usa la app ----------
+function viewActivity() {
+  const b = board();
+  if (!b.activity) return frame('Actividad', `<section class="card warn"><h2>Falta un cambio en Supabase</h2>
+    <p>Para saber quién abre la app hay que ejecutar <b>supabase/cambios/2026-11-19-actividad.sql</b> en el editor SQL de Supabase. Desde ese momento se apunta la última vez que cada corredor entra con su enlace.</p></section>`, { back: '#/hoy' });
+  const groups = [['hot', 'Activos esta semana', 'green'], ['warm', 'Este mes', 'blue'], ['cold', 'Hace más de un mes', 'amber'], ['never', 'No la han abierto nunca', 'red']];
+  const by = (lv) => b.activity.filter((x) => x.level === lv).map((x) => ({ ...x, r: runnerById(x.id) })).filter((x) => x.r)
+    .sort((p, q) => (p.days ?? 1e9) - (q.days ?? 1e9) || byName(p.r, q.r));
+  const n = (lv) => b.activity.filter((x) => x.level === lv).length;
+  const tot = b.activity.length || 1;
+  return frame('Actividad', `
+    <section class="card act-sum"><div class="act-bar">${groups.map(([lv, , tone]) => n(lv) ? `<span class="t-${tone}" style="flex:${n(lv)}">${n(lv)}</span>` : '').join('')}</div>
+      <div class="act-leg">${groups.map(([lv, label, tone]) => `<span class="t-${tone}"><i></i>${label} <b>${n(lv)}</b></span>`).join('')}</div>
+      <p class="hint">Cuenta cada vez que el corredor abre la app con su enlace personal. ${Math.round((n('hot') / tot) * 100)} % activos esta semana.</p></section>
+    ${groups.map(([lv, label, tone]) => { const list = by(lv); if (!list.length) return '';
+      return `<h2 class="sec-h t-${tone}"><i class="seen s-${lv}"></i> ${label} <span class="muted">(${list.length})</span></h2>
+      <ul class="plist">${list.map((x) => `<li><a href="#/corredor/${x.r.id}">${avatar(x.r.name)}<span><b>${esc(x.r.name)}</b><small>${esc(seenText(x.days))}${x.r.category ? ' · ' + esc(x.r.category) : ''}</small></span>${ico('go')}</a></li>`).join('')}</ul>
+      ${lv === 'cold' || lv === 'never' ? `<p class="center">${msgBtn('inactive')}</p>` : ''}`; }).join('')}`, { back: '#/hoy' });
+}
+
+// ---------- Calidad de datos: lo que le falta a cada carrera ----------
+function viewQuality() {
+  const b = board(), year = new Date().getFullYear();
+  const all = S.data.races.filter((r) => yearOf(r.date) === year).length;
+  const ok = all - b.quality.length, pct = all ? Math.round((ok / all) * 100) : 100;   // km, desnivel y precio no se exigen
+  const everything = [...b.quality, ...b.soft];
+  const count = (k) => everything.filter((x) => x.gaps.some((g) => g.includes(k))).length;
+  const row = (x) => `<a class="mrow-card ${discClass(x.race.modality, x.race.subtype)}" href="#/carreras/${x.race.id}">${dateBadge(x.race)}
+      <span class="up-main"><b>${esc(x.race.name)}</b><span class="gaps">${x.gaps.map((g) => `<i${SOFT_GAPS.has(g) ? ' class="soft"' : ''}>${SOFT_GAPS.has(g) ? 'sin ' + esc(g) : esc(g)}</i>`).join('')}</span></span><span class="tc-go">${ico('go')}</span></a>`;
+  return frame('Datos incompletos', `
+    <section class="card q-head"><div class="ring" style="--p:${pct}"><b>${pct}%</b></div>
+      <div><h2>${ok} de ${all} carreras completas</h2><p class="muted small">Temporada ${year}. Provincia, disciplina y puestos completos: así sale bien la memoria para los sponsors. Los km, el desnivel y el precio son opcionales, pero alimentan las estadísticas de subida, la carrera más larga o más dura y el coste de competir.</p></div></section>
+    ${everything.length ? `<div class="q-chips">${[['provincia', 'Sin provincia'], ['disciplina', 'Sin disciplina'], ['sin puesto', 'Sin puesto'], ['km', 'Sin km'], ['desnivel', 'Sin desnivel'], ['precio', 'Sin precio'], ['ubicación', 'Sin ubicación']].map(([k, l]) => count(k) ? `<span class="qchip${SOFT_GAPS.has(k) ? ' soft' : ''}">${l} <b>${count(k)}</b></span>` : '').join('')}</div>` : ''}
+    ${b.quality.length ? `<h2 class="sec-h">${ico('alert')} Les falta algo importante</h2><div class="mlist">${b.quality.map(row).join('')}</div>` : (everything.length ? '<p class="card ok-card">✅ Todas tienen provincia, disciplina y puestos.</p>' : '')}
+    ${b.soft.length ? `<h2 class="sec-h">${ico('mountain')} Para completar (opcional)</h2><p class="hint">Cualquier corredor que participó puede completarlos desde la carrera («Faltan datos»); tú, desde su ficha.</p><div class="mlist">${b.soft.map(row).join('')}</div>` : ''}
+    ${!everything.length ? '<p class="card ok-card">✅ Todas las carreras de la temporada tienen los datos completos.</p>' : ''}`, { back: '#/hoy' });
+}
+
+// ---------- Mensajes por grupos (WhatsApp) ----------
+const MSG_KINDS = [['results', '🏁 Faltan resultados'], ['next', '📅 Próxima carrera'], ['idle', '💤 Sin carreras apuntadas'], ['inactive', '📲 No usan la app'], ['low', '⚠️ Bajo el mínimo'], ['all', '📣 Todo el equipo']];
+function msgGroup(kind, ref) {
+  const b = board();
+  if (kind === 'results') {
+    const list = b.pendingResults; const x = list.find((y) => y.reg.id === ref) || list[0];
+    return { ids: x ? x.missing : [], extra: { race: x?.reg.name }, pick: list.map((y) => [y.reg.id, `${y.reg.name} (${y.missing.length})`]), ref: x?.reg.id, empty: 'No falta ningún resultado. 🎉' };
+  }
+  if (kind === 'next') {
+    const today = todayISO();
+    const list = S.data.registrations.filter((g) => !g.suspended && g.date >= today).sort((p, q) => p.date.localeCompare(q.date)).slice(0, 12);
+    const g = list.find((y) => y.id === ref) || list[0];
+    const inn = new Set((g?.entries || []).map((e) => e.runner_id));
+    return { ids: g ? S.data.runners.filter((r) => !inn.has(r.id)).map((r) => r.id) : [], extra: { race: g?.name, when: g ? when(g) : '' }, pick: list.map((y) => [y.id, `${formatDate(y.date, false)} · ${y.name}`]), ref: g?.id,
+      note: g ? `${inn.size} ya apuntado${inn.size === 1 ? '' : 's'}: el mensaje va a los que aún no.` : '', empty: 'No hay inscripciones próximas.' };
+  }
+  if (kind === 'idle') return { ids: b.idle, empty: 'Todos tienen alguna carrera apuntada. 🎉' };
+  if (kind === 'inactive') return b.activity ? { ids: b.activity.filter((x) => x.level === 'never' || x.level === 'cold').map((x) => x.id), empty: 'Todos han entrado en el último mes. 🎉' }
+    : { ids: [], empty: 'Falta el cambio de Supabase de actividad (2026-11-19-actividad.sql).' };
+  if (kind === 'low') return { ids: rosterRows().filter((x) => x.low).map((x) => x.r.id), empty: 'Nadie está por debajo del mínimo. 🎉' };
+  return { ids: [], all: true };
+}
+function viewMessages() {
+  const { id, rest } = parseRoute();
+  const kind = MSG_KINDS.some(([k]) => k === id) ? id : 'results';
+  const g = msgGroup(kind, rest);
+  const key = `${kind}|${g.ref || ''}`;
+  if (S.msgKey !== key) { S.msgKey = key; S.msgOff = new Set(); }
+  const on = g.ids.filter((x) => !S.msgOff.has(x));
+  const text = groupMessage(kind, g.all ? [] : namesOf(on), g.extra || {});
+  return frame('Mensaje al equipo', `
+    <div class="msg-kinds">${MSG_KINDS.map(([k, l]) => `<a class="chip${k === kind ? ' on' : ''}" href="#/mensajes/${k}">${l}</a>`).join('')}</div>
+    ${g.pick?.length > 1 ? `<label class="msg-pick">${kind === 'results' ? 'Carrera' : 'Inscripción'}<select data-msg-pick="${kind}">${g.pick.map(([v, l]) => opt(v, l, g.ref)).join('')}</select></label>` : ''}
+    ${g.note ? `<p class="hint">${esc(g.note)}</p>` : ''}
+    ${g.all ? '' : g.ids.length ? `<section class="card"><h3>Para ${on.length} de ${g.ids.length}</h3><p class="hint">Quita a quien no quieras nombrar.</p>
+      <div class="who-chips">${namesOf(g.ids).map((n) => { const r = S.data.runners.find((x) => x.name === n); const off = S.msgOff.has(r.id);
+        return `<button type="button" class="who${off ? ' off' : ''}" data-act="msg-who" data-id="${r.id}" aria-pressed="${!off}">${avatar(n)}${esc(n)}</button>`; }).join('')}</div></section>`
+      : `<p class="card ok-card">${esc(g.empty || 'Nadie en este grupo.')}</p>`}
+    ${g.all || on.length ? `<section class="card msg-box"><label>Mensaje <small class="muted">(puedes cambiarlo antes de enviar)</small><textarea id="msg-text" rows="8">${esc(text)}</textarea></label>
+      <div class="row"><button class="btn primary wa-big" data-act="msg-wa">${ico('msg')}Enviar por WhatsApp</button><button class="btn" data-act="msg-copy">Copiar</button></div>
+      <p class="hint">WhatsApp se abre para que elijas el chat (el grupo del equipo o una persona). Los nombres van con viñeta para que se vea a quién va.</p></section>` : ''}`, { back: '#/hoy' });
+}
+
+/** Pestañas de Carreras: próximas (inscripciones) y resultados. */
+const carTabs = (cur) => { const today = todayISO(); const up = S.data.registrations.filter((g) => g.date >= today).length;
+  return `<div class="seg2" role="tablist"><a href="#/inscripciones" class="${cur === 'inscripciones' ? 'on' : ''}">${ico('cal')}Próximas<b>${up}</b></a><a href="#/carreras" class="${cur === 'carreras' ? 'on' : ''}">${ico('trophy')}Resultados<b>${S.data.races.filter((r) => yearOf(r.date) === new Date().getFullYear()).length}</b></a></div>`; };
 
 // ======================================================================
 //  Carreras con resultados (dirección)
@@ -2164,7 +2628,7 @@ function raceListHtml() {
       <p class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''}</p></div>${modTag(r.modality, r.subtype)}</div>${typeTag(r)}${pubTags(r, true)}
       <p class="count">${r.results.length} participante${r.results.length === 1 ? '' : 's'}${medals ? ` · ${medals}` : ''}${r.stages?.length ? ` · ${r.stages.length} etapas${st.length ? `, ${st.length} podio${st.length === 1 ? '' : 's'} de etapa` : ''}` : ''}</p>
       ${res.length ? `<p class="pods">${res.map((x) => `${medal(x.position)} ${esc(x.runner_name)}${x.category ? ` <small>${esc(x.category)}</small>` : ''}`).join(' · ')}</p>` : ''}
-      ${issues.length ? `<p class="issues">${issues.map((x) => `<span class="issue">⚠️ ${esc(x)}</span>`).join('')}</p>` : ''}</a>`;
+      ${issues.length ? `<p class="issues">${issues.map((x) => `<span class="issue">⚠️ ${esc(x)}</span>`).join('')}</p>` : ''}${editCta()}</a>`;
   };
   return `
     ${mods.length > 1 || S.raceMod !== 'all' ? `<div class="years mod-chips" role="tablist" aria-label="Modalidad">
@@ -2180,6 +2644,7 @@ function viewRaces() {
   const years = availableYears(S.data.races);
   if (!years.includes(S.year)) S.year = years[0];
   return frame('Carreras', `
+    ${carTabs('carreras')}
     ${normalize(S.q.races || '').length >= 2 ? '' : yearPicker(years)}
     <div class="toolbar">
       ${searchBox('races', 'Buscar carrera o lugar…')}
@@ -2194,7 +2659,7 @@ function yearPicker(years) {
 }
 
 function draftRace(id) {
-  if (id === 'nueva') return { kind: 'race', id: null, name: '', date: '', place: '', province: '', country: DEFAULT_COUNTRY, modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', notes: '', people: [], stages: [] };
+  if (id === 'nueva') return { kind: 'race', id: null, name: '', date: '', place: '', province: '', country: DEFAULT_COUNTRY, modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', url: '', elevation: '', price: '', notes: '', people: [], stages: [] };
   const r = S.data.races.find((x) => x.id === id);
   if (!r) return null;
   const stages = (r.stages || []).map((_, i) => stageName(r, i));
@@ -2248,7 +2713,7 @@ function viewRaceEdit() {
           <select data-p="${i}" data-pf="podium_type" aria-label="Tipo de podio" ${pod ? '' : 'disabled'}>
             ${PODIUM_TYPES.map((t) => opt(t.id, { suelta: 'Suelta', general: 'General', campeonato: 'Campeonato' }[t.id] || t.label, p.podium_type)).join('')}</select>
         </div>
-        <label class="res-time">⏱️ Tiempo <input type="text" inputmode="numeric" autocomplete="off" maxlength="10" placeholder="2:05:30" aria-label="Tiempo (h:mm:ss)" data-p="${i}" data-pf="time" value="${esc(p.time || '')}"></label>
+        <div class="res-time"><span class="flabel">⏱️ Tiempo</span>${timeFields(p.time, `data-p="${i}" data-pf="time"`)}</div>
         ${d.stages.length ? `<div class="stage-pos">${d.stages.map((n, j) => `<label><span data-stage-label="${j}">${esc(n)}</span>
           <input type="number" inputmode="numeric" min="1" data-p="${i}" data-sp="${j}" value="${esc(p.stage_positions?.[j] ?? '')}"></label>`).join('')}</div>` : ''}
         </li>`;
@@ -2266,37 +2731,61 @@ function viewRaceEdit() {
 // ======================================================================
 
 /** Resumen del equipo en la pantalla Equipo del corredor: filtros simples, cifras grandes, líderes con icono, modalidades, mes + formatos y clasificación compacta. */
-function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods, places, maxOf }) {
+function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods, places, maxOf, reach = '', board = '' }) {
   const T = s.totals;
   const modLabel = !mod ? '' : mod.includes('|') ? mod.split('|').filter(Boolean).join(' · ') : mod;
-  const filters = `<div class="eq-filters"><label class="year-pick"><select data-year-sel aria-label="Temporada">${years.map((y) => `<option value="${y}"${y === S.year ? ' selected' : ''}>${y}</option>`).join('')}</select>${ico('chevd')}</label>
-    <div class="eq-chips"><button class="chip${mod ? '' : ' on'}" data-act="sum-mod" data-m="all">Todos</button>${all.byModality.map((m) =>
-      `<button class="chip${mod === m.modality ? ' on' : ''}" data-act="sum-mod" data-m="${esc(m.modality)}">${esc(m.modality)}</button>`).join('')}${mod && mod.includes('|') ? `<button class="chip on" data-act="sum-mod" data-m="all" title="Quitar el filtro">${esc(modLabel)} ✕</button>` : ''}</div></div>`;
+  const filterOn = !!mod || S.year !== years[0];
+  const tab = RES_TABS.some(([k]) => k === S.eqTab) ? S.eqTab : 'pan';
+  const filters = `<div class="eq-bar"><nav class="rs-tabs" role="tablist" aria-label="Apartados del resumen del equipo">${RES_TABS.map(([k, l, ic]) => `<button type="button" class="${k === tab ? 'on' : ''}" data-act="eq-tab" data-t="${k}" role="tab" aria-selected="${k === tab}">${ico(ic)}<span>${l}</span></button>`).join('')}</nav>
+      <button type="button" class="eq-fbtn${filterOn ? ' on' : ''}" data-act="eq-filters" aria-label="Filtros${filterOn ? ' (activos)' : ''}" title="Filtros">${icon(ICON_FILTER)}${filterOn ? '<i class="fdot"></i>' : ''}</button></div>
+    ${filterOn ? `<div class="eq-active"><span>${S.year}${mod ? ` · ${esc(modLabel)}` : ''}</span><button type="button" class="link" data-act="eq-clear">Quitar filtros ✕</button></div>` : ''}`;
   const big = (n, label, c) => `<div class="b-${c}"><b>${n}</b><span>${label}</span></div>`;
   const mini = (icon, v, l, c) => `<div class="m-${c}"><i>${ico(icon)}</i><b>${v}</b><small>${l}</small></div>`;
   const hero = `<section class="sum-hero eq-hero ${cls}">
     <p class="sum-hero-t">${ico('flag')}${mod ? esc(modLabel) : 'Todo el equipo'} · Temporada ${S.year}</p>
     <div class="sum-big">${big(T.races, 'Carreras', 'r')}${big(T.runners, 'Corredores', 'c')}${big(T.podiums, 'Podios', 'p')}${big(T.wins, 'Victorias', 'w')}</div>
-    <div class="eq-mini">${mini('ruler', T.km ? kmText(T.km) : '—', 'totales', 'km')}${mini('clock', T.timed ? formatTime(T.time, true) : '—', 'en carrera', 'tm')}${mini('users', T.participations, 'particip.', 'pt')}${mini('bars', T.podiums ? `${Math.round((T.podiums / Math.max(1, T.participations)) * 100)} %` : '—', 'podios', 'pc')}</div>
+    <div class="eq-mini${T.elevation ? ' eq-mini5' : ''}">${mini('ruler', T.km ? kmText(T.km) : '—', 'totales', 'km')}${T.elevation ? mini('mountain', elevText(T.elevation), 'de subida', 'el') : ''}${mini('clock', T.timed ? formatTime(T.time, true) : '—', 'en carrera', 'tm')}${mini('users', T.participations, 'particip.', 'pt')}${mini('bars', T.podiums ? `${Math.round((T.podiums / Math.max(1, T.participations)) * 100)} %` : '—', 'podios', 'pc')}</div>
+    ${T.travelKm ? `<p class="eq-trip">${ico('compass')}<b>${esc(kmText(T.travelKm))}</b> de viaje entre todos <small>(ida y vuelta, aprox.)</small></p>` : ''}
   </section>`;
-  const lead = (icon, label, score, unit) => {
+  // tarjetas de líderes: nombre de quien lidera y su cifra; las de «récord» llevan su propio texto
+  const lead = (icon, label, score, fmt, cls = icon) => {
     const top = Math.max(0, ...people.map(score));
     if (!top) return '';
-    return `<div class="lead l-${icon}"><span class="lead-i">${ico(icon)}</span><small>${label}</small><b>${names(people.filter((r) => score(r) === top), 2)}</b><em>${top} ${top === 1 ? unit : unit + 's'}</em></div>`;
+    return `<div class="lead l-${cls}"><span class="lead-i">${ico(icon)}</span><small>${label}</small><b>${names(people.filter((r) => score(r) === top), 2)}</b><em>${fmt(top)}</em></div>`;
   };
-  const leaders = [lead('flag', 'Más carreras', (r) => r.races, 'carrera'), lead('trophy', 'Más podios', (r) => r.p1 + r.p2 + r.p3, 'podio'), lead('medal', 'Más victorias', (r) => r.p1, 'victoria')].join('');
+  const plu = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const L = s.longest;
+  const longestCard = L ? `<div class="lead l-ruler"><span class="lead-i">${ico('ruler')}</span><small>Carrera más larga</small><b>${esc(kmText(L.km))}</b><em class="lead-race">${esc(L.race)}</em><em>${esc(L.runners.slice(0, 2).join(', '))}${L.runners.length > 2 ? ` y ${L.runners.length - 2} más` : ''}</em></div>` : '';
+  const H = s.hardest;
+  const F = s.farthest;
+  const farCard = F ? `<div class="lead l-compass"><span class="lead-i">${ico('compass')}</span><small>Carrera más lejana</small><b>${esc(kmText(F.value))}</b><em class="lead-race">${esc(F.race)}</em><em>${esc(F.place || '')}</em></div>` : '';
+  const hardestCard = H ? `<div class="lead l-mountain"><span class="lead-i">${ico('mountain')}</span><small>Carrera más dura</small><b>${esc(elevText(H.elevation))}</b><em class="lead-race">${esc(H.race)}</em><em>${esc(H.runners.slice(0, 2).join(', '))}${H.runners.length > 2 ? ` y ${H.runners.length - 2} más` : ''}</em></div>` : '';
+  const leaders = [
+    lead('flag', 'Más carreras', (r) => r.races, (n) => plu(n, 'carrera', 'carreras')),
+    lead('trophy', 'Más podios', (r) => r.p1 + r.p2 + r.p3, (n) => plu(n, 'podio', 'podios')),
+    lead('medal', 'Más victorias', (r) => r.p1, (n) => plu(n, 'victoria', 'victorias')),
+    longestCard,
+    lead('route', 'Más kilómetros', (r) => r.km, (n) => kmText(n), 'route'),
+    lead('mountain', 'Más desnivel', (r) => r.elev, (n) => elevText(n), 'mountain'),
+    hardestCard,
+    lead('compass', 'Se desplaza más', (r) => r.trip, (n) => `${kmText(n)} de viaje`, 'compass'),
+    farCard,
+    lead('timer', 'Más tiempo en carrera', (r) => r.time, (n) => formatTime(n, true), 'timer'),
+    lead('layers', 'Más versátil', (r) => Object.keys(r.discs || {}).length, (n) => plu(n, 'disciplina distinta', 'disciplinas distintas')),
+    lead('calcheck', 'Más constante', (r) => r.months?.size || 0, (n) => plu(n, 'mes con carrera', 'meses con carrera'), 'calcheck'),
+  ].filter(Boolean).join('');
   // participación del equipo, compacta: una barra repartida (por disciplina o por categoría) y globos debajo
   const pview = S.partView === 'cat' ? 'cat' : 'disc';
   const partItems = pview === 'disc'
-    ? all.disciplines.map((x) => ({ key: x.key, cls: discClass(x.modality, x.subtype), label: x.subtype ? (x.subtype === 'Otra' ? `${x.modality} · Otra` : x.subtype) : x.modality, n: x.participations, tip: `${x.runners} corredor${x.runners === 1 ? '' : 'es'} · ${x.races} carrera${x.races === 1 ? '' : 's'}` })).filter((x) => x.n)
+    ? modalityTree(all).flatMap((m) => (m.children.length ? m.children : [{ modality: m.modality, subtype: '', key: disciplineKey(m.modality, ''), label: m.modality, participations: m.participations, runners: m.runners, races: m.races }])).map((x) => ({ key: x.key, mod: x.modality, cls: discClass(x.modality, x.subtype), label: x.label, n: x.participations, tip: `${x.runners} corredor${x.runners === 1 ? '' : 'es'} · ${x.races} carrera${x.races === 1 ? '' : 's'}` })).filter((x) => x.n)
     : s.byCategory.map((c) => ({ key: '', cls: `d-cat-${slug(c.category) || 'sin'}`, label: c.category || 'Sin categoría', n: c.participations, tip: `${c.runners} corredor${c.runners === 1 ? '' : 'es'}${c.km ? ` · ${kmText(c.km)}` : ''}` }));
   const partTot = partItems.reduce((n, x) => n + x.n, 0) || 1;
   const byMod = `<section class="card eq-mod"><div class="part-head"><h2>Participación</h2>
       <div class="seg-sw part-sw" role="group" aria-label="Ver la participación por"><button type="button" class="${pview === 'disc' ? 'on' : ''}" data-act="part-view" data-v="disc">Disciplina</button><button type="button" class="${pview === 'cat' ? 'on' : ''}" data-act="part-view" data-v="cat">Categoría</button></div></div>
     <div class="part-bar" role="img" aria-label="Participaciones del equipo por ${pview === 'disc' ? 'disciplina' : 'categoría'}">${partItems.map((x) => `<span class="${x.cls}" style="flex:${x.n}" title="${esc(x.label)}: ${x.n} (${x.tip})">${x.n / partTot >= 0.09 ? x.n : ''}</span>`).join('')}</div>
-    <div class="part-chips">${partItems.map((x) => (x.key
+    <div class="part-chips">${partItems.map((x, i) => `${pview === 'disc' && SUBTYPES[x.mod] && (i === 0 || partItems[i - 1].mod !== x.mod) ? `<span class="part-mod ${modClass(x.mod)}"><i></i>${esc(x.mod)} <b>${partItems.filter((y) => y.mod === x.mod).reduce((n, y) => n + y.n, 0)}</b></span>` : pview === 'disc' && i > 0 && partItems[i - 1].mod !== x.mod ? '<span class="part-brk"></span>' : ''}${(x.key
       ? `<button type="button" class="part-chip ${x.cls}${mod === x.key ? ' sel' : ''}" data-act="sum-mod" data-m="${esc(x.key)}" title="${esc(x.tip)}"><i></i>${esc(x.label)} <b>${x.n}</b></button>`
-      : `<span class="part-chip ${x.cls}" title="${esc(x.tip)}"><i></i>${esc(x.label)} <b>${x.n}</b></span>`)).join('')}</div>
+      : `<span class="part-chip ${x.cls}" title="${esc(x.tip)}"><i></i>${esc(x.label)} <b>${x.n}</b></span>`)}`).join('')}</div>
 </section>`;
   // carreras por mes + formatos más comunes
   const maxMonth = maxOf(s.byMonth.map((m) => m.total));
@@ -2306,8 +2795,7 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
     <div class="mchart" role="img" aria-label="Carreras de cada mes, por disciplina">${s.byMonth.map((m) => `<div class="mc${m.total ? '' : ' none'}"><div class="mc-area"><em>${m.total || ''}</em>
       <div class="mc-stack" style="height:${m.total ? (m.total / maxMonth) * 100 : 0}%">${Object.entries(m.discs).sort(([x], [y]) => discOrder(y) - discOrder(x)).map(([k, n]) => { const [dm, ds] = k.split('|');
         return `<span class="${discClass(dm, ds)}" style="flex:${n}" title="${esc(discLabel(dm, ds))}: ${n}"></span>`; }).join('')}</div></div><b>${MES[m.month]}</b></div>`).join('')}</div>
-    <h3>Carreras por disciplina</h3>
-    <div class="pills fmt-pills">${s.disciplines.map((x) => `<span class="pill ${discClass(x.modality, x.subtype)}"><i class="dot"></i>${esc(discLabel(x.modality, x.subtype))} <b>${x.races}</b></span>`).join('')}</div></section>`;
+    <h3>Carreras por modalidad y disciplina</h3>${discLegend(s.disciplines, true)}</section>`;
   // clasificación: cuatro primeros y el resto desplegado
   const active = people.filter((r) => r.races > 0), idle = people.filter((r) => !r.races && r.current);
   const maxR = maxOf(active.map((r) => r.races));
@@ -2340,20 +2828,22 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
   const podItem = (x) => `<li class="pod-item m${x.position}">
       <i class="medal m${x.position}"></i>
       <div class="pod-main"><div class="pod-l1"><b>${esc(x.runner)}</b><span class="pod-pos m${x.position}">${medalNames[x.position - 1]} ${x.category ? `de ${esc(x.category)}` : 'sin categoría'}</span></div>
-        <div class="pod-l2">${esc(x.race)} <span class="muted">· ${esc(formatDate(x.date, false))}</span></div>
+        <div class="pod-l2"><b class="rname">${esc(x.race)}</b> <span class="muted">· ${esc(formatDate(x.date, false))}</span></div>
         <div class="pod-l3">${modTag(x.modality, x.subtype)}<span class="tag t-type">${typeLabel(x)}</span></div></div></li>`;
   const SHOWN = 5;
   const podRunner = `<section class="card eq-pods"><h2>Podios${mod ? ` · ${esc(modLabel)}` : ' del año'}</h2>
     ${pl.length ? `<div class="pod-tot">${[1, 2, 3].map((k) => { const n = pl.filter((x) => x.position === k).length; return n ? `<span class="pod-pill m${k}"><i class="medal m${k}"></i>${n} ${['Oro', 'Plata', 'Bronce'][k - 1]}${n === 1 ? '' : 's'}</span>` : ''; }).join('')}</div>
-      <div class="seg-sw pod-sw" role="group" aria-label="Ver los podios por"><button type="button" class="${view === 'cat' ? 'on' : ''}" data-act="pod-view" data-v="cat">Por categoría</button><button type="button" class="${view === 'disc' ? 'on' : ''}" data-act="pod-view" data-v="disc">Por disciplina</button></div>
-      <p class="hint">${view === 'cat' ? 'El puesto es el de su <b>categoría</b>: un 1º de M40 es el primero entre los M40.' : 'Podios de cada disciplina, sumando todas las categorías.'}</p>
+      <div class="seg-sw pod-sw" role="group" aria-label="Ver los podios por"><button type="button" class="${view === 'cat' ? 'on' : ''}" data-act="pod-view" data-v="cat">Por categoría</button><button type="button" class="${view === 'disc' ? 'on' : ''}" data-act="pod-view" data-v="disc">Por modalidad</button></div>
+      <p class="hint">${view === 'cat' ? 'El puesto es el de su <b>categoría</b>: un 1º de M40 es el primero entre los M40.' : 'Podios de cada modalidad y, debajo, de sus disciplinas (suman todas las categorías).'}</p>
       <ul class="pg-list">${view === 'cat' ? rowsCat.map((g) => grpRow(esc(g.k), g.m, g.list.length)).join('')
-        : rowsDisc.map((g) => { const [dm, ds] = g.k.split('|'); return grpRow(esc(ds ? `${dm} · ${ds}` : dm), g.m, g.list.length, discClass(dm, ds)); }).join('')}</ul>
+        : [...new Set(rowsDisc.map((g) => g.k.split('|')[0]))].map((dm) => { const ch = rowsDisc.filter((g) => g.k.split('|')[0] === dm), all3 = ch.flatMap((g) => g.list);
+            return grpRow(`<b>${esc(dm)}</b>`, medalsOf(all3), all3.length, `pg-mod ${modClass(dm)}`) + (SUBTYPES[dm] ? ch.map((g) => { const ds = g.k.split('|')[1]; return grpRow(esc(subLabel(dm, ds)), g.m, g.list.length, `pg-sub ${discClass(dm, ds)}`); }).join('') : ''); }).join('')}</ul>
       <h3>Últimos podios</h3><ul class="pod-items">${items.slice(0, SHOWN).map(podItem).join('')}</ul>
       ${items.length > SHOWN ? `<details class="pod-more"><summary>Ver los ${items.length - SHOWN} anteriores</summary><ul class="pod-items">${items.slice(SHOWN).map(podItem).join('')}</ul></details>` : ''}`
       : '<p class="muted">Sin podios este año.</p>'}</section>`;
-  return `<div class="eq">${filters}${hero}${leaders ? `<div class="leads eq-leads">${leaders}</div>` : ''}
-    ${months}${rank}${byMod}${podRunner}${places}</div>`;
+  const leadsBlock = leaders ? `<div class="eq-leads-wrap"><div class="leads eq-leads" role="list" aria-label="Líderes y récords del equipo">${leaders}</div><p class="leads-hint">Desliza para ver más récords ›</p></div>` : '';
+  const body = { pan: `${hero}${leadsBlock}${months}${byMod}`, pod: podRunner, eq: `${board}${idle.length ? `<p class="muted small">Sin carreras todavía${mod ? ` de ${esc(modLabel)}` : ''}: ${names(idle, 40)}.</p>` : ''}`, alc: reach }[tab];
+  return `<div class="eq">${filters}${body}</div>`;
 }
 
 /**
@@ -2371,7 +2861,7 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
   const isDisc = !!mod && mod.includes('|');
   const s = mod ? yearSummary(S.year, races.filter((r) => (isDisc ? disciplineKey(r.modality, r.subtype) === mod : r.modality === mod)), runners) : all;  // lo que se ve, filtrado
   const cls = mod && !isDisc ? modClass(mod) : '';
-  const raceLink = (id, name) => admin ? `<a href="#/carreras/${id}">${esc(name)}</a>` : `<b>${esc(name)}</b>`;
+  const raceLink = (id, name) => admin ? `<a class="rname" href="#/carreras/${id}">${esc(name)}</a>` : `<b class="rname">${esc(name)}</b>`;
   const names = (rows, n = 3) => rows.length <= n ? rows.map((r) => esc(r.name)).join(', ') : `${rows.slice(0, n).map((r) => esc(r.name)).join(', ')} y ${rows.length - n} más`;
   const maxOf = (arr) => Math.max(1, ...arr);
 
@@ -2468,30 +2958,14 @@ function summaryBody(races, runners, { admin = false, me = null } = {}) {
     ${admin && s.missingPlace.length ? `<div class="warn"><b>Faltan datos en ${s.missingPlace.length} carrera${s.missingPlace.length === 1 ? '' : 's'}:</b>
       <ul>${s.missingPlace.map((m) => `<li><a href="#/carreras/${m.id}">${esc(m.name)}</a> (${formatRange(m.date, m.end_date, false)}): sin ${m.missing.join(' ni ')}</li>`).join('')}</ul></div>` : ''}</section>`;
 
-  if (!admin) return summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods, places, maxOf });
-  return `
-    ${admin ? resumenTabs('club') : ''}
-    ${yearPicker(years)}
-    ${chips}
-    ${hero}
-    ${leaders ? `<div class="leads">${leaders}</div>` : ''}
-    ${mod ? '' : byMod}
-    ${months}
-    ${fmt}
-    ${cats}
-    ${rank}
-    ${pods}
-    ${mod ? byMod : ''}
-    ${places}
-    ${admin ? `<button class="btn block" data-act="csv-year">Exportar ${S.year} a CSV (Excel)</button>` : ''}
-    ${admin ? `<details class="card data-det" data-open-key="datos"${S.open?.datos ? ' open' : ''}><summary>⚙️ Datos y copias <small class="muted">· copia de seguridad, restaurar, aspecto, versión y cerrar sesión</small></summary>${dataBody()}</details>` : ''}`;
+  const pkR = resPack(S.year, mod, { races, runners, registrations: S.runnerData?.registrations || [] });
+  return summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods, places, maxOf, reach: resReach(pkR), board: rankingBoard(pkR, { me }) });
 }
 
 // ======================================================================
-//  Estadísticas de Instagram (Resumen → Instagram)
+//  Estadísticas de Instagram (Redes → Instagram)
 // ======================================================================
 
-const resumenTabs = (on) => `<div class="years subtabs no-print"><a class="chip${on === 'club' ? ' on' : ''}" href="#/resumen">🏁 Club</a><a class="chip${on === 'ig' ? ' on' : ''}" href="#/instagram">📸 Instagram</a></div>`;
 const nf = (n) => (n == null ? '—' : Number(n).toLocaleString('de-DE'));   // 5.200 (el «es-ES» no pone el punto en 4 cifras)
 const IG_MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const igShort = (iso) => `${Number(iso.slice(8))} ${IG_MES[Number(iso.slice(5, 7)) - 1]} ${iso.slice(2, 4)}`;
@@ -2512,26 +2986,27 @@ async function loadIg(force = false) {
   S.ig = { loading: true };
   try { const rows = await api.listIg(); S.ig = rows ? { rows } : { missing: true }; }
   catch (e) { S.ig = { failed: friendlyError(e) }; }
-  if (parseRoute().view === 'instagram') render();
+  if (['instagram', 'memoria'].includes(parseRoute().view)) render();
 }
 
 function viewInstagram() {
   if (!S.ig) loadIg();
-  const head = (inner) => frame('Instagram', `${resumenTabs('ig')}${inner}`);
+  const head = (inner) => frame('Redes', `${netTabs('ig')}${inner}`);
   if (!S.ig || S.ig.loading) return head('<p class="empty">Cargando…</p>');
   if (S.ig.missing) return head('<p class="card warn">Aún no está activado: falta ejecutar en Supabase <code>supabase/cambios/2026-11-14-instagram.sql</code> (ver docs/instagram-captura.md).</p>');
   if (S.ig.failed) return head(`<p class="card warn">${esc(S.ig.failed)}</p>`);
-  const period = S.igPeriod || 'all', tab = S.igTab || 'per', sort = S.igSort || 'views';
+  const period = S.igPeriod || 'all', sort = S.igSort || 'views';
   const [from, to] = igRange(period);
   const g = igSummary(S.ig.rows, from, to), t = g.totals, prev = igPrevTotals(S.ig.rows, from, to), P = igPeriods(S.ig.rows, from, to);
+  const tab = S.igTab || (P.list.length ? 'per' : 'res');
   const periods = [['all', 'Todo lo guardado'], ['30', 'Últimos 30 días'], ['month', 'Este mes'], ['year', `Año ${S.year}`]];
   const label = g.nDays ? `${dateEs(g.first)} – ${dateEs(g.last)}` : 'sin datos en este periodo';
-  const periodBar = `<div class="years no-print">${periods.map(([k, l]) => `<button class="chip${k === period ? ' on' : ''}" data-act="ig-period" data-p="${k}">${l}</button>`).join('')}</div>`;
+  const periodName = (periods.find(([k]) => k === period) || periods[0])[1];
   const noData = !g.nDays && !g.account && !g.audience && !g.posts.length;
 
   const dlt = (cur, old) => (prev && old ? `${cur >= old ? '+' : '−'}${Math.round((Math.abs(cur - old) / old) * 100)} % vs periodo anterior` : '');
-  const kpi = (v, l, note = '') => `<div class="rp-kpi"><b>${v}</b><span>${l}</span>${note ? `<em class="rp-d">${note}</em>` : ''}</div>`;
-  const rep = (inner) => `<section class="card report ig-sec">${inner}</section>`;
+  const kpi = (v, l, note = '', cls = '') => `<div class="rp-kpi ${cls}"><b>${v}</b><span>${l}</span>${note ? `<em class="rp-d">${note}</em>` : ''}</div>`;
+  const rep = (inner) => `<section class="card rs-card ig-sec">${inner}</section>`;
   const maxOf = (a) => Math.max(1, ...a);
   const pct = (a, b) => (b ? `${Math.round((a / b) * 100)} %` : '—');
   const bar = (name, v, max, suffix = '') => `<li class="ig-row"><span class="ig-name">${esc(name)}</span><span class="ig-track"><i style="width:${Math.max(2, (v / max) * 100)}%"></i></span><b>${nf(v)}${suffix}</b></li>`;
@@ -2545,8 +3020,8 @@ function viewInstagram() {
   const chart = (ser, title, note = '') => `<h2>${title}</h2><div class="ig-bars${useDays ? ' dense' : ''}" role="img" aria-label="${esc(title)}">${ser.map((x, i) => `<div class="ig-col" title="${esc(x.name)}: ${nf(x.v)}"><i style="height:${Math.max(2, (x.v / smax) * 100)}%"></i>${!useDays || (i % 7 === 0 && ser.length - 1 - i > 3) || i === ser.length - 1 ? `<small>${esc(x.name)}</small>` : '<small></small>'}</div>`).join('')}</div>${note}`;
   const hero = rep(`<h2>@hinacoclubciclistamonzon <small class="muted">· ${esc(label)}</small></h2><div class="rp-kpis">
     ${acc ? kpi(nf(acc.followers), 'Seguidores', acc.delta != null ? `${acc.delta >= 0 ? '+' : '−'}${Math.abs(acc.delta)} desde ${igShort(acc.since)}` : `a ${igShort(acc.until)}`) : ''}
-    ${g.nDays ? kpi(nf(t.views), 'Visualizaciones', dlt(t.views, prev?.views)) : ''}${g.nDays && t.reachAvg ? kpi(nf(t.reachAvg), 'Alcance medio diario', 'personas distintas') : ''}
-    ${g.nDays ? kpi(nf(t.interactions), 'Interacciones', dlt(t.interactions, prev?.interactions)) : ''}${g.nDays ? kpi(nf(t.follows), 'Nuevos seguidores', dlt(t.follows, prev?.follows)) : ''}
+    ${g.nDays ? kpi(nf(t.views), 'Visualizaciones', dlt(t.views, prev?.views), 'in-hero') : ''}${g.nDays && t.reachAvg ? kpi(nf(t.reachAvg), 'Alcance medio diario', 'personas distintas', 'in-hero') : ''}
+    ${g.nDays ? kpi(nf(t.interactions), 'Interacciones', dlt(t.interactions, prev?.interactions), 'in-hero') : ''}${g.nDays ? kpi(nf(t.follows), 'Nuevos seguidores', dlt(t.follows, prev?.follows), 'in-hero') : ''}
     ${t.taps ? kpi(nf(t.taps), 'Toques en el perfil') : ''}${g.nDays ? kpi(nf(Math.round(t.views / g.nDays)), 'Visualizaciones por día', 'media') : ''}</div>
     ${acc?.media != null ? `<p class="rp-note" style="margin:0">${nf(acc.media)} publicaciones en total · siguiendo a ${nf(acc.following)}.</p>` : ''}`);
   const evo = g.nDays ? rep(chart(series, `Visualizaciones ${useDays ? 'por día' : 'por mes'}`, g.nDays < 30 ? `<p class="rp-note">Solo hay ${g.nDays} día${g.nDays === 1 ? '' : 's'} guardado${g.nDays === 1 ? '' : 's'}: el histórico crece cada día que la captura se ejecuta.</p>` : '')) : '';
@@ -2639,19 +3114,644 @@ function viewInstagram() {
     ${A.countries ? `<h3 class="ig-h">Países</h3><ul class="ig-list tight">${pctList(A.countries, 6).map(([k, v], i, arr) => bar(IG_COUNTRY[k] || k, v, arr[0][1], ' %')).join('')}</ul>` : ''}`) : '';
   const hoursP = P.topHours ? rep(`<h2>¿Cuándo están más activos los seguidores?</h2><ul class="ig-list tight">${P.topHours.list.map((h) => `<li class="ig-post"><b>${esc(h)}</b></li>`).join('')}</ul><p class="rp-note">Según Insights (${esc(plabel(P.topHours))}), hora de España. Para publicar cuando más gente está conectada.</p>`) : '';
   const panels = { per, res: noData ? noDataMsg : resumen, con: (noData && !postsP) ? noDataMsg : `${postsP}${noData ? '' : contenido}`, aud: (noData && !audP && !hoursP) ? noDataMsg : `${audP}${hoursP}${noData || audP ? '' : audiencia}` };
-  const tabs = [['per', 'Periodos'], ['res', 'Diario'], ['con', 'Contenido'], ['aud', 'Audiencia']];
+  const tabs = [['per', 'Periodos', 'cal'], ['res', 'Diario', 'bars'], ['con', 'Contenido', 'list'], ['aud', 'Audiencia', 'users']];
+  const filterOn = period !== 'all';
+  const big = (v, l) => `<div class="rs-big"><b>${v}</b><span>${l}</span></div>`;
+  const igHero = g.nDays ? `<section class="rs-hero ig-hero no-print"><p class="rs-hero-t">Instagram · ${esc(periodName)}</p>
+      <div class="rs-bigs">${big(nf(t.views), 'visualiz.')}${big(t.reachAvg ? nf(t.reachAvg) : '—', 'alcance/día')}${big(nf(t.interactions), 'interacc.')}${big(nf(t.follows), 'nuevos seg.')}</div>
+      <p class="rs-hero-s">${esc(label)}${acc?.media != null ? ` · ${nf(acc.media)} publicaciones` : ''}${t.pctNonFollowers != null ? ` · ${t.pctNonFollowers} % de no seguidores` : ''}</p></section>` : '';
   return head(`
-    <div class="no-print">${periodBar}
-      <div class="years">${tabs.map(([k, l]) => `<button class="chip${k === tab ? ' on' : ''}" data-act="ig-tab" data-t="${k}">${l}</button>`).join('')}</div>
-      <div class="row-btns rp-actions"><button class="btn primary" data-act="print-report">🖨️ Imprimir o guardar PDF</button><button class="btn" data-act="ig-csv">📊 Excel</button></div>
-      <p class="hint">Para añadir datos, mándale a Claude la captura de Instagram → Insights y él los vuelca aquí: se suman y salen en gráficos. El PDF incluye todas las partes (Periodos, Diario, Contenido y Audiencia), listo para el dossier de memorias o para enseñar a un patrocinador: en el cuadro de imprimir elige «Guardar como PDF».</p></div>
+    <div class="no-print">${igHero}
+      <div class="eq-bar"><nav class="rs-tabs" role="tablist" aria-label="Apartados de Instagram">${tabs.map(([k, l, ic]) => `<button type="button" class="${k === tab ? 'on' : ''}" data-act="ig-tab" data-t="${k}" role="tab" aria-selected="${k === tab}">${ico(ic)}<span>${l}</span></button>`).join('')}</nav>
+        <button type="button" class="eq-fbtn${filterOn ? ' on' : ''}" data-act="ig-filters" aria-label="Periodo${filterOn ? ' (filtrado)' : ''}" title="Periodo">${icon(ICON_FILTER)}${filterOn ? '<i class="fdot"></i>' : ''}</button></div>
+      ${filterOn ? `<div class="eq-active"><span>${esc(periodName)}</span><button type="button" class="link" data-act="ig-period" data-p="all">Quitar filtro ✕</button></div>` : ''}
+      <div class="ig-tools"><button class="btn" data-act="print-report">${ico('file')} PDF</button><button class="btn" data-act="ig-csv">${ico('db')} Excel</button></div>
+      <details class="ig-help"><summary>${ico('info')} Cómo se añaden datos</summary><p class="hint">Mándale a Claude la captura de Instagram → Insights y él los vuelca aquí: se suman y salen en gráficos. El PDF incluye todas las partes (Periodos, Diario, Contenido y Audiencia), listo para el dossier de memorias o para enseñar a un patrocinador: en el cuadro de imprimir elige «Guardar como PDF».</p></details></div>
     <div class="print-only ig-title"><b>Club Ciclista Monzón · Estadísticas de Instagram</b><span>${esc(label)}</span></div>
     ${tabs.map(([k, l]) => `<div class="ig-panel${k === tab ? '' : ' off'}"><h2 class="print-only ig-part">${l}</h2>${panels[k]}</div>`).join('')}
     <p class="rp-note">Fuente: Instagram (estadísticas de la cuenta profesional del club). Alcance = personas distintas que vieron el contenido; las visualizaciones cuentan también las repeticiones.</p>`);
 }
 
+// ======================================================================
+//  Temporada: panel de fin de año (dirección) y memoria para sponsors
+// ======================================================================
+
+/** Cifras de una temporada ya calculadas, con la anterior para comparar. */
+function seasonPack(year) {
+  const s = yearSummary(year, S.data.races, S.data.runners);
+  const prev = yearSummary(year - 1, S.data.races, S.data.runners);
+  const hasPrev = prev.totals.races > 0;
+  return { s, prev, hasPrev, year };
+}
+/** «▲ +4 vs 2025» (verde si sube, rojo si baja); vacío si no hay año anterior con datos. */
+const seasonDelta = (pk, cur, old, fmt = (n) => n) => (!pk.hasPrev ? '' : `<em class="rp-d ${cur > old ? 'up' : cur < old ? 'down' : ''}">${cur > old ? '▲ +' : cur < old ? '▼ −' : '= '}${cur === old ? '' : fmt(Math.abs(cur - old))} vs ${pk.year - 1}</em>`);
+const seasonKpis = (pk) => {
+  const t = pk.s.totals, o = pk.prev.totals, k = (v, l, d = '') => `<div class="rp-kpi"><b>${v}</b><span>${l}</span>${d}</div>`;
+  return `<div class="rp-kpis">
+    ${k(t.races, 'carreras', seasonDelta(pk, t.races, o.races))}
+    ${k(t.runners, 'corredores', seasonDelta(pk, t.runners, o.runners))}
+    ${k(t.participations, 'participaciones', seasonDelta(pk, t.participations, o.participations))}
+    ${k(t.podiums, 'podios', seasonDelta(pk, t.podiums, o.podiums))}
+    ${k(t.wins, 'victorias', seasonDelta(pk, t.wins, o.wins))}
+    ${k(t.km ? kmText(Math.round(t.km)) : '—', 'km recorridos', seasonDelta(pk, Math.round(t.km), Math.round(o.km), (n) => kmText(n)))}
+    ${t.elevation || o.elevation ? k(t.elevation ? elevText(t.elevation) : '—', 'desnivel positivo', seasonDelta(pk, t.elevation, o.elevation, (n) => elevText(n))) : ''}
+    ${t.travelKm || o.travelKm ? k(t.travelKm ? kmText(t.travelKm) : '—', 'de desplazamiento (aprox.)', seasonDelta(pk, t.travelKm, o.travelKm, (n) => kmText(n))) : ''}
+    ${k(t.timed ? formatTime(t.time, true) : '—', 'tiempo en carrera')}</div>`;
+};
+const disciplineName = (x) => fullLabel(x.modality, x.subtype);
+/** Filas de un grupo (de modalidades o de disciplinas): barra de color, carreras, participaciones, corredores y podios. */
+const statRows = (list, { cost = false, byMod = false } = {}) => {
+  const mx = Math.max(1, ...list.map((x) => x.races));
+  const xtra = (x) => [x.elevation ? `${ico('mountain')}${elevText(x.elevation)}${x.avgElev ? ` · media ${elevText(x.avgElev)}` : ''}` : '', x.trip ? `${ico('compass')}${kmText(x.trip)} de viaje` : '', cost && x.avgPrice ? `${ico('euro')}inscripción media ${euros(x.avgPrice)}` : '',
+    cost && byMod && x.cost ? `${ico('money')}${euros(Math.round(x.cost))} en inscripciones` : ''].filter(Boolean);
+  return `<ul class="tp-disc${byMod ? ' md-mod' : ''}">${list.map((x) => `<li class="${byMod ? modClass(x.modality) : discClass(x.modality, x.subtype)}"><i class="tp-dot"></i><b>${esc(byMod ? x.modality : x.label || subLabel(x.modality, x.subtype))}</b>
+    <span class="tp-track"><i style="width:${(x.races / mx) * 100}%"></i></span>
+    <span class="tp-n"><b>${x.races}</b> carr.</span><span class="tp-n">${x.participations} part.</span><span class="tp-n">${x.runners} corr.</span><span class="tp-n tp-pod">🏆 ${x.podiums}${x.wins ? ` · 🥇 ${x.wins}` : ''}</span>${xtra(x).length ? `<span class="tp-xtra">${xtra(x).map((t) => `<i>${t}</i>`).join('')}</span>` : ''}</li>`).join('') || '<li class="muted">Sin carreras este año.</li>'}</ul>`;
+};
+/** Nivel 1: las modalidades (BTT, Carretera, Gravel…), una barra repartida y sus cifras. Las disciplinas NO salen aquí: cuelgan de cada modalidad. */
+const modalityOverview = (pk, opts = {}) => {
+  const tree = modalityTree(pk.s), tot = tree.reduce((n, m) => n + m.races, 0) || 1;
+  return `${tree.length ? `<div class="rs-stack">${tree.map((m) => `<span class="${modClass(m.modality)}" style="flex:${m.races}" title="${esc(m.modality)}: ${m.races}">${m.races / tot > 0.08 ? m.races : ''}</span>`).join('')}</div>` : ''}${statRows(tree, { ...opts, byMod: true })}`;
+};
+/** Nivel 2: una por modalidad con formatos, con sus disciplinas dentro (BTT → XCO, XCM, Rally…; Carretera → Critérium, Ciclodeportiva…). */
+const disciplineBlocks = (pk, opts = {}) => modalityTree(pk.s).filter((m) => m.children.length).map((m) => {
+  const tot = m.children.reduce((n, d) => n + d.races, 0) || 1;
+  return { modality: m.modality, html: `<div class="rs-stack">${m.children.map((d) => `<span class="${discClass(d.modality, d.subtype)}" style="flex:${d.races}" title="${esc(d.label)}: ${d.races}">${d.races / tot > 0.08 ? d.races : ''}</span>`).join('')}</div>${statRows(m.children, opts)}` };
+});
+/** Leyenda agrupada: cada modalidad con sus disciplinas debajo, nunca todas mezcladas al mismo nivel. */
+const discLegend = (disciplines, counts = false) => {
+  const g = new Map(); for (const d of disciplines) (g.get(d.modality) || g.set(d.modality, []).get(d.modality)).push(d);
+  return `<div class="dl-groups">${[...g].map(([m, list]) => `<span class="dl-g"><b class="${modClass(m)}"><i class="dot"></i>${esc(m)}${counts ? ` <em>${list.reduce((n, d) => n + d.races, 0)}</em>` : ''}</b>${SUBTYPES[m] ? list.map((d) => `<span class="${discClass(d.modality, d.subtype)}"><i class="dot"></i>${esc(subLabel(m, d.subtype))}${counts ? ` <em>${d.races}</em>` : ''}</span>`).join('') : ''}</span>`).join('')}</div>`;
+};
+/** Podios por categoría y por disciplina (tablas cortas con medallas). */
+const seasonPodiums = (pk) => {
+  const pl = pk.s.podiumList, medalsOf = (l) => [1, 2, 3].map((k) => l.filter((x) => x.position === k).length);
+  const group = (keyFn) => { const g = new Map(); for (const x of pl) { const k = keyFn(x); (g.get(k) || g.set(k, []).get(k)).push(x); } return [...g].map(([k, list]) => ({ k, list, m: medalsOf(list) })).sort((a, b) => b.list.length - a.list.length || b.m[0] - a.m[0]); };
+  const tbl = (rows, lab) => `<table class="tp-table"><thead><tr><th>${lab}</th><th>🥇</th><th>🥈</th><th>🥉</th><th>Total</th></tr></thead><tbody>${rows.map((g) => `<tr><td>${g.label}</td><td>${g.m[0]}</td><td>${g.m[1]}</td><td>${g.m[2]}</td><td><b>${g.list.length}</b></td></tr>`).join('') || '<tr><td colspan="5" class="muted">Sin podios</td></tr>'}</tbody></table>`;
+  const cat = group((x) => x.category || 'Sin categoría').map((g) => ({ ...g, label: esc(g.k) }));
+  // por modalidad y, dentro, por disciplina (la fila de la modalidad suma las de sus disciplinas)
+  const sum = (list) => ({ list, m: medalsOf(list) });
+  const discRows = [];
+  for (const [m, mlist] of [...pl.reduce((g, x) => (g.get(x.modality) || g.set(x.modality, []).get(x.modality)).push(x) && g, new Map())].sort((a, b) => b[1].length - a[1].length)) {
+    discRows.push({ ...sum(mlist), label: `<b>${esc(m)}</b>`, cls: 'tp-mod' });
+    if (SUBTYPES[m]) {
+      const g = new Map(); for (const x of mlist) (g.get(x.subtype || '') || g.set(x.subtype || '', []).get(x.subtype || '')).push(x);
+      for (const [sub, l] of [...g].sort((a, b) => (a[0] ? 0 : 1) - (b[0] ? 0 : 1) || b[1].length - a[1].length)) discRows.push({ ...sum(l), label: esc(subLabel(m, sub)), cls: 'tp-sub' });
+    }
+  }
+  const tblD = (rows) => `<table class="tp-table"><thead><tr><th>Modalidad y disciplina</th><th>🥇</th><th>🥈</th><th>🥉</th><th>Total</th></tr></thead><tbody>${rows.map((g) => `<tr class="${g.cls}"><td>${g.label}</td><td>${g.m[0]}</td><td>${g.m[1]}</td><td>${g.m[2]}</td><td><b>${g.list.length}</b></td></tr>`).join('') || '<tr><td colspan="5" class="muted">Sin podios este año.</td></tr>'}</tbody></table>`;
+  return `<div class="tp-two"><div><h3>Por categoría</h3>${tbl(cat, 'Categoría')}</div><div><h3>Por modalidad y disciplina</h3>${tblD(discRows)}</div></div>
+    <p class="hint">El puesto es el de la categoría del corredor (un 1º de M40 es el primero entre los M40).</p>`;
+};
+/** Récords del equipo (quién lidera cada cosa). */
+const seasonRecords = (pk) => {
+  const s = pk.s, people = s.perRunner, who = (score) => { const top = Math.max(0, ...people.map(score)); return top ? { top, names: people.filter((r) => score(r) === top).map((r) => r.name) } : null; };
+  const row = (label, w, fmt) => (w ? `<tr><td>${label}</td><td><b>${esc(w.names.slice(0, 3).join(', '))}${w.names.length > 3 ? ` y ${w.names.length - 3} más` : ''}</b></td><td>${fmt(w.top)}</td></tr>` : '');
+  const L = s.longest;
+  return `<table class="tp-table"><tbody>
+    ${row('Más carreras', who((r) => r.races), (n) => `${n}`)}${row('Más podios', who((r) => r.p1 + r.p2 + r.p3), (n) => `${n}`)}${row('Más victorias', who((r) => r.p1), (n) => `${n}`)}
+    ${L ? `<tr><td>Carrera más larga</td><td><b>${esc(L.race)}</b></td><td>${esc(kmText(L.km))}</td></tr>` : ''}
+    ${s.hardest ? `<tr><td>Carrera más dura (desnivel)</td><td><b>${esc(s.hardest.race)}</b></td><td>${esc(elevText(s.hardest.elevation))}</td></tr>` : ''}
+    ${s.steepest && s.steepest.race !== s.hardest?.race ? `<tr><td>Carrera más empinada</td><td><b>${esc(s.steepest.race)}</b></td><td>${Math.round(s.steepest.value)} m/km</td></tr>` : ''}
+    ${row('Más metros de subida', who((r) => r.elev), (n) => elevText(n))}
+    ${s.farthest ? `<tr><td>Carrera más lejana</td><td><b>${esc(s.farthest.race)}</b></td><td>${esc(kmText(s.farthest.value))}</td></tr>` : ''}
+    ${row('Más desplazamientos', who((r) => r.trip), (n) => kmText(n))}
+    ${row('Más kilómetros', who((r) => r.km), (n) => kmText(n))}${row('Más tiempo en carrera', who((r) => r.time), (n) => formatTime(n, true))}
+    ${row('Más versátil (disciplinas distintas)', who((r) => Object.keys(r.discs || {}).length), (n) => `${n}`)}${row('Más constante (meses con carrera)', who((r) => r.months?.size || 0), (n) => `${n}`)}
+    </tbody></table>`;
+};
+/** Metros de subida (de todos los participantes) mes a mes. */
+const seasonElevMonths = (pk) => {
+  const m = pk.s.byMonth, mx = Math.max(1, ...m.map((x) => x.elev));
+  return `<div class="rs-wk rs-elev" role="img" aria-label="Desnivel positivo de cada mes">${m.map((x) => `<div><em>${x.elev ? (x.elev >= 1000 ? `${(x.elev / 1000).toFixed(1).replace('.', ',')}k` : x.elev) : ''}</em><span style="height:${(x.elev / mx) * 100}%"></span><b>${MES3[x.month].slice(0, 1).toUpperCase()}</b></div>`).join('')}</div>`;
+};
+/** Dónde se ha competido: provincias y países. */
+const seasonReach = (pk) => {
+  const pr = pk.s.provinces.slice(0, 10), co = pk.s.countries.slice(0, 6);
+  const chips = (rows) => rows.map((c) => `<span class="tp-chip">${esc(c.name)} <b>${c.races}</b></span>`).join('') || '<span class="muted">—</span>';
+  return `<div class="tp-two"><div><h3>Provincias (${pk.s.provinces.length})</h3><div class="tp-chips">${chips(pr)}</div></div><div><h3>Países (${pk.s.countries.length})</h3><div class="tp-chips">${chips(co)}</div></div></div>`;
+};
+/** Carreras por mes, con el color de cada disciplina. */
+const seasonMonths = (pk) => {
+  const s = pk.s, mx = Math.max(1, ...s.byMonth.map((m) => m.total)), MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  const order = (k) => s.disciplines.findIndex((d) => d.key === k);
+  return `<div class="mchart tp-months" role="img" aria-label="Carreras por mes">${s.byMonth.map((m) => `<div class="mc${m.total ? '' : ' none'}"><div class="mc-area"><em>${m.total || ''}</em>
+    <div class="mc-stack" style="height:${m.total ? (m.total / mx) * 100 : 0}%">${Object.entries(m.discs).sort(([x], [y]) => order(y) - order(x)).map(([k, n]) => { const [dm, ds] = k.split('|');
+      return `<span class="${discClass(dm, ds)}" style="flex:${n}" title="${esc(discLabel(dm, ds))}: ${n}"></span>`; }).join('')}</div></div><b>${MES[m.month]}</b></div>`).join('')}</div>`;
+};
+/** Filas de la tabla de corredores del año (con las columnas de cada disciplina para el Excel). */
+function seasonRunnerRows(pk) {
+  return pk.s.perRunner.filter((r) => r.races > 0).map((r) => {
+    const rn = S.data.runners.find((x) => x.id === r.key);
+    return { ...r, cat: rn?.category || '', contract: rn?.contract ? contractLabel(rn.contract) : '', nd: Object.keys(r.discs || {}).length, nm: r.months?.size || 0, pod: r.p1 + r.p2 + r.p3 };
+  });
+}
+const TP_COLS = [['name', 'Corredor', 'text'], ['races', 'Carr.'], ['km', 'Km'], ['elev', 'Desn.'], ['trip', 'Viaje'], ['cost', '€ insc.'], ['time', 'Tiempo'], ['nd', 'Disc.'], ['p1', '🥇'], ['p2', '🥈'], ['p3', '🥉'], ['nm', 'Meses']];
+function viewMemoria() {
+  const years = availableYears(S.data.races);
+  if (!years.includes(S.year)) S.year = years[0];
+  if (!S.ig) loadIg();
+  const pk = seasonPack(S.year);
+  const memIns = yearInsights(S.year, S.data.races, S.data.runners);
+  const igOk = S.ig?.rows;
+  const g = igOk ? igSummary(S.ig.rows, `${S.year}-01-01`, `${S.year}-12-31`) : null, acc = g?.account, t = g?.totals;
+  const nf2 = (n) => (n == null ? '—' : Number(n).toLocaleString('de-DE'));
+  const redes = g && (g.nDays || acc) ? `<section class="mem-sec"><h2>Presencia en redes</h2><div class="rp-kpis">
+      ${acc ? `<div class="rp-kpi"><b>${nf2(acc.followers)}</b><span>seguidores en Instagram</span></div>` : ''}
+      ${g.nDays ? `<div class="rp-kpi"><b>${nf2(t.views)}</b><span>visualizaciones</span></div><div class="rp-kpi"><b>${nf2(t.interactions)}</b><span>interacciones</span></div>` : ''}
+      ${g.nDays && t.reachAvg ? `<div class="rp-kpi"><b>${nf2(t.reachAvg)}</b><span>alcance medio diario</span></div>` : ''}</div>
+      <p class="rp-note">@hinacoclubciclistamonzon · ${g.nDays ? `${g.nDays} días de datos guardados en ${S.year}` : `datos a ${acc ? igShort(acc.until) : ''}`}.</p></section>` : '';
+  const top = pk.s.perRunner.filter((r) => r.races > 0).slice(0, 10);
+  return frame('Memoria de la temporada', `
+    <div class="no-print">${yearPicker(years)}<div class="row-btns rp-actions"><button class="btn primary" data-act="print-report">🖨️ Imprimir o guardar PDF</button><a class="btn" href="#/resumen">‹ Volver al Resumen</a></div>
+      <p class="hint">En el cuadro de imprimir elige «Guardar como PDF». No incluye bonos, contratos ni datos personales: es para enseñar a sponsors.</p></div>
+    <article class="report memoria">
+      <header class="rp-head"><img src="icons/logo.png" alt=""><div><h2>Club Ciclista Monzón · Memoria ${S.year}</h2><p>Resumen de la temporada del equipo de competición</p></div></header>
+      <section class="mem-sec"><h2>La temporada en cifras</h2>${seasonKpis(pk)}</section>
+      <section class="mem-sec"><h2>Carreras por mes</h2>${seasonMonths(pk)}</section>
+      ${pk.s.totals.elevation ? `<section class="mem-sec"><h2>Metros de subida</h2><p class="rp-note">${esc(elevText(pk.s.totals.elevation))} de desnivel positivo entre todos${memIns.climb ? ` · ${String(memIns.climb).replace('.', ',')} m de subida por km de media` : ''}${pk.s.hardest ? ` · la más dura, ${esc(pk.s.hardest.race)} (${esc(elevText(pk.s.hardest.elevation))})` : ''}.</p>${seasonElevMonths(pk)}</section>` : ''}
+      <section class="mem-sec"><h2>Por modalidad</h2>${modalityOverview(pk)}</section>
+      ${disciplineBlocks(pk).map((b) => `<section class="mem-sec"><h2>${esc(b.modality)}: por disciplina</h2>${b.html}</section>`).join('')}
+      <section class="mem-sec"><h2>Podios</h2>${seasonPodiums(pk)}</section>
+      <section class="mem-sec"><h2>Récords del equipo</h2>${seasonRecords(pk)}</section>
+      <section class="mem-sec"><h2>Dónde hemos competido</h2>${seasonReach(pk)}</section>
+      ${top.length ? `<section class="mem-sec"><h2>Los que más han corrido</h2><table class="tp-table"><tbody>${top.map((r, i) => `<tr><td>${i + 1}</td><td><b>${esc(r.name)}</b></td><td>${r.races} carreras</td><td>${r.km ? esc(kmText(r.km)) : ''}</td><td>${r.p1 ? `🥇${r.p1} ` : ''}${r.p2 ? `🥈${r.p2} ` : ''}${r.p3 ? `🥉${r.p3}` : ''}</td></tr>`).join('')}</tbody></table></section>` : ''}
+      ${redes}
+      <footer class="rp-note">Datos del club a ${dateEs(todayISO())}.</footer>
+    </article>`, { back: '#/resumen' });
+}
+
+
+// ======================================================================
+//  Ubicación de las carreras (desplazamientos): la dirección busca sola las poblaciones que no están en el listado de la app
+// ======================================================================
+
+const GEO_MISS_KEY = 'monzon-geo-miss';
+/** Busca una población en Open-Meteo (sin clave) y devuelve la que mejor encaja con su provincia y país, o null. */
+async function geocodePlace(place, province, country) {
+  const name = String(place).replace(/\(.*?\)/g, '').split(/[,;/]/)[0].trim();
+  if (name.length < 2) return null;
+  const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=8&language=es&format=json`);
+  if (!res.ok) throw new Error('geocodificador');
+  return pickGeocode((await res.json()).results, province, country);
+}
+/** Las carreras cuya población no está en el listado (y no tienen ya coordenadas guardadas) son las que hay que buscar. */
+function geoPending() {
+  let miss = {}; try { miss = JSON.parse(store.get(GEO_MISS_KEY) || '{}'); } catch { miss = {}; }
+  const out = [];
+  for (const [kind, list] of [['race', S.data?.races || []], ['reg', S.data?.registrations || []]]) for (const r of list) {
+    if (!cleanName(r.place) || (r.lat != null && r.geo_key === geoKey(r))) continue;
+    if (placeCoords(r.place, '')?.src === 'town') continue;
+    if (miss[geoKey(r)]) continue;
+    out.push({ kind, r });
+  }
+  return out;
+}
+let geoBusy = false;
+async function geocodeMissing(max = 12) {
+  if (geoBusy || !S.session?.isAdmin || !S.data || api.mode === 'demo' || !navigator.onLine) return;
+  const todo = geoPending().slice(0, max);
+  if (!todo.length) return;
+  geoBusy = true;
+  let miss = {}; try { miss = JSON.parse(store.get(GEO_MISS_KEY) || '{}'); } catch { miss = {}; }
+  let found = 0;
+  try {
+    for (const { kind, r } of todo) {
+      const key = geoKey(r);
+      if (r.lat != null && r.geo_key === key) continue;
+      try {
+        const c = await geocodePlace(r.place, r.province, r.country);
+        if (c) { const geo = { ...c, geo_key: key }; await api.saveGeo(kind, r.id, geo); Object.assign(r, geo); found++; } else miss[key] = Date.now();
+      } catch { break; }   // sin conexión o servicio caído: se reintenta otro día
+      await new Promise((ok) => setTimeout(ok, 300));
+    }
+  } finally {
+    store.set(GEO_MISS_KEY, JSON.stringify(miss)); geoBusy = false;
+  }
+  if (found && ['resumen', 'temporada', 'calidad', 'memoria'].includes(parseRoute().view)) render();
+}
+
+// ======================================================================
+//  Resumen de la dirección: panel de temporada en cuatro pestañas
+//  Panorama · Podios · Equipo · Alcance (todo filtrable por modalidad y con el año anterior al lado)
+// ======================================================================
+
+/** ¿Mira la dirección (con enlaces a fichas) o un corredor (o la vista previa de uno)? */
+const viewerIsAdmin = () => !!S.session?.isAdmin && !S.preview;
+const raceHref = (id) => (viewerIsAdmin() ? `#/carreras/${id}` : `${runnerHref('carrera')}/race_${id}`);
+const personTag = (key, name) => (viewerIsAdmin() ? `<a href="#/corredor/${esc(key)}"><b>${esc(name)}</b></a>` : `<b>${esc(name)}</b>`);
+const RES_TABS = [['pan', 'Panorama', 'bars'], ['pod', 'Podios', 'trophy'], ['eq', 'Equipo', 'users'], ['alc', 'Alcance', 'flag']];
+const MES3 = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const cap1 = (t) => String(t).charAt(0).toUpperCase() + String(t).slice(1);
+const pctOf = (n, d) => (d ? Math.round((n / d) * 100) : 0);
+const bar = (pct, cls = '') => `<span class="rs-bar ${cls}"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></span>`;
+/** «▲ 4» o «▼ 2» (sobre fondo claro u oscuro) frente al año anterior; vacío si no hay año anterior. */
+const rsDelta = (pk, cur, old, fmt = (n) => n) => (!pk.hasPrev || (cur === 0 && old === 0) ? '' : `<em class="rs-d ${cur > old ? 'up' : cur < old ? 'down' : ''}" title="frente a ${pk.year - 1}">${cur > old ? '▲' : cur < old ? '▼' : '='}${cur === old ? '' : ' ' + fmt(Math.abs(cur - old))}</em>`);
+
+function resPack(year, mod, src = null) {
+  const base = src || { races: S.data.races, runners: S.data.runners, registrations: S.data.registrations };
+  const keep = (r) => !mod || (mod.includes('|') ? disciplineKey(r.modality, r.subtype) === mod : r.modality === mod);   // modalidad («BTT») o, en la pantalla del corredor, disciplina («BTT|XCO»)
+  const races = base.races.filter(keep), regs = base.registrations.filter(keep);
+  const ins = yearInsights(year, races, base.runners, regs, todayISO());
+  const pins = yearInsights(year - 1, races, base.runners, regs, todayISO());
+  return { s: ins.summary, prev: pins.summary, hasPrev: pins.summary.totals.races > 0, year, ins, pins, mod };
+}
+
+/** Cabecera verde con las cifras grandes y la variación frente al año anterior. */
+function resHero(pk) {
+  const t = pk.s.totals, o = pk.prev.totals, i = pk.ins;
+  const big = (n, l, d) => `<div class="rs-big"><b>${n}</b><span>${l}</span>${d}</div>`;
+  const sub = [i.summary.totals.participations ? `${t.participations} participaciones` : '', i.podiumRate ? `${i.podiumRate} % acaban en podio` : '', i.days > t.races ? `${i.days} días de competición` : '',
+    t.km ? `📏 ${kmText(Math.round(t.km))}` : '', t.elevation ? `⛰️ ${elevText(t.elevation)}` : '', t.travelKm ? `🧭 ${kmText(t.travelKm)} de viaje` : '', t.timed ? `⏱️ ${formatTime(t.time, true)}` : ''].filter(Boolean);
+  return `<section class="rs-hero">
+    <p class="rs-hero-t">${pk.mod ? esc(pk.mod.split('|').filter(Boolean).join(' · ')) : 'Todo el equipo'} · temporada ${pk.year}</p>
+    <div class="rs-bigs">${big(t.races, 'carreras', rsDelta(pk, t.races, o.races))}${big(t.runners, 'corredores', rsDelta(pk, t.runners, o.runners))}${big(t.podiums, 'podios', rsDelta(pk, t.podiums, o.podiums))}${big(t.wins, 'victorias', rsDelta(pk, t.wins, o.wins))}</div>
+    ${sub.length ? `<p class="rs-hero-s">${sub.map(esc).join(' · ')}</p>` : ''}
+    ${pk.hasPrev ? `<p class="rs-hero-p">Flechas: frente a ${pk.year - 1}</p>` : ''}</section>`;
+}
+
+/** Cuatro datos destacados del año en fichas pequeñas. */
+function resHighlights(pk) {
+  const i = pk.ins, L = pk.s.longest, t = pk.s.totals;
+  const tile = (ic, label, val, sub = '', href = '') => `<${href ? `a href="${esc(href)}"` : 'div'} class="rs-tile">${ico(ic)}<small>${label}</small><b>${val}</b>${sub ? `<em>${sub}</em>` : ''}</${href ? 'a' : 'div'}>`;
+  const up = i.upcoming;
+  return `<div class="rs-tiles">
+    ${tile('cal', 'Mejor mes', i.bestMonth ? cap1(MONTH_NAMES[i.bestMonth.month]) : '—', i.bestMonth ? `${i.bestMonth.total} carrera${i.bestMonth.total === 1 ? '' : 's'}` : '')}
+    ${tile('users', 'Media por carrera', i.avgPart ? `${String(i.avgPart).replace('.', ',')}` : '—', 'corredores del club')}
+    ${tile('ruler', 'La más larga', L ? esc(kmText(L.km)) : '—', L ? esc(L.race) : 'sin km indicados', L ? `#/carreras/${L.raceId}` : '')}
+    ${tile('calplus', 'Por venir', up.races ? `${up.races} carrera${up.races === 1 ? '' : 's'}` : 'Nada más', up.races ? `${up.entries} inscripcion${up.entries === 1 ? '' : 'es'}` : 'este año', up.races ? '#/inscripciones' : '')}
+    ${tile('mountain', 'La más dura', pk.s.hardest ? esc(elevText(pk.s.hardest.elevation)) : '—', pk.s.hardest ? esc(pk.s.hardest.race) : 'sin desnivel indicado', pk.s.hardest ? `#/carreras/${pk.s.hardest.raceId}` : '')}
+    ${tile('money', 'Coste de competir', t.cost ? esc(euros(Math.round(t.cost))) : '—', t.cost ? `${esc(euros(Math.round((t.cost / Math.max(1, t.participations)) * 10) / 10))} por inscripción` : 'sin precios indicados')}
+    ${tile('compass', 'Viaje del equipo', t.travelKm ? esc(kmText(t.travelKm)) : '—', t.travelKm ? 'ida y vuelta, aprox.' : 'sin ubicación de las carreras')}
+    ${tile('route', 'La más lejana', pk.s.farthest ? esc(kmText(pk.s.farthest.value)) : '—', pk.s.farthest ? esc(pk.s.farthest.race) : 'sin ubicación', pk.s.farthest ? `#/carreras/${pk.s.farthest.raceId}` : '')}
+  </div>`;
+}
+
+/** Acumulado de carreras mes a mes: este año frente al anterior. */
+function resPace(pk) {
+  const cum = (s) => { let n = 0; return s.byMonth.map((m) => (n += m.total)); };
+  const a = cum(pk.s), b = cum(pk.prev), W = 300, H = 90, P = 6;
+  const mx = Math.max(1, ...a, ...(pk.hasPrev ? b : []));
+  const pt = (arr) => arr.map((v, k) => `${(P + (k / 11) * (W - 2 * P)).toFixed(1)},${(H - P - (v / mx) * (H - 2 * P)).toFixed(1)}`);
+  const cur = pt(a), area = `${P},${H - P} ${cur.join(' ')} ${W - P},${H - P}`;
+  const nowM = pk.year === new Date().getFullYear() ? new Date().getMonth() : 11;
+  return `<svg class="rs-pace" viewBox="0 0 ${W} ${H}" role="img" aria-label="Carreras acumuladas mes a mes">
+    <polygon points="${area}" class="pa-area"/>${pk.hasPrev ? `<polyline points="${pt(b).join(' ')}" class="pa-prev"/>` : ''}<polyline points="${cur.slice(0, nowM + 1).join(' ')}" class="pa-cur"/>
+    <circle cx="${cur[nowM].split(',')[0]}" cy="${cur[nowM].split(',')[1]}" r="4" class="pa-dot"/></svg>
+    <div class="rs-pace-x">${MES3.map((m) => `<span>${m}</span>`).join('')}</div>
+    <p class="rs-pace-l"><i class="l-cur"></i>${pk.year}: <b>${a[nowM]}</b>${pk.hasPrev ? ` &nbsp; <i class="l-prev"></i>${pk.year - 1}: <b>${b[nowM]}</b> a estas alturas · <b>${b[11]}</b> en total` : ''}</p>`;
+}
+
+/** Calendario del año: una fila por mes, una casilla por día; las carreras llevan el color de su disciplina. */
+function resHeat(pk) {
+  const year = pk.year, today = todayISO(), byDay = new Map();
+  for (const r of pk.ins.cal) for (const d of daysOf(r.date, r.end_date)) if (d.startsWith(String(year))) (byDay.get(d) || byDay.set(d, []).get(d)).push(r);
+  const rows = MES3.map((m, mi) => {
+    const n = new Date(year, mi + 1, 0).getDate();
+    const cells = Array.from({ length: 31 }, (_, k) => {
+      const day = k + 1;
+      if (day > n) return '<i class="hc gone"></i>';
+      const iso = `${year}-${String(mi + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const wd = (new Date(`${iso}T12:00:00Z`).getUTCDay() + 6) % 7, rs = byDay.get(iso);
+      const cls = `hc${wd >= 5 ? ' we' : ''}${iso === today ? ' today' : ''}`;
+      if (!rs) return `<i class="${cls}"></i>`;
+      const r = rs[0];
+      return `<a class="${cls} on ${discClass(r.modality, r.subtype)}" href="#/carreras/${r.id}" title="${esc(`${day} ${m} · ${rs.map((x) => x.name).join(' + ')}`)}"></a>`;
+    }).join('');
+    return `<div class="hrow"><b>${m}</b><div class="hcells">${cells}</div></div>`;
+  }).join('');
+  return `<div class="rs-heat">${rows}</div>${discLegend(pk.s.disciplines)}<div class="mod-legend"><span class="hl-we"><i class="dot"></i>fin de semana</span></div>`;
+}
+
+/** Reparto de carreras por día de la semana. */
+function resWeekdays(pk) {
+  const w = pk.ins.weekdays, mx = Math.max(1, ...w);
+  return `<div class="rs-wk">${w.map((n, k) => `<div class="${k >= 5 ? 'we' : ''}"><em>${n || ''}</em><span style="height:${(n / mx) * 100}%"></span><b>${WEEKDAYS[k].slice(0, 1).toUpperCase()}</b></div>`).join('')}</div>
+    <p class="hint">Las carreras empiezan en ${(() => { const k = w.indexOf(mx); return mx ? WEEKDAYS[k] + (w.filter((x) => x === mx).length > 1 ? ' (y otros días igual)' : '') : '—'; })()} sobre todo.</p>`;
+}
+
+/** Barra apilada con el reparto por disciplina + la lista con sus cifras. */
+/** Año actual frente al anterior, métrica a métrica. */
+function resCompare(pk) {
+  if (!pk.hasPrev) return `<p class="hint">Todavía no hay datos de ${pk.year - 1} para comparar.</p>`;
+  const t = pk.s.totals, o = pk.prev.totals, ci = pk.ins, oi = pk.pins;
+  const row = (l, a, b, fmt = (n) => n) => `<tr><td>${l}</td><td class="num"><b>${fmt(a)}</b></td><td class="num muted">${fmt(b)}</td><td class="num">${rsDelta(pk, a, b, fmt) || '—'}</td></tr>`;
+  return `<div class="tp-scroll"><table class="tp-table rs-cmp"><thead><tr><th class="l"></th><th class="num">${pk.year}</th><th class="num">${pk.year - 1}</th><th class="num">Δ</th></tr></thead><tbody>
+    ${row('Carreras', t.races, o.races)}${row('Días de competición', ci.days, oi.days)}${row('Corredores que han corrido', t.runners, o.runners)}${row('Participaciones', t.participations, o.participations)}
+    ${row('Podios', t.podiums, o.podiums)}${row('Victorias', t.wins, o.wins)}${row('% de podios', ci.podiumRate, oi.podiumRate, (n) => `${n}\u00a0%`)}${row('Km recorridos', Math.round(t.km), Math.round(o.km), (n) => kmText(n))}
+    ${ci.summary.totals.elevation || oi.summary.totals.elevation ? row('Desnivel positivo', ci.summary.totals.elevation, oi.summary.totals.elevation, (n) => elevText(n)) : ''}${t.cost || o.cost ? row('Coste de las inscripciones', Math.round(t.cost), Math.round(o.cost), (n) => euros(n)) : ''}${t.travelKm || o.travelKm ? row('Desplazamiento (ida y vuelta)', t.travelKm, o.travelKm, (n) => kmText(n)) : ''}
+    ${row('Provincias distintas', pk.s.provinces.length, pk.prev.provinces.length)}${row('Disciplinas distintas', pk.s.disciplines.length, pk.prev.disciplines.length)}</tbody></table></div>`;
+}
+
+function resPanorama(pk) {
+  return `${resHero(pk)}${resHighlights(pk)}
+    <section class="card rs-card"><h2>Ritmo del año</h2>${resPace(pk)}</section>
+    <section class="card rs-card"><h2>Carreras por mes</h2>${seasonMonths(pk)}</section>
+    ${pk.s.totals.elevation ? `<section class="card rs-card"><h2>Metros de subida por mes</h2>${seasonElevMonths(pk)}<p class="hint">Desnivel positivo sumado de todos los participantes en cada mes.</p></section>` : ''}
+    <section class="card rs-card"><h2>Calendario del año</h2><p class="hint">Cada casilla es un día. Toca una carrera para abrirla.</p>${resHeat(pk)}</section>
+    <section class="card rs-card"><h2>Por modalidad</h2>${modalityOverview(pk, { cost: true })}</section>
+    ${disciplineBlocks(pk, { cost: true }).map((b) => `<section class="card rs-card"><h2><i class="dot ${modClass(b.modality)}"></i>${esc(b.modality)}: por disciplina</h2>${b.html}</section>`).join('')}
+    <section class="card rs-card"><h2>Días de la semana</h2>${resWeekdays(pk)}</section>
+    <section class="card rs-card"><h2>Frente a ${pk.year - 1}</h2>${resCompare(pk)}</section>`;
+}
+
+// ---------- Podios ----------
+function resPodiums(pk) {
+  const s = pk.s, pl = s.podiumList, n = (k) => pl.filter((x) => x.position === k).length;
+  const t = s.totals, i = pk.ins;
+  const medals = `<div class="rs-medals"><div class="m1"><b>${n(1)}</b><span>🥇 Oros</span></div><div class="m2"><b>${n(2)}</b><span>🥈 Platas</span></div><div class="m3"><b>${n(3)}</b><span>🥉 Bronces</span></div></div>
+    <p class="rs-medal-s"><b>${pl.length}</b> podio${pl.length === 1 ? '' : 's'} en <b>${new Set(pl.map((x) => x.raceId)).size}</b> carrera${new Set(pl.map((x) => x.raceId)).size === 1 ? '' : 's'} · <b>${i.podiumRate} %</b> de las ${t.participations} participaciones acaban en podio${pk.hasPrev ? ` ${rsDelta(pk, pl.length, pk.prev.podiumList.length)}` : ''}</p>`;
+  const types = s.byPodiumType.filter((x) => x.podiums);
+  const hunters = s.perRunner.filter((r) => r.p1 + r.p2 + r.p3 > 0).sort((a, b) => b.p1 - a.p1 || (b.p1 + b.p2 + b.p3) - (a.p1 + a.p2 + a.p3) || b.p2 - a.p2 || a.name.localeCompare(b.name, 'es'));
+  const topP = Math.max(1, ...hunters.map((r) => r.p1 + r.p2 + r.p3));
+  const byRace = new Map();
+  for (const p of pl) { const k = `${p.raceId}|${p.date}`; (byRace.get(k) || byRace.set(k, { ...p, items: [] }).get(k)).items.push(p); }
+  const races = [...byRace.values()].sort((a, b) => b.date.localeCompare(a.date));
+  const raceRow = (r) => `<li class="${discClass(r.modality, r.subtype)}">${dateBadge({ date: r.date, modality: r.modality, subtype: r.subtype })}<div class="pr-body"><a class="rname" href="#/carreras/${r.raceId}">${esc(r.race)}</a>
+    <p class="pr-who">${r.items.sort((a, b) => a.position - b.position).map((p) => `${medal(p.position)} ${esc(p.runner)}${p.category ? ` <small class="muted">${esc(p.category)}</small>` : ''}${p.stage ? ` <small class="muted">(${esc(p.stage)})</small>` : ''}`).join(' · ')}</p></div></li>`;
+  return `<section class="card rs-card rs-gold"><h2>Podios ${pk.year}</h2>${medals}
+      ${types.length ? `<div class="pills">${types.map((x) => `<span class="pill">${esc(x.label)} <b>${x.podiums}</b>${x.wins ? ` · 🥇 ${x.wins}` : ''}</span>`).join('')}</div>` : ''}</section>
+    ${hunters.length ? `<section class="card rs-card"><h2>Los que más suben al podio</h2><ol class="rs-rank">${hunters.slice(0, 10).map((r, k) => `<li><span class="pos">${k + 1}</span><div><a href="#/corredor/${esc(r.key)}"><b>${esc(r.name)}</b></a>
+      <small class="muted">${r.races} carrera${r.races === 1 ? '' : 's'} · ${pctOf(r.p1 + r.p2 + r.p3, r.races)} % en podio</small>${bar(((r.p1 + r.p2 + r.p3) / topP) * 100, 'gold')}</div><span class="rk-m">${r.p1 ? `🥇${r.p1} ` : ''}${r.p2 ? `🥈${r.p2} ` : ''}${r.p3 ? `🥉${r.p3}` : ''}</span></li>`).join('')}</ol></section>` : ''}
+    <section class="card rs-card"><h2>Por categoría y disciplina</h2>${seasonPodiums(pk)}</section>
+    <section class="card rs-card"><h2>Récords del equipo</h2>${seasonRecords(pk)}</section>
+    <section class="card rs-card"><h2>Todos los podios (${races.length} carrera${races.length === 1 ? '' : 's'})</h2>
+      ${races.length ? `<ul class="podium-list rs-pods">${races.slice(0, 6).map(raceRow).join('')}</ul>${races.length > 6 ? `<details class="pod-more"><summary>Ver las ${races.length - 6} anteriores</summary><ul class="podium-list rs-pods">${races.slice(6).map(raceRow).join('')}</ul></details>` : ''}` : '<p class="muted">Sin podios este año.</p>'}</section>`;
+}
+
+// ---------- Equipo ----------
+function resTeam(pk) {
+  const i = pk.ins, s = pk.s, year = pk.year;
+  const pct = pctOf(i.activeCount, i.rosterSize), mx = Math.max(1, ...i.hist.map((h) => h.runners));
+  const part = `<section class="card rs-card"><h2>Participación</h2><div class="rs-part"><div class="ring" style="--p:${pct}"><b>${pct}%</b></div>
+      <div><p><b>${i.activeCount} de ${i.rosterSize}</b> corredores han corrido${pk.mod ? ` ${esc(pk.mod.split('|').filter(Boolean).join(' · '))}` : ''} en ${year}.</p>
+      <p class="muted small">${s.totals.participations} participaciones: <b>${i.avgPart ? String(i.avgPart).replace('.', ',') : 0}</b> corredores por carrera.</p></div></div>
+    <div class="rs-hist">${i.hist.map((h) => `<div><em>${h.runners || ''}</em><span style="height:${(h.runners / mx) * 100}%"></span><b>${h.label}</b></div>`).join('')}</div><p class="hint">Cuántos corredores han hecho cada número de carreras.</p>
+    ${i.idle.length ? `<p class="small"><b>Sin ninguna carrera (${i.idle.length}):</b> ${i.idle.sort(byName).map((r) => `<a href="#/corredor/${r.key}">${esc(r.name)}</a>`).join(', ')}.</p>` : '<p class="small">✅ Todos han corrido alguna vez este año.</p>'}</section>`;
+  let money = '';
+  if (!pk.mod) {
+    const cfg = bonusCfg(year), bs = yearBonuses(year, S.data.races, S.data.registrations, S.data.runners, cfg, S.data.circuitPodiums || []);
+    const amount = bs.reduce((n, b) => n + b.amount, 0), pen = bs.reduce((n, b) => n + b.penalty, 0);
+    const ok = bs.filter((b) => b.reachesMinimum).length, low = bs.length - ok, withTier = bs.filter((b) => b.tier).length;
+    const tiers = new Map(); for (const b of bs) { const k = b.tier ? b.tier.races : 0; tiers.set(k, (tiers.get(k) || 0) + 1); }
+    const order = [...tiers.keys()].sort((a, b) => a - b), tmx = Math.max(1, ...tiers.values());
+    money = `<section class="card rs-card"><h2>Bonos y mínimo (${year})</h2>
+      <div class="rs-bonus"><div class="good"><b>${ok}</b><span>cumplen el mínimo</span></div><div class="bad"><b>${low}</b><span>por debajo</span></div><div class="gold"><b>${withTier}</b><span>con bono</span></div></div>
+      <div class="rs-money"><div><small>Bonos que correspondería pagar</small><b>${euros(amount)}</b></div><div><small>Penalizaciones</small><b>${euros(pen)}</b></div><div><small>Saldo</small><b class="${amount - pen >= 0 ? 'pos' : 'neg'}">${signEuros(amount - pen)}</b></div></div>
+      <div class="rs-tiers">${order.map((k) => `<div><span>${k ? `Tramo ${k} carreras` : 'Sin tramo'}</span>${bar((tiers.get(k) / tmx) * 100, k ? 'ok' : 'low')}<b>${tiers.get(k)}</b></div>`).join('')}</div>
+      <p class="hint">Con las carreras ya hechas hasta hoy (sin contar las inscritas). Detalle por corredor en <a href="#/computo">Cómputo</a> y <a href="#/bonos">Bonos</a>.</p></section>`;
+  }
+  const roster = S.data.runners;
+  const catRow = (c) => { const rs = roster.filter((r) => (r.category || '') === c); const st = s.byCategory.find((x) => x.category === c);
+    return rs.length || st ? `<li><div class="cs-head"><b>${c ? esc(c) : 'Sin categoría'}</b><small class="muted">${rs.length} en plantilla · ${st ? `${st.runners} corrieron · ${st.participations} part.${st.km ? ` · ${kmText(st.km)}` : ''}${st.elev ? ` · ▲ ${elevText(st.elev)}` : ''}` : 'sin carreras'}</small>
+      <span class="cs-pod">${st && st.podiums ? `${st.p1 ? '🥇' + st.p1 + ' ' : ''}${st.p2 ? '🥈' + st.p2 + ' ' : ''}${st.p3 ? '🥉' + st.p3 : ''}` : ''}</span></div>${bar(pctOf(st?.participations || 0, Math.max(1, ...s.byCategory.map((x) => x.participations))))}</li>` : ''; };
+  const cats = `<section class="card rs-card"><h2>Por categoría</h2><ul class="cat-stats">${[...CATEGORIES, ''].map(catRow).join('')}</ul></section>`;
+  const cn = CONTRACTS.map((c) => [c.label, roster.filter((r) => r.contract === c.id).length]).concat([['Sin indicar', roster.filter((r) => !CONTRACTS.some((c) => c.id === r.contract)).length]]).filter(([, n]) => n);
+  const contracts = `<section class="card rs-card"><h2>Plantilla por contrato</h2><div class="pills">${cn.map(([l, n]) => `<span class="pill">${esc(l)} <b>${n}</b></span>`).join('')}</div></section>`;
+  const bonusBy = new Map(yearBonuses(year, S.data.races, S.data.registrations, S.data.runners, bonusCfg(year), S.data.circuitPodiums || []).map((b) => [b.runner.id, b]));
+  const sort = S.tsort || { k: 'races', dir: -1 };
+  const rows = seasonRunnerRows(pk).map((r) => ({ ...r, bc: bonusBy.get(r.key)?.bonusCount || 0, bok: bonusBy.get(r.key)?.reachesMinimum }))
+    .sort((a, b) => (sort.k === 'name' ? a.name.localeCompare(b.name, 'es') * -sort.dir : (b[sort.k] - a[sort.k]) * -sort.dir || a.name.localeCompare(b.name, 'es')));
+  const cols = [...TP_COLS, ...(pk.mod ? [] : [['bc', 'Bono']])];
+  const th = ([k, l, t]) => `<th class="${t === 'text' ? 'l' : 'num'}"><button type="button" class="tp-sort${sort.k === k ? ' on' : ''}" data-act="tp-sort" data-k="${k}">${l}${sort.k === k ? (sort.dir === 1 ? ' ▲' : ' ▼') : ''}</button></th>`;
+  const table = `<section class="card rs-card"><h2>Corredores (${rows.length})</h2><div class="tp-scroll"><table class="tp-table tp-runners"><thead><tr>${cols.map(th).join('')}</tr></thead>
+    <tbody>${rows.map((r) => `<tr><td class="l"><a href="#/corredor/${esc(r.key)}"><b>${esc(r.name)}</b></a>${r.cat ? ` <small class="muted">${esc(r.cat)}</small>` : ''}</td><td class="num">${r.races}</td><td class="num">${r.km ? esc(kmText(r.km)) : '—'}</td><td class="num">${r.elev ? esc(elevText(r.elev)) : '—'}</td><td class="num">${r.trip ? esc(kmText(r.trip)) : '—'}</td><td class="num">${r.cost ? esc(euros(r.cost)) : '—'}</td><td class="num">${r.timed ? formatTime(r.time, true) : '—'}</td><td class="num">${r.nd}</td><td class="num">${r.p1 || '·'}</td><td class="num">${r.p2 || '·'}</td><td class="num">${r.p3 || '·'}</td><td class="num">${r.nm}</td>${pk.mod ? '' : `<td class="num">${r.bc}${r.bok === false ? ' ⚠️' : ''}</td>`}</tr>`).join('') || `<tr><td colspan="${cols.length}" class="muted">Sin carreras este año.</td></tr>`}</tbody></table></div>
+    <p class="hint">Toca una columna para ordenar. ⚠️ = por debajo del mínimo de carreras.</p></section>`;
+  return `${rankingBoard(pk)}${part}${money}${cats}${contracts}${table}`;
+}
+
+// ---------- Alcance: dónde, cuánto y qué formatos ----------
+/** Km frente a desnivel de cada carrera (un punto por carrera, con el color de su disciplina). */
+function resScatter(pk) {
+  const pts = pk.ins.cal.filter((r) => r.km && r.elevation);
+  if (pts.length < 2) return '<p class="hint">Hacen falta al menos dos carreras con km y desnivel indicados para dibujarlo.</p>';
+  const W = 320, H = 190, L = 38, B = 26, T = 8, R = 10, mx = Math.max(...pts.map((r) => r.km)) * 1.08, my = Math.max(...pts.map((r) => r.elevation)) * 1.08;
+  const X = (v) => L + (v / mx) * (W - L - R), Y = (v) => H - B - (v / my) * (H - B - T);
+  const tick = (max, n) => Array.from({ length: n + 1 }, (_, i) => Math.round((max / n) * i / 10) * 10);
+  return `<svg class="rs-scatter" viewBox="0 0 ${W} ${H}" role="img" aria-label="Kilómetros frente a desnivel de cada carrera">
+    ${tick(my, 4).map((v) => `<g><line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" class="sc-grid"/><text x="${L - 4}" y="${Y(v) + 3}" class="sc-t" text-anchor="end">${v >= 1000 ? (v / 1000).toFixed(1).replace('.', ',') + 'k' : v}</text></g>`).join('')}
+    ${tick(mx, 4).map((v) => `<text x="${X(v)}" y="${H - 8}" class="sc-t" text-anchor="middle">${v}</text>`).join('')}
+    <text x="${L}" y="9" class="sc-l">m de subida</text><text x="${W - R}" y="${H - B - 4}" class="sc-l" text-anchor="end">km →</text>
+    ${pts.map((r) => `<a href="${raceHref(r.id)}"><circle cx="${X(r.km)}" cy="${Y(r.elevation)}" r="${Math.min(9, 4 + r.n * 1.2)}" class="sc-dot ${discClass(r.modality, r.subtype)}"><title>${esc(`${r.name}: ${r.km} km, ${elevText(r.elevation)}`)}</title></circle></a>`).join('')}</svg>
+    <p class="hint">Cada punto es una carrera; el tamaño crece con los corredores del club que la corrieron. Arriba a la derecha, las más largas y duras.</p>`;
+}
+/** Las carreras con más desnivel del año. */
+function resHardest(pk) {
+  const list = pk.ins.cal.filter((r) => r.elevation).sort((a, b) => b.elevation - a.elevation).slice(0, 6), mx = Math.max(1, ...list.map((r) => r.elevation));
+  return list.length ? `<ol class="rs-rank">${list.map((r, k) => `<li><span class="pos">${k + 1}</span><div><a href="${raceHref(r.id)}"><b>${esc(r.name)}</b></a>
+    <small class="muted">${esc(formatDate(r.date, false))}${r.km ? ` · ${esc(kmText(r.km))} · ${Math.round((r.elevation / r.km) * 10) / 10} m/km` : ''}${r.n ? ` · ${r.n} del club` : ''}</small>${bar((r.elevation / mx) * 100, 'warm')}</div><span class="rk-m">${esc(elevText(r.elevation))}</span></li>`).join('')}</ol>`
+    : '<p class="hint">Todavía no hay carreras con desnivel indicado. Se completa desde cada carrera («Faltan datos») o al crearla.</p>';
+}
+/** Cuánto cuesta competir: total, medias, por disciplina y por mes (solo dirección). */
+function resCost(pk) {
+  const t = pk.s.totals;
+  if (!t.pricedRaces) return '<p class="hint">Todavía no hay carreras con precio indicado. Se completa desde cada carrera («Faltan datos») o al crearla.</p>';
+  const ds = pk.s.disciplines.filter((d) => d.avgPrice), dmx = Math.max(1, ...ds.map((d) => d.avgPrice));
+  const mon = pk.s.byMonth, mmx = Math.max(1, ...mon.map((m) => m.cost));
+  const per = Math.round((t.cost / Math.max(1, t.participations)) * 10) / 10;
+  return `<div class="rs-money rs-cost"><div><small>Gasto en inscripciones</small><b>${esc(euros(Math.round(t.cost)))}</b></div><div><small>Precio medio de carrera</small><b>${esc(euros(t.avgPrice))}</b></div><div><small>Por participación</small><b>${esc(euros(per))}</b></div></div>
+    <h3>Precio medio por disciplina</h3>${ds.map((d) => `<div class="hbar"><span>${esc(disciplineName(d))}</span>${bar((d.avgPrice / dmx) * 100, 'warm')}<b>${esc(euros(d.avgPrice))}</b></div>`).join('')}
+    <h3>Gasto por mes</h3><div class="rs-wk rs-elev rs-costm" role="img" aria-label="Gasto en inscripciones de cada mes">${mon.map((m) => `<div><em>${m.cost ? Math.round(m.cost) : ''}</em><span style="height:${(m.cost / mmx) * 100}%"></span><b>${MES3[m.month].slice(0, 1).toUpperCase()}</b></div>`).join('')}</div>
+    <p class="hint">Suma el precio de la inscripción de cada participación del club (${t.pricedRaces} de ${t.races} carreras con precio indicado). Es lo que costaría inscribirse, no lo que se haya pagado.</p>`;
+}
+
+/** Mapa de desplazamientos: cada carrera según su rumbo y su distancia desde el punto de salida (anillos cada 50/100/200 km). */
+function resTripMap(pk) {
+  const pts = pk.ins.cal.filter((r) => r.dist != null && r.bearing != null);
+  if (!pts.length) return '<p class="hint">Todavía no se sabe dónde son las carreras: se buscan solas al abrir el Resumen.</p>';
+  const W = 320, C = W / 2, maxD = Math.max(...pts.map((r) => r.dist), 40), step = maxD > 260 ? 100 : maxD > 110 ? 50 : 25, top = Math.ceil((maxD * 1.05) / step) * step, R = C - 18;
+  const pos = (r) => ({ x: C + (r.dist / top) * R * Math.sin((r.bearing * Math.PI) / 180), y: C - (r.dist / top) * R * Math.cos((r.bearing * Math.PI) / 180) });
+  const rings = Array.from({ length: top / step }, (_, i) => (i + 1) * step);
+  return `<svg class="rs-trip" viewBox="0 0 ${W} ${W}" role="img" aria-label="Mapa de las carreras según su distancia y dirección desde el punto de salida">
+    ${rings.map((d) => `<circle cx="${C}" cy="${C}" r="${(d / top) * R}" class="tr-ring"/><text x="${C + 3}" y="${C - (d / top) * R + 10}" class="tr-t">${d} km</text>`).join('')}
+    <line x1="${C}" y1="${C - R - 6}" x2="${C}" y2="${C + R + 6}" class="tr-axis"/><line x1="${C - R - 6}" y1="${C}" x2="${C + R + 6}" y2="${C}" class="tr-axis"/>
+    <text x="${C}" y="10" class="tr-n" text-anchor="middle">N</text><text x="${W - 4}" y="${C + 4}" class="tr-n" text-anchor="end">E</text><text x="${C}" y="${W - 3}" class="tr-n" text-anchor="middle">S</text><text x="4" y="${C + 4}" class="tr-n">O</text>
+    ${pts.map((r) => { const q = pos(r); return `<a href="${raceHref(r.id)}"><circle cx="${q.x.toFixed(1)}" cy="${q.y.toFixed(1)}" r="${Math.min(9, 4 + r.n * 1.1)}" class="tr-dot ${discClass(r.modality, r.subtype)}${r.src === 'province' ? ' approx' : ''}"><title>${esc(`${r.name} (${r.place || 'sin lugar'}): ${r.dist} km${r.src === 'province' ? ' · aprox. por provincia' : ''}`)}</title></circle></a>`; }).join('')}
+    <circle cx="${C}" cy="${C}" r="5" class="tr-home"/><text x="${C + 8}" y="${C + 14}" class="tr-t">salida</text></svg>
+    <p class="hint">El centro es el punto de salida (${esc(ORIGEN.nombre)}). Cada punto es una carrera: cuanto más lejos del centro, más km; el tamaño crece con los corredores del club que fueron. Los puntos huecos solo se conocen por su provincia.</p>`;
+}
+/** Cuánto se desplaza el equipo: totales, quién más y las carreras más lejanas. */
+function resTravel(pk) {
+  const t = pk.s.totals, s = pk.s;
+  if (!t.travelRaces) return '<p class="hint">Todavía no se sabe dónde son las carreras. Se busca la población de cada una al abrir el Resumen; si alguna no aparece, revisa su lugar y provincia.</p>';
+  const people = s.perRunner.filter((r) => r.trip > 0).sort((a, b) => b.trip - a.trip), mx = Math.max(1, ...people.map((r) => r.trip));
+  const far = pk.ins.cal.filter((r) => r.dist != null).sort((a, b) => b.dist - a.dist).slice(0, 5), fmx = Math.max(1, ...far.map((r) => r.dist));
+  const pend = S.session?.isAdmin ? geoPending().length : 0;
+  return `<div class="rs-tiles">
+      <div class="rs-tile">${ico('compass')}<small>Viaje del equipo</small><b>${esc(kmText(t.travelKm))}</b><em>ida y vuelta${pk.hasPrev ? ` ${rsDelta(pk, t.travelKm, pk.prev.totals.travelKm, (n) => kmText(n))}` : ''}</em></div>
+      <div class="rs-tile">${ico('route')}<small>Distancia media</small><b>${esc(kmText(t.avgDist))}</b><em>de ida a cada carrera</em></div></div>
+    <h3>Quién se desplaza más</h3>
+    <ol class="rs-rank">${people.slice(0, 8).map((r, k) => `<li><span class="pos">${k + 1}</span><div>${personTag(r.key, r.name)}
+      <small class="muted">${r.tripN} carrera${r.tripN === 1 ? '' : 's'} · media ${esc(kmText(Math.round(r.trip / 2 / r.tripN)))}${r.tripRace ? ` · la más lejos: ${esc(kmText(r.tripMax))} (${esc(r.tripRace)})` : ''}</small>${bar((r.trip / mx) * 100, 'warm')}</div><span class="rk-m">${esc(kmText(r.trip))}</span></li>`).join('')}</ol>
+    <h3>Km de viaje del equipo, mes a mes</h3>${monthBars(pk, 'trip', kmShort)}
+    <h3>Las carreras más lejanas</h3>
+    <ol class="rs-rank">${far.map((r, k) => `<li><span class="pos">${k + 1}</span><div><a href="${raceHref(r.id)}"><b>${esc(r.name)}</b></a><small class="muted">${esc(r.place || '—')}${r.src === 'province' ? ' · aprox. (solo se sabe la provincia)' : ''}${r.n ? ` · ${r.n} del club` : ''}</small>${bar((r.dist / fmx) * 100, 'warm')}</div><span class="rk-m">${esc(kmText(r.dist))}</span></li>`).join('')}</ol>
+    <p class="hint">Cálculo orientativo: línea recta desde el punto de salida (${esc(ORIGEN.nombre)}) hasta la población de cada carrera, × ${String(FACTOR_CARRETERA).replace('.', ',')} para estimar la carretera, ida y vuelta, por cada corredor que participó. No cuenta coches compartidos ni el domicilio real de cada uno. ${t.travelRaces} de ${t.races} carreras con ubicación${t.travelApprox ? ` (${t.travelApprox} solo por su provincia)` : ''}${pend ? `; faltan ${pend} por buscar` : ''}.</p>`;
+}
+
+/** Rosco de reparto: cada porción un color, con el total en el centro y la leyenda al lado (nombre, carreras y %). */
+const PLACE_COLORS = ['#15906a', '#2f6fd6', '#d8601a', '#6a4fd6', '#cf2f68', '#0a8fc0', '#9aa7b0'];
+function placeDonut(rows, { title, max = 6, unit = 'carreras' }) {
+  if (!rows.length) return `<div><h3>${title}</h3><p class="muted small">Sin datos</p></div>`;
+  const top = rows.slice(0, max), rest = rows.slice(max).reduce((n, c) => n + c.races, 0);
+  const items = [...top.map((c) => ({ name: c.name, n: c.races })), ...(rest ? [{ name: `Otras (${rows.length - max})`, n: rest, other: true }] : [])];
+  const tot = items.reduce((n, x) => n + x.n, 0) || 1, R = 38, C = 2 * Math.PI * R;
+  let acc = 0;
+  const arcs = items.map((x, i) => { const len = (x.n / tot) * C, o = -acc; acc += len; return `<circle cx="50" cy="50" r="${R}" fill="none" stroke="${x.other ? PLACE_COLORS[6] : PLACE_COLORS[i % 6]}" stroke-width="16" stroke-dasharray="${Math.max(0, len - 1.2).toFixed(2)} ${(C - Math.max(0, len - 1.2)).toFixed(2)}" stroke-dashoffset="${o.toFixed(2)}" transform="rotate(-90 50 50)"><title>${esc(x.name)}: ${x.n}</title></circle>`; }).join('');
+  return `<div class="pd"><h3>${title} <small class="muted">(${rows.length})</small></h3>
+    <div class="pd-wrap"><svg class="pd-svg" viewBox="0 0 100 100" role="img" aria-label="${esc(title)}: reparto de ${unit}">${arcs}<text x="50" y="49" text-anchor="middle" class="pd-n">${tot}</text><text x="50" y="60" text-anchor="middle" class="pd-u">${unit}</text></svg>
+      <ul class="pd-leg">${items.map((x, i) => `<li><i style="background:${x.other ? PLACE_COLORS[6] : PLACE_COLORS[i % 6]}"></i><span>${esc(x.name)}</span><b>${x.n}</b><em>${Math.round((x.n / tot) * 100)} %</em></li>`).join('')}</ul></div></div>`;
+}
+function resReach(pk) {
+  const s = pk.s, i = pk.ins, t = s.totals, L = s.longest;
+  const km = s.perRunner.filter((r) => r.km > 0).sort((a, b) => b.km - a.km).slice(0, 5), kmx = Math.max(1, ...km.map((r) => r.km));
+  const tm = s.perRunner.filter((r) => r.timed > 0).sort((a, b) => b.time - a.time).slice(0, 5), tmx = Math.max(1, ...tm.map((r) => r.time));
+  const figs = `<div class="rs-tiles">
+    <div class="rs-tile">${ico('ruler')}<small>Km recorridos</small><b>${t.km ? esc(kmText(Math.round(t.km))) : '—'}</b><em>entre todos${pk.hasPrev ? ` ${rsDelta(pk, Math.round(t.km), Math.round(pk.prev.totals.km), (n) => kmText(n))}` : ''}</em></div>
+    <div class="rs-tile">${ico('flag')}<small>Km por carrera</small><b>${i.avgRaceKm ? esc(kmText(i.avgRaceKm)) : '—'}</b><em>${i.withKm} de ${t.races} con km</em></div>
+    <div class="rs-tile">${ico('timer')}<small>Tiempo en carrera</small><b>${t.timed ? formatTime(t.time, true) : '—'}</b><em>${t.timed} de ${t.participations} con tiempo</em></div>
+    <div class="rs-tile">${ico('layers')}<small>Pruebas de varios días</small><b>${i.multiDay}</b><em>${i.days} días de competición</em></div>
+    <div class="rs-tile">${ico('mountain')}<small>Desnivel positivo</small><b>${t.elevation ? esc(elevText(t.elevation)) : '—'}</b><em>entre todos${pk.hasPrev ? ` ${rsDelta(pk, t.elevation, pk.prev.totals.elevation, (n) => elevText(n))}` : ''}</em></div>
+    <div class="rs-tile">${ico('mountain')}<small>Media por carrera</small><b>${i.avgElev ? esc(elevText(i.avgElev)) : '—'}</b><em>${i.withElev} de ${t.races} con desnivel</em></div></div>`;
+  const people = (rows, key, fmt, mx) => rows.map((r, k) => `<li><span class="pos">${k + 1}</span><div>${personTag(r.key, r.name)}${bar((r[key] / mx) * 100)}</div><span class="rk-m">${fmt(r[key])}</span></li>`).join('');
+  return `${figs}
+    <section class="card rs-card"><h2>Dónde se ha competido</h2>${placeDonut(s.provinces, { title: 'Provincias', max: 6 })}${s.countries.length > 1 ? placeDonut(s.countries, { title: 'Países', max: 5 }) : s.countries.length ? `<p class="hint">Todas las carreras han sido en ${esc(s.countries[0].name)}.</p>` : ''}
+      ${viewerIsAdmin() && s.missingPlace.length ? `<div class="warn"><b>Faltan datos en ${s.missingPlace.length} carrera${s.missingPlace.length === 1 ? '' : 's'}:</b><ul>${s.missingPlace.map((m) => `<li><a href="#/carreras/${m.id}">${esc(m.name)}</a>: sin ${m.missing.join(' ni ')}</li>`).join('')}</ul></div>` : ''}</section>
+    <section class="card rs-card"><h2>Las carreras más duras</h2>${resHardest(pk)}${i.climb ? `<p class="hint">De media, ${String(i.climb).replace('.', ',')} metros de subida por kilómetro.</p>` : ''}</section>
+    ${pk.ins.cal.filter((r) => r.km && r.elevation).length > 1 ? `<section class="card rs-card"><h2>Km frente a desnivel</h2>${resScatter(pk)}</section>` : ''}
+    ${(() => { const el = s.perRunner.filter((r) => r.elev > 0).sort((a, b) => b.elev - a.elev).slice(0, 5), ex = Math.max(1, ...el.map((r) => r.elev));
+      return el.length ? `<section class="card rs-card"><h2>Quién ha subido más</h2><ol class="rs-rank">${people(el, 'elev', (n) => esc(elevText(n)), ex)}</ol></section>` : ''; })()}
+    ${resTimeCard(pk)}
+    <section class="card rs-card"><h2>Desplazamientos</h2>${resTravel(pk)}</section>
+    <section class="card rs-card"><h2>Mapa de desplazamientos</h2>${resTripMap(pk)}</section>
+    <section class="card rs-card"><h2>Cuánto cuesta competir</h2>${resCost(pk)}</section>
+    ${km.length ? `<section class="card rs-card"><h2>Quién ha recorrido más</h2><ol class="rs-rank">${people(km, 'km', (n) => esc(kmText(n)), kmx)}</ol></section>` : ''}
+    ${tm.length ? `<section class="card rs-card"><h2>Más tiempo en carrera</h2><ol class="rs-rank">${people(tm, 'time', (n) => formatTime(n, true), tmx)}</ol></section>` : ''}
+    ${L ? `<section class="card rs-card"><h2>La carrera más larga</h2><p><a class="rname" href="#/carreras/${L.raceId}"><b>${esc(L.race)}</b></a> · <b>${esc(kmText(L.km))}</b></p><p class="muted small">La corrieron: ${esc(L.runners.join(', '))}.</p></section>` : ''}
+    ${s.bySubtype.length ? `<section class="card rs-card"><h2>Formatos</h2><div class="pills">${s.bySubtype.map((x) => `<span class="pill ${modClass(x.modality)}"><i class="dot"></i>${pk.mod ? '' : `${esc(x.modality)} · `}${esc(x.subtype)} <b>${x.races}</b></span>`).join('')}</div></section>` : ''}`;
+}
+
+
+/** Contenido de la ventana de filtros del Resumen del equipo (temporada, modalidad y, si la hay, disciplina). */
+const eqSource = () => (S.session?.isAdmin && !S.preview ? { races: S.data?.races || [], runners: S.data?.runners || [] } : { races: S.team?.races || [], runners: S.team?.runners || [] });
+function eqFilterHtml() {
+  const { races, runners } = eqSource();
+  const years = availableYears(races), mods = yearSummary(S.year, races, runners).byModality.filter((m) => m.races > 0);
+  const cur = S.sumMod && S.sumMod !== 'all' ? S.sumMod : null, curMod = cur ? cur.split('|')[0] : null;
+  const discs = curMod ? yearSummary(S.year, races.filter((r) => r.modality === curMod), runners).disciplines.filter((d) => d.subtype) : [];
+  const chip = (on, kind, val, label) => `<button type="button" class="chip${on ? ' on' : ''}" data-eqf="${kind}:${esc(val)}">${label}</button>`;
+  return `<form method="dialog" class="dlg eqdlg"><h2>Filtros</h2>
+    <h3>Temporada</h3><div class="eqd-chips">${years.map((y) => chip(y === S.year, 'year', y, y)).join('')}</div>
+    <h3>Modalidad</h3><div class="eqd-chips">${chip(!cur, 'mod', 'all', 'Todas')}${mods.map((m) => chip(curMod === m.modality, 'mod', m.modality, esc(m.modality))).join('')}</div>
+    ${discs.length ? `<h3>Disciplina de ${esc(curMod)}</h3><div class="eqd-chips">${chip(cur === curMod, 'mod', curMod, 'Todas')}${discs.map((d) => chip(cur === d.key, 'mod', d.key, esc(d.subtype))).join('')}</div>` : ''}
+    <div class="dlg-actions"><button type="button" class="btn" data-eqf="clear">Quitar filtros</button><button value="" class="btn primary">Listo</button></div></form>`;
+}
+{
+  const dlg = document.getElementById('dialog');
+  dlg.addEventListener('click', (ev) => {
+    const b = ev.target.closest('.eqdlg [data-eqf]'); if (!b) return;
+    ev.preventDefault();
+    const [kind, ...rest] = b.dataset.eqf.split(':'), val = rest.join(':');
+    if (kind === 'year') { S.year = Number(val); if (S.sumMod && S.sumMod !== 'all' && !eqSource().races.some((r) => yearOf(r.date) === S.year && r.modality === S.sumMod.split('|')[0])) S.sumMod = 'all'; }
+    else if (kind === 'mod') S.sumMod = val;
+    else if (kind === 'clear') { S.sumMod = 'all'; S.year = availableYears(eqSource().races)[0]; }
+    render(); dlg.innerHTML = eqFilterHtml();
+  });
+}
+
+// ---------- Instagram: periodo en el cuadradito de filtros ----------
+const IG_PERIODS = (year) => [['all', 'Todo lo guardado'], ['30', 'Últimos 30 días'], ['month', 'Este mes'], ['year', `Año ${year}`]];
+function igFilterHtml() {
+  const cur = S.igPeriod || 'all';
+  return `<form method="dialog" class="dlg eqdlg"><h2>Periodo</h2><div class="eqd-chips">${IG_PERIODS(S.year).map(([k, l]) => `<button type="button" class="chip${k === cur ? ' on' : ''}" data-igp="${k}">${l}</button>`).join('')}</div>
+    <div class="dlg-actions"><button type="button" class="btn" data-igp="all">Quitar filtro</button><button value="" class="btn primary">Listo</button></div></form>`;
+}
+document.getElementById('dialog').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-igp]'); if (!b) return;
+  ev.preventDefault(); S.igPeriod = b.dataset.igp; render(); document.getElementById('dialog').innerHTML = igFilterHtml();
+});
+
+// ---------- Clasificaciones: quién lidera cada cosa, con gráfico mes a mes ----------
+const hoursOf = (sec) => formatTime(sec, true);
+const EQ_METRICS = [
+  { k: 'races', label: 'Carreras', ico: 'flag', val: (r) => r.races, fmt: (n) => `${n}`, month: 'parts', mfmt: (n) => `${n}`, sum: true, unit: 'carreras',
+    det: (r) => `${r.months?.size || 0} mes${(r.months?.size || 0) === 1 ? '' : 'es'} con carrera`, hint: 'Carreras en las que ha participado este año (cada una cuenta una vez).' },
+  { k: 'pod', label: 'Podios', ico: 'trophy', val: (r) => r.p1 + r.p2 + r.p3, fmt: (n) => `${n}`, month: 'pod', mfmt: (n) => `${n}`, sum: true, unit: 'podios',
+    det: (r) => `${r.p1 ? `🥇${r.p1} ` : ''}${r.p2 ? `🥈${r.p2} ` : ''}${r.p3 ? `🥉${r.p3}` : ''}`.trim(), hint: 'Podios (1º, 2º o 3º) de su categoría, también en etapas.' },
+  { k: 'wins', label: 'Victorias', ico: 'medal', val: (r) => r.p1, fmt: (n) => `${n}`, month: 'wins', mfmt: (n) => `${n}`, sum: true, unit: 'victorias',
+    det: (r) => `${r.p1 + r.p2 + r.p3} podio${r.p1 + r.p2 + r.p3 === 1 ? '' : 's'} en total`, hint: 'Primeros puestos de su categoría.' },
+  { k: 'km', label: 'Km', ico: 'ruler', val: (r) => r.km, fmt: (n) => kmText(Math.round(n)), month: 'km', mfmt: (n) => kmShort(n), sum: true, unit: 'km',
+    det: (r) => `${r.races} carrera${r.races === 1 ? '' : 's'}`, hint: 'Kilómetros de las carreras en las que ha participado (solo las que tienen distancia indicada).' },
+  { k: 'elev', label: 'Desnivel', ico: 'mountain', val: (r) => r.elev, fmt: (n) => elevText(n), month: 'elev', mfmt: (n) => kmShort(n), sum: true, unit: 'm',
+    det: (r) => `media ${elevText(Math.round(r.elev / Math.max(1, r.races)))} por carrera`, hint: 'Desnivel positivo de las carreras en las que ha participado (solo las que lo tienen indicado).' },
+  { k: 'trip', label: 'Viaje', ico: 'compass', val: (r) => r.trip, fmt: (n) => kmText(n), month: 'trip', mfmt: (n) => kmShort(n), sum: true, unit: 'km',
+    det: (r) => `media ${kmText(Math.round(r.trip / 2 / Math.max(1, r.tripN)))} de ida por carrera`, hint: 'Km de desplazamiento (ida y vuelta, estimados desde un punto a medio camino entre Monzón y Lleida). Orientativo.' },
+  { k: 'time', label: 'Tiempo', ico: 'timer', val: (r) => r.time, fmt: (n) => hoursOf(n), month: 'time', mfmt: (n) => `${Math.round(n / 3600)}h`, sum: true, unit: 'tiempo',
+    det: (r) => `${r.timed} de ${r.races} carrera${r.races === 1 ? '' : 's'} con tiempo`, hint: 'Tiempo total en carrera (solo las carreras en las que se puso el tiempo).' },
+  { k: 'cost', label: 'Gasto', ico: 'money', val: (r) => r.cost, fmt: (n) => euros(n), month: 'cost', mfmt: (n) => `${Math.round(n)}`, sum: true, unit: '€',
+    det: (r) => `media ${euros(Math.round((r.cost / Math.max(1, r.races)) * 10) / 10)} por carrera`, hint: 'Lo que costarían las inscripciones de las carreras en las que ha participado (precios indicados; no lo que haya pagado).' },
+  { k: 'disc', label: 'Versátil', ico: 'layers', val: (r) => Object.keys(r.discs || {}).length, fmt: (n) => `${n}`, sum: false,
+    det: (r) => Object.keys(r.discs || {}).map((k) => { const [m, sub] = k.split('|'); return sub || m; }).slice(0, 4).join(', '), hint: 'Disciplinas distintas en las que ha corrido.' },
+  { k: 'mon', label: 'Meses', ico: 'calcheck', val: (r) => r.months?.size || 0, fmt: (n) => `${n}`, sum: false,
+    det: (r) => `${r.races} carreras`, hint: 'Meses distintos del año con alguna carrera.' },
+];
+/** Cifra compacta para las barras de cada mes: 4,3k, 840… */
+const kmShort = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1).replace('.', ',')}k` : `${Math.round(n)}`);
+/** Barras de un dato mes a mes (suma de todo el equipo). */
+function monthBars(pk, key, mfmt, cls = '') {
+  const m = pk.s.byMonth, mx = Math.max(1, ...m.map((x) => x[key] || 0));
+  return `<div class="rs-wk rs-elev rb-months ${cls}" role="img" aria-label="Evolución mes a mes">${m.map((x) => `<div><em>${x[key] ? mfmt(x[key]) : ''}</em><span style="height:${((x[key] || 0) / mx) * 100}%"></span><b>${MES3[x.month].slice(0, 1).toUpperCase()}</b></div>`).join('')}</div>`;
+}
+/** Clasificación del equipo: eliges un dato (carreras, desnivel, viaje, tiempo…) y ves quién lidera, con barras y cómo va el equipo mes a mes. */
+function rankingBoard(pk, { me = null } = {}) {
+  const m = EQ_METRICS.find((x) => x.k === S.eqMetric) || EQ_METRICS[0];
+  const rows = pk.s.perRunner.map((r) => ({ r, v: m.val(r) })).filter((x) => x.v > 0).sort((a, b) => b.v - a.v || a.r.name.localeCompare(b.r.name, 'es'));
+  const mx = rows[0]?.v || 1, total = rows.reduce((n, x) => n + x.v, 0);
+  const tabs = `<div class="rb-tabs" role="tablist" aria-label="Qué clasificar">${EQ_METRICS.map((x) => `<button type="button" class="rb-tab${x.k === m.k ? ' on' : ''}" data-act="eq-metric" data-k="${x.k}" role="tab" aria-selected="${x.k === m.k}">${ico(x.ico)}<span>${x.label}</span></button>`).join('')}</div>`;
+  const row = ({ r, v }, i) => `<li class="rb-row${me && r.key === me ? ' me' : ''}"><span class="rb-pos p${Math.min(i + 1, 4)}">${i + 1}</span>${avatar(r.name)}<div class="rb-main"><span class="rb-name">${personTag(r.key, r.name)}${me && r.key === me ? '<i class="rb-you">tú</i>' : ''}</span><small>${m.det(r)}</small><span class="rs-bar warm"><i style="width:${(v / mx) * 100}%"></i></span></div><b class="rb-val">${m.fmt(v)}</b></li>`;
+  const top = rows.slice(0, 8), rest = rows.slice(8);
+  const sum = !rows.length ? '' : m.sum ? `Entre todos <b>${m.fmt(total)}</b> · media por corredor <b>${['races', 'pod', 'wins'].includes(m.k) ? String(Math.round((total / rows.length) * 10) / 10).replace('.', ',') : m.fmt(Math.round(total / rows.length))}</b> · ${rows.length} corredor${rows.length === 1 ? '' : 'es'}` : `Lidera <b>${esc(rows[0].r.name)}</b> con <b>${m.fmt(rows[0].v)}</b>`;
+  return `<section class="card rs-card rb"><h2>Clasificaciones</h2>${tabs}
+    ${rows.length ? `<p class="rb-sum">${sum}</p>${m.month ? `<h3>Todo el equipo, mes a mes</h3>${monthBars(pk, m.month, m.mfmt)}` : ''}
+      <h3>${esc(m.label)}: quién lidera</h3><ol class="rb-list">${top.map(row).join('')}</ol>
+      ${rest.length ? `<details class="rb-more"><summary>Ver los ${rest.length} restantes</summary><ol class="rb-list" start="9">${rest.map((x, i) => row(x, i + 8)).join('')}</ol></details>` : ''}`
+      : `<p class="empty">Todavía no hay datos de «${esc(m.label)}» este año.</p>`}
+    <p class="hint">${esc(m.hint)}</p></section>`;
+}
+/** Tiempo en carrera del equipo: totales y cobertura (la clasificación y el gráfico mes a mes están en «Clasificaciones»). */
+function resTimeCard(pk) {
+  const t = pk.s.totals;
+  if (!t.timed) return '';
+  const per = Math.round(t.time / t.timed);
+  return `<section class="card rs-card"><h2>${ico('timer')} Tiempo en carrera</h2>
+    <div class="rs-tiles"><div class="rs-tile">${ico('timer')}<small>Tiempo total</small><b>${esc(hoursOf(t.time))}</b><em>entre todos${pk.hasPrev && pk.prev.totals.time ? ` ${rsDelta(pk, t.time, pk.prev.totals.time, (n) => hoursOf(n))}` : ''}</em></div>
+      <div class="rs-tile">${ico('timer')}<small>Media por carrera</small><b>${esc(hoursOf(per))}</b><em>${t.timed} de ${t.participations} participaciones con tiempo</em></div></div>
+    <h3>Tiempo del equipo, mes a mes</h3>${monthBars(pk, 'time', (n) => `${Math.round(n / 3600)}h`)}
+    <p class="hint">Solo cuentan las carreras en las que el corredor puso su tiempo. Quién ha estado más tiempo, en «Clasificaciones» (Tiempo).</p></section>`;
+}
+
 function viewSummary() {
-  return frame('Resumen anual', summaryBody(S.data.races, S.data.runners, { admin: true }));
+  const years = availableYears(S.data.races);
+  if (!years.includes(S.year)) S.year = years[0];
+  const base = yearSummary(S.year, S.data.races, S.data.runners);
+  const mods = base.byModality.filter((m) => m.races > 0);
+  if (S.sumMod && S.sumMod !== 'all' && !mods.some((m) => m.modality === S.sumMod.split('|')[0])) S.sumMod = 'all';
+  const mod = S.sumMod && S.sumMod !== 'all' ? S.sumMod : null;
+  const modLabel = mod ? mod.split('|').filter(Boolean).join(' · ') : '';
+  const tab = RES_TABS.some(([k]) => k === S.resTab) ? S.resTab : 'pan';
+  const pk = resPack(S.year, mod);
+  const body = { pan: resPanorama, pod: resPodiums, eq: resTeam, alc: resReach }[tab](pk);
+  const filterOn = !!mod || S.year !== years[0];
+  return frame('Resumen', `<div class="eq-bar"><nav class="rs-tabs" role="tablist" aria-label="Apartados del resumen">${RES_TABS.map(([k, l, ic]) => `<button type="button" class="${k === tab ? 'on' : ''}" data-act="res-tab" data-t="${k}" role="tab" aria-selected="${k === tab}">${ico(ic)}<span>${l}</span></button>`).join('')}</nav>
+      <button type="button" class="eq-fbtn${filterOn ? ' on' : ''}" data-act="eq-filters" aria-label="Filtros${filterOn ? ' (activos)' : ''}" title="Filtros">${icon(ICON_FILTER)}${filterOn ? '<i class="fdot"></i>' : ''}</button></div>
+    ${filterOn ? `<div class="eq-active"><span>${S.year}${mod ? ` · ${esc(modLabel)}` : ''}</span><button type="button" class="link" data-act="eq-clear">Quitar filtros ✕</button></div>` : ''}
+    ${body}
+    <section class="card rs-card rs-links"><h2>Informes y exportar</h2>
+      <a class="rs-link" href="#/memoria">${ico('book')}<span><b>Memoria para sponsors</b><small>Una página limpia para imprimir o PDF, sin bonos ni contratos</small></span>${ico('go')}</a>
+      <a class="rs-link" href="#/computo">${ico('money')}<span><b>Cómputo de la temporada</b><small>Bonos, control antes de cerrar e informe por corredor</small></span>${ico('go')}</a>
+      <a class="rs-link" href="#/calidad">${ico('list')}<span><b>Datos incompletos</b><small>Carreras a las que les falta algo</small></span>${ico('go')}</a>
+      <div class="row-btns"><button class="btn" data-act="csv-year">📊 Resultados ${S.year} (Excel)</button><button class="btn" data-act="tp-csv-runners">📊 Corredores</button><button class="btn" data-act="tp-csv-disc">📊 Disciplinas</button></div></section>
+    <details class="card data-det" data-open-key="datos"${S.open?.datos ? ' open' : ''}><summary>⚙️ Datos y copias <small class="muted">· copia de seguridad, restaurar, aspecto, versión y cerrar sesión</small></summary>${dataBody()}</details>`);
 }
 
 /** Resumen del equipo para los corredores (solo lectura). */
@@ -2962,12 +4062,27 @@ function viewRunnerCard(id) {
   const docs = (S.docs || []).filter((x) => x.runner_id === r.id);
   const circuits = (S.data.circuitPodiums || []).filter((c) => c.runner_id === r.id && c.year === S.year);
   const tot = S.data.races.reduce((n, x) => n + x.results.filter((y) => y.runner_id === r.id).length, 0);
+  const today = todayISO();
+  const mine = (g) => (g.entries || []).some((e) => e.runner_id === r.id);
+  const pendRes = board().pendingResults.filter((x) => x.missing.includes(r.id));
+  const next = S.data.registrations.filter((g) => !g.suspended && g.date >= today && mine(g)).sort((p, q) => p.date.localeCompare(q.date));
+  const tracked = Object.prototype.hasOwnProperty.call(r, 'last_seen'), sd = tracked ? seenDays(r.last_seen) : null;
+  const yb = yearBonuses(new Date().getFullYear(), S.data.races, S.data.registrations, S.data.runners, bonusCfg(new Date().getFullYear()), S.data.circuitPodiums || []).find((x) => x.runner.id === r.id);
   return frame(r.name, `
+    <section class="rc-hero">${avatar(r.name, 'big')}<div><h2>${esc(r.name)}</h2><p>${[r.category, contractLabel(r.contract)].filter(Boolean).map(esc).join(' · ')}</p></div></section>
+    <div class="rc-stats">
+      <div class="${tracked ? 's-' + seenLevel(sd) : ''}"><i class="seen s-${tracked ? seenLevel(sd) : 'none'}"></i><b>${tracked ? (sd == null ? 'Nunca' : sd === 0 ? 'Hoy' : `${sd} d`) : '—'}</b><span>${tracked ? 'última vez en la app' : 'actividad (falta SQL)'}</span></div>
+      <div class="${yb && !yb.reachesMinimum ? 'bad' : yb?.tier ? 'good' : ''}"><b>${yb ? yb.bonusCount : 0}</b><span>${yb ? (yb.reachesMinimum ? (yb.tier ? `bono ${euros(yb.amount)}` : 'mínimo hecho') : `faltan ${yb.missingToMinimum}`) : 'carreras'}</span></div>
+      <a class="${pendRes.length ? 'warn' : ''}" href="${pendRes.length ? `#/inscripciones/${pendRes[0].reg.id}` : '#/corredor/' + r.id}"><b>${pendRes.length}</b><span>sin resultado</span></a>
+      <div><b>${next.length}</b><span>próximas${next[0] ? `: ${formatDate(next[0].date, false)}` : ''}</span></div>
+    </div>
+    ${pendRes.length ? `<p class="card warn small">🏁 Le falta poner su resultado en: <b>${pendRes.map((x) => esc(x.reg.name)).join(', ')}</b>.</p>` : ''}
     <section class="card stack">
       <label>Categoría${catSelect(`data-runner-cat="${r.id}"`, r.category || '')}</label>
       <label>Contrato${contractSelect(`data-runner-contract="${r.id}"`, r.contract || '')}</label>
       <p class="muted small">${tot} carrera${tot === 1 ? '' : 's'} en total${r.created_at ? ` · en el club desde ${formatDate(String(r.created_at).slice(0, 10), false)}` : ''}</p>
-      <div class="row"><button class="btn primary" data-act="runner-menu" data-id="${r.id}">Enlace y opciones ⋯</button></div>
+      <div class="row"><button class="btn primary" data-act="runner-menu" data-id="${r.id}">${ico('share')} Enlace</button>
+        <button class="btn" data-act="runner-do" data-a="preview" data-id="${r.id}">Ver su pantalla</button></div>
     </section>
     ${yearPicker(years)}
     ${row ? `<section class="card bonus-card"><h2>Bono ${S.year}</h2>
@@ -2989,7 +4104,11 @@ function viewRunnerCard(id) {
       ${S.docs === null ? '<p class="muted">Aún no están activados los documentos.</p>'
         : docs.length ? `<ul class="mini-list">${docs.map((x) => `<li><div><b>${docIcon(x.mime)} ${esc(x.title)}</b><small class="muted">Temporada ${x.year} · ${fmtSize(x.size)}</small></div>
           <button class="btn small" data-act="doc-open" data-id="${x.id}">Ver</button></li>`).join('')}</ul>` : '<p class="empty small">Todavía no hay documentos.</p>'}
-      <a class="btn small" href="#/docs/${r.id}">Subir o borrar documentos</a></section>`, { back: '#/corredores' });
+      <a class="btn small" href="#/docs/${r.id}">Subir o borrar documentos</a></section>
+    <details class="card more-det"><summary><b>Más opciones</b> <span class="muted">· cambiar nombre, descargar sus datos, borrar</span></summary>
+      <div class="stack"><button class="btn" data-act="runner-do" data-a="rename" data-id="${r.id}">Cambiar nombre</button>
+        <button class="btn" data-act="runner-do" data-a="export" data-id="${r.id}">Descargar sus datos</button>
+        <button class="btn danger ghost" data-act="runner-do" data-a="delete" data-id="${r.id}">Borrar corredor</button></div></details>`, { back: '#/corredores' });
 }
 
 /** Una línea, arriba de Corredores, que abre la hoja con las respuestas del pedido de ropa. El enlace se guarda en los ajustes, que solo ve la dirección. */
@@ -3020,7 +4139,7 @@ function askLink(title, text, current) {
 function askPaid(name, mine) {
   return new Promise((resolve) => {
     const dlg = document.getElementById('dialog');
-    dlg.innerHTML = `<form method="dialog" class="dlg"><h2>Pago de la inscripción</h2><p>${esc(name || '')}</p>
+    dlg.innerHTML = `<form method="dialog" class="dlg"><h2>Pago de la inscripción</h2><p><b>${esc((name || '').toLocaleUpperCase('es'))}</b></p>
       <p class="hint">Anota que ya la has pagado en la web de la carrera. Tus compañeros verán que la tienes pagada; <b>el importe y el día solo los ves tú</b>.</p>
       <label>Importe pagado (opcional)<input name="amount" type="number" inputmode="decimal" step="0.01" min="0" max="10000" placeholder="Ej.: 25" value="${mine?.paid_amount ?? ''}"></label>
       <label>Día del pago<input name="date" type="date" max="${todayISO()}" value="${mine?.paid_on || todayISO()}"></label>
@@ -3040,7 +4159,7 @@ function askPaid(name, mine) {
 function askCategory(name, okLabel = 'Apuntarme', current = '') {
   return new Promise((resolve) => {
     const dlg = document.getElementById('dialog');
-    dlg.innerHTML = `<form method="dialog" class="dlg"><h2>¿En qué categoría?</h2><p>${esc(name || '')}</p>
+    dlg.innerHTML = `<form method="dialog" class="dlg"><h2>¿En qué categoría?</h2><p><b>${esc((name || '').toLocaleUpperCase('es'))}</b></p>
       <label>Tu categoría${catSelect('name="cat" required', current, 'Elige tu categoría')}</label>
       <div class="dlg-actions"><button value="ok" class="btn primary">${esc(okLabel)}</button><button value="" class="btn ghost" formnovalidate>Cancelar</button></div></form>`;
     dlg.onclose = () => resolve(dlg.returnValue === 'ok' ? dlg.querySelector('select[name="cat"]').value || null : null);
@@ -3051,7 +4170,7 @@ function askCategory(name, okLabel = 'Apuntarme', current = '') {
 
 /** Pestañas de arriba de Corredores: plantilla y contratos por tipo. */
 const runnersTabs = (cur) => `<div class="years subtabs">${[['corredores', '👥 Plantilla'], ['contratos', '📄 Contratos'], ['computo', '📊 Cómputo']].map(([v, l]) =>
-  `<a class="chip${cur === v ? ' on' : ''}" href="#/${v}" aria-current="${cur === v}">${l}</a>`).join('')}</div>`;
+  `<a class="chip${cur === v ? ' on' : ''}" href="#/${v}" aria-current="${cur === v}">${l}</a>`).join('')}${(() => { const u = S.data?.settings?.enlaces_direccion?.ropa_respuestas; return u ? `<a class="chip ext" href="${esc(u)}" target="_blank" rel="noopener noreferrer" title="Respuestas del pedido de ropa (se abre en otra pestaña)">👕 Ropa ↗</a>` : ''; })()}</div>`;
 
 /** Cómputo de fin de temporada: lo que ha hecho cada corredor y descarga para Excel. */
 function viewSeasonCount() {
@@ -3160,6 +4279,7 @@ function runnerSheet(r, year, minimum) {
       <div class="rp-kpi"><b>${r.races}</b><span>carreras${r.days !== r.races ? ` · ${r.days} días` : ''}</span></div>
       <div class="rp-kpi"><b>${podText(r)}</b><span>podios</span></div>
       <div class="rp-kpi"><b>${r.km ? kmText(r.km) : '—'}</b><span>km</span></div>
+      <div class="rp-kpi"><b>${r.elev ? elevText(r.elev) : '—'}</b><span>desnivel</span></div>
       <div class="rp-kpi"><b>${r.timed ? formatTime(r.time, true) : '—'}</b><span>tiempo en carrera</span></div>
       ${b ? `<div class="rp-kpi good"><b>${euros(b.amount)}</b><span>bono</span></div><div class="rp-kpi bad"><b>${euros(b.penalty)}</b><span>penalización</span></div>
       <div class="rp-kpi ${sal > 0 ? 'good' : sal < 0 ? 'bad' : ''}"><b>${signEuros(sal)}</b><span>${sal > 0 ? 'el club debe' : sal < 0 ? 'a favor del club' : 'saldo'}</span></div>` : ''}
@@ -3281,9 +4401,11 @@ function rosterRows() {
   for (const r of S.data.races) for (const x of r.results) if (x.runner_id) counts.set(x.runner_id, (counts.get(x.runner_id) || 0) + 1);
   const bonusBy = new Map(yearBonuses(year, S.data.races, S.data.registrations, S.data.runners, bonusCfg(year), S.data.circuitPodiums || []).map((b) => [b.runner.id, b]));
   return S.data.runners.map((r) => { const b = bonusBy.get(r.id);
-    return { r, b, total: counts.get(r.id) || 0, noContract: !CONTRACTS.some((c) => c.id === r.contract), low: !!b && !b.reachesMinimum, withBonus: !!b?.tier }; });
+    const seen = Object.prototype.hasOwnProperty.call(r, 'last_seen') ? seenLevel(seenDays(r.last_seen)) : null;
+    return { r, b, total: counts.get(r.id) || 0, noContract: !CONTRACTS.some((c) => c.id === r.contract), low: !!b && !b.reachesMinimum, withBonus: !!b?.tier, noApp: seen === 'never' || seen === 'cold' }; });
 }
-const RFILTERS = [['todos', 'Corredores', ''], ['sincontrato', 'Sin contrato', 'warn'], ['bajo', 'Bajo el mínimo', 'bad'], ['bono', 'Con bono', 'good']];
+const RFILTERS = [['todos', 'Corredores', ''], ['sincontrato', 'Sin contrato', 'warn'], ['bajo', 'Bajo el mínimo', 'bad'], ['bono', 'Con bono', 'good'], ['app', 'Sin usar la app', 'violet']];
+const rfilters = () => RFILTERS.filter(([id]) => id !== 'app' || S.data.runners.some((r) => Object.prototype.hasOwnProperty.call(r, 'last_seen')));
 
 /** Lista filtrable de la plantilla: se repinta sola al escribir en el buscador. */
 function runnersListHtml() {
@@ -3294,6 +4416,7 @@ function runnersListHtml() {
   if (f === 'sincontrato') rows = rows.filter((x) => x.noContract);
   else if (f === 'bajo') rows = rows.filter((x) => x.low);
   else if (f === 'bono') rows = rows.filter((x) => x.withBonus);
+  else if (f === 'app') rows = rows.filter((x) => x.noApp);
   if (normalize(q).length >= 1) { const ids = new Set(matchPeople(q, rows.map((x) => x.r)).map((m) => m.id)); rows = rows.filter((x) => ids.has(x.r.id)); }
   const sort = S.rsort || 'nombre';
   if (sort === 'carreras') rows.sort((a, b) => (b.b?.count || 0) - (a.b?.count || 0) || byName(a.r, b.r));
@@ -3302,16 +4425,19 @@ function runnersListHtml() {
   if (!rows.length) return `<p class="empty">${q ? `Ningún corredor se parece a «${esc(q)}».` : f === 'todos' ? 'Todavía no hay corredores.' : 'Nadie en esta lista. 🎉'}</p>`;
   const row = ({ r, b, total, noContract, low }) => {
     const top = b?.tiers.at(-1)?.races || 1, pct = b ? Math.min(100, Math.round((b.bonusCount / top) * 100)) : 0;
-    return `<li class="rr ${low ? 'low' : b?.tier ? 'ok' : ''}${noContract ? ' nocon' : ''}">
-      <div class="rr-main"><span class="name"><a class="name-link" href="#/corredor/${r.id}">${esc(r.name)} ›</a>${(S.docs || []).some((x) => x.runner_id === r.id && x.year === year) ? ' <a class="doc-badge" href="#/docs/' + r.id + '" title="Contrato ' + year + ' subido">📄</a>' : ''}</span>
-        <small class="muted">${total} carrera${total === 1 ? '' : 's'} en total${noContract ? ' · <b class="warn-txt">⚠️ sin tipo de contrato</b>' : ''}</small></div>
-      ${b ? `<div class="rr-bono"><div class="rp-bar ${b.reachesMinimum ? (b.tier ? 'ok' : 'mid') : 'low'}"><i style="width:${pct}%"></i></div>
-        <small><b>${b.bonusCount}</b> en ${year} · ${b.reachesMinimum ? (b.tier ? `✅ bono ${euros(b.amount)}` : '✅ mínimo') : `<span class="bad-txt">⚠️ faltan ${b.missingToMinimum}</span>`}</small></div>` : ''}
-      <button class="icon-btn" data-act="runner-menu" data-id="${r.id}" aria-label="Opciones de ${esc(r.name)}">⋯</button>
-      <div class="roster-sel">
+    const tracked = Object.prototype.hasOwnProperty.call(r, 'last_seen'), sd = tracked ? seenDays(r.last_seen) : null;
+    const sels = `<div class="roster-sel">
         ${catSelect(`data-runner-cat="${r.id}" aria-label="Categoría habitual de ${esc(r.name)}"`, r.category || '')}
         <span class="sel-wrap${noContract ? ' needs' : ''}">${contractSelect(`data-runner-contract="${r.id}" aria-label="Tipo de contrato de ${esc(r.name)}"`, r.contract || '')}</span>
-      </div>
+      </div>`;
+    return `<li class="rr rr2 ${low ? 'low' : b?.tier ? 'ok' : ''}${noContract ? ' nocon' : ''}">
+      <div class="rr-top"><a class="rr-who" href="#/corredor/${r.id}">${avatar(r.name)}${tracked ? `<i class="seen s-${seenLevel(sd)}" title="${esc(seenText(sd))}"></i>` : ''}
+        <span class="rr-name"><b>${esc(r.name)}</b><span class="rr-tags">${r.category ? `<i class="rt cat">${esc(r.category)}</i>` : '<i class="rt warn">sin categoría</i>'}${noContract ? '<i class="rt warn">sin contrato</i>' : `<i class="rt">${esc(contractLabel(r.contract))}</i>`}${(S.docs || []).some((x) => x.runner_id === r.id && x.year === year) ? '<i class="rt ok">📄 contrato</i>' : ''}</span>
+        <small class="muted">${total} carrera${total === 1 ? '' : 's'} en total${tracked ? ` · ${esc(seenText(sd))}` : ''}</small></span>${ico('go', 'rr-go')}</a>
+        <button class="icon-btn link-btn" data-act="runner-menu" data-id="${r.id}" aria-label="Enviar o copiar el enlace de ${esc(r.name)}" title="Enlace personal">${ico('share')}</button></div>
+      ${b ? `<div class="rr-bono"><div class="rp-bar ${b.reachesMinimum ? (b.tier ? 'ok' : 'mid') : 'low'}"><i style="width:${pct}%"></i></div>
+        <small><b>${b.bonusCount}</b> en ${year} · ${b.reachesMinimum ? (b.tier ? `✅ bono ${euros(b.amount)}` : '✅ mínimo') : `<span class="bad-txt">⚠️ faltan ${b.missingToMinimum}</span>`}</small></div>` : ''}
+      ${noContract || !r.category ? sels : `<details class="rr-edit"><summary>Cambiar categoría o contrato</summary>${sels}</details>`}
       ${adminRunnerRaces(r, year)}</li>`;
   };
   return `<p class="hint rr-count">${rows.length} corredor${rows.length === 1 ? '' : 'es'}${q || f !== 'todos' ? ' (filtrado)' : ''}</p><ul class="roster">${rows.map(row).join('')}</ul>`;
@@ -3320,12 +4446,11 @@ function runnersListHtml() {
 function viewRunners() {
   const year = new Date().getFullYear();
   const all = rosterRows();
-  const n = { todos: all.length, sincontrato: all.filter((x) => x.noContract).length, bajo: all.filter((x) => x.low).length, bono: all.filter((x) => x.withBonus).length };
+  const n = { todos: all.length, sincontrato: all.filter((x) => x.noContract).length, bajo: all.filter((x) => x.low).length, bono: all.filter((x) => x.withBonus).length, app: all.filter((x) => x.noApp).length };
   const f = S.rfilter || 'todos';
-  return frame(`Corredores (${all.length})`, `
+  return frame(`Equipo (${all.length})`, `
     ${runnersTabs('corredores')}
-    ${S.data?.settings?.enlaces_direccion?.ropa_respuestas ? clothingLine() : ''}
-    <div class="rr-kpis">${RFILTERS.map(([id, label, cls]) => `<button class="rr-kpi ${cls}${f === id ? ' on' : ''}${id !== 'todos' && !n[id] ? ' zero' : ''}" data-act="r-filter" data-f="${id}" aria-pressed="${f === id}"><b>${n[id]}</b><span>${label}</span></button>`).join('')}</div>
+    <div class="rr-kpis" style="grid-template-columns:repeat(${rfilters().length},1fr)">${rfilters().map(([id, label, cls]) => `<button class="rr-kpi ${cls}${f === id ? ' on' : ''}${id !== 'todos' && !n[id] ? ' zero' : ''}" data-act="r-filter" data-f="${id}" aria-pressed="${f === id}"><b>${n[id]}</b><span>${label}</span></button>`).join('')}</div>
     <div class="toolbar">
       ${searchBox('rlist', 'Buscar corredor…')}
       <button class="btn primary add-btn" data-act="r-manage" aria-label="Añadir corredores" title="Añadir corredores">＋</button>
@@ -3336,7 +4461,7 @@ function viewRunners() {
       <summary><b>⚙️ Gestionar plantilla</b> <span class="muted">· añadir, renovar, enlaces, bonos</span></summary>
       <div class="stack">
         <div class="quick"><a class="btn" href="#/bonos">💶 Bonos ${year}</a>${all.length ? '<button class="btn" data-act="all-links">🔗 Copiar todos los enlaces</button>' : ''}</div>
-        ${S.data?.settings?.enlaces_direccion?.ropa_respuestas ? '' : clothingLine()}
+        ${clothingLine()}
         <details class="card">
           <summary><b>+ Añadir corredores</b></summary>
           <form class="stack" data-form="bulk">
@@ -3404,7 +4529,11 @@ function draftPayload() {
     end_date: d.multi && d.end_date ? d.end_date : null,
     race_type: d.race_type || 'suelta', circuit: d.race_type === 'circuito' ? cleanName(d.circuit) : null,
     suspended: d.kind === 'reg' && !!d.suspended,
-    subtype: SUBTYPES[d.modality]?.includes(d.subtype) ? d.subtype : null, km: parseKm(d.km) };
+    subtype: SUBTYPES[d.modality]?.includes(d.subtype) ? d.subtype : null, km: parseKm(d.km), url: cleanWeb(d.url),
+    elevation: parseElev(d.elevation), price: parsePrice(d.price) };
+  if (String(d.elevation ?? '').trim() !== '' && base.elevation === null) throw new Error('El desnivel tiene que ser un número entre 1 y 10 000 metros.');
+  if (String(d.price ?? '').trim() !== '' && base.price === null) throw new Error('El precio tiene que ser un número entre 0 y 10 000 euros (0 = gratis).');
+  if (base.url === '!') throw new Error('La web no parece una dirección válida. Pon algo como https://nombre-de-la-carrera.com o déjala vacía.');
   if (String(d.km ?? '').trim() !== '' && base.km === null) throw new Error('La distancia tiene que estar entre 0 y 1000 km.');
   if (!base.name) throw new Error('Falta el nombre de la carrera.');
   if (base.race_type === 'circuito' && !base.circuit) throw new Error('Falta el nombre del circuito.');
@@ -3433,9 +4562,57 @@ async function setMyRaceType(id, d) {
   try { await api.runnerSetType(S.code, id, d.race_type || 'suelta', d.race_type === 'circuito' ? cleanName(d.circuit) : null); } catch (e) { console.warn(e); }
 }
 
+/** Acciones sobre un corredor (enlace, vista previa, cambiar nombre, descargar datos, borrar). */
+async function runnerDo(choice, r) {
+  const link = linkFor(r.code);
+  if (choice === 'wa') {
+    const msg = `Hola ${r.name}! Este es tu enlace personal para ver las carreras del Club Ciclista Monzón y apuntarte:\n${link}\n\nEs solo tuyo: no lo reenvíes. Consejo: ábrelo y añádelo a la pantalla de inicio.`;
+    window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+  } else if (choice === 'copy') {
+    try { await navigator.clipboard.writeText(link); toast('Enlace copiado'); } catch { prompt('Copia el enlace:', link); }
+  } else if (choice === 'docs') {
+    go('#/docs/' + r.id);
+  } else if (choice === 'preview') {
+    const view = await run(() => api.runnerView(r.code));
+    if (!view) return;
+    S.preview = { name: r.name, sqlOk: Array.isArray(view.my_results) }; S.previewCode = r.code;
+    S.runnerData = view; S.myOpen = true; await loadNews(); await loadChron();
+    go('#/vista');
+  } else if (choice === 'open') {
+    await api.signOut(); S.session = null; S.data = null; go('#/c/' + r.code);
+  } else if (choice === 'rename') {
+    const name = cleanName(prompt('Nuevo nombre:', r.name) || '');
+    if (!name || name === r.name) return;
+    if (S.data.runners.some((x) => x.id !== r.id && normalize(x.name) === normalize(name))) return toast('Ya hay un corredor con ese nombre.', true);
+    await run(async () => { await api.updateRunner(r.id, { name }); await reload(); }, 'Nombre cambiado'); render();
+  } else if (choice === 'regen') {
+    if (!await confirmAction('Enlace nuevo', `El enlace actual de ${esc(r.name)} dejará de funcionar. Tendrás que enviarle el nuevo.`, 'Crear enlace nuevo')) return;
+    await run(async () => { await api.regenerateCode(r.id); await reload(); }, 'Enlace nuevo creado: envíaselo'); render();
+  } else if (choice === 'export') {
+    const races = S.data.races.filter((x) => x.results.some((y) => y.runner_id === r.id));
+    const data = { corredor: { nombre: r.name, categoria: r.category, contrato: r.contract ? contractLabel(r.contract) : null, alta: r.created_at },
+      resultados: races.map((x) => { const y = x.results.find((z) => z.runner_id === r.id);
+        return { fecha: x.date, carrera: x.name, lugar: x.place, provincia: x.province, pais: x.country, modalidad: x.modality, categoria: y.category, puesto: y.position, tipo_podio: isPodium(y.position) ? podiumLabel(y.podium_type) : null,
+          ...(x.stages?.length ? { etapas: x.stages.map((_, i) => ({ etapa: stageName(x, i), puesto: y.stage_positions?.[i] ?? null })) } : {}) }; }),
+      inscripciones: S.data.registrations.filter((g) => g.entries.some((e) => e.runner_id === r.id)).map((g) => ({ fecha: g.date, carrera: g.name })) };
+    download(`datos-${normalize(r.name).replace(/\W+/g, '-')}.json`, JSON.stringify(data, null, 2), 'application/json');
+  } else if (choice === 'delete') {
+    const how = await choose(`Borrar a ${r.name}`, 'Sale de la plantilla y de las inscripciones abiertas. ¿Qué hacemos con sus resultados de carreras pasadas?', [
+      { label: 'Mantener su nombre en el historial', value: 'keep', kind: 'primary' },
+      { label: 'Borrar también su nombre del historial (lo pide el corredor)', value: 'anon', kind: 'danger' },
+    ]);
+    if (!how) return;
+    await run(async () => { await api.deleteRunner(r.id, how === 'anon'); await reload(); }, 'Corredor borrado'); render();
+  }
+
+}
+
 const actions = {
+  'msg-who'(el) { const id = el.dataset.id; S.msgOff = S.msgOff || new Set(); if (S.msgOff.has(id)) S.msgOff.delete(id); else S.msgOff.add(id); render(); },
+  'msg-wa'() { const t = document.getElementById('msg-text')?.value || ''; if (t.trim()) window.open(`https://wa.me/?text=${encodeURIComponent(t)}`, '_blank', 'noopener'); },
+  'msg-copy'() { copyText(document.getElementById('msg-text')?.value || '', 'Mensaje copiado: pégalo en el chat'); },
   async install() { S.installEvt?.prompt(); S.installEvt = null; render(); },
-  async 'demo-admin'() { await api.signIn(); S.session = await api.session(); await run(reload); go('#/inscripciones'); },
+  async 'demo-admin'() { await api.signIn(); S.session = await api.session(); await run(reload); go('#/hoy'); },
   async 'demo-reset'() {
     if (!await confirmAction('Reiniciar demostración', 'Se borran los cambios de prueba y se cargan los datos de ejemplo.', 'Reiniciar')) return;
     await api.resetDemo(); await run(reload, 'Demostración reiniciada'); render();
@@ -3473,23 +4650,67 @@ const actions = {
     if (ok) { S.rdraft = null; go(isRace ? runnerHref('mi') : '#/'); }
   },
   async 'r-new'() { S.rdraft = null; if (!S.fed) loadFed(); go('#/nueva'); },
+  async 'r-web'(el) {
+    const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id); if (!g) return;
+    const v = await askWeb(g.name, g.url || ''); if (v === null) return;
+    const u = cleanWeb(v); if (u === '!') return toast('Esa dirección no parece una web. Pon algo como https://nombre-de-la-carrera.com', true);
+    const ok = await run(async () => { await api.runnerSetUrl(S.code, g.id, u); await loadRunner(); return true; }, u ? 'Web guardada: ya la ven todos' : 'Web quitada');
+    if (ok) render();
+  },
+  async 'w-sign'(el) {
+    const w = (S.watch || []).find((x) => x.id === el.dataset.id); if (!w) return;
+    const g = watchMatch(w, S.runnerData.registrations);
+    if (g) {   // ya existe en el club: solo apuntarse
+      const cat = await askCategory(g.name); if (!cat) return;
+      const ok = await run(async () => { await api.runnerJoin(S.code, g.id, cat); await api.runnerWatchDelete(S.code, w.id).catch(() => {}); await loadWatch(); await loadRunner(); return true; }, '¡Apuntado! La he quitado de «Por valorar»');
+      if (ok) go('#/');
+      return;
+    }
+    S.rdraft = emptyRunnerDraft({ name: w.name, date: w.date, multi: !!w.end_date, end_date: w.end_date || '', place: w.place || '', province: w.province || '', country: w.country || DEFAULT_COUNTRY, modality: w.modality,
+      subtype: w.subtype || '', km: w.km ?? '', url: w.url || '', elevation: w.elevation ?? '', price: w.price ?? '', watchId: w.id });
+    go('#/nueva');
+  },
+  async 'w-del'(el) {
+    const w = (S.watch || []).find((x) => x.id === el.dataset.id); if (!w) return;
+    if (!await confirmAction('Quitar de «Por valorar»', `Se quita <b>${esc(w.name)}</b> de tu lista. Si te lo piensas mejor, tendrás que volver a guardarla.`, 'Quitar', 'danger')) return;
+    const ok = await run(async () => { await api.runnerWatchDelete(S.code, w.id); await loadWatch(); return true; }, 'Quitada de la lista');
+    if (!ok) return;
+    S.rdraft = null; if (el.dataset.back) go('#/mi/valorar'); else render();
+  },
+  'w-sort'(el) { S.watchSort = el.dataset.m; render(); },
+  async 'w-add-fed'(el) {
+    const r = S.fed?.races[Number(el.dataset.i)]; if (!r) return;
+    const g = watchMatch(r, S.runnerData.registrations);   // si ya está en Carreras (aunque con otro nombre), se guarda esa para no duplicarla
+    const data = g ? { ...watchFrom(g, `Calendario: ${srcNote(r)}`.slice(0, 500)), url: watchFrom(r).url } : watchFrom(r, `Calendario: ${srcNote(r)}`.slice(0, 500));
+    const ok = await run(async () => { await api.runnerWatchSave(S.code, null, data); await loadWatch(); return true; }, 'Guardada en «Por valorar»');
+    if (ok) render();
+  },
+  async 'w-add-reg'(el) {
+    const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id); if (!g) return;
+    const ok = await run(async () => { await api.runnerWatchSave(S.code, null, watchFrom(g, String(g.notes || '').slice(0, 500))); await loadWatch(); return true; }, 'Guardada en «Por valorar»');
+    if (!ok) return;
+    if (el.dataset.go) { S.rdraft = null; go('#/mi/valorar'); } else render();
+  },
   async 'r-new-fed'(el) {
     const r = S.fed.races[Number(el.dataset.i)];
-    S.rdraft = emptyRunnerDraft({ name: r.name, date: r.date, place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY, modality: r.modality, ...circuitOf(r) });
+    S.rdraft = emptyRunnerDraft({ name: r.name, date: r.date, place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY, modality: r.modality, url: /^https?:\/\/\S+$/i.test(r.url || '') ? r.url : '', ...circuitOf(r) });
     go('#/nueva');
   },
   'fill-fed'(el) {
     const r = S.fed.races[Number(el.dataset.i)];
     const vals = { name: r.name, date: r.date, place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY, modality: r.modality, ...circuitOf(r) };
-    if (S.rdraft && parseRoute().view === 'nueva') Object.assign(S.rdraft, vals);
-    else if (S.draft) Object.assign(S.draft, vals, { notes: S.draft.notes || srcNote(r) });
+    const web = /^https?:\/\/\S+$/i.test(r.url || '') ? r.url : '';
+    if (S.rdraft && S.rdraft.wk != null && parseRoute().view === 'valorar') Object.assign(S.rdraft, vals, { subtype: vals.subtype || S.rdraft.subtype, url: S.rdraft.url || web });
+    else if (S.rdraft && parseRoute().view === 'nueva') Object.assign(S.rdraft, vals, { url: S.rdraft.url || web });
+    else if (S.draft) Object.assign(S.draft, vals, { url: S.draft.url || web, notes: S.draft.notes || srcNote(r) });
     render();
   },
   async 'r-join-go'(el) {
     const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id);
     const cat = S.rdraft?.category || await askCategory(g?.name);
     if (!cat) return;
-    const ok = await run(async () => { await api.runnerJoin(S.code, el.dataset.id, cat); await loadRunner(); return true; }, '¡Apuntado!');
+    const wid = S.rdraft?.watchId;
+    const ok = await run(async () => { await api.runnerJoin(S.code, el.dataset.id, cat); if (wid) { await api.runnerWatchDelete(S.code, wid).catch(() => {}); await loadWatch(); } await loadRunner(); return true; }, '¡Apuntado!');
     S.rdraft = null; go(ok && isPastReg(el.dataset.id) ? resultHref(el.dataset.id) : '#/');
   },
   async 'r-join'(el) {
@@ -3540,7 +4761,7 @@ const actions = {
   async 'r-joined'(el) {
     const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id); if (!g) return;
     const mine = g.entries.find((e) => e.runner_id === S.runnerData.me.id);
-    const pick = await choose(g.name, `Estás inscrito${mine?.category ? ' en <b>' + esc(mine.category) + '</b>' : ''}.`, [
+    const pick = await choose(g.name.toLocaleUpperCase('es'), `Estás inscrito${mine?.category ? ' en <b>' + esc(mine.category) + '</b>' : ''}.`, [
       { label: 'Cambiar mi categoría', value: 'cat', kind: 'primary' },
       { label: 'Borrarme de esta carrera', value: 'leave', kind: 'danger' }]);
     if (pick === 'leave') return actions['r-leave'](el);
@@ -3581,7 +4802,7 @@ const actions = {
   'fed-create'(el) {
     const r = S.fed.races[Number(el.dataset.i)];
     S.prefill = { name: r.name, date: r.date, place: r.place || '', province: r.province || '', country: r.country || DEFAULT_COUNTRY,
-      modality: r.modality, ...circuitOf(r), notes: srcNote(r) };
+      modality: r.modality, url: /^https?:\/\/\S+$/i.test(r.url || '') ? r.url : '', ...circuitOf(r), notes: srcNote(r) };
     go('#/inscripciones/nueva');
   },
   async 'insc-menu'() {
@@ -3660,61 +4881,19 @@ const actions = {
     if (await run(async () => { await api.deleteRace(S.draft.id); await reload(); return true; }, 'Carrera borrada')) go(editBack('#/carreras'));
   },
 
+  // Menú del icono de enlace: solo lo que tiene que ver con el enlace personal
   async 'runner-menu'(el) {
     const r = runnerById(el.dataset.id);
     const link = linkFor(r.code);
-    const choice = await choose(r.name, `Enlace personal: <code class="break">${esc(link)}</code>`, [
-      { label: 'Enviar enlace por WhatsApp', value: 'wa', kind: 'primary' },
+    const choice = await choose(`Enlace de ${r.name}`, `<code class="break">${esc(link)}</code>`, [
+      { label: 'Enviar por WhatsApp', value: 'wa', kind: 'primary' },
       { label: 'Copiar enlace', value: 'copy' },
-      { label: '📄 Contrato y documentos', value: 'docs' },
-      { label: 'Ver su pantalla (vista previa)', value: 'preview' },
-      ...(api.mode === 'demo' ? [{ label: 'Abrir su pantalla (demo)', value: 'open' }] : []),
-      { label: 'Cambiar nombre', value: 'rename' },
-      { label: 'Crear enlace nuevo (anula el anterior)', value: 'regen' },
-      { label: 'Descargar sus datos', value: 'export' },
-      { label: 'Borrar corredor', value: 'delete', kind: 'danger ghost' },
+      { label: 'Crear enlace nuevo (anula el anterior)', value: 'regen', kind: 'ghost' },
     ]);
-    if (!choice) return;
-    if (choice === 'wa') {
-      const msg = `Hola ${r.name}! Este es tu enlace personal para ver las carreras del Club Ciclista Monzón y apuntarte:\n${link}\n\nEs solo tuyo: no lo reenvíes. Consejo: ábrelo y añádelo a la pantalla de inicio.`;
-      window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
-    } else if (choice === 'copy') {
-      try { await navigator.clipboard.writeText(link); toast('Enlace copiado'); } catch { prompt('Copia el enlace:', link); }
-    } else if (choice === 'docs') {
-      go('#/docs/' + r.id);
-    } else if (choice === 'preview') {
-      const view = await run(() => api.runnerView(r.code));
-      if (!view) return;
-      S.preview = { name: r.name, sqlOk: Array.isArray(view.my_results) }; S.previewCode = r.code;
-      S.runnerData = view; S.myOpen = true; await loadNews(); await loadChron();
-      go('#/vista');
-    } else if (choice === 'open') {
-      await api.signOut(); S.session = null; S.data = null; go('#/c/' + r.code);
-    } else if (choice === 'rename') {
-      const name = cleanName(prompt('Nuevo nombre:', r.name) || '');
-      if (!name || name === r.name) return;
-      if (S.data.runners.some((x) => x.id !== r.id && normalize(x.name) === normalize(name))) return toast('Ya hay un corredor con ese nombre.', true);
-      await run(async () => { await api.updateRunner(r.id, { name }); await reload(); }, 'Nombre cambiado'); render();
-    } else if (choice === 'regen') {
-      if (!await confirmAction('Enlace nuevo', `El enlace actual de ${esc(r.name)} dejará de funcionar. Tendrás que enviarle el nuevo.`, 'Crear enlace nuevo')) return;
-      await run(async () => { await api.regenerateCode(r.id); await reload(); }, 'Enlace nuevo creado: envíaselo'); render();
-    } else if (choice === 'export') {
-      const races = S.data.races.filter((x) => x.results.some((y) => y.runner_id === r.id));
-      const data = { corredor: { nombre: r.name, categoria: r.category, contrato: r.contract ? contractLabel(r.contract) : null, alta: r.created_at },
-        resultados: races.map((x) => { const y = x.results.find((z) => z.runner_id === r.id);
-          return { fecha: x.date, carrera: x.name, lugar: x.place, provincia: x.province, pais: x.country, modalidad: x.modality, categoria: y.category, puesto: y.position, tipo_podio: isPodium(y.position) ? podiumLabel(y.podium_type) : null,
-            ...(x.stages?.length ? { etapas: x.stages.map((_, i) => ({ etapa: stageName(x, i), puesto: y.stage_positions?.[i] ?? null })) } : {}) }; }),
-        inscripciones: S.data.registrations.filter((g) => g.entries.some((e) => e.runner_id === r.id)).map((g) => ({ fecha: g.date, carrera: g.name })) };
-      download(`datos-${normalize(r.name).replace(/\W+/g, '-')}.json`, JSON.stringify(data, null, 2), 'application/json');
-    } else if (choice === 'delete') {
-      const how = await choose(`Borrar a ${r.name}`, 'Sale de la plantilla y de las inscripciones abiertas. ¿Qué hacemos con sus resultados de carreras pasadas?', [
-        { label: 'Mantener su nombre en el historial', value: 'keep', kind: 'primary' },
-        { label: 'Borrar también su nombre del historial (lo pide el corredor)', value: 'anon', kind: 'danger' },
-      ]);
-      if (!how) return;
-      await run(async () => { await api.deleteRunner(r.id, how === 'anon'); await reload(); }, 'Corredor borrado'); render();
-    }
+    if (choice) await runnerDo(choice, r);
   },
+  // Resto de acciones sobre un corredor, desde su ficha
+  async 'runner-do'(el) { const r = runnerById(el.dataset.id); if (r) await runnerDo(el.dataset.a, r); },
 
   async 'all-links'() {
     const text = [...S.data.runners].sort(byName).map((r) => `${r.name}: ${linkFor(r.code)}`).join('\n');
@@ -3783,6 +4962,21 @@ const actions = {
   'net-range'(el) { S.netAll = el.dataset.w === '1'; S.netMore = false; render(); },
   'net-more'() { S.netMore = true; render(); },
   async 'info-next'() { await choose('Mis próximas inscripciones', 'Carreras a las que estás apuntado y que aún no se han corrido. <b>Toca una</b> para abrirla: ves quién va, puedes borrarte y, si la añadiste tú, editarla.', [{ label: 'Entendido', value: true, kind: 'primary' }]); },
+  async 'res-admin-save'(el) {
+    const box = el.closest('.net-res'); if (!box) return;
+    const changes = [];
+    for (const row of box.querySelectorAll('.rs-row')) {
+      const posTxt = row.querySelector('[data-rs="pos"]').value.trim(), timeTxt = row.querySelector('input[data-rs="time"]').value.trim();
+      const position = posTxt ? Number(posTxt) : null, time = timeTxt ? parseTime(timeTxt) : null;
+      if (posTxt && !(Number.isInteger(position) && position >= 1 && position <= 999)) return toast(`Puesto no válido: ${row.querySelector('.rs-who b').textContent}.`, true);
+      if (timeTxt && !time) return toast(`Revisa el tiempo de ${row.querySelector('.rs-who b').textContent}: los minutos van de 0 a 59.`, true);
+      if (`${position || ''}|${time || ''}` !== row.dataset.orig) changes.push({ id: row.dataset.runner, position, time, podium: row.dataset.podium });
+    }
+    if (!changes.length) return toast('No has cambiado nada.');
+    const ok = await run(async () => { for (const c of changes) await api.adminSetResult(el.dataset.kind, el.dataset.id, c.id, c.position, c.podium, c.time); await reload(); return true; },
+      `Guardado: ${changes.length} ${changes.length === 1 ? 'puesto' : 'puestos'}`);
+    if (ok) render();
+  },
   async 'chro-admin-all'(el) { await setChronicleFor(el.dataset.ids.split(','), el.dataset.key, true); },
   'ig-tab'(el) { S.igTab = el.dataset.t; render(); },
   async 'ig-per-del'(el) {
@@ -3813,7 +5007,25 @@ const actions = {
     await run(async () => { await api.saveSetting(`cierre_${S.year}`, seasonModel(S.year)); await reload(); }, 'Cierre guardado'); render();
   },
   'sum-mod'(el) { S.sumMod = el.dataset.m; render(); },
+  'eq-tab'(el) { S.eqTab = el.dataset.t; render(); window.scrollTo({ top: 0 }); },
+  'eq-metric'(el) { S.eqMetric = el.dataset.k; render(); },
+  'ig-filters'() {
+    const dlg = document.getElementById('dialog'); dlg.innerHTML = igFilterHtml(); dlg.onclose = null; dlg.showModal();
+  },
+  'eq-filters'() { const dlg = document.getElementById('dialog'); dlg.innerHTML = eqFilterHtml(); dlg.onclose = null; dlg.showModal(); },
+  'eq-clear'() { S.sumMod = 'all'; S.year = availableYears(eqSource().races)[0]; render(); },
+  'res-tab'(el) { S.resTab = el.dataset.t; render(); window.scrollTo({ top: 0 }); },
   'pod-view'(el) { S.podView = el.dataset.v; render(); },
+  'tp-sort'(el) { const k = el.dataset.k, cur = S.tsort || { k: 'races', dir: -1 }; S.tsort = { k, dir: cur.k === k ? -cur.dir : (k === 'name' ? 1 : -1) }; render(); },
+  'tp-csv-runners'() {
+    const pk = seasonPack(S.year), rows = seasonRunnerRows(pk), ds = pk.s.disciplines;
+    const head = ['Corredor', 'Categoría', 'Carreras', 'Km', 'Desnivel (m)', 'Desplazamiento (km, ida y vuelta)', 'Coste inscripciones (€)', 'Tiempo (h)', 'Disciplinas distintas', 'Meses con carrera', 'Oros', 'Platas', 'Bronces', 'Podios', ...ds.map((d) => disciplineName(d))];
+    download(`monzon-corredores-${S.year}.csv`, toCsv(rows.sort((a, b) => b.races - a.races).map((r) => [r.name, r.cat, r.races, r.km || 0, r.elev || 0, r.trip || 0, r.cost || 0, Math.round((r.time || 0) / 36) / 100, r.nd, r.nm, r.p1, r.p2, r.p3, r.pod, ...ds.map((d) => r.discs[d.key] || 0)]), head), 'text/csv;charset=utf-8');
+  },
+  'tp-csv-disc'() {
+    const pk = seasonPack(S.year);
+    download(`monzon-disciplinas-${S.year}.csv`, toCsv(pk.s.disciplines.map((d) => [d.modality, d.subtype || '', d.races, d.participations, d.runners, d.podiums, d.wins, d.elevation || 0, d.avgElev || '', d.avgPrice || '']), ['Modalidad', 'Disciplina', 'Carreras', 'Participaciones', 'Corredores', 'Podios', 'Victorias', 'Desnivel total (m)', 'Desnivel medio (m)', 'Precio medio inscripción (€)']), 'text/csv;charset=utf-8');
+  },
   'part-view'(el) { S.partView = el.dataset.v; render(); },
   'race-mod'(el) { S.raceMod = el.dataset.m; render(); },
   'race-todo'() { S.raceTodo = !S.raceTodo; render(); },
@@ -3849,7 +5061,7 @@ const actions = {
     await run(async () => { await api.runnerReplyNews(S.code, el.dataset.id, el.dataset.a, guests); await loadNews(); }, el.dataset.a === 'si' ? '¡Apuntado!' : 'Anotado: no vienes');
     render();
   },
-  'goto-sec'(el) { const t = document.getElementById(el.dataset.to); if (t) { const dt = t.querySelector('details'); if (dt) { dt.open = true; S.open = { ...(S.open || {}), [dt.dataset.openKey]: true }; } t.scrollIntoView({ behavior: 'smooth', block: 'start' }); } else toast('No tienes carreras en este apartado.'); },
+  'goto-sec'(el) { const t = document.getElementById(el.dataset.to); if (t) { const dt = t.matches('details') ? t : t.querySelector('details'); if (dt) { dt.open = true; S.open = { ...(S.open || {}), [dt.dataset.openKey]: true }; } t.scrollIntoView({ behavior: 'smooth', block: 'start' }); } else toast('No tienes carreras en este apartado.'); },
   'hist-filter'(el) { S.histFilter = el.dataset.f; render(); },
   'week-view'(el) { S.weekView = el.dataset.v; render(); },
   'week-all'() { const set = postedSet(), list = weekRaces(S.weekDays || 14); setPostedKeys(list.map(postKey), !list.every((g) => set.has(postKey(g)))); },
@@ -3912,8 +5124,9 @@ const actions = {
 const forms = {
   async 'r-complete'(f) {
     if (S.preview) return toast('Vista previa: aquí no se puede cambiar nada.', true);
-    const data = { province: cleanName(f.province?.value || ''), km: f.km?.value || '', subtype: f.subtype?.value || '' };
-    if (!data.province && !parseKm(data.km) && !data.subtype) return toast('Rellena al menos un dato.', true);
+    const data = { province: cleanName(f.province?.value || ''), km: f.km?.value || '', subtype: f.subtype?.value || '', elevation: parseElev(f.elevation?.value) ?? '', price: parsePrice(f.price?.value) ?? '' };
+    if ((f.elevation?.value.trim() && data.elevation === '') || (f.price?.value.trim() && data.price === '')) return toast('Revisa el desnivel (1 a 10 000 m) y el precio (0 a 10 000 €).', true);
+    if (!data.province && !parseKm(data.km) && !data.subtype && data.elevation === '' && data.price === '') return toast('Rellena al menos un dato.', true);
     const ok = await run(async () => { await api.runnerComplete(S.code, f.dataset.kind, f.dataset.id, data); await loadRunner(); S.team = null; await loadTeam(); return true; }, '¡Gracias! Datos guardados');
     if (ok) render();
   },
@@ -3927,7 +5140,7 @@ const forms = {
     const ok = await run(async () => { await api.signIn(f.email.value.trim(), f.password.value); S.session = await api.session(); return true; });
     if (!ok) return;
     if (!S.session?.isAdmin) { toast('Esta cuenta no es de la dirección.', true); render(); return; }
-    S.data = null; go('#/inscripciones');
+    S.data = null; go('#/hoy');
   },
   async bulk(f) {
     const { toAdd, duplicates, unknownCategory } = parseBulkRunners(f.bulk.value, S.data.runners.map((r) => r.name));
@@ -3964,19 +5177,48 @@ const forms = {
     }, 'Plantilla renovada');
     if (ok) { f.reset(); render(); }
   },
+  async 'w-save'() {
+    const d = S.rdraft; if (!d || d.wk == null) return;
+    let name = cleanName(d.name);
+    if (name.length < 3) return toast('Pon el nombre de la carrera.', true);
+    if (!d.date) return toast('Falta la fecha.', true);
+    if (d.multi && !d.end_date) return toast('Falta el último día.', true);
+    if (d.wk === 'nueva') {   // ¿ya está en Carreras con otro nombre? Se usa esa para no duplicarla
+      const same = watchMatch({ name, date: d.date, end_date: d.multi ? d.end_date : null }, S.runnerData.registrations);
+      const sameName = same && normalize(same.name).replace(/[^a-z0-9]/g, '') === normalize(name).replace(/[^a-z0-9]/g, '');
+      if (sameName) { name = same.name; d.name = same.name; }   // es la misma escrita distinto: se usa el nombre de Carreras
+      else if (same) {
+        const c = await choose('¿Es esta carrera?', `Ya hay <b>${esc(same.name)}</b> en Carreras esos días (${esc(when(same))}).`, [
+          { label: 'Sí, guardar esa', value: 'use', kind: 'primary' }, { label: 'No, es otra: guardar la mía', value: 'mine' }]);
+        if (!c) return;
+        if (c === 'use') { name = same.name; d.date = same.date; d.name = same.name; }
+      }
+    }
+    if (d.deadline && d.deadline > d.date) return toast('El plazo de inscripción no puede ser después de la carrera.', true);
+    if (String(d.km ?? '').trim() !== '' && parseKm(d.km) === null) return toast('La distancia tiene que estar entre 0 y 1000 km.', true);
+    if (String(d.elevation ?? '').trim() !== '' && parseElev(d.elevation) === null) return toast('El desnivel tiene que ser un número entre 1 y 10 000 metros.', true);
+    let url = String(d.url || '').trim(); if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
+    const data = { name, date: d.date, end_date: d.multi ? d.end_date : '', place: cleanName(d.place), province: cleanName(d.province), country: d.country, modality: d.modality,
+      subtype: SUBTYPES[d.modality]?.includes(d.subtype) ? d.subtype : '', km: parseKm(d.km), url, price: String(d.price ?? '').trim(), elevation: parseElev(d.elevation) ?? '', deadline: d.deadline || '', notes: d.notes || '' };
+    const ok = await run(async () => { await api.runnerWatchSave(S.code, d.wk === 'nueva' ? null : d.wk, data); await loadWatch(); return true; }, 'Guardada en «Por valorar»');
+    if (ok) { S.rdraft = null; S.q.runner = ''; go('#/mi/valorar'); }
+  },
   async 'r-create'() {
     const d = S.rdraft;
     const name = cleanName(d.name);
     if (d.multi && !d.end_date) return toast('Falta el último día.', true);
     if (!d.id && !d.category) return toast('Elige tu categoría para apuntarte.', true);
     if (d.race_type === 'circuito' && !cleanName(d.circuit)) return toast('Falta el nombre del circuito.', true);
+    if (String(d.elevation ?? '').trim() !== '' && parseElev(d.elevation) === null) return toast('El desnivel tiene que ser un número entre 1 y 10 000 metros.', true);
+    if (String(d.price ?? '').trim() !== '' && parsePrice(d.price) === null) return toast('El precio tiene que ser un número entre 0 y 10 000 euros (0 = gratis).', true);
+    if (!d.kind && cleanWeb(d.url) === '!') return toast('La web no parece una dirección válida. Pon algo como https://nombre-de-la-carrera.com o déjala vacía.', true);
     if (d.id && d.kind === 'race') { // editar una carrera propia que ya está en resultados
       const subtype = SUBTYPES[d.modality]?.includes(d.subtype) ? d.subtype : null;
       if (String(d.km ?? '').trim() !== '' && parseKm(d.km) === null) return toast('La distancia tiene que estar entre 0 y 1000 km.', true);
       const ok = await run(async () => {
         await api.runnerUpdateRace(S.code, d.id, { name, date: d.date, end_date: d.multi ? d.end_date : null, place: cleanName(d.place),
           province: cleanName(d.province), country: d.country, modality: d.modality, notes: d.notes || '',
-          race_type: d.race_type || 'suelta', circuit: d.race_type === 'circuito' ? cleanName(d.circuit) : null, subtype, km: parseKm(d.km) });
+          race_type: d.race_type || 'suelta', circuit: d.race_type === 'circuito' ? cleanName(d.circuit) : null, subtype, km: parseKm(d.km), elevation: parseElev(d.elevation) ?? '', price: parsePrice(d.price) ?? '' });
         await loadRunner(); if (S.team) await loadTeam(); return true;
       }, 'Carrera actualizada');
       if (ok) { S.rdraft = null; go(runnerHref('mi')); }
@@ -3985,8 +5227,10 @@ const forms = {
     if (d.id) { // editar una carrera propia
       const ok = await run(async () => {
         await api.runnerUpdate(S.code, d.id, { name, date: d.date, end_date: d.multi ? d.end_date : null, place: cleanName(d.place),
-          province: cleanName(d.province), country: d.country, modality: d.modality, notes: d.notes || '' });
+          province: cleanName(d.province), country: d.country, modality: d.modality, notes: d.notes || '', elevation: parseElev(d.elevation) ?? '', price: parsePrice(d.price) ?? '' });
         await setMyRaceType(d.id, d); await setMyDetails(d.id, d);
+        const cur = S.runnerData.registrations.find((x) => x.id === d.id)?.url || '';
+        if (cleanWeb(d.url) !== '!' && (cleanWeb(d.url) || '') !== cur) await api.runnerSetUrl(S.code, d.id, cleanWeb(d.url));
         await loadRunner(); return true;
       }, 'Carrera actualizada');
       if (ok) { S.rdraft = null; go('#/'); }
@@ -3998,14 +5242,20 @@ const forms = {
       const choice = await choose('¿Es esta carrera?', `Ya hay <b>${esc(same.name)}</b> el mismo día (${esc(when(same))}).`, [
         { label: 'Sí, apuntarme a esa', value: 'join', kind: 'primary' }, { label: 'No, es otra: crearla', value: 'create' }]);
       if (!choice) return;
-      if (choice === 'join') return actions['r-join-go']({ dataset: { id: same.id } });
+      if (choice === 'join') {
+        if (cleanWeb(d.url) && cleanWeb(d.url) !== '!' && !same.url) await api.runnerSetUrl(S.code, same.id, cleanWeb(d.url)).catch(() => {});
+        const extra = { elevation: !same.elevation ? parseElev(d.elevation) ?? '' : '', price: same.price == null ? parsePrice(d.price) ?? '' : '' };
+        if (extra.elevation !== '' || extra.price !== '') await api.runnerComplete(S.code, 'reg', same.id, extra).catch(() => {});
+        return actions['r-join-go']({ dataset: { id: same.id } });
+      }
     }
     const past = d.date < todayISO();
     const id = await run(async () => {
       const newId = await api.runnerCreate(S.code, { name, date: d.date, end_date: d.multi ? d.end_date : null, place: cleanName(d.place),
-        province: cleanName(d.province), country: d.country, modality: d.modality }, d.category || null);
+        province: cleanName(d.province), country: d.country, modality: d.modality, url: cleanWeb(d.url) || '', elevation: parseElev(d.elevation) ?? '', price: parsePrice(d.price) ?? '' }, d.category || null);
       if (newId && d.race_type && d.race_type !== 'suelta') await setMyRaceType(newId, d);
       if (newId) await setMyDetails(newId, d);
+      if (d.watchId) { await api.runnerWatchDelete(S.code, d.watchId).catch(() => {}); await loadWatch(); }   // ya no está «por valorar»
       await loadRunner(); return newId || true;
     }, past ? 'Carrera añadida: ahora pon tu resultado' : 'Carrera añadida y te has apuntado');
     if (id) { S.rdraft = null; S.q.runner = ''; go(past ? resultHref(id) : '#/'); }
@@ -4015,7 +5265,7 @@ const forms = {
     if (!Number.isInteger(position) || position < 1) return toast('Pon un puesto válido (1, 2, 3…).', true);
     const cat = f.category.value || null, pod = f.podium.value;
     const rawTime = f.time.value.trim(), time = rawTime ? parseTime(rawTime) : null;
-    if (rawTime && !time) return toast('Pon el tiempo así: 2:05:30 (horas:minutos:segundos), o déjalo vacío.', true);
+    if (rawTime && !time) return toast('Revisa el tiempo: minutos y segundos van de 0 a 59. Déjalo vacío si no lo sabes.', true);
     const txt = `${position}º${cat ? ' en ' + cat : ''}${time ? ' · ⏱️ ' + formatTime(time) : ''}${position <= 3 && pod === 'campeonato' ? ` · ${podiumLabel(pod)}` : ''}`;
     if (!await confirmAction('Guardar resultado', `Vas a guardar: <b>${esc(txt)}</b>.<br>Si te equivocas, lo puedes cambiar después.`, 'Guardar', 'primary')) return;
     const ok = await run(async () => { await api.runnerReport(S.code, f.dataset.kind, f.dataset.id, position, cat, pod, time); await loadRunner(); return true; },
@@ -4187,7 +5437,7 @@ document.addEventListener('visibilitychange', async () => {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['chro-toggle', 'chro-all', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
+const RUNNER_ACTIONS = new Set(['r-web', 'w-sign', 'w-del', 'w-add-fed', 'w-add-reg', 'chro-toggle', 'chro-all', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
 // los enlaces de la ventana emergente (p. ej. las carreras de un compañero) cierran la ventana al navegar
 document.getElementById('dialog').addEventListener('click', (ev) => { if (ev.target.closest('a[href^="#/"]')) ev.currentTarget.close(); });
 $app.addEventListener('click', (ev) => {
@@ -4216,11 +5466,21 @@ $app.addEventListener('input', (ev) => {
     updateSearch(t.dataset.search);
     return;
   }
+  if (t.dataset.tpart) {
+    const w = t.closest('.tinput'), v = (k) => w.querySelector(`[data-tpart="${k}"]`);
+    t.value = t.value.replace(/\D/g, '');
+    if (t.dataset.tpart !== 'h' && t.value.length === 2 && Number(t.value) > 59) t.value = '59';
+    const hid = w.querySelector('[data-tvalue]'), [h, m] = ['h', 'm'].map((k) => v(k).value), x = Number(w.dataset.sec || 0);   // los segundos que ya hubiera se conservan
+    hid.value = h || m ? `${Number(h || 0)}:${String(Number(m || 0)).padStart(2, '0')}:${String(x).padStart(2, '0')}` : '';
+    if (t.dataset.tpart === 'h' && t.value.length === 2 && ev.inputType !== 'deleteContentBackward') v('m').focus();
+    hid.dispatchEvent(new Event('input', { bubbles: true }));
+    return;
+  }
   if (t.dataset.rf && S.rdraft) {
     S.rdraft[t.dataset.rf] = t.value;
     if (t.dataset.rf === 'name' && !S.rdraft.subtype) {
       const g = guessSubtype(t.value, S.rdraft.modality);
-      if (g) { S.rdraft.subtype = g; const sel = $app.querySelector('select[data-rf="subtype"]'); if (sel) sel.value = g; }
+      if (g) { S.rdraft.subtype = g; const sel = [...$app.querySelectorAll('input[data-rf="subtype"]')].find((x) => x.value === g); if (sel) sel.checked = true; }
     }
     if (t.dataset.rf === 'name') updateSearch('rname');
     return;
@@ -4228,7 +5488,7 @@ $app.addEventListener('input', (ev) => {
   if (!S.draft) return;
   if (t.dataset.f === 'name' && !S.draft.subtype) { // el nombre da pistas del formato (XCM, Critérium…)
     const g = guessSubtype(t.value, S.draft.modality);
-    if (g) { S.draft.subtype = g; const sel = $app.querySelector('select[data-f="subtype"]'); if (sel) sel.value = g; }
+    if (g) { S.draft.subtype = g; const sel = [...$app.querySelectorAll('input[data-f="subtype"]')].find((x) => x.value === g); if (sel) sel.checked = true; }
   }
   if (S.draft.kind === 'reg' && !S.draft.id && t.dataset.f === 'name') {
     S.draft.name = t.value;
@@ -4264,6 +5524,7 @@ $app.addEventListener('input', (ev) => {
 $app.addEventListener('change', async (ev) => {
   const t = ev.target;
   if (t.dataset.yearSel !== undefined) { S.year = Number(t.value); render(); return; }
+  if (t.dataset.msgPick) { go(`#/mensajes/${t.dataset.msgPick}/${t.value}`); return; }
   if (t.dataset.filter) { actions[{ mod: 'mod-filter', sub: 'sub-filter', who: 'who-filter' }[t.dataset.filter]]({ dataset: { m: t.value, s: t.value, w: t.value } }); return; }
   if (t.dataset.f === 'modality' && S.draft) { // cambia la modalidad: el formato depende de ella
     S.draft.modality = t.value; if (!SUBTYPES[t.value]?.includes(S.draft.subtype)) S.draft.subtype = guessSubtype(S.draft.name, t.value); render(); return;
