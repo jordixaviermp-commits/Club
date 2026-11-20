@@ -224,9 +224,8 @@ export function yearSummary(year, races, runners) {
     podiums: podiums.length,
     wins: podiums.filter((p) => p.position === 1).length,
     km: Math.round(parts.reduce((n, p) => n + (Number(p.race.km) || 0), 0) * 10) / 10, // km recorridos entre todos
-    // velocidad media: km entre horas de competición, solo con las participaciones que tienen distancia Y tiempo
-    kmTimed: Math.round(parts.reduce((n, p) => n + (Number(p.race.km) > 0 && Number(p.res.time_seconds) > 0 ? Number(p.race.km) : 0), 0) * 10) / 10,
-    secTimed: parts.reduce((n, p) => n + (Number(p.race.km) > 0 && Number(p.res.time_seconds) > 0 ? Number(p.res.time_seconds) : 0), 0),
+    // carreras con distancia: para la media de km por carrera (quien hace pocas carreras pero largas)
+    kmRaces: parts.filter((p) => Number(p.race.km) > 0).length,
     time: parts.reduce((n, p) => n + (Number(p.res.time_seconds) || 0), 0), // segundos de los que tienen tiempo
     timed: parts.filter((p) => Number(p.res.time_seconds) > 0).length,
     // desnivel positivo (m) que han subido entre todos (cada participación suma el de su carrera) y lo que cuestan las inscripciones (€)
@@ -298,14 +297,14 @@ export function yearSummary(year, races, runners) {
 
   // Participaciones por corredor: toda la plantilla (también con 0) y quien ya no está pero corrió ese año.
   const rows = new Map();
-  for (const rn of runners) rows.set(rn.id, { key: rn.id, name: rn.name, current: true, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {}, discs: {}, months: new Set(), km: 0, elev: 0, cost: 0, trip: 0, tripN: 0, tripMax: 0, tripRace: '', kmTimed: 0, secTimed: 0, time: 0, timed: 0 });
+  for (const rn of runners) rows.set(rn.id, { key: rn.id, name: rn.name, current: true, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {}, discs: {}, months: new Set(), km: 0, elev: 0, cost: 0, trip: 0, tripN: 0, tripMax: 0, tripRace: '', kmRaces: 0, time: 0, timed: 0 });
   for (const { race, res } of parts) {
     const k = personKey(res);
-    if (!rows.has(k)) rows.set(k, { key: k, name: res.runner_name, current: false, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {}, discs: {}, months: new Set(), km: 0, elev: 0, cost: 0, trip: 0, tripN: 0, tripMax: 0, tripRace: '', kmTimed: 0, secTimed: 0, time: 0, timed: 0 });
+    if (!rows.has(k)) rows.set(k, { key: k, name: res.runner_name, current: false, races: 0, road: 0, btt: 0, p1: 0, p2: 0, p3: 0, mods: {}, discs: {}, months: new Set(), km: 0, elev: 0, cost: 0, trip: 0, tripN: 0, tripMax: 0, tripRace: '', kmRaces: 0, time: 0, timed: 0 });
     const row = rows.get(k);
     row.races++;
     row.km = Math.round((row.km + (Number(race.km) || 0)) * 10) / 10;
-    if (Number(race.km) > 0 && Number(res.time_seconds) > 0) { row.kmTimed = Math.round((row.kmTimed + Number(race.km)) * 10) / 10; row.secTimed += Number(res.time_seconds); }
+    if (Number(race.km) > 0) row.kmRaces++;
     row.elev += elevOf(race); row.cost = Math.round((row.cost + (priceOf(race) ?? 0)) * 100) / 100;
     { const dd = distOf(race); if (dd) { row.trip += 2 * dd.km; row.tripN++; if (dd.km > row.tripMax) { row.tripMax = dd.km; row.tripRace = race.name; } } }
     if (Number(res.time_seconds) > 0) { row.time += Number(res.time_seconds); row.timed++; }
@@ -770,11 +769,11 @@ export function daysOf(start, end) {
 
 /** Número de días de una carrera. */
 export const numDays = (start, end) => daysOf(start, end).length;
-/** Tiempo por km de una lista de carreras ({ km, time_seconds }): segundos que tarda por cada km (solo carreras con distancia y tiempo). `kmh` es lo mismo al revés. */
-export function avgSpeed(items) {
-  let km = 0, sec = 0;
-  for (const r of items || []) { const k = Number(r?.km), t = Number(r?.time_seconds); if (k > 0 && t > 0) { km += k; sec += t; } }
-  return { km: Math.round(km * 10) / 10, sec, kmh: sec ? Math.round((km / (sec / 3600)) * 10) / 10 : 0, pace: km ? Math.round(sec / km) : 0 };
+/** Km por carrera de una lista de carreras ({ km }): media de distancia de las carreras que tienen km (premia pocas carreras pero largas). */
+export function kmPerRace(items) {
+  let km = 0, races = 0;
+  for (const r of items || []) { const k = Number(r?.km); if (k > 0) { km += k; races++; } }
+  return { km: Math.round(km * 10) / 10, races, avg: races ? Math.round((km / races) * 10) / 10 : 0 };
 }
 
 // ---------- Bonos por carreras de la temporada ----------
