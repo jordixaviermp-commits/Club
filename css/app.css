@@ -2122,3 +2122,20 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .ig-upd.stale { border-color: color-mix(in srgb, #d93025 50%, var(--line)); background: color-mix(in srgb, #d93025 10%, var(--card)); } .ig-upd.stale .ico { color: #d93025; }
 .ig-upd .ig-upd-w { color: var(--text); font-weight: 700; }
 @media print { .ig-upd { display: none; } }
+
+/* Carreras: la próxima carrera del equipo, bien resaltada */
+.next-team { position: relative; overflow: hidden; border: 0; border-radius: 20px; padding: .9rem 1rem 1rem; margin: 0 0 .8rem; color: #fff; background: radial-gradient(120% 140% at 100% 0, color-mix(in srgb, var(--sec) 70%, #fff) 0, transparent 55%), linear-gradient(135deg, var(--sec), color-mix(in srgb, var(--sec) 45%, #000)); box-shadow: 0 8px 24px color-mix(in srgb, var(--sec) 35%, transparent); }
+.next-team::after { content: ""; position: absolute; right: -34px; bottom: -44px; width: 150px; height: 150px; border-radius: 50%; border: 16px solid rgba(255, 255, 255, .08); pointer-events: none; }
+.next-team.wk { outline: 3px solid #ffd84d; outline-offset: 2px; }
+.next-team > * { position: relative; z-index: 1; }
+.nt-k { display: flex; align-items: center; gap: .4rem; margin: 0 0 .25rem; font-size: .74rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; opacity: .95; } .nt-k .ico { width: 16px; height: 16px; }
+.nt-n { margin: 0; font-size: 1.35rem; line-height: 1.15; text-transform: uppercase; color: #fff; }
+.nt-d { margin: .2rem 0 .55rem; font-size: .9rem; opacity: .95; }
+.nt-row { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+.nt-pill { display: inline-flex; padding: .15rem .6rem; border-radius: 999px; font-size: .78rem; font-weight: 800; background: rgba(255, 255, 255, .18); border: 1px solid rgba(255, 255, 255, .3); }
+.nt-when { background: #ffd84d; color: #3a2a00; border-color: #ffd84d; }
+.nt-people { margin: .55rem 0 0; font-size: .84rem; opacity: .95; }
+.nt-foot { display: flex; align-items: center; justify-content: space-between; gap: .6rem; margin-top: .7rem; }
+.nt-me { display: inline-flex; align-items: center; gap: .35rem; font-size: .85rem; font-weight: 700; opacity: .95; } .nt-me .ico { width: 16px; height: 16px; } .nt-me.on { color: #b7ffd0; }
+.nt-btn { background: #fff; color: #222; border: 0; font-weight: 800; }
+.nt-btn { white-space: nowrap; }

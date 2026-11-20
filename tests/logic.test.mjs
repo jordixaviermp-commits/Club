@@ -757,3 +757,13 @@ test('última actualización de Instagram: fecha de la captura, último día y s
   assert.equal(igLastUpdate([{ kind: 'day', key: '2026-11-01' }], now), null);
   assert.equal(igLastUpdate([], now), null);
 });
+
+test('próxima carrera del equipo: la primera con inscritos, en curso incluida, sin suspendidas', async () => {
+  const { nextTeamRace } = await import('../js/logic.js');
+  const e = (n) => Array.from({ length: n }, (_, i) => ({ runner_id: 'r' + i }));
+  const regs = [{ id: 'sin', date: '2026-11-22', entries: [] }, { id: 'susp', date: '2026-11-23', suspended: true, entries: e(3) }, { id: 'b', date: '2026-11-24', entries: e(1) }, { id: 'a', date: '2026-11-24', entries: e(4) }, { id: 'pasada', date: '2026-11-10', entries: e(2) }];
+  assert.equal(nextTeamRace(regs, '2026-11-20').id, 'a');                    // misma fecha: la de más inscritos
+  assert.equal(nextTeamRace([{ id: 'curso', date: '2026-11-19', end_date: '2026-11-21', entries: e(2) }, ...regs], '2026-11-20').id, 'curso');   // en curso
+  assert.equal(nextTeamRace(regs, '2026-11-25'), null);
+  assert.equal(nextTeamRace([], '2026-11-20'), null);
+});
