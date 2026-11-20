@@ -745,3 +745,15 @@ test('ratios de resumen: km/día, km/h, min/km, km por carrera y carrera frente 
   assert.equal(avgSpeed([{ km: 134, time_seconds: 16320 }]).pace, 122);
   assert.deepEqual(avgSpeed([{ km: 50 }, { time_seconds: 3600 }]), { km: 0, sec: 0, kmh: 0, pace: 0 });
 });
+
+test('última actualización de Instagram: fecha de la captura, último día y semáforo', async () => {
+  const { igLastUpdate } = await import('../js/logic.js');
+  const now = new Date('2026-11-20T10:00:00Z');
+  const rows = [{ kind: 'day', key: '2026-11-18', captured_at: '2026-11-19T06:00:00Z' }, { kind: 'day', key: '2026-11-19', captured_at: '2026-11-20T07:00:00Z' }, { kind: 'media', key: 'a', captured_at: '2026-11-20T07:00:05Z' }];
+  const r = igLastUpdate(rows, now);
+  assert.equal(r.lastDay, '2026-11-19'); assert.equal(r.level, 'ok'); assert.ok(r.hours > 2.9 && r.hours < 3.1);
+  assert.equal(igLastUpdate([{ kind: 'day', key: '2026-11-10', captured_at: '2026-11-16T10:00:00Z' }], now).level, 'late');
+  assert.equal(igLastUpdate([{ kind: 'day', key: '2026-11-01', captured_at: '2026-11-10T10:00:00Z' }], now).level, 'stale');
+  assert.equal(igLastUpdate([{ kind: 'day', key: '2026-11-01' }], now), null);
+  assert.equal(igLastUpdate([], now), null);
+});

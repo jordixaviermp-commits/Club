@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError, cleanWeb } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, disciplineKey, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  directorBoard, raceImpact, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
+  directorBoard, raceImpact, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -3162,11 +3162,18 @@ function viewInstagram() {
   const tabs = [['per', 'Periodos', 'cal'], ['res', 'Diario', 'bars'], ['con', 'Contenido', 'list'], ['aud', 'Audiencia', 'users']];
   const filterOn = period !== 'all';
   const big = (v, l) => `<div class="rs-big"><b>${v}</b><span>${l}</span></div>`;
+  // cuándo se actualizó por última vez (la captura automática): para ver de un vistazo si sigue funcionando
+  const igUpdLine = () => {
+    const u = igLastUpdate(S.ig.rows); if (!u) return '';
+    const when = new Date(u.at).toLocaleString('es-ES', { timeZone: 'Europe/Madrid', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const d = Math.floor(u.hours / 24), ago = u.hours < 1 ? 'hace menos de 1 hora' : u.hours < 24 ? `hace ${Math.round(u.hours)} h` : `hace ${d} ${d === 1 ? 'día' : 'días'}`;
+    return `<div class="ig-upd ${u.level}" role="status">${ico(u.level === 'ok' ? 'check' : 'alert')}<span><b>Última actualización: ${esc(when)}</b> · ${ago}${u.lastDay ? `<small>Datos hasta el ${esc(formatDate(u.lastDay, false))}</small>` : ''}${u.level === 'ok' ? '' : `<small class="ig-upd-w">${u.level === 'late' ? 'Lleva unos días sin actualizarse.' : 'Lleva más de 4 días sin actualizarse: revisa la tarea automática.'}</small>`}</span></div>`;
+  };
   const igHero = g.nDays ? `<section class="rs-hero ig-hero no-print"><p class="rs-hero-t">Instagram · ${esc(periodName)}</p>
       <div class="rs-bigs">${big(nf(t.views), 'visualiz.')}${big(t.reachAvg ? nf(t.reachAvg) : '—', 'alcance/día')}${big(nf(t.interactions), 'interacc.')}${big(nf(t.follows), 'nuevos seg.')}</div>
       <p class="rs-hero-s">${esc(label)}${acc?.media != null ? ` · ${nf(acc.media)} publicaciones` : ''}${t.pctNonFollowers != null ? ` · ${t.pctNonFollowers} % de no seguidores` : ''}</p></section>` : '';
   return head(`
-    <div class="no-print">${igHero}
+    <div class="no-print">${igHero}${igUpdLine()}
       <div class="eq-bar"><nav class="rs-tabs" role="tablist" aria-label="Apartados de Instagram">${tabs.map(([k, l, ic]) => `<button type="button" class="${k === tab ? 'on' : ''}" data-act="ig-tab" data-t="${k}" role="tab" aria-selected="${k === tab}">${ico(ic)}<span>${l}</span></button>`).join('')}</nav>
         <button type="button" class="eq-fbtn${filterOn ? ' on' : ''}" data-act="ig-filters" aria-label="Periodo${filterOn ? ' (filtrado)' : ''}" title="Periodo">${icon(ICON_FILTER)}${filterOn ? '<i class="fdot"></i>' : ''}</button></div>
       ${filterOn ? `<div class="eq-active"><span>${esc(periodName)}</span><button type="button" class="link" data-act="ig-period" data-p="all">Quitar filtro ✕</button></div>` : ''}
