@@ -1096,13 +1096,19 @@ function myRacesCard(d, afterSummary = () => '') {
       <a href="#" class="tile t-next" data-act="goto-sec" data-to="sec-next"><span class="t-n">${upcoming.length}</span><span class="t-l">Próximas</span>${ico('cal', 't-ico')}<small>inscrito</small></a>
       <a href="#" class="tile t-done" data-act="goto-sec" data-to="sec-done"><span class="t-n">${list.length + sent.filter((g) => yearOf(g.date) === S.myYear).length}</span><span class="t-l">Hechas</span>${ico('ok', 't-ico')}<small>${days !== list.length ? `${days} días de competición` : 'con resultado'}</small></a>
       <a href="#" class="tile t-pend${pending.length ? ' alert' : ''}" data-act="goto-sec" data-to="sec-pend"><span class="t-n">${pending.length}</span><span class="t-l">Pendientes</span>${ico('flag', 't-ico')}<small>${pending.length ? 'falta tu resultado' : 'de resultado'}</small></a>
-      <a href="#" class="tile t-canc" data-act="goto-sec" data-to="sec-canc"><span class="t-n">${cancelled.length}</span><span class="t-l">Anuladas</span>${ico('ban', 't-ico')}<small>suspendidas</small></a>
     </div>
+    ${cancelled.length ? `<a href="#" class="canc-line" data-act="goto-sec" data-to="sec-canc">${ico('ban')}<span><b>${cancelled.length}</b> ${cancelled.length === 1 ? 'carrera anulada' : 'carreras anuladas'} (cuenta${cancelled.length === 1 ? '' : 'n'} para el mínimo)</span>${ico('go')}</a>` : ''}
     ${(() => { const sentYear = sent.filter((g) => yearOf(g.date) === S.myYear).map((g) => ({ position: g.my_result.position, time_seconds: g.my_result.time_seconds })), allMine = [...list, ...sentYear];   // los enviados también cuentan
       const pod = [1, 2, 3].map((k) => allMine.filter((x) => x.position === k).length), NAMES = [['Oro', 'Oros'], ['Plata', 'Platas'], ['Bronce', 'Bronces']];
       // una sola línea pequeña: tiempo en carrera y, al lado, km de viaje (ida y vuelta, aprox.)
       const myTime = allMine.reduce((n, r) => n + (Number(r.time_seconds) || 0), 0), myTrip = list.reduce((n, r) => n + 2 * (distanceKm(r)?.km ?? 0), 0);
-      const road = myTime || myTrip ? `<p class="my-line">${myTime ? `<span title="Tiempo total en carrera (de las carreras con tiempo)">${ico('timer')}<b>${formatTime(myTime, true)}</b> en carrera</span>` : ''}${myTrip ? `<span title="Ida y vuelta desde un punto a medio camino entre Monzón y Lleida">${ico('compass')}<b>${kmText(myTrip)}</b> de viaje</span>` : ''}</p>` : '';
+      // lo que aporta al club: sus carreras alimentan las historias, las publicaciones y la estadística del equipo
+      const joined = list.length + sentYear.length + pending.filter((g) => yearOf(g.date) === S.myYear).length + upcoming.filter((g) => yearOf(g.date) === S.myYear).length;
+      const cro = S.chron ? chronicleStatus(d, S.chron, today, S.myYear).done.length : 0;
+      const road = joined ? `<div class="aport"><p class="aport-t">${ico('star')}Tu aportación al club</p><ul>
+          <li>${ico('flag')}<span><b>${joined}</b> ${joined === 1 ? 'carrera apuntada' : 'carreras apuntadas'}: cada una es una historia y un post en redes</span></li>
+          ${cro ? `<li>${ico('book')}<span><b>${cro}</b> ${cro === 1 ? 'crónica pasada' : 'crónicas pasadas'}</span></li>` : ''}
+          ${myTime || myTrip ? `<li>${ico('bars')}<span>Entras en la estadística del equipo${myTime ? ` con <b>${formatTime(myTime, true)}</b> en carrera` : ''}${myTime && myTrip ? ' y ' : myTrip ? ' con ' : ''}${myTrip ? `<b>${kmText(myTrip)}</b> de viaje` : ''}</span></li>` : ''}</ul></div>` : '';
       return (pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}"><i class="medal m${i + 1}"></i>${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : '') + road; })()}
   </section>
 
