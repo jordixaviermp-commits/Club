@@ -2082,3 +2082,13 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .chro-det h3 { margin: .8rem 0 .2rem; font-size: .98rem; }
 .imp-list li { flex-wrap: wrap; } .imp-n { flex: 1 1 100%; } .imp-n b { white-space: normal; }
 .imp-chip { padding: .2rem .55rem; }
+
+/* Mis carreras: tres fichas en una fila, «Anuladas» como línea solo si hay, y */
+.sum-card .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .4rem; }
+.sum-card .tiles .tile { grid-template-columns: 1fr auto; grid-template-areas: "n i" "l l" "s s"; row-gap: .1rem; padding: .5rem .45rem; }
+.sum-card .tiles .tile .t-n { font-size: 1.9rem; }
+.sum-card .tiles .tile .t-l { font-size: .78rem; letter-spacing: -.01em; overflow: visible; text-overflow: clip; }
+.sum-card .tiles .tile small { font-size: .7rem; line-height: 1.15; }
+.sum-card .tiles .tile .t-ico { width: 18px; height: 18px; }
+.canc-line { display: flex; align-items: center; gap: .45rem; margin: .5rem 0 0; padding: .35rem .65rem; border-radius: 10px; background: color-mix(in srgb, #b3261e 10%, var(--card)); border: 1px solid color-mix(in srgb, #b3261e 35%, var(--line)); color: var(--text); text-decoration: none; font-size: .82rem; }
+.canc-line .ico { width: 16px; height: 16px; flex: none; color: #b3261e; } .canc-line span { flex: 1; }

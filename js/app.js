@@ -1105,13 +1105,14 @@ function myRacesCard(d, afterSummary = () => '') {
       <a href="#" class="tile t-next" data-act="goto-sec" data-to="sec-next"><span class="t-n">${upcoming.length}</span><span class="t-l">Próximas</span>${ico('cal', 't-ico')}<small>inscrito</small></a>
       <a href="#" class="tile t-done" data-act="goto-sec" data-to="sec-done"><span class="t-n">${list.length + sent.filter((g) => yearOf(g.date) === S.myYear).length}</span><span class="t-l">Hechas</span>${ico('ok', 't-ico')}<small>${days !== list.length ? `${days} días de competición` : 'con resultado'}</small></a>
       <a href="#" class="tile t-pend${pending.length ? ' alert' : ''}" data-act="goto-sec" data-to="sec-pend"><span class="t-n">${pending.length}</span><span class="t-l">Pendientes</span>${ico('flag', 't-ico')}<small>${pending.length ? 'falta tu resultado' : 'de resultado'}</small></a>
-      <a href="#" class="tile t-canc" data-act="goto-sec" data-to="sec-canc"><span class="t-n">${cancelled.length}</span><span class="t-l">Anuladas</span>${ico('ban', 't-ico')}<small>suspendidas</small></a>
     </div>
+    ${cancelled.length ? `<a href="#" class="canc-line" data-act="goto-sec" data-to="sec-canc">${ico('ban')}<span><b>${cancelled.length}</b> ${cancelled.length === 1 ? 'anulada' : 'anuladas'} · cuenta${cancelled.length === 1 ? '' : 'n'} para el mínimo</span>${ico('go')}</a>` : ''}
     ${(() => { const sentYear = sent.filter((g) => yearOf(g.date) === S.myYear).map((g) => ({ position: g.my_result.position, time_seconds: g.my_result.time_seconds })), allMine = [...list, ...sentYear];   // los enviados también cuentan
       const pod = [1, 2, 3].map((k) => allMine.filter((x) => x.position === k).length), NAMES = [['Oro', 'Oros'], ['Plata', 'Platas'], ['Bronce', 'Bronces']];
       // una sola línea pequeña: tiempo en carrera y, al lado, km de viaje (ida y vuelta, aprox.)
-      const myTime = allMine.reduce((n, r) => n + (Number(r.time_seconds) || 0), 0), myTrip = list.reduce((n, r) => n + 2 * (distanceKm(r)?.km ?? 0), 0);
-      const road = myTime || myTrip ? `<p class="my-line">${myTime ? `<span title="Tiempo total en carrera (de las carreras con tiempo)">${ico('timer')}<b>${formatTime(myTime, true)}</b> en carrera</span>` : ''}${myTrip ? `<span title="Ida y vuelta desde un punto a medio camino entre Monzón y Lleida">${ico('compass')}<b>${kmText(myTrip)}</b> de viaje</span>` : ''}</p>` : '';
+      // una sola línea pequeña: tiempo en carrera y, al lado, los km recorridos en carrera
+      const myTime = allMine.reduce((n, r) => n + (Number(r.time_seconds) || 0), 0), myKm = list.reduce((n, r) => n + (Number(r.km) || 0), 0) + sent.filter((g) => yearOf(g.date) === S.myYear).reduce((n, g) => n + (Number(g.km) || 0), 0);
+      const road = myTime || myKm ? `<p class="my-line">${myTime ? `<span title="Tiempo total en carrera (de las carreras con tiempo)">${ico('timer')}<b>${formatTime(myTime, true)}</b> en carrera</span>` : ''}${myKm ? `<span title="Kilómetros de las carreras que has hecho">${ico('ruler')}<b>${kmText(Math.round(myKm))}</b> en carrera</span>` : ''}</p>` : '';
       return (pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}"><i class="medal m${i + 1}"></i>${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : '') + road; })()}
   </section>
 
