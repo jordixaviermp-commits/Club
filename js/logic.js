@@ -1175,6 +1175,18 @@ export function socialBoard(races, registrations, posted, today, log = null, { b
 // ======================================================================
 
 /**
+ * «Impacto en redes» de un corredor: de cada una de sus carreras, qué se ha publicado gracias a ella.
+ * Lo único que hace el corredor es poner su resultado y pasar la crónica; la historia sale sola (tarea automática) y los resultados los publica el club.
+ * `items`: carreras con { key, date, name }; `posted`: Set de claves publicadas por el club (la clave de la carrera = historia/aviso, «res|…» = resultados);
+ * `story`: registro de historias automáticas (parseStoryLog); `chron`: Set de crónicas pasadas; `mine`: Set de carreras en las que el corredor ya puso su resultado.
+ */
+export function raceImpact(items, { posted = new Set(), story = null, chron = null, mine = new Set() } = {}) {
+  const rows = items.map((x) => ({ ...x, story: !!(story?.byKey?.has(x.key) || posted.has(x.key)), mine: mine.has(x.key), published: posted.has('res|' + x.key), cro: !!chron?.has(x.key) }));
+  const totals = { races: rows.length, stories: rows.filter((r) => r.story).length, results: rows.filter((r) => r.mine).length, published: rows.filter((r) => r.published).length, chronicles: rows.filter((r) => r.cro).length };
+  return { rows, totals, pieces: totals.stories + totals.published + totals.chronicles };
+}
+
+/**
  * Crónicas de un corredor: las carreras en las que ha participado (con resultado, o ya corridas estando inscrito) y cuáles ya pasó.
  * `d`: datos del corredor ({ me, my_results, registrations }); `done`: Set de claves «AAAA-MM-DD|nombre» pasadas; `year`: temporada (o null = todas).
  */
