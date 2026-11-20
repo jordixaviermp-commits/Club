@@ -1107,7 +1107,7 @@ function myRacesCard(d, afterSummary = () => '') {
     <div class="tiles">
       <a href="#" class="tile t-next" data-act="goto-sec" data-to="sec-next"><span class="t-n">${upcomingYear.length}</span><span class="t-l">Próximas</span>${ico('cal', 't-ico')}<small>inscrito</small></a>
       <a href="#" class="tile t-done" data-act="goto-sec" data-to="sec-done"><span class="t-n">${list.length + sent.filter((g) => yearOf(g.date) === S.myYear).length}</span><span class="t-l">Hechas</span>${ico('ok', 't-ico')}<small>${days !== list.length ? `${days} días de competición` : 'con resultado'}</small></a>
-      <a href="#" class="tile t-pend${pendingN ? ' alert' : ''}" data-act="goto-sec" data-to="sec-pend"><span class="t-n">${pendingN}</span><span class="t-l">Pendientes</span>${ico('flag', 't-ico')}<small>${pendingN ? 'falta tu resultado' : 'de resultado'}</small></a>
+      <a href="#" class="tile t-pend${pendingN ? ' alert' : ''}" data-act="goto-sec" data-to="sec-pend"><span class="t-n">${pendingN}</span><span class="t-l">Pendientes</span>${ico('flag', 't-ico')}<small>${pendingN ? 'falta tu resultado' : 'todo al día'}</small></a>
     </div>
     ${cancelled.length ? `<a href="#" class="canc-line" data-act="goto-sec" data-to="sec-canc">${ico('ban')}<span><b>${cancelled.length}</b> ${cancelled.length === 1 ? 'carrera suspendida' : 'carreras suspendidas'}</span>${ico('go')}</a>` : ''}
     ${(() => { const sentYear = sent.filter((g) => yearOf(g.date) === S.myYear).map((g) => ({ position: g.my_result.position, time_seconds: g.my_result.time_seconds })), allMine = [...list, ...sentYear];   // los enviados también cuentan
@@ -1639,8 +1639,8 @@ function watchCard(w, i) {
     ${w.notes ? `<p class="notes">${esc(w.notes)}</p>` : ''}
     <div class="wc-acts">${i.past ? `<button class="btn primary small" data-act="w-repeat" data-id="${w.id}">${ico('star')}Repetir el año que viene</button>` : mine ? '' : `<button class="btn primary small" data-act="w-sign" data-id="${w.id}">${g ? 'Apuntarme' : 'Inscribirme'}</button>`}
       ${w.url ? `<a class="btn small" href="${esc(w.url)}" target="_blank" rel="noopener noreferrer">${ico('ext')}Web</a>` : ''}
-      <a class="btn small ghost" href="#/valorar/${w.id}">${ico('pen')}Editar</a>
-      <button class="btn small ghost" data-act="w-del" data-id="${w.id}">${ico('trash')}${i.past || mine ? 'Quitar' : 'Descartar'}</button></div></article>`;
+      <a class="btn small ghost wc-edit" href="#/valorar/${w.id}" aria-label="Editar" title="Editar">${ico('pen')}</a>
+      <button class="btn small ghost wc-edit" data-act="w-del" data-id="${w.id}" aria-label="${i.past || mine ? 'Quitar' : 'Descartar'}" title="${i.past || mine ? 'Quitar' : 'Descartar'}">${ico('trash')}</button></div></article>`;
 }
 
 function viewWatch() {
