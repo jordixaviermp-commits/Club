@@ -2153,7 +2153,7 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .cal-title h2 { font-size: 1rem; } .cal-sub { font-size: .74rem; line-height: 1.2; }
 .cal-months { margin-top: .4rem; }
 
-/* con el calendario abierto, la tarjeta de la próxima carrera del equipo ocupa menos */
+/* la tarjeta de la próxima carrera del equipo, siempre compacta (lista y calendario) */
 .next-team.compact { padding: .6rem .8rem .7rem; margin-bottom: .5rem; }
 .next-team.compact .nt-n { font-size: 1.1rem; } .next-team.compact .nt-d { margin: .1rem 0 .4rem; font-size: .82rem; }
 .next-team.compact .nt-people { display: none; }
