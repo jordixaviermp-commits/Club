@@ -2111,3 +2111,8 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .susp-btn { margin: .4rem 0 0; display: inline-flex; align-items: center; gap: .35rem; } .susp-btn .ico { width: 15px; height: 15px; }
 
 .rs-tiles > .rs-tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
+
+/* Mis carreras: tiempo, km y velocidad media siempre en UNA línea */
+.sum-card .my-line { flex-wrap: nowrap; justify-content: space-between; gap: .3rem; font-size: .84rem; white-space: nowrap; }
+.sum-card .my-line > span { gap: .25rem; min-width: 0; }
+@media (max-width: 340px) { .sum-card .my-line { font-size: .76rem; } .sum-card .my-line .ico { width: 12px; height: 12px; } }
