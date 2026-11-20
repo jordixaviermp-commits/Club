@@ -1110,9 +1110,10 @@ function myRacesCard(d, afterSummary = () => '') {
     ${(() => { const sentYear = sent.filter((g) => yearOf(g.date) === S.myYear).map((g) => ({ position: g.my_result.position, time_seconds: g.my_result.time_seconds })), allMine = [...list, ...sentYear];   // los enviados también cuentan
       const pod = [1, 2, 3].map((k) => allMine.filter((x) => x.position === k).length), NAMES = [['Oro', 'Oros'], ['Plata', 'Platas'], ['Bronce', 'Bronces']];
       // una sola línea pequeña: tiempo en carrera y, al lado, km de viaje (ida y vuelta, aprox.)
-      // una sola línea pequeña: tiempo en carrera y, al lado, los km recorridos en carrera
+      // una sola fila: las horas encima de la bici con el maillot (lo que más se ve) y, al lado, los km totales de esas carreras
       const myTime = allMine.reduce((n, r) => n + (Number(r.time_seconds) || 0), 0), myKm = list.reduce((n, r) => n + (Number(r.km) || 0), 0) + sent.filter((g) => yearOf(g.date) === S.myYear).reduce((n, g) => n + (Number(g.km) || 0), 0);
-      const road = myTime || myKm ? `<p class="my-line">${myTime ? `<span title="Tiempo total en carrera (de las carreras con tiempo)">${ico('timer')}<b>${formatTime(myTime, true)}</b> en carrera</span>` : ''}${myKm ? `<span title="Kilómetros de las carreras que has hecho">${ico('ruler')}<b>${kmText(Math.round(myKm))}</b> en carrera</span>` : ''}</p>` : '';
+      const myTimed = allMine.filter((r) => Number(r.time_seconds) > 0).length;
+      const road = myTime || myKm ? `<div class="my-line">${myTime ? `<span title="Horas encima de la bici en carrera con el maillot (${myTimed} ${myTimed === 1 ? 'carrera con tiempo' : 'carreras con tiempo'} de ${allMine.length})">${ico('timer')}<b>${formatTime(myTime, true)}</b><small>con el maillot</small></span>` : ''}${myKm ? `<span title="Kilómetros totales de las carreras que has hecho">${ico('ruler')}<b>${kmText(Math.round(myKm))}</b><small>km en carrera</small></span>` : ''}</div>` : '';
       return (pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}"><i class="medal m${i + 1}"></i>${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : '') + road; })()}
   </section>
 
@@ -2807,7 +2808,7 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
     hardestCard,
     lead('compass', 'Se desplaza más', (r) => r.trip, (n) => `${kmText(n)} de viaje`, 'compass'),
     farCard,
-    lead('timer', 'Más tiempo en carrera', (r) => r.time, (n) => formatTime(n, true), 'timer'),
+    lead('timer', 'Más horas con el maillot', (r) => r.time, (n) => formatTime(n, true), 'timer'),
     lead('layers', 'Más versátil', (r) => Object.keys(r.discs || {}).length, (n) => plu(n, 'disciplina distinta', 'disciplinas distintas')),
     lead('calcheck', 'Más constante', (r) => r.months?.size || 0, (n) => plu(n, 'mes con carrera', 'meses con carrera'), 'calcheck'),
   ].filter(Boolean).join('');
@@ -3253,7 +3254,7 @@ const seasonRecords = (pk) => {
     ${row('Más metros de subida', who((r) => r.elev), (n) => elevText(n))}
     ${s.farthest ? `<tr><td>Carrera más lejana</td><td><b>${esc(s.farthest.race)}</b></td><td>${esc(kmText(s.farthest.value))}</td></tr>` : ''}
     ${row('Más desplazamientos', who((r) => r.trip), (n) => kmText(n))}
-    ${row('Más kilómetros', who((r) => r.km), (n) => kmText(n))}${row('Más tiempo en carrera', who((r) => r.time), (n) => formatTime(n, true))}
+    ${row('Más kilómetros', who((r) => r.km), (n) => kmText(n))}${row('Más horas con el maillot', who((r) => r.time), (n) => formatTime(n, true))}
     ${row('Más versátil (disciplinas distintas)', who((r) => Object.keys(r.discs || {}).length), (n) => `${n}`)}${row('Más constante (meses con carrera)', who((r) => r.months?.size || 0), (n) => `${n}`)}
     </tbody></table>`;
 };
@@ -3646,7 +3647,7 @@ function resReach(pk) {
   const figs = `<div class="rs-tiles">
     <div class="rs-tile">${ico('ruler')}<small>Km recorridos</small><b>${t.km ? esc(kmText(Math.round(t.km))) : '—'}</b><em>entre todos${pk.hasPrev ? ` ${rsDelta(pk, Math.round(t.km), Math.round(pk.prev.totals.km), (n) => kmText(n))}` : ''}</em></div>
     <div class="rs-tile">${ico('flag')}<small>Km por carrera</small><b>${i.avgRaceKm ? esc(kmText(i.avgRaceKm)) : '—'}</b><em>${i.withKm} de ${t.races} con km</em></div>
-    <div class="rs-tile">${ico('timer')}<small>Tiempo en carrera</small><b>${t.timed ? formatTime(t.time, true) : '—'}</b><em>${t.timed} de ${t.participations} con tiempo</em></div>
+    <div class="rs-tile">${ico('timer')}<small>Horas con el maillot</small><b>${t.timed ? formatTime(t.time, true) : '—'}</b><em>${t.timed} de ${t.participations} con tiempo</em></div>
     <div class="rs-tile">${ico('layers')}<small>Pruebas de varios días</small><b>${i.multiDay}</b><em>${i.days} días de competición</em></div>
     <div class="rs-tile">${ico('mountain')}<small>Desnivel positivo</small><b>${t.elevation ? esc(elevText(t.elevation)) : '—'}</b><em>entre todos${pk.hasPrev ? ` ${rsDelta(pk, t.elevation, pk.prev.totals.elevation, (n) => elevText(n))}` : ''}</em></div>
     <div class="rs-tile">${ico('mountain')}<small>Media por carrera</small><b>${i.avgElev ? esc(elevText(i.avgElev)) : '—'}</b><em>${i.withElev} de ${t.races} con desnivel</em></div></div>`;
@@ -3663,7 +3664,7 @@ function resReach(pk) {
     <section class="card rs-card"><h2>Mapa de desplazamientos</h2>${resTripMap(pk)}</section>
     <section class="card rs-card"><h2>Cuánto cuesta competir</h2>${resCost(pk)}</section>
     ${km.length ? `<section class="card rs-card"><h2>Quién ha recorrido más</h2><ol class="rs-rank">${people(km, 'km', (n) => esc(kmText(n)), kmx)}</ol></section>` : ''}
-    ${tm.length ? `<section class="card rs-card"><h2>Más tiempo en carrera</h2><ol class="rs-rank">${people(tm, 'time', (n) => formatTime(n, true), tmx)}</ol></section>` : ''}
+    ${tm.length ? `<section class="card rs-card"><h2>Más horas con el maillot</h2><ol class="rs-rank">${people(tm, 'time', (n) => formatTime(n, true), tmx)}</ol></section>` : ''}
     ${L ? `<section class="card rs-card"><h2>La carrera más larga</h2><p><a class="rname" href="#/carreras/${L.raceId}"><b>${esc(L.race)}</b></a> · <b>${esc(kmText(L.km))}</b></p><p class="muted small">La corrieron: ${esc(L.runners.join(', '))}.</p></section>` : ''}
     ${s.bySubtype.length ? `<section class="card rs-card"><h2>Formatos</h2><div class="pills">${s.bySubtype.map((x) => `<span class="pill ${modClass(x.modality)}"><i class="dot"></i>${pk.mod ? '' : `${esc(x.modality)} · `}${esc(x.subtype)} <b>${x.races}</b></span>`).join('')}</div></section>` : ''}`;
 }
@@ -3723,8 +3724,8 @@ const EQ_METRICS = [
     det: (r) => `media ${elevText(Math.round(r.elev / Math.max(1, r.races)))} por carrera`, hint: 'Desnivel positivo de las carreras en las que ha participado (solo las que lo tienen indicado).' },
   { k: 'trip', label: 'Viaje', ico: 'compass', val: (r) => r.trip, fmt: (n) => kmText(n), month: 'trip', mfmt: (n) => kmShort(n), sum: true, unit: 'km',
     det: (r) => `media ${kmText(Math.round(r.trip / 2 / Math.max(1, r.tripN)))} de ida por carrera`, hint: 'Km de desplazamiento (ida y vuelta, estimados desde un punto a medio camino entre Monzón y Lleida). Orientativo.' },
-  { k: 'time', label: 'Tiempo', ico: 'timer', val: (r) => r.time, fmt: (n) => hoursOf(n), month: 'time', mfmt: (n) => `${Math.round(n / 3600)}h`, sum: true, unit: 'tiempo',
-    det: (r) => `${r.timed} de ${r.races} carrera${r.races === 1 ? '' : 's'} con tiempo`, hint: 'Tiempo total en carrera (solo las carreras en las que se puso el tiempo).' },
+  { k: 'time', label: 'Horas', ico: 'timer', val: (r) => r.time, fmt: (n) => hoursOf(n), month: 'time', mfmt: (n) => `${Math.round(n / 3600)}h`, sum: true, unit: 'tiempo',
+    det: (r) => `${r.timed} de ${r.races} carrera${r.races === 1 ? '' : 's'} con tiempo`, hint: 'Horas encima de la bici en carrera con el maillot del club: el tiempo total de las carreras en las que se puso el tiempo. Quien hace 2 carreras de 60 h suma más que quien hace 10 de 1 h.' },
   { k: 'cost', label: 'Gasto', ico: 'money', val: (r) => r.cost, fmt: (n) => euros(n), month: 'cost', mfmt: (n) => `${Math.round(n)}`, sum: true, unit: '€',
     det: (r) => `media ${euros(Math.round((r.cost / Math.max(1, r.races)) * 10) / 10)} por carrera`, hint: 'Lo que costarían las inscripciones de las carreras en las que ha participado (precios indicados; no lo que haya pagado).' },
   { k: 'disc', label: 'Versátil', ico: 'layers', val: (r) => Object.keys(r.discs || {}).length, fmt: (n) => `${n}`, sum: false,
@@ -3760,11 +3761,11 @@ function resTimeCard(pk) {
   const t = pk.s.totals;
   if (!t.timed) return '';
   const per = Math.round(t.time / t.timed);
-  return `<section class="card rs-card"><h2>${ico('timer')} Tiempo en carrera</h2>
+  return `<section class="card rs-card"><h2>${ico('timer')} Horas con el maillot</h2>
     <div class="rs-tiles"><div class="rs-tile">${ico('timer')}<small>Tiempo total</small><b>${esc(hoursOf(t.time))}</b><em>entre todos${pk.hasPrev && pk.prev.totals.time ? ` ${rsDelta(pk, t.time, pk.prev.totals.time, (n) => hoursOf(n))}` : ''}</em></div>
       <div class="rs-tile">${ico('timer')}<small>Media por carrera</small><b>${esc(hoursOf(per))}</b><em>${t.timed} de ${t.participations} participaciones con tiempo</em></div></div>
     <h3>Tiempo del equipo, mes a mes</h3>${monthBars(pk, 'time', (n) => `${Math.round(n / 3600)}h`)}
-    <p class="hint">Solo cuentan las carreras en las que el corredor puso su tiempo. Quién ha estado más tiempo, en «Clasificaciones» (Tiempo).</p></section>`;
+    <p class="hint">Solo cuentan las carreras en las que el corredor puso su tiempo. Quién ha estado más tiempo, en «Clasificaciones» (Horas).</p></section>`;
 }
 
 function viewSummary() {

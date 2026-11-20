@@ -2109,3 +2109,9 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .imp-act .btn { min-height: 34px; padding: .25rem .7rem; font-size: .82rem; }
 
 .susp-btn { margin: .4rem 0 0; display: inline-flex; align-items: center; gap: .35rem; } .susp-btn .ico { width: 15px; height: 15px; }
+
+/* Mis carreras: horas con el maillot y km totales, cada dato con su rótulo, en una fila */
+.sum-card .my-line { display: flex; flex-wrap: nowrap; justify-content: flex-start; gap: .3rem 1.6rem; white-space: nowrap; }
+.sum-card .my-line > span { display: grid; grid-template-columns: auto 1fr; grid-template-areas: "i b" ". s"; align-items: center; column-gap: .3rem; row-gap: 0; min-width: 0; }
+.sum-card .my-line .ico { grid-area: i; } .sum-card .my-line b { grid-area: b; font-size: 1rem; }
+.sum-card .my-line small { grid-area: s; font-size: .7rem; color: var(--muted); line-height: 1.15; }
