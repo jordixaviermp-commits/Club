@@ -1162,7 +1162,7 @@ function myRacesCard(d, afterSummary = () => '') {
   </section>` : ''}
 
   <details class="card season-block done-block desp" id="sec-done" data-open-key="done"${S.open?.done ? ' open' : ''}>
-    <summary><span class="desp-t">Carreras hechas ${S.myYear} <small>(${list.length} ${list.length === 1 ? 'finalizada' : 'finalizadas'}${days !== list.length ? ` · ${days} jornadas por las pruebas de varios días` : ''})</small></span>${ico('chevd', 'desp-chev')}</summary>
+    <summary><span class="desp-t">Carreras hechas ${S.myYear} <small>${list.length} ${list.length === 1 ? 'finalizada' : 'finalizadas'}${days !== list.length ? ` · ${days} jornadas` : ''}</small></span>${ico('chevd', 'desp-chev')}</summary>
     ${years.length > 1 ? `<div class="years">${years.map((y) => `<button class="chip${y === S.myYear ? ' on' : ''}" data-act="my-year" data-y="${y}">${y}</button>`).join('')}</div>` : ''}
     ${list.length ? `<ul class="mini-list">${list.map(row).join('')}</ul>`
       : `<p class="empty small">Todavía no hay carreras tuyas con resultado en ${S.myYear}.</p>`}
