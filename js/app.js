@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError, cleanWeb } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, disciplineKey, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  directorBoard, raceImpact, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
+  directorBoard, raceImpact, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -1190,12 +1190,14 @@ function chronicleCard(d) {
   const impactPane = () => {
     if (S.impact === undefined || S.impact === 'loading') return '<p class="empty small">Cargando…</p>';
     if (S.impact === null) return '<p class="hint">Todavía no está activado: la dirección tiene que ejecutar un SQL en Supabase (<code>2026-11-20-impacto-redes.sql</code>).</p>';
-    const imp = raceImpact([...c.pending, ...c.done].sort((a, b) => b.date.localeCompare(a.date)), { posted: S.impact.posted, story: S.stories || null, chron: S.chron });
+    const mineKeys = new Set([...(d.my_results || []).filter((r) => r.position).map(postKeyOf), ...(d.registrations || []).filter((g) => g.my_result).map(postKeyOf)]);   // carreras donde ya puso su puesto
+    const imp = raceImpact([...c.pending, ...c.done].sort((a, b) => b.date.localeCompare(a.date)), { posted: S.impact.posted, story: S.stories || null, chron: S.chron, mine: mineKeys });
     const t = imp.totals, ig = S.impact.ig, nf = (n) => Number(n || 0).toLocaleString('es-ES');
     const chip = (on, icon, label) => `<span class="imp-chip${on ? ' on' : ''}" title="${esc(label)}${on ? ': hecho' : ': aún no'}">${icon}${on ? ico('check') : '<i class="imp-no">·</i>'}</span>`;
-    return `<p class="hint">Lo que has hecho llegar a las redes del club: cada carrera a la que vas se convierte en <b>historia</b>, en <b>resultados</b> publicados y en <b>crónica</b>.</p>
-      <div class="imp-tiles"><div><b>${t.stories}</b><span>historias</span></div><div><b>${t.results}</b><span>resultados</span></div><div><b>${t.chronicles}</b><span>crónicas</span></div></div>
-      <ul class="imp-list">${imp.rows.map((r) => `<li><span class="imp-n"><b>${esc(r.name)}</b><small class="muted">${esc(formatDate(r.date, false))}</small></span>${chip(r.story, '📸', 'Historia')}${chip(r.res, '🖼️', 'Resultados')}${chip(r.cro, '✍️', 'Crónica')}</li>`).join('')}</ul>
+    return `<p class="hint">Tú solo tienes que <b>poner tu resultado</b> y <b>pasar la crónica</b>. La historia sale sola al apuntarte, y con tu resultado el club publica los resultados y alimenta la estadística.</p>
+      <div class="imp-tiles"><div><b>${t.stories}</b><span>historias <em>(solas)</em></span></div><div><b>${t.results}</b><span>tus resultados</span></div><div><b>${t.chronicles}</b><span>crónicas</span></div></div>
+      <ul class="imp-list">${imp.rows.map((r) => `<li><span class="imp-n"><b>${esc(r.name)}</b><small class="muted">${esc(formatDate(r.date, false))}</small></span>${chip(r.story, '📸', 'Historia automática')}${chip(r.mine, '🏁', 'Tu resultado')}${chip(r.cro, '✍️', 'Crónica')}${r.published ? '<span class="imp-pub" title="El club ha publicado los resultados de esta carrera">🖼️ publicado</span>' : ''}</li>`).join('')}</ul>
+      <p class="imp-key"><span>📸 historia (automática)</span><span>🏁 tu resultado</span><span>✍️ crónica</span><span>🖼️ publicado</span></p>
       <h3>El club en Instagram <small class="muted">· últimos 30 días</small></h3>
       ${ig && ig.days ? `<div class="imp-tiles ig"><div><b>${nf(ig.views)}</b><span>visualizaciones</span></div><div><b>${nf(ig.reach_avg)}</b><span>alcance al día</span></div><div><b>${nf(ig.interactions)}</b><span>interacciones</span></div><div><b>${ig.follows > 0 ? '+' : ''}${nf(ig.follows)}</b><span>seguidores nuevos</span></div></div>
         ${ig.followers ? `<p class="imp-f">${ico('users')}<span><b>${nf(ig.followers)}</b> seguidores en total</span></p>` : ''}`

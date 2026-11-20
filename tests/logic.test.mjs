@@ -720,13 +720,12 @@ test('Por valorar: «Repetir el año que viene» mueve 52 semanas, marca la fech
   assert.equal(watchTbc({ notes: 'Con el grupo' }), false);
 });
 
-test('impacto en redes: historia (registro o marca), resultados y crónica por carrera', async () => {
+test('impacto en redes: historia automática, resultado del corredor, publicado por el club y crónica', async () => {
   const { raceImpact, parseStoryLog } = await import('../js/logic.js');
   const items = [{ key: '2026-10-10|a', date: '2026-10-10', name: 'A' }, { key: '2026-10-17|b', date: '2026-10-17', name: 'B' }, { key: '2026-10-24|c', date: '2026-10-24', name: 'C' }];
   const story = parseStoryLog({ desde: '2026-10-01', historias: [{ carrera: 'A', fecha: '2026-10-10', publicada: '2026-10-08' }] });
-  const r = raceImpact(items, { posted: new Set(['2026-10-17|b', 'res|2026-10-10|a']), story, chron: new Set(['2026-10-24|c']) });
-  assert.deepEqual(r.rows.map((x) => [x.story, x.res, x.cro]), [[true, true, false], [true, false, false], [false, false, true]]);
-  assert.deepEqual(r.totals, { races: 3, stories: 2, results: 1, chronicles: 1 });
-  assert.equal(r.pieces, 4);
-  assert.deepEqual(raceImpact([]).totals, { races: 0, stories: 0, results: 0, chronicles: 0 });
+  const r = raceImpact(items, { posted: new Set(['2026-10-17|b', 'res|2026-10-10|a']), story, chron: new Set(['2026-10-24|c']), mine: new Set(['2026-10-10|a', '2026-10-24|c']) });
+  assert.deepEqual(r.rows.map((x) => [x.story, x.mine, x.published, x.cro]), [[true, true, true, false], [true, false, false, false], [false, true, false, true]]);
+  assert.deepEqual(r.totals, { races: 3, stories: 2, results: 2, published: 1, chronicles: 1 });
+  assert.deepEqual(raceImpact([]).totals, { races: 0, stories: 0, results: 0, published: 0, chronicles: 0 });
 });

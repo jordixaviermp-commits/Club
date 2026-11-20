@@ -2092,3 +2092,7 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .sum-card .tiles .tile .t-ico { width: 18px; height: 18px; }
 .canc-line { display: flex; align-items: center; gap: .45rem; margin: .5rem 0 0; padding: .35rem .65rem; border-radius: 10px; background: color-mix(in srgb, #b3261e 10%, var(--card)); border: 1px solid color-mix(in srgb, #b3261e 35%, var(--line)); color: var(--text); text-decoration: none; font-size: .82rem; }
 .canc-line .ico { width: 16px; height: 16px; flex: none; color: #b3261e; } .canc-line span { flex: 1; }
+
+.imp-pub { margin-left: auto; font-size: .74rem; font-weight: 700; color: #1b7f3b; align-self: center; }
+.imp-key { display: flex; flex-wrap: wrap; gap: .2rem .8rem; margin: 0 0 .4rem; font-size: .72rem; color: var(--muted); }
+.imp-tiles em { font-style: normal; opacity: .8; }
