@@ -1080,6 +1080,8 @@ function myRacesCard(d, afterSummary = () => '') {
   const mineReg = d.registrations.filter((g) => g.entries.some((e) => e.runner_id === d.me.id));
   const pastReg = mineReg.filter((g) => g.date < today && !g.suspended);
   const pending = pastReg.filter((g) => !g.my_result);   // les falta poner el puesto
+  const noPos = results.filter((r) => !r.position);          // carreras ya en resultados donde participó pero no consta su puesto: también le falta ponerlo
+  const pendingN = pending.length + noPos.length;
   const sent = pastReg.filter((g) => g.my_result);        // ya puso su puesto: cuenta para el bono aunque la dirección aún no la haya pasado a resultados
   const upcoming = mineReg.filter((g) => g.date >= today && !g.suspended).sort((a, b) => a.date.localeCompare(b.date));
   const cancelled = mineReg.filter((g) => g.suspended).sort((a, b) => a.date.localeCompare(b.date));
@@ -1104,7 +1106,7 @@ function myRacesCard(d, afterSummary = () => '') {
     <div class="tiles">
       <a href="#" class="tile t-next" data-act="goto-sec" data-to="sec-next"><span class="t-n">${upcoming.length}</span><span class="t-l">Próximas</span>${ico('cal', 't-ico')}<small>inscrito</small></a>
       <a href="#" class="tile t-done" data-act="goto-sec" data-to="sec-done"><span class="t-n">${list.length + sent.filter((g) => yearOf(g.date) === S.myYear).length}</span><span class="t-l">Hechas</span>${ico('ok', 't-ico')}<small>${days !== list.length ? `${days} días de competición` : 'con resultado'}</small></a>
-      <a href="#" class="tile t-pend${pending.length ? ' alert' : ''}" data-act="goto-sec" data-to="sec-pend"><span class="t-n">${pending.length}</span><span class="t-l">Pendientes</span>${ico('flag', 't-ico')}<small>${pending.length ? 'falta tu resultado' : 'de resultado'}</small></a>
+      <a href="#" class="tile t-pend${pendingN ? ' alert' : ''}" data-act="goto-sec" data-to="sec-pend"><span class="t-n">${pendingN}</span><span class="t-l">Pendientes</span>${ico('flag', 't-ico')}<small>${pendingN ? 'falta tu resultado' : 'de resultado'}</small></a>
     </div>
     ${cancelled.length ? `<a href="#" class="canc-line" data-act="goto-sec" data-to="sec-canc">${ico('ban')}<span><b>${cancelled.length}</b> ${cancelled.length === 1 ? 'carrera suspendida' : 'carreras suspendidas'}</span>${ico('go')}</a>` : ''}
     ${(() => { const sentYear = sent.filter((g) => yearOf(g.date) === S.myYear).map((g) => ({ position: g.my_result.position, time_seconds: g.my_result.time_seconds })), allMine = [...list, ...sentYear];   // los enviados también cuentan
@@ -1116,13 +1118,14 @@ function myRacesCard(d, afterSummary = () => '') {
       return (pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}"><i class="medal m${i + 1}"></i>${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : '') + road; })()}
   </section>
 
-  ${pending.length ? `<section class="card chro-card pend-card has-pend" id="sec-pend"><details class="chro-det" data-open-key="pend"${S.open?.pend ? ' open' : ''}>
+  ${pendingN ? `<section class="card chro-card pend-card has-pend" id="sec-pend"><details class="chro-det" data-open-key="pend"${S.open?.pend ? ' open' : ''}>
     <summary><span class="chro-ic">${ico('flag')}</span><b class="chro-t">Sin resultado</b>
-      <span class="chro-tag pend">${pending.length} ${pending.length === 1 ? 'pendiente' : 'pendientes'}${ico('go')}</span></summary>
+      <span class="chro-tag pend">${pendingN} ${pendingN === 1 ? 'pendiente' : 'pendientes'}${ico('go')}</span></summary>
     <p class="hint">Pon tu puesto: en cuanto lo pongas <b>ya cuenta para el bono</b>. Si no fuiste, pulsa «No fui: borrarme». ${WEEK_RULE}</p>
     <ul class="mini-list">${pending.map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`,
       edit: editMine(g),
-      below: weekChip(g.end_date || g.date, today) + (S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a><button type="button" class="btn ghost small" data-act="r-leave" data-id="${g.id}">No fui: borrarme</button>`) })).join('')}</ul>
+      below: weekChip(g.end_date || g.date, today) + (S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a><button type="button" class="btn ghost small" data-act="r-leave" data-id="${g.id}">No fui: borrarme</button>`) })).join('')}${noPos.map((r) => mrow(r, { href: `${runnerHref('carrera')}/race_${r.race_id}`,
+      below: weekChip(r.end_date || r.date, today) + (S.preview ? '<span class="badge-pend">sin puesto</span>' : `<a class="btn primary small" href="#/resultado/race_${r.race_id}">Poner mi puesto</a>`) })).join('')}</ul>
   </details></section>` : ''}
   ${sent.length ? `<section class="card chro-card sent-card"><details class="chro-det" data-open-key="sent"${S.open?.sent ? ' open' : ''}>
     <summary><span class="chro-ic">${ico('check')}</span><b class="chro-t">Resultado enviado</b>
