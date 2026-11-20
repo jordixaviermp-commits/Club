@@ -91,7 +91,7 @@ test('Europeos UEC MTB La Molina 2027 (XCO Máster y Descenso): salen al buscar 
 
 test('MB Race (MTB Alpine Cup 2027): sale al buscar por nombre, pueblo o Ultra', () => {
   const names = (q) => searchRaces(q, data.races).map((r) => r.name);
-  const n = 'MB Race – MB Ultra Somfy (MTB Alpine Cup)';
+  const n = 'MTB Alpine Cup – MB Race Megève-Combloux';
   assert.ok(names('mb race').includes(n) && names('megeve').includes(n) && names('alpine cup').includes(n));
   const r = data.races.find((x) => x.name === n);
   assert.deepEqual([r.date, r.subtype, r.country, r.circuit], ['2027-07-03', 'UXCM', 'Francia', 'MTB Alpine Cup']);
