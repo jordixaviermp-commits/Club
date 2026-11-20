@@ -767,3 +767,10 @@ test('próxima carrera del equipo: la primera con inscritos, en curso incluida, 
   assert.equal(nextTeamRace(regs, '2026-11-25'), null);
   assert.equal(nextTeamRace([], '2026-11-20'), null);
 });
+
+test('tramos de bonificación como rangos: 12 a 16 · 17 a 21 · 22 o más', async () => {
+  const { tierRanges, DEFAULT_BONUS } = await import('../js/logic.js');
+  assert.deepEqual(tierRanges(DEFAULT_BONUS.tiers).map((r) => [r.text, r.amount]), [['12 a 16', 50], ['17 a 21', 100], ['22 o más', 150]]);
+  assert.deepEqual(tierRanges(DEFAULT_BONUS.tiersByContract.renovacion_sin_licencia).map((r) => [r.text, r.amount]), [['12 a 16', 100], ['17 a 21', 150], ['22 o más', 200]]);
+  assert.deepEqual(tierRanges([]), []);
+});

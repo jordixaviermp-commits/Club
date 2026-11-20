@@ -860,6 +860,11 @@ export function bonusConfigFor(all, year) {
 }
 
 /** Tramos de bono que corresponden a un tipo de contrato. */
+/** Tramos de bonificación como rangos de carreras: 12/17/22 → «12 a 16», «17 a 21», «22 o más» (cada tramo empieza al llegar a su número). */
+export const tierRanges = (tiers) => {
+  const t = [...(tiers || [])].filter((x) => x.races > 0).sort((a, b) => a.races - b.races);
+  return t.map((x, i) => ({ from: x.races, to: t[i + 1] ? t[i + 1].races - 1 : null, amount: x.amount, text: t[i + 1] ? `${x.races} a ${t[i + 1].races - 1}` : `${x.races} o más` }));
+};
 export const tiersFor = (cfg, contract) =>
   [...((cfg.tiersByContract || {})[contract] || cfg.tiers || [])].filter((t) => t.races > 0).sort((a, b) => a.races - b.races);
 

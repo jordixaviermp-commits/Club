@@ -2192,3 +2192,61 @@ details.card.rcard { margin-bottom: 6px; }
 .next-team .nt-when { background: #ffd84d; color: #3a2a00; border-color: #ffd84d; }
 .next-team .nt-me.on { color: #a9f0c8; }
 .next-team.wk { outline-width: 2px; outline-color: #f3cf55; }
+
+/* Bonificación: cada tramo centrado bajo su propio rango de carreras (12–16, 17–21, 22 o más) con su importe */
+.bb-labels.seg { display: block; position: relative; height: 2.5rem; margin-top: .6rem; }
+.bb-labels.seg span { position: absolute; transform: translateX(-50%); align-items: center; text-align: center; white-space: nowrap; }
+.bb-labels.seg span:last-child { transform: translateX(-50%); }
+.bb-labels.seg b { font-size: .86rem; } .bb-labels.seg small { font-size: .84rem; }
+.bb-labels .cur { font-weight: 800; } .bb-labels .cur small { font-weight: 800; color: var(--text); }
+.bb-labels .cur b { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+
+/* Bonificación (v197): barra por zonas, una frase de estado y marcador con «cuánto falta» */
+.bonus-card .bn-main { margin: 0 0 .3rem; font-size: 1.05rem; } .bonus-card .bn-main b { font-size: 2rem; line-height: 1; } .bn-amt { font-weight: 800; color: #1b7f3b; }
+.bz-msg { display: flex; gap: .5rem; align-items: flex-start; margin: .35rem 0 0; font-size: .92rem; line-height: 1.3; } .bz-msg .ico { width: 18px; height: 18px; flex: none; margin-top: .1rem; }
+.bz-msg small { color: var(--muted); } .bz-msg.bad { color: var(--text); } .bz-msg.bad .ico { color: #c0392b; } .bz-msg.ok .ico { color: #1b7f3b; }
+.bz { margin: 3.3rem 0 1.1rem; } .bz-bar { position: relative; display: flex; gap: 2px; height: 26px; }
+.bz-seg { position: relative; overflow: hidden; background: color-mix(in srgb, var(--zc) 16%, var(--card)); border-radius: 4px; } .bz-seg i { position: absolute; inset: 0 auto 0 0; background: var(--zc); }
+.bz-seg:first-child { border-radius: 9px 4px 4px 9px; } .bz-seg:last-of-type { border-radius: 4px 9px 9px 4px; }
+.bz-seg.pre { --zc: #c0392b; background: repeating-linear-gradient(45deg, color-mix(in srgb, #c0392b 16%, var(--card)), color-mix(in srgb, #c0392b 16%, var(--card)) 6px, color-mix(in srgb, #c0392b 8%, var(--card)) 6px, color-mix(in srgb, #c0392b 8%, var(--card)) 12px); }
+.bz-seg.pre.done i { background: color-mix(in srgb, var(--muted) 55%, var(--card)); }   /* mínimo cumplido: la zona de penalización queda apagada */
+.bz-seg.t0 { --zc: #2e8b57; } .bz-seg.t1 { --zc: #1f7a8c; } .bz-seg.t2 { --zc: #284556; }
+.bz-plan { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(90deg, rgba(255, 255, 255, .55) 0 4px, transparent 4px 8px); border: 2px dashed var(--text); border-left: 0; border-radius: 0 6px 6px 0; opacity: .6; pointer-events: none; }
+.bz-you { position: absolute; bottom: calc(100% + 9px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; padding: .12rem .6rem; border-radius: 12px; background: var(--text); color: var(--bg); line-height: 1.1; white-space: nowrap; z-index: 2; }
+.bz-you b { font-size: 1rem; } .bz-you small { font-size: .7rem; opacity: .9; }
+.bz-you::after { content: ""; position: absolute; left: 50%; top: 100%; margin-left: -5px; border: 5px solid transparent; border-top-color: var(--text); }
+.bz-labels { display: flex; gap: 2px; margin-top: .35rem; } .bz-labels span { display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; color: var(--muted); line-height: 1.15; }
+.bz-labels b { font-size: .8rem; } .bz-labels small { font-size: .8rem; } .bz-labels .pre small { color: #c0392b; font-weight: 700; }
+.bz-labels .cur { color: var(--text); } .bz-labels .cur b { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; } .bz-labels .cur small { font-weight: 800; }
+
+.bz-labels .pre.done small { color: var(--muted); font-weight: 500; }
+
+/* Bonificación: lo contabilizado, lo inscrito y lo que falta (resultado / crónica) */
+.bz-todo { margin: .5rem 0 .6rem; }
+.bz-chips { display: flex; flex-wrap: wrap; gap: .3rem .5rem; }
+.bz-chips > span { display: inline-flex; align-items: center; gap: .3rem; padding: .15rem .6rem; border-radius: 999px; font-size: .82rem; background: var(--bg); border: 1px solid var(--line); }
+.bz-chips .ico { width: 14px; height: 14px; } .bz-chips b { font-weight: 800; }
+.bz-chips .ok { background: color-mix(in srgb, #1b7f3b 12%, var(--card)); border-color: color-mix(in srgb, #1b7f3b 40%, var(--line)); } .bz-chips .ok .ico { color: #1b7f3b; }
+.bz-chips .warn { background: color-mix(in srgb, #e0a030 16%, var(--card)); border-color: color-mix(in srgb, #d08a00 50%, var(--line)); font-weight: 700; } .bz-chips .warn .ico { color: #b87400; }
+.bz-det { margin-top: .5rem; } .bz-det > summary { cursor: pointer; font-size: .88rem; font-weight: 700; color: var(--sec); }
+.bz-det h4 { margin: .7rem 0 .2rem; font-size: .85rem; }
+.bz-rows { list-style: none; margin: .4rem 0 0; padding: 0; display: grid; gap: .35rem; }
+.bz-rows li { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem; padding: .4rem .55rem; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); }
+.bz-n { flex: 1 1 10rem; min-width: 0; display: flex; flex-direction: column; } .bz-n b { font-size: .88rem; } .bz-n small { font-size: .74rem; }
+.bz-act { display: flex; flex-wrap: wrap; gap: .35rem; } .bz-act .btn { min-height: 34px; padding: .2rem .7rem; font-size: .82rem; }
+.bz-pay { font-size: .76rem; font-weight: 800; padding: .05rem .55rem; border-radius: 999px; } .bz-pay.ok { color: #1b7f3b; background: color-mix(in srgb, #1b7f3b 12%, var(--card)); } .bz-pay.wait { color: #8a5a00; background: color-mix(in srgb, #e0a030 18%, var(--card)); }
+
+/* leyenda de la bonificación: siempre en una línea */
+.bz-chips { flex-wrap: nowrap; gap: .25rem; }
+.bz-chips > span { gap: .2rem; padding: .1rem .4rem; font-size: .74rem; white-space: nowrap; min-width: 0; }
+.bz-chips .ico { width: 12px; height: 12px; }
+@media (max-width: 340px) { .bz-chips > span { font-size: .68rem; padding: .1rem .3rem; } .bz-chips .ico { display: none; } }
+
+@media (max-width: 400px) { .bz-chips > span { font-size: .7rem; padding: .1rem .35rem; } .bz-chips .ico { display: none; } }
+.bz-chips { align-items: center; }
+
+/* la bonificación solo enseña lo que falta por rellenar */
+.bz-det.warn { margin: .6rem 0; border: 1px solid color-mix(in srgb, #d08a00 50%, var(--line)); border-radius: 12px; background: color-mix(in srgb, #e0a030 12%, var(--card)); padding: .45rem .7rem; }
+.bz-det.warn > summary { display: flex; align-items: center; gap: .45rem; color: var(--text); font-weight: 700; list-style: none; } .bz-det.warn > summary::-webkit-details-marker { display: none; }
+.bz-det.warn > summary .ico:first-child { width: 18px; height: 18px; color: #b87400; flex: none; } .bz-det.warn > summary span { flex: 1; }
+.bz-det.warn > summary .rules-chev { width: 18px; height: 18px; transition: transform .15s; } .bz-det.warn[open] > summary .rules-chev { transform: rotate(180deg); }
