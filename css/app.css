@@ -2172,3 +2172,16 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .pulse-fold .pulse-months { height: 80px; }
 .pulse-fold > summary { flex-wrap: nowrap; gap: .2rem .5rem; display: grid; grid-template-columns: 1fr auto; grid-template-areas: "t c" "k k"; align-items: center; }
 .pulse-t { grid-area: t; } .pulse-chev { grid-area: c; margin: 0; } .pulse-chips { grid-area: k; flex: none; gap: .1rem .9rem; flex-wrap: nowrap; white-space: nowrap; }
+
+/* Carreras: «Esta semana», «Más adelante», meses y tarjetas de carrera, más bajos */
+h2.section { font-size: 1.02rem; margin: .7rem 0 .4rem; gap: .4rem; }
+h2.section::before { width: 4px; }
+.month-head { margin: 8px 0 5px; padding: .3rem .7rem; border-radius: 10px; font-size: .9rem; }
+.month-head .mh-meta { font-size: .78rem; }
+.rc-sum { min-height: 46px; padding: .4rem .6rem .4rem .7rem; gap: .45rem; }
+.rc-name { font-size: .88rem; line-height: 1.15; } .rc-sub { font-size: .78rem; line-height: 1.2; }
+.rc-chips .soon { margin-top: .1rem; font-size: .74rem; padding: 0 .5rem; }
+.rc-chip { font-size: .72rem; padding: .02rem .5rem; }
+.rc-ins { min-width: 38px; padding: .1rem .25rem; } .rc-ins b { font-size: 1rem; }
+details.card.rcard { margin-bottom: 6px; }
+.pulse-legend b { color: var(--text); margin-left: .1rem; }
