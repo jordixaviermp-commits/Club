@@ -2273,3 +2273,7 @@ details.card.rcard { margin-bottom: 6px; }
 .sum-card .tiles .t-pend:not(.alert) { background: color-mix(in srgb, var(--tc) 6%, var(--card)); border-color: color-mix(in srgb, var(--tc) 45%, var(--card)); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .sum-card .tiles .t-next { --tc: #f0963a; --tc-t: #f5a85a; } :root:not([data-theme="light"]) .sum-card .tiles .t-done, :root:not([data-theme="light"]) .sum-card .tiles .t-pend { --tc-t: #6fd08f; } :root:not([data-theme="light"]) .sum-card .tiles .t-pend.alert { --tc: #ff6b5e; --tc-t: #ff8a80; } }
 :root[data-theme="dark"] .sum-card .tiles .t-next { --tc: #f0963a; --tc-t: #f5a85a; } :root[data-theme="dark"] .sum-card .tiles .t-done, :root[data-theme="dark"] .sum-card .tiles .t-pend { --tc-t: #6fd08f; } :root[data-theme="dark"] .sum-card .tiles .t-pend.alert { --tc: #ff6b5e; --tc-t: #ff8a80; }
+/* v209: tarjeta de «Para valorar»: Apuntarme, Web, Editar y Descartar en una sola fila, del mismo tamaño */
+.wc-acts { display: flex; flex-wrap: nowrap; gap: .3rem; }
+.wc-acts .btn, .wc-acts .btn.primary { flex: 1 1 auto; margin: 0; justify-content: center; padding: .45rem .35rem; font-size: .78rem; gap: .2rem; white-space: nowrap; min-width: 0; }
+.wc-acts .btn .ico { width: 13px; height: 13px; flex: none; }
