@@ -1162,7 +1162,7 @@ function myRacesCard(d, afterSummary = () => '') {
   </section>` : ''}
 
   <details class="card season-block done-block desp" id="sec-done" data-open-key="done"${S.open?.done ? ' open' : ''}>
-    <summary><span class="desp-t">Carreras hechas ${S.myYear} <small>(${list.length}${days !== list.length ? ` · ${days} días para el bono` : ''})</small></span>${ico('chevd', 'desp-chev')}</summary>
+    <summary><span class="desp-t">Carreras hechas ${S.myYear} <small>(${list.length} ${list.length === 1 ? 'finalizada' : 'finalizadas'}${days !== list.length ? ` · ${days} jornadas por las pruebas de varios días` : ''})</small></span>${ico('chevd', 'desp-chev')}</summary>
     ${years.length > 1 ? `<div class="years">${years.map((y) => `<button class="chip${y === S.myYear ? ' on' : ''}" data-act="my-year" data-y="${y}">${y}</button>`).join('')}</div>` : ''}
     ${list.length ? `<ul class="mini-list">${list.map(row).join('')}</ul>`
       : `<p class="empty small">Todavía no hay carreras tuyas con resultado en ${S.myYear}.</p>`}
@@ -1297,6 +1297,14 @@ function runnerBonusCard(d) {
   return `<h2 class="blk-title">Tu bonificación ${b.year} ${ico('money')}</h2>
   <section class="card bonus-card">
     <p class="bn-main"><b>${st.count}</b> ${plural(st.count, 'carrera realizada', 'carreras realizadas')}${st.tier ? ` · <span class="bn-amt">${euros(st.amount)}</span>` : ''}</p>
+    ${(() => { // de dónde sale el número: carreras con resultado (con sus jornadas), inscripciones con puesto enviado y, si no cuadra, lo que cuenta el servidor
+      const yr = b.year, today = d.today || todayISO(), resY = (d.my_results || []).filter((r) => yearOf(r.date) === yr), daysRes = resY.reduce((n, r) => n + numDays(r.date, r.end_date), 0);
+      const sentY = (d.registrations || []).filter((g) => g.my_result && !g.suspended && g.date < today && yearOf(g.date) === yr), daysSent = sentY.reduce((n, g) => n + numDays(g.date, g.end_date), 0);
+      const calc = daysRes + daysSent;
+      if (daysRes === resY.length && !sentY.length && calc === st.count) return '';
+      const parts = [`${resY.length} ${plural(resY.length, 'carrera finalizada', 'carreras finalizadas')}${daysRes !== resY.length ? ` (${daysRes} jornadas: las pruebas de varios días cuentan un día cada una)` : ''}`];
+      if (sentY.length) parts.push(`${daysSent} con el puesto enviado y aún sin pasar a resultados`);
+      return `<p class="bn-how">${parts.join(' + ')}${calc !== st.count ? ` <b>· el servidor cuenta ${st.count}: avisa a la dirección</b>` : ''}.</p>`; })()}
     ${chips ? `<div class="bn-chips">${chips}</div>` : ''}
     ${msg}
     ${bonusZones(st, cfg, b.planned || 0)}
