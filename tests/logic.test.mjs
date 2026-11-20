@@ -40,7 +40,7 @@ const races = [
 test('resumen anual', () => {
   const s = yearSummary(2026, races, runners);
   { const { travelKm, travelRaces, travelApprox, avgDist, ...base } = s.totals;
-  assert.deepEqual(base, { races: 3, runners: 3, participations: 4, podiums: 3, wins: 1, km: 0, kmRaces: 0, time: 0, timed: 0, elevation: 0, cost: 0, elevRaces: 0, pricedRaces: 0, avgPrice: 0 }); }
+  assert.deepEqual(base, { races: 3, runners: 3, participations: 4, podiums: 3, wins: 1, km: 0, kmBoth: 0, tripBoth: 0, time: 0, timed: 0, elevation: 0, cost: 0, elevRaces: 0, pricedRaces: 0, avgPrice: 0 }); }
   assert.deepEqual(s.byModality.map((m) => m.modality), ['Carretera', 'BTT', 'Gravel']); // Pista no aparece en 2026
   { const { elevation, trip, cost, km, ...base } = s.byModality[1];
   assert.deepEqual(base, { modality: 'BTT', races: 1, participations: 2, podiums: 2, wins: 0, runners: 2 }); }
@@ -130,7 +130,7 @@ test('podios de etapa: cuentan como tipo «Etapa»', () => {
     ] }];
   const s = yearSummary(2027, races2, runners2);
   { const { travelKm, travelRaces, travelApprox, avgDist, ...base } = s.totals;
-  assert.deepEqual(base, { races: 1, runners: 2, participations: 2, podiums: 4, wins: 2, km: 0, kmRaces: 0, time: 0, timed: 0, elevation: 0, cost: 0, elevRaces: 0, pricedRaces: 0, avgPrice: 0 }); }
+  assert.deepEqual(base, { races: 1, runners: 2, participations: 2, podiums: 4, wins: 2, km: 0, kmBoth: 0, tripBoth: 0, time: 0, timed: 0, elevation: 0, cost: 0, elevRaces: 0, pricedRaces: 0, avgPrice: 0 }); }
   assert.deepEqual(s.byPodiumType.map((t) => [t.type, t.podiums, t.wins]),
     [['suelta', 0, 0], ['general', 1, 0], ['campeonato', 0, 0], ['etapa', 3, 2]]);
   assert.deepEqual(s.perRunner.map((r) => [r.name, r.races, r.p1, r.p2, r.p3]), [['Anna', 1, 1, 1, 1], ['Biel', 1, 1, 0, 0]]);
@@ -730,10 +730,13 @@ test('impacto en redes: historia automática, resultado del corredor, publicado 
   assert.deepEqual(raceImpact([]).totals, { races: 0, stories: 0, results: 0, published: 0, chronicles: 0 });
 });
 
-test('km por carrera: media de distancia, solo carreras con km', async () => {
-  const { kmPerRace } = await import('../js/logic.js');
-  assert.deepEqual(kmPerRace([{ km: 800 }, { km: 800 }]), { km: 1600, races: 2, avg: 800 });
-  assert.equal(kmPerRace(Array.from({ length: 10 }, () => ({ km: 30 }))).avg, 30);
-  assert.deepEqual(kmPerRace([{ km: 60 }, { km: 90 }, {}, { km: null }, { km: 0 }]), { km: 150, races: 2, avg: 75 });
-  assert.deepEqual(kmPerRace([]), { km: 0, races: 0, avg: 0 });
+test('carrera frente a viaje: pocas carreras largas no salen peor que muchas cortas', async () => {
+  const { tripRatio } = await import('../js/logic.js');
+  // mismo origen que el resto de la app: A corre cerca (Fraga, 35 km) y B lejos (Valencia, 330 km)
+  const near = { km: 800, place: 'Fraga', province: 'Huesca' }, far = { km: 30, place: 'Valencia', province: 'Valencia' };
+  const a = tripRatio([near, near]), b = tripRatio(Array.from({ length: 10 }, () => far));
+  assert.ok(a.km === 1600 && b.km === 300);
+  assert.ok(a.ratio > b.ratio * 5, 'A (2 de 800 km, cerca) compensa mucho más que B (10 de 30 km, lejos)');
+  assert.deepEqual(tripRatio([{ km: 50 }, { place: 'Fraga', province: 'Huesca' }, {}]), { km: 0, trip: 0, ratio: 0 });   // sin km o sin ubicación no cuenta
+  assert.deepEqual(tripRatio([]), { km: 0, trip: 0, ratio: 0 });
 });
