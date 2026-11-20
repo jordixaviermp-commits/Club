@@ -2235,3 +2235,12 @@ details.card.rcard { margin-bottom: 6px; }
 .bz-n { flex: 1 1 10rem; min-width: 0; display: flex; flex-direction: column; } .bz-n b { font-size: .88rem; } .bz-n small { font-size: .74rem; }
 .bz-act { display: flex; flex-wrap: wrap; gap: .35rem; } .bz-act .btn { min-height: 34px; padding: .2rem .7rem; font-size: .82rem; }
 .bz-pay { font-size: .76rem; font-weight: 800; padding: .05rem .55rem; border-radius: 999px; } .bz-pay.ok { color: #1b7f3b; background: color-mix(in srgb, #1b7f3b 12%, var(--card)); } .bz-pay.wait { color: #8a5a00; background: color-mix(in srgb, #e0a030 18%, var(--card)); }
+
+/* leyenda de la bonificación: siempre en una línea */
+.bz-chips { flex-wrap: nowrap; gap: .25rem; }
+.bz-chips > span { gap: .2rem; padding: .1rem .4rem; font-size: .74rem; white-space: nowrap; min-width: 0; }
+.bz-chips .ico { width: 12px; height: 12px; }
+@media (max-width: 340px) { .bz-chips > span { font-size: .68rem; padding: .1rem .3rem; } .bz-chips .ico { display: none; } }
+
+@media (max-width: 400px) { .bz-chips > span { font-size: .7rem; padding: .1rem .35rem; } .bz-chips .ico { display: none; } }
+.bz-chips { align-items: center; }
