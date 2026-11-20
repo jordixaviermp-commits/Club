@@ -778,6 +778,21 @@ export function daysOf(start, end) {
 
 /** Número de días de una carrera. */
 export const numDays = (start, end) => daysOf(start, end).length;
+/**
+ * Cuándo se actualizaron por última vez las estadísticas de Instagram (la captura automática escribe `captured_at = now()` en cada pasada).
+ * Devuelve { at, hours, lastDay, level }: `level` = 'ok' (≤ 2 días), 'late' (≤ 4 días) o 'stale' (más); null si no hay filas con fecha.
+ */
+export function igLastUpdate(rows, now = new Date()) {
+  let at = 0, lastDay = '';
+  for (const r of rows || []) {
+    const t = Date.parse(r?.captured_at); if (Number.isFinite(t) && t > at) at = t;
+    if (r?.kind === 'day' && /^\d{4}-\d{2}-\d{2}$/.test(r.key || '') && r.key > lastDay) lastDay = r.key;
+  }
+  if (!at) return null;
+  const hours = Math.max(0, (now.getTime() - at) / 36e5);
+  return { at: new Date(at).toISOString(), hours, lastDay: lastDay || null, level: hours <= 48 ? 'ok' : hours <= 96 ? 'late' : 'stale' };
+}
+
 /** Tiempo por km y velocidad media de una lista de carreras ({ km, time_seconds }): solo cuentan las que tienen distancia y tiempo. */
 export function avgSpeed(items) {
   let km = 0, sec = 0;
