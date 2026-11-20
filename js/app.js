@@ -1193,16 +1193,23 @@ function chronicleCard(d) {
     const mineKeys = new Set([...(d.my_results || []).filter((r) => r.position).map(postKeyOf), ...(d.registrations || []).filter((g) => g.my_result).map(postKeyOf)]);   // carreras donde ya puso su puesto
     const imp = raceImpact([...c.pending, ...c.done].sort((a, b) => b.date.localeCompare(a.date)), { posted: S.impact.posted, story: S.stories || null, chron: S.chron, mine: mineKeys });
     const t = imp.totals, ig = S.impact.ig, nf = (n) => Number(n || 0).toLocaleString('es-ES');
-    const chip = (on, icon, label) => `<span class="imp-chip${on ? ' on' : ''}" title="${esc(label)}${on ? ': hecho' : ': aún no'}">${icon}${on ? ico('check') : '<i class="imp-no">·</i>'}</span>`;
-    return `<p class="hint">Tú solo tienes que <b>poner tu resultado</b> y <b>pasar la crónica</b>. La historia sale sola al apuntarte, y con tu resultado el club publica los resultados y alimenta la estadística.</p>
-      <div class="imp-tiles"><div><b>${t.stories}</b><span>historias <em>(solas)</em></span></div><div><b>${t.results}</b><span>tus resultados</span></div><div><b>${t.chronicles}</b><span>crónicas</span></div></div>
-      <ul class="imp-list">${imp.rows.map((r) => `<li><span class="imp-n"><b>${esc(r.name)}</b><small class="muted">${esc(formatDate(r.date, false))}</small></span>${chip(r.story, '📸', 'Historia automática')}${chip(r.mine, '🏁', 'Tu resultado')}${chip(r.cro, '✍️', 'Crónica')}${r.published ? '<span class="imp-pub" title="El club ha publicado los resultados de esta carrera">🖼️ publicado</span>' : ''}</li>`).join('')}</ul>
-      <p class="imp-key"><span>📸 historia (automática)</span><span>🏁 tu resultado</span><span>✍️ crónica</span><span>🖼️ publicado</span></p>
-      <h3>El club en Instagram <small class="muted">· últimos 30 días</small></h3>
-      ${ig && ig.days ? `<div class="imp-tiles ig"><div><b>${nf(ig.views)}</b><span>visualizaciones</span></div><div><b>${nf(ig.reach_avg)}</b><span>alcance al día</span></div><div><b>${nf(ig.interactions)}</b><span>interacciones</span></div><div><b>${ig.follows > 0 ? '+' : ''}${nf(ig.follows)}</b><span>seguidores nuevos</span></div></div>
+    const okI = '<span class="imp-ok" aria-label="hecho">✓</span>', noI = '<span class="imp-no" aria-label="aún no">—</span>';
+    const rowHtml = (r) => {
+      const act = [!r.mine && !S.preview ? `<a class="btn small primary" href="${resultHref(r.id)}">Poner mi resultado</a>` : '', !r.cro && !S.preview ? `<button type="button" class="btn small" data-act="chro-toggle" data-key="${esc(r.key)}" data-done="1">✓ Crónica pasada</button>` : ''].filter(Boolean).join('');
+      return `<li><span class="imp-n"><b>${esc(r.name)}</b><small class="muted">${esc(formatDate(r.date, false))}</small></span>
+        <span class="imp-st"><span>📸 Historia ${r.story ? okI : noI}</span><span>🏁 Resultado ${r.mine ? okI : noI}</span><span>✍️ Crónica ${r.cro ? okI : noI}</span>${r.published ? '<span class="imp-pub">🖼️ publicado</span>' : ''}</span>${act ? `<span class="imp-act">${act}</span>` : ''}</li>`;
+    };
+    const todo = imp.rows.filter((r) => !r.mine || !r.cro).length;
+    return `${ig && ig.days ? `<h3>El club en Instagram <small class="muted">· últimos 30 días</small></h3>
+        <div class="imp-tiles ig"><div><b>${nf(ig.views)}</b><span>visualizaciones</span></div><div><b>${nf(ig.reach_avg)}</b><span>alcance al día</span></div><div><b>${nf(ig.interactions)}</b><span>interacciones</span></div><div><b>${ig.follows > 0 ? '+' : ''}${nf(ig.follows)}</b><span>seguidores nuevos</span></div></div>
         ${ig.followers ? `<p class="imp-f">${ico('users')}<span><b>${nf(ig.followers)}</b> seguidores en total</span></p>` : ''}`
         : '<p class="muted small">Todavía no hay cifras de Instagram guardadas.</p>'}
-      <p class="hint">Son cifras de <b>todo el club</b>, no de cada persona: Instagram no dice qué publicación viene de qué carrera. Cuantas más carreras ponéis, más contenido y más gente llega.</p>`;
+      <p class="hint">Son cifras de <b>todo el club</b>, no de cada persona: Instagram no dice qué publicación viene de qué carrera.</p>
+      <h3>Lo que han generado tus carreras</h3>
+      <div class="imp-tiles"><div><b>${t.stories}</b><span>historias <em>(solas)</em></span></div><div><b>${t.results}</b><span>tus resultados</span></div><div><b>${t.chronicles}</b><span>crónicas</span></div></div>
+      <p class="hint">Tú solo pones tu resultado y pasas la crónica: la historia sale sola al apuntarte, y con tu resultado el club publica los resultados y alimenta la estadística.</p>
+      <details class="imp-races" data-open-key="imp-races"${S.open?.['imp-races'] ? ' open' : ''}><summary>Mis carreras (${imp.rows.length})${todo ? ` · <b>${todo}</b> con algo por hacer` : ' · todo al día 🎉'}</summary>
+        <ul class="imp-list">${imp.rows.map(rowHtml).join('')}</ul></details>`;
   };
   return `<section class="card chro-card${pend ? ' has-pend' : ''}"><details class="chro-det" data-open-key="chro"${S.open?.chro ? ' open' : ''}>
     <summary><span class="chro-ic">${ico('book')}</span><b class="chro-t">Crónicas${year === new Date().getFullYear() ? '' : ` <small class="muted">${year}</small>`}</b>
