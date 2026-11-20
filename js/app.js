@@ -1454,7 +1454,7 @@ function nextTeamBanner(d) {
   if (!g) return '';
   const n = daysTo(g.date), going = d.registrations && (g.entries || []).some((e) => e.runner_id === d.me.id), live = g.date <= today;
   const wk = live || n <= 7, names = g.entries.map((e) => e.name.split(' ')[0]), shown = names.slice(0, 6);
-  return `<section class="card next-team${wk ? ' wk' : ''}" aria-label="Próxima carrera del equipo">
+  return `<section class="card next-team${wk ? ' wk' : ''}${S.regView === 'cal' ? ' compact' : ''}" aria-label="Próxima carrera del equipo">
     <p class="nt-k">${wk ? `${ico('flag')}Esta semana compite el equipo` : `${ico('flag')}Próxima carrera del equipo`}</p>
     <h2 class="nt-n">${esc(g.name)}</h2>
     <p class="nt-d">${esc(when(g))}${place(g) ? ' · ' + esc(place(g)) : ''}</p>
