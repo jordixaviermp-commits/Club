@@ -733,7 +733,8 @@ test('impacto en redes: historia automática, resultado del corredor, publicado 
 test('velocidad media: km entre horas, solo carreras con distancia y tiempo', async () => {
   const { avgSpeed } = await import('../js/logic.js');
   const r = avgSpeed([{ km: 60, time_seconds: 7200 }, { km: 90, time_seconds: 10800 }, { km: 50 }, { time_seconds: 3600 }, { km: 40, time_seconds: 0 }]);
-  assert.deepEqual(r, { km: 150, sec: 18000, kmh: 30 });
-  assert.deepEqual(avgSpeed([]), { km: 0, sec: 0, kmh: 0 });
+  assert.deepEqual(r, { km: 150, sec: 18000, kmh: 30, pace: 120 });
+  assert.deepEqual(avgSpeed([]), { km: 0, sec: 0, kmh: 0, pace: 0 });
+  assert.equal(avgSpeed([{ km: 134, time_seconds: 16320 }]).pace, 122);
   assert.equal(avgSpeed([{ km: 100, time_seconds: 12600 }]).kmh, 28.6);
 });

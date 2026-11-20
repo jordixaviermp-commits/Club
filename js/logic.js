@@ -770,11 +770,11 @@ export function daysOf(start, end) {
 
 /** Número de días de una carrera. */
 export const numDays = (start, end) => daysOf(start, end).length;
-/** Velocidad media (km/h) de una lista de carreras ({ km, time_seconds }): solo cuentan las que tienen distancia y tiempo. */
+/** Tiempo por km de una lista de carreras ({ km, time_seconds }): segundos que tarda por cada km (solo carreras con distancia y tiempo). `kmh` es lo mismo al revés. */
 export function avgSpeed(items) {
   let km = 0, sec = 0;
   for (const r of items || []) { const k = Number(r?.km), t = Number(r?.time_seconds); if (k > 0 && t > 0) { km += k; sec += t; } }
-  return { km: Math.round(km * 10) / 10, sec, kmh: sec ? Math.round((km / (sec / 3600)) * 10) / 10 : 0 };
+  return { km: Math.round(km * 10) / 10, sec, kmh: sec ? Math.round((km / (sec / 3600)) * 10) / 10 : 0, pace: km ? Math.round(sec / km) : 0 };
 }
 
 // ---------- Bonos por carreras de la temporada ----------
