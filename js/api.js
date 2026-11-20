@@ -183,6 +183,8 @@ export function supabaseApi(url, key) {
     async runnerWatchDelete(code, id) { ok(await sb.rpc('runner_watch_delete', { p_code: code, p_id: id })); },
     async runnerPing(code) { try { await sb.rpc('runner_ping', { p_code: code }); } catch { /* sin el SQL de actividad */ } },
     async runnerChroniclesTeam(code) { try { return ok(await sb.rpc('runner_chronicles_team', { p_code: code })); } catch { return null; } },
+    // publicaciones del club y cifras agregadas de Instagram (30 días) para «Impacto en redes»; null si falta su SQL
+    async runnerSocialImpact(code) { try { return ok(await sb.rpc('runner_social_impact', { p_code: code })); } catch { return null; } },
     async runnerSetChronicle(code, key, done) { ok(await sb.rpc('runner_chronicle_set', { p_code: code, p_key: key, p_done: !!done })); },
     /** Dirección: marca o desmarca la crónica de un corredor (por si la pasó y no la marcó en su perfil). */
     async setChronicle(runnerId, key, done) {
@@ -770,6 +772,13 @@ export function demoApi(storage = globalThis.localStorage) {
     async runnerWatchDelete(code, id) { const me = byCode(code), d = load(); d.runner_watch = (d.runner_watch || []).filter((w) => !(w.id === id && w.runner_id === me.id)); cleanCandidates(d); save(); },
     async runnerPing(code) { const me = byCode(code); me.last_seen = new Date().toISOString(); save(); },
     async runnerChronicles(code) { const me = byCode(code); return clone((load().chronicles || []).filter((x) => x.runner_id === me.id).map((x) => x.race_key)); },
+    async runnerSocialImpact(code) {
+      byCode(code); const d = load(); const from = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+      const days = (d.ig_snapshots || []).filter((x) => x.kind === 'day' && x.key >= from);
+      const sum = (k) => days.reduce((n, x) => n + (Number(x.data?.[k]) || 0), 0);
+      const acc = (d.ig_snapshots || []).filter((x) => x.kind === 'account').sort((a, b) => b.key.localeCompare(a.key))[0];
+      return { posted: (d.social_posts || []).map((x) => x.key), from, ig: (d.ig_snapshots || []).length ? { days: days.length, views: sum('views'), reach_avg: days.length ? Math.round(sum('reach') / days.length) : 0, interactions: sum('interactions'), follows: sum('follows'), followers: acc?.data?.followers ?? null } : null };
+    },
     async runnerChroniclesTeam(code) {
       const me = byCode(code), d = load(), by = new Map();
       for (const x of d.chronicles || []) { const cur = by.get(x.race_key); const nm = d.runners.find((r) => r.id === x.runner_id)?.name || '?'; if (!cur || (x.runner_id === me.id && !cur.mine)) by.set(x.race_key, { key: x.race_key, by: nm, mine: x.runner_id === me.id || !!cur?.mine }); else if (x.runner_id === me.id) cur.mine = true; }

@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError, cleanWeb } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, disciplineKey, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  directorBoard, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
+  directorBoard, raceImpact, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -195,7 +195,7 @@ async function loadStories() {
     try { const r = await fetch(url, { cache: 'no-cache' }); if (r.ok) { log = parseStoryLog(await r.json()); break; } } catch { /* sin conexión o sin registro todavía */ }
   }
   S.stories = log || { desde: null, byKey: new Map(), none: true };
-  if (['inscripciones', 'carreras', 'publicaciones', 'avisos', 'redes', ''].includes(parseRoute().view) && S.session?.isAdmin && !S.draft) render();
+  if ((['inscripciones', 'carreras', 'publicaciones', 'avisos', 'redes', ''].includes(parseRoute().view) && S.session?.isAdmin && !S.draft) || (S.runnerData && S.chroTab === 'imp' && !S.draft)) render();
 }
 
 async function reload() {
@@ -271,6 +271,15 @@ async function loadChron() {
   } catch { /* sin el SQL nuevo: se sigue con las propias */ }
   S.chronBy = null;
   try { const keys = await api.runnerChronicles(code); S.chron = Array.isArray(keys) ? new Set(keys) : null; } catch { S.chron = null; }
+}
+/** «Impacto en redes» del corredor: publicaciones del club y cifras de Instagram de 30 días. null = falta el SQL; undefined = sin cargar. */
+async function loadImpact() {
+  if (S.impact !== undefined && S.impact !== 'loading') return;
+  S.impact = 'loading';
+  if (S.stories === undefined) loadStories();
+  let r = null; try { r = await api.runnerSocialImpact(S.code || S.previewCode); } catch { r = null; }
+  S.impact = r && Array.isArray(r.posted) ? { posted: new Set(r.posted), ig: r.ig || null } : null;
+  if (S.runnerData) render();
 }
 async function loadRunner() {
   if (!S.session?.isAdmin) api.runnerPing?.(S.code).catch(() => {});   // actividad: última vez que abrió la app
@@ -1175,12 +1184,30 @@ function chronicleCard(d) {
   const li = (x, isDone) => { const by = S.chronBy?.get(x.key), other = isDone && by && !by.mine;
     return `<li class="chro-row"><span class="chro-name"><b>${esc(x.name)}</b><small class="muted">${esc(formatDate(x.date, false))}${x.place ? ' · ' + esc(x.place) : ''}${other ? ` · la pasó ${esc(by.by)}` : ''}</small></span>${S.preview || other ? '' : `<button class="btn small${isDone ? ' ghost' : ' primary'}" data-act="chro-toggle" data-key="${esc(x.key)}" data-done="${isDone ? 0 : 1}">${isDone ? 'Deshacer' : '✓ Ya la pasé'}</button>`}</li>`; };
   const pend = c.pending.length;
+  const tabImp = S.chroTab === 'imp';
+  if (tabImp) loadImpact();
+  const impactPane = () => {
+    if (S.impact === undefined || S.impact === 'loading') return '<p class="empty small">Cargando…</p>';
+    if (S.impact === null) return '<p class="hint">Todavía no está activado: la dirección tiene que ejecutar un SQL en Supabase (<code>2026-11-20-impacto-redes.sql</code>).</p>';
+    const imp = raceImpact([...c.pending, ...c.done].sort((a, b) => b.date.localeCompare(a.date)), { posted: S.impact.posted, story: S.stories || null, chron: S.chron });
+    const t = imp.totals, ig = S.impact.ig, nf = (n) => Number(n || 0).toLocaleString('es-ES');
+    const chip = (on, icon, label) => `<span class="imp-chip${on ? ' on' : ''}" title="${esc(label)}${on ? ': hecho' : ': aún no'}">${icon}${on ? ico('check') : '<i class="imp-no">·</i>'}</span>`;
+    return `<p class="hint">Lo que has hecho llegar a las redes del club: cada carrera a la que vas se convierte en <b>historia</b>, en <b>resultados</b> publicados y en <b>crónica</b>.</p>
+      <div class="imp-tiles"><div><b>${t.stories}</b><span>historias</span></div><div><b>${t.results}</b><span>resultados</span></div><div><b>${t.chronicles}</b><span>crónicas</span></div></div>
+      <ul class="imp-list">${imp.rows.map((r) => `<li><span class="imp-n"><b>${esc(r.name)}</b><small class="muted">${esc(formatDate(r.date, false))}</small></span>${chip(r.story, '📸', 'Historia')}${chip(r.res, '🖼️', 'Resultados')}${chip(r.cro, '✍️', 'Crónica')}</li>`).join('')}</ul>
+      <h3>El club en Instagram <small class="muted">· últimos 30 días</small></h3>
+      ${ig && ig.days ? `<div class="imp-tiles ig"><div><b>${nf(ig.views)}</b><span>visualizaciones</span></div><div><b>${nf(ig.reach_avg)}</b><span>alcance al día</span></div><div><b>${nf(ig.interactions)}</b><span>interacciones</span></div><div><b>${ig.follows > 0 ? '+' : ''}${nf(ig.follows)}</b><span>seguidores nuevos</span></div></div>
+        ${ig.followers ? `<p class="imp-f">${ico('users')}<span><b>${nf(ig.followers)}</b> seguidores en total</span></p>` : ''}`
+        : '<p class="muted small">Todavía no hay cifras de Instagram guardadas.</p>'}
+      <p class="hint">Son cifras de <b>todo el club</b>, no de cada persona: Instagram no dice qué publicación viene de qué carrera. Cuantas más carreras ponéis, más contenido y más gente llega.</p>`;
+  };
   return `<section class="card chro-card${pend ? ' has-pend' : ''}"><details class="chro-det" data-open-key="chro"${S.open?.chro ? ' open' : ''}>
     <summary><span class="chro-ic">${ico('book')}</span><b class="chro-t">Crónicas${year === new Date().getFullYear() ? '' : ` <small class="muted">${year}</small>`}</b>
       <span class="chro-tag ${pend ? 'pend' : 'ok'}">${pend ? `${pend} ${plural(pend, 'pendiente', 'pendientes')}` : `${c.done.length} ${plural(c.done.length, 'pasada', 'pasadas')}`}${ico('go')}</span></summary>
-    <p class="hint">${CHRONICLE_RULE} Cuando lo hayas enviado, márcala.</p>
+    <div class="seg-sw chro-sw" role="tablist" aria-label="Crónicas o impacto en redes"><button type="button" role="tab" class="${tabImp ? '' : 'on'}" data-act="chro-tab" data-t="cro">Crónicas</button><button type="button" role="tab" class="${tabImp ? 'on' : ''}" data-act="chro-tab" data-t="imp">Impacto en redes</button></div>
+    ${tabImp ? impactPane() : `<p class="hint">${CHRONICLE_RULE} Cuando lo hayas enviado, márcala.</p>
     ${pend ? `<ul class="chro-list">${c.pending.map((x) => li(x, false)).join('')}</ul>${pend > 1 && !S.preview ? '<button class="btn small ghost" data-act="chro-all">✓ Marcar todas como pasadas</button>' : ''}` : '<p class="empty small">No te falta ninguna. 🎉</p>'}
-    ${c.done.length ? `<details class="chro-done"${pend ? '' : ' open'}><summary>Pasadas (${c.done.length})</summary><ul class="chro-list">${c.done.map((x) => li(x, true)).join('')}</ul></details>` : ''}
+    ${c.done.length ? `<details class="chro-done"${pend ? '' : ' open'}><summary>Pasadas (${c.done.length})</summary><ul class="chro-list">${c.done.map((x) => li(x, true)).join('')}</ul></details>` : ''}`}
   </details></section>`;
 }
 
@@ -4984,6 +5011,7 @@ const actions = {
       `Guardado: ${changes.length} ${changes.length === 1 ? 'puesto' : 'puestos'}`);
     if (ok) render();
   },
+  'chro-tab'(el) { S.chroTab = el.dataset.t === 'imp' ? 'imp' : 'cro'; S.open = { ...(S.open || {}), chro: true }; render(); },
   async 'chro-admin-all'(el) { await setChronicleFor(el.dataset.ids.split(','), el.dataset.key, true); },
   'ig-tab'(el) { S.igTab = el.dataset.t; render(); },
   async 'ig-per-del'(el) {

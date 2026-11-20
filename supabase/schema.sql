@@ -1355,6 +1355,25 @@ begin
   end if;
 end $$;
 
+-- «Impacto en redes» de los corredores: publicaciones hechas por el club y cifras agregadas de Instagram (30 días)
+create or replace function public.runner_social_impact(p_code text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  v_runner uuid; v_from text := to_char(current_date - 30, 'YYYY-MM-DD'); v_ig jsonb := null;
+begin
+  select id into v_runner from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  begin   -- las estadísticas de Instagram son opcionales: si aún no existen, solo se devuelven las publicaciones
+    select jsonb_build_object(
+      'days', count(*), 'views', coalesce(sum((data->>'views')::numeric), 0), 'reach_avg', coalesce(round(avg((data->>'reach')::numeric)), 0),
+      'interactions', coalesce(sum((data->>'interactions')::numeric), 0), 'follows', coalesce(sum((data->>'follows')::numeric), 0),
+      'followers', (select (a.data->>'followers')::int from ig_snapshots a where a.kind = 'account' and a.data ? 'followers' order by a.key desc limit 1))
+      into v_ig from ig_snapshots where kind = 'day' and key >= v_from;
+  exception when others then v_ig := null;
+  end;
+  return jsonb_build_object('posted', coalesce((select jsonb_agg(key) from social_posts), '[]'::jsonb), 'ig', v_ig, 'from', v_from);
+end $$;
+
 -- Crónicas pasadas por cualquier compañero (basta con que la pase uno)
 create or replace function public.runner_chronicles_team(p_code text)
 returns jsonb language plpgsql stable security definer set search_path = public as $$
@@ -1608,7 +1627,7 @@ grant execute on function public.runner_set_registration_url(text, uuid, text), 
                           public.runner_update_race(text, uuid, jsonb), public.runner_delete_race(text, uuid),
                           public.runner_report_result(text, text, uuid, int, text, text, int),
                           public.runner_documents_list(text), public.runner_get_document(text, uuid), public.runner_contract_template(text), public.runner_get_contract_template(text),
-                          public.runner_team(text), public.runner_chronicles(text), public.runner_chronicles_team(text), public.runner_chronicle_set(text, text, boolean),
+                          public.runner_team(text), public.runner_chronicles(text), public.runner_chronicles_team(text), public.runner_social_impact(text), public.runner_chronicle_set(text, text, boolean),
                           public.runner_leave(text, uuid), public.runner_set_paid(text, uuid, boolean, numeric, date), public.runner_join_race(text, uuid, text),
                           public.runner_set_race_type(text, uuid, text, text), public.runner_propose_circuit(text, text, int, int, text),
                           public.runner_cancel_circuit(text, uuid), public.runner_news(text), public.runner_set_race_details(text, uuid, text, numeric), public.runner_complete_race(text, text, uuid, jsonb), public.auto_promote_registrations(),

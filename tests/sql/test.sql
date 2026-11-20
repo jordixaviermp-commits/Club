@@ -822,4 +822,18 @@ insert into registration_entries (registration_id, runner_id, category, self_pos
 select auto_promote_registrations();
 select pg_temp.check((select lat = 42.01234 and lon = 0.55432 and geo_key = 'pueblo raro|huesca' from races where name = 'Ubicacion Pasada'), 'ubicación: se conserva al pasar a resultados');
 select pg_temp.check((select (r->>'lat')::numeric = 42.01234 from jsonb_array_elements(runner_team('codigo-valorador-dos-02')->'races') r where r->>'name' = 'Ubicacion Pasada'), 'ubicación: el resumen del equipo la incluye');
+
+-- impacto en redes: el corredor ve las publicaciones del club y las cifras agregadas de 30 días
+reset role;
+insert into social_posts (key, posted_by) values ('2026-11-01|impacto prueba', 'Redes'), ('res|2026-11-01|impacto prueba', 'Redes') on conflict do nothing;
+insert into ig_snapshots (kind, key, data) values
+  ('day', to_char(current_date - 2, 'YYYY-MM-DD'), '{"views": 100, "reach": 40, "interactions": 7, "follows": 2}'),
+  ('day', to_char(current_date - 3, 'YYYY-MM-DD'), '{"views": 50, "reach": 20, "interactions": 3, "follows": 1}'),
+  ('day', to_char(current_date - 90, 'YYYY-MM-DD'), '{"views": 9999, "reach": 1, "interactions": 1, "follows": 1}'),
+  ('account', to_char(current_date - 1, 'YYYY-MM-DD'), '{"followers": 951}') on conflict (kind, key) do update set data = excluded.data;
+set role anon;
+select pg_temp.check((select (runner_social_impact('codigo-valorador-dos-02')->'ig'->>'views')::int between 150 and 1000 and (runner_social_impact('codigo-valorador-dos-02')->'ig'->>'followers')::int = 951 and (runner_social_impact('codigo-valorador-dos-02')->'ig'->>'days')::int >= 2), 'impacto: suma 30 días (no los viejos) y últimos seguidores');
+select pg_temp.check(runner_social_impact('codigo-valorador-dos-02')->'posted' @> '["2026-11-01|impacto prueba"]'::jsonb, 'impacto: ve lo publicado');
+select pg_temp.expect_fail($q$select runner_social_impact('codigo-falso')$q$, 'impacto: enlace falso no lee');
+select pg_temp.expect_fail('select * from social_posts', 'impacto: anon sigue sin leer la tabla de publicaciones');
 \echo TODAS LAS PRUEBAS SQL OK

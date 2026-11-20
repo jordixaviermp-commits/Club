@@ -2065,3 +2065,20 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 /* Buscador del corredor: «Apuntarme» y la estrella de «Por valorar» una sobre otra */
 .mini-acts { display: flex; flex-direction: column; align-items: flex-end; gap: .3rem; flex-shrink: 0; } .mini-acts .star-btn { margin-top: 0; }
 .wchip.tbc { display: inline-block; margin: .15rem 0 0; padding: .1rem .5rem; border-radius: 999px; background: color-mix(in srgb, #e3b93c 18%, var(--card)); font-size: .78rem; font-weight: 700; }
+
+/* Crónicas → Impacto en redes */
+.chro-sw { margin: .4rem 0 .6rem; }
+.imp-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; margin: .5rem 0; }
+.imp-tiles.ig { grid-template-columns: repeat(2, 1fr); }
+.imp-tiles > div { display: flex; flex-direction: column; align-items: center; padding: .5rem .3rem; border-radius: 12px; background: var(--sec-soft); border: 1px solid var(--sec-line); }
+.imp-tiles b { font-size: 1.5rem; line-height: 1.1; font-variant-numeric: tabular-nums; } .imp-tiles span { font-size: .72rem; color: var(--muted); font-weight: 600; }
+.imp-list { list-style: none; margin: .4rem 0 .6rem; padding: 0; display: grid; gap: .3rem; }
+.imp-list li { display: flex; align-items: center; gap: .35rem; padding: .35rem .5rem; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); }
+.imp-n { flex: 1; min-width: 0; display: flex; flex-direction: column; } .imp-n b { font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .imp-n small { font-size: .74rem; }
+.imp-chip { display: inline-flex; align-items: center; gap: .1rem; padding: .15rem .4rem; border-radius: 999px; font-size: .85rem; background: var(--card); border: 1px solid var(--line); opacity: .55; }
+.imp-chip.on { opacity: 1; background: color-mix(in srgb, #1b7f3b 14%, var(--card)); border-color: color-mix(in srgb, #1b7f3b 45%, var(--line)); }
+.imp-chip .ico { width: 13px; height: 13px; color: #1b7f3b; } .imp-no { font-style: normal; color: var(--muted); }
+.imp-f { display: flex; align-items: center; gap: .4rem; margin: .2rem 0; font-size: .85rem; } .imp-f .ico { width: 16px; height: 16px; color: var(--sec); }
+.chro-det h3 { margin: .8rem 0 .2rem; font-size: .98rem; }
+.imp-list li { flex-wrap: wrap; } .imp-n { flex: 1 1 100%; } .imp-n b { white-space: normal; }
+.imp-chip { padding: .2rem .55rem; }
