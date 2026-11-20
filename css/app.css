@@ -2109,3 +2109,5 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .imp-act .btn { min-height: 34px; padding: .25rem .7rem; font-size: .82rem; }
 
 .susp-btn { margin: .4rem 0 0; display: inline-flex; align-items: center; gap: .35rem; } .susp-btn .ico { width: 15px; height: 15px; }
+
+.rs-tiles > .rs-tile:last-child:nth-child(odd) { grid-column: 1 / -1; }

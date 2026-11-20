@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError, cleanWeb } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, disciplineKey, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  directorBoard, raceImpact, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
+  directorBoard, raceImpact, kmPerDay, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -1112,7 +1112,8 @@ function myRacesCard(d, afterSummary = () => '') {
       // una sola línea pequeña: tiempo en carrera y, al lado, km de viaje (ida y vuelta, aprox.)
       // una sola línea pequeña: tiempo en carrera y, al lado, los km recorridos en carrera
       const myTime = allMine.reduce((n, r) => n + (Number(r.time_seconds) || 0), 0), myKm = list.reduce((n, r) => n + (Number(r.km) || 0), 0) + sent.filter((g) => yearOf(g.date) === S.myYear).reduce((n, g) => n + (Number(g.km) || 0), 0);
-      const road = myTime || myKm ? `<p class="my-line">${myTime ? `<span title="Tiempo total en carrera (de las carreras con tiempo)">${ico('timer')}<b>${formatTime(myTime, true)}</b> en carrera</span>` : ''}${myKm ? `<span title="Kilómetros de las carreras que has hecho">${ico('ruler')}<b>${kmText(Math.round(myKm))}</b> en carrera</span>` : ''}</p>` : '';
+      const myRatio = kmPerDay([...list, ...sent.filter((g) => yearOf(g.date) === S.myYear)]);   // km por día de competición
+      const road = myTime || myKm ? `<p class="my-line">${myTime ? `<span title="Tiempo total en carrera (de las carreras con tiempo)">${ico('timer')}<b>${formatTime(myTime, true)}</b> en carrera</span>` : ''}${myKm ? `<span title="Kilómetros de las carreras que has hecho">${ico('ruler')}<b>${kmText(Math.round(myKm))}</b> en carrera</span>` : ''}${myRatio.ratio ? `<span title="Km por día de competición (${myRatio.days} ${myRatio.days === 1 ? 'día' : 'días'} de carreras con distancia)">${ico('route')}<b>${ratioText(myRatio.ratio)}</b></span>` : ''}</p>` : '';
       return (pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}"><i class="medal m${i + 1}"></i>${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : '') + road; })()}
   </section>
 
@@ -3646,6 +3647,7 @@ function resReach(pk) {
   const figs = `<div class="rs-tiles">
     <div class="rs-tile">${ico('ruler')}<small>Km recorridos</small><b>${t.km ? esc(kmText(Math.round(t.km))) : '—'}</b><em>entre todos${pk.hasPrev ? ` ${rsDelta(pk, Math.round(t.km), Math.round(pk.prev.totals.km), (n) => kmText(n))}` : ''}</em></div>
     <div class="rs-tile">${ico('flag')}<small>Km por carrera</small><b>${i.avgRaceKm ? esc(kmText(i.avgRaceKm)) : '—'}</b><em>${i.withKm} de ${t.races} con km</em></div>
+    <div class="rs-tile">${ico('route')}<small>Km por día de competición</small><b>${t.kmDays ? esc(ratioText(t.km / t.kmDays)) : '—'}</b><em>${t.kmDays ? `${esc(kmText(Math.round(t.km)))} en ${t.kmDays} ${t.kmDays === 1 ? 'día' : 'días'}` : 'sin km indicados'}</em></div>
     <div class="rs-tile">${ico('timer')}<small>Tiempo en carrera</small><b>${t.timed ? formatTime(t.time, true) : '—'}</b><em>${t.timed} de ${t.participations} con tiempo</em></div>
     <div class="rs-tile">${ico('layers')}<small>Pruebas de varios días</small><b>${i.multiDay}</b><em>${i.days} días de competición</em></div>
     <div class="rs-tile">${ico('mountain')}<small>Desnivel positivo</small><b>${t.elevation ? esc(elevText(t.elevation)) : '—'}</b><em>entre todos${pk.hasPrev ? ` ${rsDelta(pk, t.elevation, pk.prev.totals.elevation, (n) => elevText(n))}` : ''}</em></div>
@@ -3719,6 +3721,8 @@ const EQ_METRICS = [
     det: (r) => `${r.p1 + r.p2 + r.p3} podio${r.p1 + r.p2 + r.p3 === 1 ? '' : 's'} en total`, hint: 'Primeros puestos de su categoría.' },
   { k: 'km', label: 'Km', ico: 'ruler', val: (r) => r.km, fmt: (n) => kmText(Math.round(n)), month: 'km', mfmt: (n) => kmShort(n), sum: true, unit: 'km',
     det: (r) => `${r.races} carrera${r.races === 1 ? '' : 's'}`, hint: 'Kilómetros de las carreras en las que ha participado (solo las que tienen distancia indicada).' },
+  { k: 'kmday', label: 'Km/día', ico: 'route', val: (r) => (r.kmDays ? r.km / r.kmDays : 0), fmt: (n) => ratioText(n), sum: false,
+    det: (r) => `${kmText(Math.round(r.km))} en ${r.kmDays} ${r.kmDays === 1 ? 'día' : 'días'} de competición`, hint: 'Km por día de competición: los km de sus carreras entre los días de cada prueba (solo las que tienen distancia). Una prueba de 3 días con 240 km son 80 km/día.' },
   { k: 'elev', label: 'Desnivel', ico: 'mountain', val: (r) => r.elev, fmt: (n) => elevText(n), month: 'elev', mfmt: (n) => kmShort(n), sum: true, unit: 'm',
     det: (r) => `media ${elevText(Math.round(r.elev / Math.max(1, r.races)))} por carrera`, hint: 'Desnivel positivo de las carreras en las que ha participado (solo las que lo tienen indicado).' },
   { k: 'trip', label: 'Viaje', ico: 'compass', val: (r) => r.trip, fmt: (n) => kmText(n), month: 'trip', mfmt: (n) => kmShort(n), sum: true, unit: 'km',
@@ -3733,6 +3737,8 @@ const EQ_METRICS = [
     det: (r) => `${r.races} carreras`, hint: 'Meses distintos del año con alguna carrera.' },
 ];
 /** Cifra compacta para las barras de cada mes: 4,3k, 840… */
+/** «67,5 km/día»: km por día de competición. */
+const ratioText = (n) => `${(Math.round(n * 10) / 10).toLocaleString('es-ES')} km/día`;
 const kmShort = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1).replace('.', ',')}k` : `${Math.round(n)}`);
 /** Barras de un dato mes a mes (suma de todo el equipo). */
 function monthBars(pk, key, mfmt, cls = '') {

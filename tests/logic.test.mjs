@@ -40,7 +40,7 @@ const races = [
 test('resumen anual', () => {
   const s = yearSummary(2026, races, runners);
   { const { travelKm, travelRaces, travelApprox, avgDist, ...base } = s.totals;
-  assert.deepEqual(base, { races: 3, runners: 3, participations: 4, podiums: 3, wins: 1, km: 0, time: 0, timed: 0, elevation: 0, cost: 0, elevRaces: 0, pricedRaces: 0, avgPrice: 0 }); }
+  assert.deepEqual(base, { races: 3, runners: 3, participations: 4, podiums: 3, wins: 1, km: 0, kmDays: 0, time: 0, timed: 0, elevation: 0, cost: 0, elevRaces: 0, pricedRaces: 0, avgPrice: 0 }); }
   assert.deepEqual(s.byModality.map((m) => m.modality), ['Carretera', 'BTT', 'Gravel']); // Pista no aparece en 2026
   { const { elevation, trip, cost, km, ...base } = s.byModality[1];
   assert.deepEqual(base, { modality: 'BTT', races: 1, participations: 2, podiums: 2, wins: 0, runners: 2 }); }
@@ -130,7 +130,7 @@ test('podios de etapa: cuentan como tipo «Etapa»', () => {
     ] }];
   const s = yearSummary(2027, races2, runners2);
   { const { travelKm, travelRaces, travelApprox, avgDist, ...base } = s.totals;
-  assert.deepEqual(base, { races: 1, runners: 2, participations: 2, podiums: 4, wins: 2, km: 0, time: 0, timed: 0, elevation: 0, cost: 0, elevRaces: 0, pricedRaces: 0, avgPrice: 0 }); }
+  assert.deepEqual(base, { races: 1, runners: 2, participations: 2, podiums: 4, wins: 2, km: 0, kmDays: 0, time: 0, timed: 0, elevation: 0, cost: 0, elevRaces: 0, pricedRaces: 0, avgPrice: 0 }); }
   assert.deepEqual(s.byPodiumType.map((t) => [t.type, t.podiums, t.wins]),
     [['suelta', 0, 0], ['general', 1, 0], ['campeonato', 0, 0], ['etapa', 3, 2]]);
   assert.deepEqual(s.perRunner.map((r) => [r.name, r.races, r.p1, r.p2, r.p3]), [['Anna', 1, 1, 1, 1], ['Biel', 1, 1, 0, 0]]);
@@ -728,4 +728,12 @@ test('impacto en redes: historia automática, resultado del corredor, publicado 
   assert.deepEqual(r.rows.map((x) => [x.story, x.mine, x.published, x.cro]), [[true, true, true, false], [true, false, false, false], [false, true, false, true]]);
   assert.deepEqual(r.totals, { races: 3, stories: 2, results: 2, published: 1, chronicles: 1 });
   assert.deepEqual(raceImpact([]).totals, { races: 0, stories: 0, results: 0, published: 0, chronicles: 0 });
+});
+
+test('ratio km por día de competición: solo carreras con km, los días de cada prueba', async () => {
+  const { kmPerDay } = await import('../js/logic.js');
+  const r = kmPerDay([{ km: 80, date: '2026-05-10' }, { km: 240, date: '2026-06-05', end_date: '2026-06-07' }, { km: null, date: '2026-07-01' }, { date: '2026-08-01' }]);
+  assert.deepEqual(r, { km: 320, days: 4, ratio: 80 });
+  assert.deepEqual(kmPerDay([]), { km: 0, days: 0, ratio: 0 });
+  assert.equal(kmPerDay([{ km: 100, date: '2026-05-10' }, { km: 55, date: '2026-05-17' }]).ratio, 77.5);
 });
