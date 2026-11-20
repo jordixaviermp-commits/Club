@@ -86,4 +86,5 @@ test('Europeos UEC MTB La Molina 2027 (XCO Máster y Descenso): salen al buscar 
   assert.ok(names('europa').includes('Campeonato de Europa UEC MTB XCO Máster – La Molina'));
   assert.ok(names('descenso').includes('Campeonato de Europa UEC MTB Descenso – La Molina'));
   assert.equal(data.races.filter((r) => r.league === 'Europeos UEC MTB La Molina 2027').length, 2);
+  assert.equal(data.races.find((r) => /Descenso/.test(r.name)).subtype, 'Descenso');
 });

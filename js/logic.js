@@ -17,7 +17,7 @@ export const RACE_TYPES = [
 /** Formato de la carrera según la modalidad (el resto de modalidades no lo piden). */
 export const SUBTYPES = {
   Carretera: ['Critérium', 'Ciclodeportiva', 'Máster', 'Contrarreloj', 'Ultradistancia', 'Otra'],
-  BTT: ['XCO', 'XCM', 'UXCM', 'Rally', 'Otra'],
+  BTT: ['XCO', 'XCM', 'UXCM', 'Rally', 'Descenso', 'Otra'],
 };
 /** Km de un valor de formulario: número entre 0 y 1000 con un decimal, o null. */
 export function parseKm(v) {
@@ -32,6 +32,7 @@ export function guessSubtype(name, modality) {
     if (/\bxcm\b|maraton|marathon|maratona/.test(n)) return 'XCM';
     if (/\bxco\b/.test(n)) return 'XCO';
     if (/\brally\b|\brallye\b/.test(n)) return 'Rally';
+    if (/\bdescenso\b|\bdownhill\b|\bdescens\b|\bdhi?\b/.test(n)) return 'Descenso';
   } else if (modality === 'Carretera') {
     if (/criterium/.test(n)) return 'Critérium';
     if (/contrarreloj|contrarellotge|\bcri\b|cronoescalada/.test(n)) return 'Contrarreloj';
