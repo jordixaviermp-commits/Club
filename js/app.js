@@ -827,7 +827,7 @@ function openMate(id) {
     .sort((a, b) => b.date.localeCompare(a.date));
   const done = doneAll.slice(0, 15);
   const row = (g, right = '') => `<li class="mini ${modClass(g.modality)} tappable"><a class="mini-main" href="#/carrera/${g.id}"><b>${esc(g.name)}</b>
-    <small class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''} · ${esc(modText(g))}${g.suspended ? ' · ⛔ anulada' : ''}</small></a>${right}</li>`;
+    <small class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''} · ${esc(modText(g))}${g.suspended ? ' · ⛔ suspendida' : ''}</small></a>${right}</li>`;
   const withMe = (g) => (!isMe && (g.entries || []).some((e) => e.runner_id === meId) ? '<span class="done">✓ Tú también</span>' : '');
   const dlg = document.getElementById('dialog');
   dlg.innerHTML = `<form method="dialog" class="dlg mate">
@@ -1106,7 +1106,7 @@ function myRacesCard(d, afterSummary = () => '') {
       <a href="#" class="tile t-done" data-act="goto-sec" data-to="sec-done"><span class="t-n">${list.length + sent.filter((g) => yearOf(g.date) === S.myYear).length}</span><span class="t-l">Hechas</span>${ico('ok', 't-ico')}<small>${days !== list.length ? `${days} días de competición` : 'con resultado'}</small></a>
       <a href="#" class="tile t-pend${pending.length ? ' alert' : ''}" data-act="goto-sec" data-to="sec-pend"><span class="t-n">${pending.length}</span><span class="t-l">Pendientes</span>${ico('flag', 't-ico')}<small>${pending.length ? 'falta tu resultado' : 'de resultado'}</small></a>
     </div>
-    ${cancelled.length ? `<a href="#" class="canc-line" data-act="goto-sec" data-to="sec-canc">${ico('ban')}<span><b>${cancelled.length}</b> ${cancelled.length === 1 ? 'carrera anulada' : 'carreras anuladas'}</span>${ico('go')}</a>` : ''}
+    ${cancelled.length ? `<a href="#" class="canc-line" data-act="goto-sec" data-to="sec-canc">${ico('ban')}<span><b>${cancelled.length}</b> ${cancelled.length === 1 ? 'carrera suspendida' : 'carreras suspendidas'}</span>${ico('go')}</a>` : ''}
     ${(() => { const sentYear = sent.filter((g) => yearOf(g.date) === S.myYear).map((g) => ({ position: g.my_result.position, time_seconds: g.my_result.time_seconds })), allMine = [...list, ...sentYear];   // los enviados también cuentan
       const pod = [1, 2, 3].map((k) => allMine.filter((x) => x.position === k).length), NAMES = [['Oro', 'Oros'], ['Plata', 'Platas'], ['Bronce', 'Bronces']];
       // una sola línea pequeña: tiempo en carrera y, al lado, km de viaje (ida y vuelta, aprox.)
@@ -1151,9 +1151,9 @@ function myRacesCard(d, afterSummary = () => '') {
       <ul class="mini-list">${todo.slice(0, 20).map((x) => miniRow(x, `<span class="badge-pend">${missingFields(x).map((k) => FIELD_LABELS[k]).join(', ')}</span>`, `${runnerHref('carrera')}/race_${x.race_id}`)).join('')}</ul></details>` : ''; })()}
 
   ${cancelled.length ? `<section class="card season-block canc-block" id="sec-canc">
-    <h2 class="sec-h">Anuladas <small>(${cancelled.length})</small></h2>
+    <h2 class="sec-h">Suspendidas <small>(${cancelled.length})</small></h2>
     <p class="hint">Carreras suspendidas en las que estabas inscrito.</p>
-    <ul class="mini-list">${cancelled.map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, below: '<span class="badge-pend">anulada</span>' })).join('')}</ul>
+    <ul class="mini-list">${cancelled.map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, below: '<span class="badge-pend">suspendida</span>' })).join('')}</ul>
   </section>` : ''}
 
   <details class="card season-block done-block desp" id="sec-done" data-open-key="done"${S.open?.done ? ' open' : ''}>
@@ -2140,7 +2140,7 @@ function viewPublications() {
   const anomalies = [
     ...a.resLate.map((x) => ({ icon: '⚠️', text: `Resultados sin publicar desde hace ${x.days} días: <b>${esc(x.race.name)}</b>`, card: resCard(x, true) })),
     ...a.noResults.map((x) => ({ icon: '❓', text: `<b>${esc(x.reg.name)}</b> terminó ${ago(x.days)} y nadie ha puesto su puesto (${x.people} inscrito${x.people === 1 ? '' : 's'}): no hay resultados que publicar`, link: `#/inscripciones/${x.reg.id}` })),
-    ...a.suspendedPosted.map((x) => ({ icon: '⛔', text: `Se publicó el aviso de <b>${esc(x.name)}</b>, pero la carrera está suspendida: conviene publicar la anulación`, link: `#/inscripciones/${x.id}` })),
+    ...a.suspendedPosted.map((x) => ({ icon: '⛔', text: `Se publicó el aviso de <b>${esc(x.name)}</b>, pero la carrera está suspendida: conviene publicar que se ha suspendido`, link: `#/inscripciones/${x.id}` })),
     ...a.storyMissing.map((g) => ({ icon: '📸', text: `No consta la historia previa de <b>${esc(g.name)}</b> (${esc(shortDate(g.date))}); debía salir el ${esc(shortDate(storyDateOf(g)))}. Si se publicó y no consta, márcala a mano`, link: `#/${g.results ? 'carreras' : 'inscripciones'}/${g.id}`, storyKey: postKey(g) })),
     ...(a.orphans.length ? [{ icon: '🔗', text: `<b>${a.orphans.length}</b> marca${a.orphans.length === 1 ? '' : 's'} de «publicada» sin carrera (se cambió el nombre o la fecha después de marcarla, o se borró): ${esc(a.orphans.slice(0, 3).map((o) => o.key.replace('res|', '').split('|')[1] || o.key).join(', '))}${a.orphans.length > 3 ? '…' : ''}`, orphan: true }] : []),
   ];
