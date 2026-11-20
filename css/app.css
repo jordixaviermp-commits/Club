@@ -2158,3 +2158,17 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .next-team.compact .nt-n { font-size: 1.1rem; } .next-team.compact .nt-d { margin: .1rem 0 .4rem; font-size: .82rem; }
 .next-team.compact .nt-people { display: none; }
 .next-team.compact .nt-foot { margin-top: .45rem; } .next-team.compact .nt-btn { min-height: 34px; padding: .2rem .8rem; }
+
+/* «El equipo ya está apuntado»: plegado por defecto, una sola línea */
+.pulse-fold { padding: .5rem .7rem; }
+.pulse-fold > summary { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .6rem; cursor: pointer; list-style: none; }
+.pulse-fold > summary::-webkit-details-marker { display: none; }
+.pulse-t { display: inline-flex; align-items: center; gap: .4rem; font-weight: 800; font-size: .95rem; } .pulse-t .ico { width: 18px; height: 18px; color: var(--sec); }
+.pulse-chips { display: inline-flex; flex-wrap: wrap; gap: .2rem .5rem; font-size: .8rem; color: var(--muted); flex: 1; }
+.pulse-chips b { color: var(--text); } .pulse-chips .me { color: #1b7f3b; font-weight: 700; }
+.pulse-chev { margin-left: auto; display: inline-flex; transition: transform .15s; } .pulse-chev .ico { width: 18px; height: 18px; }
+.pulse-fold[open] .pulse-chev { transform: rotate(180deg); }
+.pulse-fold .pulse-sum { margin: .5rem 0 0; font-size: .82rem; color: var(--muted); }
+.pulse-fold .pulse-months { height: 80px; }
+.pulse-fold > summary { flex-wrap: nowrap; gap: .2rem .5rem; display: grid; grid-template-columns: 1fr auto; grid-template-areas: "t c" "k k"; align-items: center; }
+.pulse-t { grid-area: t; } .pulse-chev { grid-area: c; margin: 0; } .pulse-chips { grid-area: k; flex: none; gap: .1rem .9rem; flex-wrap: nowrap; white-space: nowrap; }
