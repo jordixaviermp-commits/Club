@@ -1282,8 +1282,10 @@ function runnerBonusCard(d) {
     pendingPlus ? `<span class="bn-chip wait">${ico('clock')}${pendingPlus} plus ${plural(pendingPlus, 'pendiente', 'pendientes')}</span>` : '',
     st.suspended ? `<span class="bn-chip">${ico('ban')}${st.suspended} ${plural(st.suspended, 'suspendida', 'suspendidas')}</span>` : '',
   ].filter(Boolean).join('');
-  const sentList = (d.registrations || []).filter((g) => g.my_result && !g.suspended && g.date < (d.today || todayISO()) && yearOf(g.date) === b.year);   // puesto enviado, aún sin pasar a resultados
-  const sentDays = sentList.reduce((n, g) => n + numDays(g.date, g.end_date), 0);
+  // Lo que cuenta el servidor = carreras ya en resultados + inscripciones con el puesto enviado (sin pasar a resultados). Lo segundo es la diferencia exacta (sin filtrar por fecha).
+  const resY = (d.my_results || []).filter((r) => yearOf(r.date) === b.year), daysRes = resY.reduce((n, r) => n + numDays(r.date, r.end_date), 0);
+  const sentDays = Math.max(0, st.count - daysRes);
+  const sentList = (d.registrations || []).filter((g) => g.my_result && !g.suspended && yearOf(g.date) === b.year), sentFound = sentList.reduce((n, g) => n + numDays(g.date, g.end_date), 0);
   const tiers = st.tiers || [];
   const rules = `<details class="rules" data-open-key="rules"${S.open?.rules ? ' open' : ''}>
     <summary>${ico('info')}<span>Ver tramos y normativa</span>${ico('chevd', 'rules-chev')}</summary>
@@ -1300,14 +1302,11 @@ function runnerBonusCard(d) {
   return `<h2 class="blk-title">Tu bonificación ${b.year} ${ico('money')}</h2>
   <section class="card bonus-card">
     <p class="bn-main"><b>${st.count}</b> ${plural(st.count, 'carrera realizada', 'carreras realizadas')}${st.tier ? ` · <span class="bn-amt">${euros(st.amount)}</span>` : ''}</p>
-    ${(() => { // de dónde sale el número: carreras con resultado (con sus jornadas), inscripciones con puesto enviado y, si no cuadra, lo que cuenta el servidor
-      const resY = (d.my_results || []).filter((r) => yearOf(r.date) === b.year), daysRes = resY.reduce((n, r) => n + numDays(r.date, r.end_date), 0), sentY = sentList, daysSent = sentDays;
-      const calc = daysRes + daysSent;
-      if (daysRes === resY.length && !sentY.length && calc === st.count) return '';
+    ${(() => { // de dónde sale el número: carreras en resultados (con sus jornadas) + inscripciones con el puesto enviado
+      if (daysRes === resY.length && !sentDays) return '';
       const parts = [`${resY.length} ${plural(resY.length, 'carrera finalizada', 'carreras finalizadas')}${daysRes !== resY.length ? ` (${daysRes} jornadas: las pruebas de varios días cuentan un día cada una)` : ''}`];
-      if (sentY.length) parts.push(`${daysSent} con el puesto enviado y aún sin pasar a resultados`);
-      return `<p class="bn-how">${parts.join(' + ')}${calc !== st.count ? ` <b>· el servidor cuenta ${st.count}: avisa a la dirección</b>` : ''}.</p>`; })()}
-    ${chips ? `<div class="bn-chips">${chips}</div>` : ''}
+      if (sentDays) parts.push(`${sentDays} con el puesto enviado y aún sin pasar a resultados${sentList.length ? ` (${sentList.map((g) => esc(g.name)).join(', ')})` : ''}`);
+      return `<p class="bn-how">${parts.join(' + ')}${sentDays !== sentFound ? ` <b>· no encuentro cuál es en tu lista: avisa a la dirección</b>` : ''}.</p>`; })()}
     ${msg}
     ${bonusZones(st, cfg, b.planned || 0, sentDays)}
     ${sentDays ? `<p class="bz-key"><i class="k-s"></i>Rayada: puesto enviado, ya cuenta (pasa a resultados en una semana)</p>` : ''}
