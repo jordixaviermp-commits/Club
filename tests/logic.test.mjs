@@ -791,3 +791,17 @@ test('historial del equipo: barras por semana, orden y tendencia', async () => {
   assert.equal(r.recent, 4); assert.equal(r.before, 1); assert.equal(r.trend, 3);
   assert.deepEqual(teamMoves(null, now).bars.map((b) => b.n), [0, 0, 0, 0, 0, 0, 0, 0]);
 });
+
+test('resumen: la carrera que más horas costó (el MTB suma pocos km pero muchas horas)', async () => {
+  const { yearSummary } = await import('../js/logic.js');
+  const races = [
+    { id: 'a', name: 'Gran Fondo', date: '2026-05-10', modality: 'Carretera', km: 160, results: [{ runner_name: 'Ana', position: 5, time_seconds: 4 * 3600 + 30 * 60 }] },
+    { id: 'b', name: 'Marathon MTB', date: '2026-06-10', modality: 'BTT', km: 80, results: [{ runner_name: 'Joan', position: 9, time_seconds: 6 * 3600 + 10 * 60 }, { runner_name: 'Ana', position: 3, time_seconds: 5 * 3600 }] },
+    { id: 'c', name: 'Sin tiempo', date: '2026-07-10', modality: 'Carretera', km: 200, results: [{ runner_name: 'Ana', position: 1 }] },
+  ];
+  const s = yearSummary(2026, races, []);
+  assert.equal(s.longest.race, 'Sin tiempo');                       // la más larga en km
+  assert.equal(s.longestTime.race, 'Marathon MTB');                 // la que más horas costó
+  assert.equal(s.longestTime.runner, 'Joan'); assert.equal(s.longestTime.seconds, 6 * 3600 + 600);
+  assert.equal(yearSummary(2026, [{ ...races[2] }], []).longestTime, null);
+});
