@@ -117,7 +117,7 @@ const radioChips = (attr, field, options, cur, { required = false, extra = '' } 
   `<label class="cpick ${cls}"><input type="radio" name="${attr.replace('data-', '')}-${field}" ${attr}="${field}" value="${esc(v)}"${v === (cur ?? '') ? ' checked' : ''}${required ? ' required' : ''}${extra}><span>${l}</span></label>`).join('')}</div>`;
 const modalityChips = (d, attr) => radioChips(attr, 'modality', MODALITIES.map((m) => [m, `${MOD_ICON[m] || '🏁'} ${esc(m)}`, modClass(m)]), d.modality);
 const RACE_TYPE_SHORT = { suelta: 'Carrera normal', campeonato: 'Campeonato', circuito: 'De un circuito (Copa, Open…)' };
-const detailInputs = (d, attr) => `${SUBTYPES[d.modality] ? `<div class="disc-field"><span class="flabel">Disciplina de ${esc(d.modality)} <b class="req">obligatoria</b></span>${radioChips(attr, 'subtype', SUBTYPES[d.modality].map((x) => [x, esc(x)]), d.subtype, { required: !d.suspended })}
+const detailInputs = (d, attr) => `${SUBTYPES[d.modality] ? `<div class="disc-field"><span class="flabel">Disciplina de ${esc(d.modality)} <b class="req">obligatoria</b></span>${radioChips(attr, 'subtype', SUBTYPES[d.modality].map((x) => [x, esc(x)]), d.subtype, { required: true })}
       <small class="hint">Así el resumen y los gráficos del equipo reparten las carreras por disciplina.</small></div>` : ''}
     <label class="flabel-l">Distancia (km)<input type="number" inputmode="decimal" step="0.1" min="0.1" max="1000" ${attr}="km" value="${esc(d.km ?? '')}" placeholder="85"></label>`;
 /** Nombres de circuitos ya usados (para sugerirlos y no escribirlos de dos maneras). */
@@ -976,8 +976,6 @@ function viewRunnerNew() {
         <label class="flabel-l">Precio inscripción (€)<input type="text" inputmode="decimal" data-rf="price" value="${esc(d.price ?? '')}" maxlength="8" placeholder="25" autocomplete="off"></label></div>
         ${isRace ? '' : `<label class="flabel-l">Web de la carrera<input type="text" inputmode="url" data-rf="url" value="${esc(d.url || '')}" maxlength="500" placeholder="https://…" autocomplete="off"></label>`}
         <p class="hint">Los ven todos los corredores y salen en las estadísticas del club (metros de subida, coste de competir…). Si no los sabes, déjalos vacíos: cualquier compañero podrá completarlos después. Para el precio, 0 = gratis.</p>`, '#2f6fd6')}
-      ${editing && !isRace ? `<div class="susp-box${d.suspended ? ' on' : ''}"><label class="check"><input type="checkbox" data-act-change="r-suspended" ${d.suspended ? 'checked' : ''}> ⛔ La organización ha suspendido esta carrera</label>
-        <p class="hint">${d.suspended ? 'Queda como <b>suspendida</b>: a los inscritos les cuenta para el mínimo de participaciones, pero <b>no para el bono</b>, y no se pasa a resultados. Desmárcalo si se vuelve a celebrar.' : 'Márcalo si te han avisado de que se anula. Cuenta para el mínimo de carreras de los inscritos, pero no para el bono.'}</p></div>` : ''}
       ${fsec(5, 'users', editing ? 'Notas' : 'Tú', editing ? `<label class="flabel-l">Notas<textarea data-rf="notes" rows="2" maxlength="500">${esc(d.notes || '')}</textarea></label>`
         : `<label class="flabel-l">Tu categoría${catSelect('data-rf="category" required', d.category, 'Elige tu categoría')}</label>`, '#8e44ad')}
       <button class="btn primary big-save">${editing ? 'Guardar cambios' : 'Añadir y apuntarme'}</button>
@@ -1307,7 +1305,7 @@ function runnerScreen(sub) {
     }
     const g = S.runnerData.registrations.find((x) => x.id === id && x.mine_created);
     if (!g) return frame('Editar carrera', '<p class="empty">Esta carrera no existe o no la añadiste tú.</p>', { back: runnerHref('') });
-    if (S.rdraft?.id !== id) S.rdraft = emptyRunnerDraft({ id, suspended: !!g.suspended, url: g.url || '', elevation: g.elevation ?? '', price: g.price ?? '', name: g.name, date: g.date, multi: !!g.end_date, end_date: g.end_date || '',
+    if (S.rdraft?.id !== id) S.rdraft = emptyRunnerDraft({ id, url: g.url || '', elevation: g.elevation ?? '', price: g.price ?? '', name: g.name, date: g.date, multi: !!g.end_date, end_date: g.end_date || '',
       place: g.place || '', province: g.province || '', country: g.country || DEFAULT_COUNTRY, modality: g.modality, notes: g.notes || '', race_type: g.race_type || 'suelta', circuit: g.circuit || '', subtype: g.subtype || '', km: g.km ?? '' });
     return viewRunnerNew();
   }
@@ -1399,6 +1397,7 @@ function runnerRegCard(g, opts = {}) {
            <button class="btn primary" data-act="r-join" data-id="${g.id}">La hice: apuntarme</button></div>` : ''}`}
       ${g.notes ? `<p class="notes">${esc(g.notes)}</p>` : ''}
       ${webRow(g, open && !g.suspended)}
+      ${S.preview || g.date < pastLimit() ? '' : g.suspended ? `<button type="button" class="btn ghost small susp-btn" data-act="r-suspend" data-id="${g.id}" data-v="0">${ico('check')}Se vuelve a celebrar: reabrir</button>` : `<button type="button" class="btn ghost small susp-btn" data-act="r-suspend" data-id="${g.id}" data-v="1">${ico('ban')}La organización la ha suspendido</button>`}
       ${mates}
       ${edit}
       ${mine && !S.preview && !g.suspended && (open || !g.my_result) ? `<button type="button" class="pay-btn${mine.paid ? ' on' : ''}" data-act="r-paid" data-id="${g.id}">${ico('euro')}<span>${mine.paid ? `Pagada${mine.paid_amount != null ? ' · ' + euros(mine.paid_amount) : ''}` : 'Marcar como pagada'}</span></button>` : ''}
@@ -5024,6 +5023,14 @@ const actions = {
     if (ok) render();
   },
   'chro-tab'(el) { S.chroTab = el.dataset.t === 'imp' ? 'imp' : 'cro'; S.open = { ...(S.open || {}), chro: true }; render(); },
+  async 'r-suspend'(el) {
+    const susp = el.dataset.v === '1', g = (S.runnerData?.registrations || []).find((x) => x.id === el.dataset.id);
+    if (!await confirmAction(susp ? 'Marcar como suspendida' : 'Reabrir la carrera',
+      susp ? `Vas a marcar <b>${esc(g?.name || 'esta carrera')}</b> como <b>suspendida</b> por la organización. A los inscritos les cuenta para el mínimo de participaciones, pero <b>no para el bono</b>, y no se pasa a resultados. Se puede deshacer.`
+        : `<b>${esc(g?.name || 'Esta carrera')}</b> vuelve a estar activa (cuenta para el bono y se pasa a resultados como cualquier otra).`, susp ? 'Marcar suspendida' : 'Reabrir', 'primary')) return;
+    await run(async () => { await api.runnerSetSuspended(S.code, el.dataset.id, susp); await loadRunner(); return true; }, susp ? '⛔ Carrera marcada como suspendida' : 'Carrera reabierta');
+    render();
+  },
   async 'chro-admin-all'(el) { await setChronicleFor(el.dataset.ids.split(','), el.dataset.key, true); },
   'ig-tab'(el) { S.igTab = el.dataset.t; render(); },
   async 'ig-per-del'(el) {
@@ -5274,7 +5281,7 @@ const forms = {
     if (d.id) { // editar una carrera propia
       const ok = await run(async () => {
         await api.runnerUpdate(S.code, d.id, { name, date: d.date, end_date: d.multi ? d.end_date : null, place: cleanName(d.place),
-          province: cleanName(d.province), country: d.country, modality: d.modality, notes: d.notes || '', suspended: !!d.suspended, elevation: parseElev(d.elevation) ?? '', price: parsePrice(d.price) ?? '' });
+          province: cleanName(d.province), country: d.country, modality: d.modality, notes: d.notes || '', elevation: parseElev(d.elevation) ?? '', price: parsePrice(d.price) ?? '' });
         await setMyRaceType(d.id, d); await setMyDetails(d.id, d);
         const cur = S.runnerData.registrations.find((x) => x.id === d.id)?.url || '';
         if (cleanWeb(d.url) !== '!' && (cleanWeb(d.url) || '') !== cur) await api.runnerSetUrl(S.code, d.id, cleanWeb(d.url));
@@ -5595,7 +5602,6 @@ $app.addEventListener('change', async (ev) => {
   }
   if (t.dataset.actChange === 'post') { setPostedKeys([t.dataset.key], t.checked); return; }
   if (t.dataset.actChange === 'chro-admin') { setChronicleFor([t.dataset.runner], t.dataset.key, t.checked); return; }
-  if (t.dataset.actChange === 'r-suspended' && S.rdraft) { S.rdraft.suspended = t.checked; render(); return; }
   if (t.dataset.actChange === 'suspended' && S.draft) { S.draft.suspended = t.checked; render(); return; }
   if (t.dataset.actChange === 'multi') {
     S.draft.multi = t.checked;
