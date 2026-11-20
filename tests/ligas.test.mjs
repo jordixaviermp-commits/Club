@@ -105,3 +105,11 @@ test('el buscador encuentra por modalidad y formato: btt, mtb, mountain bike, xc
   assert.ok(!names('mtb').includes('La Invernal Motorland'));   // una de carretera no sale por «mtb»
   assert.ok(names('mtb marathon').slice(0, 3).every((n) => /Marathon/i.test(n)));   // más palabras afinan
 });
+
+test('Gigante de Piedra 2027 (Small y Gigante, NUE Series): salen al buscar por nombre, pueblo o serie', () => {
+  const names = (q) => searchRaces(q, data.races).map((r) => r.name);
+  assert.ok(names('gigante').includes('Gigante Small – Sant Joan de Moró') && names('gigante').includes('Gigante de Piedra – Sant Joan de Moró'));
+  assert.ok(names('nue').length >= 2 && names('moro').length >= 2);
+  const g = data.races.filter((r) => r.league === 'NUE Series 2027');
+  assert.deepEqual(g.map((r) => [r.date, r.subtype]), [['2027-05-08', 'XCM'], ['2027-06-05', 'UXCM']]);
+});
