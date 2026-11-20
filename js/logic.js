@@ -396,6 +396,12 @@ export function daysTo(iso, today = new Date()) {
   return Math.round((Date.UTC(y, m - 1, d) - t) / 86400000);
 }
 /** «hoy», «mañana», «en 6 días»… */
+/** La próxima carrera del equipo: la primera (o la que está en curso) no suspendida con algún inscrito, aunque quien mira no participe. */
+export function nextTeamRace(registrations, today) {
+  const last = (g) => g.end_date || g.date;
+  return (registrations || []).filter((g) => !g.suspended && (g.entries || []).length && last(g) >= today)
+    .sort((a, b) => a.date.localeCompare(b.date) || (b.entries.length - a.entries.length) || String(a.name).localeCompare(String(b.name), 'es'))[0] || null;
+}
 export const daysToText = (n) => (n === 0 ? 'hoy' : n === 1 ? 'mañana' : n > 1 ? `en ${n} días` : '');
 
 /** Archivo de calendario (.ics) con una carrera como evento de día completo (o de varios días). */

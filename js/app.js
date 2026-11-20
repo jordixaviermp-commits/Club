@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError, cleanWeb } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, disciplineKey, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  directorBoard, raceImpact, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
+  directorBoard, raceImpact, nextTeamRace, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -1383,7 +1383,7 @@ function runnerRegCard(g, opts = {}) {
       !open && !g.suspended && !mine ? `<span class="rc-chip off">${ico('flag')}Ya disputada</span>` : '',
       soon ? `<span class="soon${daysTo(g.date) <= 7 ? ' now' : ''}">${ico('clock', 't-i')}${daysToText(daysTo(g.date))}</span>` : '',
     ].filter(Boolean).join('');
-    return `<details class="card race rcard ${open ? '' : 'past-reg '}${modClass(g.modality)}" data-open-key="${key}"${isOpen ? ' open' : ''}>
+    return `<details class="card race rcard ${open ? '' : 'past-reg '}${modClass(g.modality)}" id="${key}" data-open-key="${key}"${isOpen ? ' open' : ''}>
       <summary class="rc-sum">
         <span class="rc-main"><b class="rc-name">${esc(g.name)}</b>
           <span class="rc-sub">${esc(when(g))}${place(g) ? ' · ' + esc(place(g)) : ''}</span>${chips ? `<span class="rc-chips">${chips}</span>` : ''}</span>
@@ -1448,6 +1448,21 @@ function teamPulse(d) {
 /** Tarjeta «Planificar ruta» (herramienta ruta/): va en Carreras, justo bajo el buscador. */
 const rutaCard = () => `<a class="card ruta-card" href="ruta/">${ico('route', 'ruta-ic')}<span class="ruta-txt"><b>Planificar ruta <span class="new-tag">NUEVO</span></b><small class="muted">Sube tu track y mira viento, tiempo y subidas</small></span><span class="mrow-go" aria-hidden="true">${ico('go')}</span></a>`;
 
+/** La próxima carrera del equipo, bien resaltada: que se vea la semana en la que compite el club aunque quien mira no participe. */
+function nextTeamBanner(d) {
+  const today = d.today || todayISO(), g = nextTeamRace(d.registrations, today);
+  if (!g) return '';
+  const n = daysTo(g.date), going = d.registrations && (g.entries || []).some((e) => e.runner_id === d.me.id), live = g.date <= today;
+  const wk = live || n <= 7, names = g.entries.map((e) => e.name.split(' ')[0]), shown = names.slice(0, 6);
+  return `<section class="card next-team${wk ? ' wk' : ''}" aria-label="Próxima carrera del equipo">
+    <p class="nt-k">${wk ? `${ico('flag')}Esta semana compite el equipo` : `${ico('flag')}Próxima carrera del equipo`}</p>
+    <h2 class="nt-n">${esc(g.name)}</h2>
+    <p class="nt-d">${esc(when(g))}${place(g) ? ' · ' + esc(place(g)) : ''}</p>
+    <div class="nt-row"><span class="nt-pill nt-when">${live ? 'En curso' : daysToText(n)}</span>${modTag(g.modality, g.subtype)}<span class="nt-pill">${g.entries.length} del club</span></div>
+    <p class="nt-people">${shown.map(esc).join(' · ')}${names.length > shown.length ? ` · +${names.length - shown.length}` : ''}</p>
+    <div class="nt-foot"><span class="nt-me${going ? ' on' : ''}">${going ? `${ico('check')}Tú vas` : 'Tú no estás apuntado'}</span><button type="button" class="btn nt-btn" data-act="goto-sec" data-to="rc-${esc(g.id)}">${going ? 'Ver carrera' : 'Apuntarme'}</button></div></section>`;
+}
+
 function viewRunnerHome() {
   const d = S.runnerData, me = d.me, today = d.today || todayISO();
   const regs = regFilter(d.registrations, me);
@@ -1472,6 +1487,7 @@ function viewRunnerHome() {
       ${S.preview ? '' : `<a class="icon-btn fbtn ruta-btn" href="ruta/" aria-label="Planificar ruta: sube tu track y mira viento, tiempo y subidas" title="Planificar ruta">${ico('route')}</a>`}
       <button type="button" class="icon-btn fbtn view-btn${S.regView === 'cal' ? ' on' : ''}" data-act="reg-view" aria-label="${S.regView === 'cal' ? 'Ver como lista' : 'Ver calendario'}" title="${S.regView === 'cal' ? 'Ver como lista' : 'Ver calendario'}">${icon(S.regView === 'cal' ? ICON_LIST : ICON_CAL)}</button>
     </div>
+    ${normalize(S.q.runner || '').length >= 2 ? '' : nextTeamBanner(d)}
     <div id="pulse-box">${S.regView === 'cal' || normalize(S.q.runner || '').length >= 2 ? '' : teamPulse(d)}</div>
     <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
     ${body}`,
@@ -5147,7 +5163,7 @@ const actions = {
     await run(async () => { await api.runnerReplyNews(S.code, el.dataset.id, el.dataset.a, guests); await loadNews(); }, el.dataset.a === 'si' ? '¡Apuntado!' : 'Anotado: no vienes');
     render();
   },
-  'goto-sec'(el) { const t = document.getElementById(el.dataset.to); if (t) { const dt = t.matches('details') ? t : t.querySelector('details'); if (dt) { dt.open = true; S.open = { ...(S.open || {}), [dt.dataset.openKey]: true }; } t.scrollIntoView({ behavior: 'smooth', block: 'start' }); } else toast('No tienes carreras en este apartado.'); },
+  'goto-sec'(el) { const t = document.getElementById(el.dataset.to); if (t) { const dt = t.matches('details') ? t : t.querySelector('details'); if (dt) { dt.open = true; S.open = { ...(S.open || {}), [dt.dataset.openKey]: true }; } for (let a = t.parentElement; a; a = a.parentElement) if (a.tagName === 'DETAILS' && !a.open) { a.open = true; if (a.dataset.openKey) S.open = { ...(S.open || {}), [a.dataset.openKey]: true }; } t.scrollIntoView({ behavior: 'smooth', block: 'start' }); } else toast('No tienes carreras en este apartado.'); },
   'hist-filter'(el) { S.histFilter = el.dataset.f; render(); },
   'week-view'(el) { S.weekView = el.dataset.v; render(); },
   'week-all'() { const set = postedSet(), list = weekRaces(S.weekDays || 14); setPostedKeys(list.map(postKey), !list.every((g) => set.has(postKey(g)))); },
