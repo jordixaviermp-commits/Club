@@ -2262,3 +2262,14 @@ details.card.rcard { margin-bottom: 6px; }
 
 .desp-t small { white-space: normal; }
 .desp-t > small { display: block; margin-top: .1rem; }
+
+/* v208: semáforo en Mis carreras — Hechas verde, Próximas naranja, Pendientes rojo (verde apagado si no queda ninguna) */
+.sum-card .tiles .t-next { --tc: #e07b12; --tc-t: #b85f00; }
+.sum-card .tiles .t-done { --tc: #1e9e4a; --tc-t: #1e8a43; }
+.sum-card .tiles .t-pend { --tc: #1e9e4a; --tc-t: #1e8a43; border-style: solid; }
+.sum-card .tiles .t-pend.alert { --tc: #d92d20; --tc-t: #c0261b; }
+.sum-card .tiles .tile .t-n { color: var(--tc-t); }
+.sum-card .tiles .tile .t-ico { color: var(--tc-t); }
+.sum-card .tiles .t-pend:not(.alert) { background: color-mix(in srgb, var(--tc) 6%, var(--card)); border-color: color-mix(in srgb, var(--tc) 45%, var(--card)); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .sum-card .tiles .t-next { --tc: #f0963a; --tc-t: #f5a85a; } :root:not([data-theme="light"]) .sum-card .tiles .t-done, :root:not([data-theme="light"]) .sum-card .tiles .t-pend { --tc-t: #6fd08f; } :root:not([data-theme="light"]) .sum-card .tiles .t-pend.alert { --tc: #ff6b5e; --tc-t: #ff8a80; } }
+:root[data-theme="dark"] .sum-card .tiles .t-next { --tc: #f0963a; --tc-t: #f5a85a; } :root[data-theme="dark"] .sum-card .tiles .t-done, :root[data-theme="dark"] .sum-card .tiles .t-pend { --tc-t: #6fd08f; } :root[data-theme="dark"] .sum-card .tiles .t-pend.alert { --tc: #ff6b5e; --tc-t: #ff8a80; }
