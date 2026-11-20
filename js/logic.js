@@ -902,6 +902,12 @@ function oneEditAway(a, b) {
   return edits + (a.length - i) + (b.length - j) <= 1;
 }
 
+/** Otras formas de escribir la modalidad o el formato al buscar (BTT = MTB = mountain bike…). */
+const MOD_ALIASES = {
+  BTT: 'btt mtb mountain bike bicicleta montana', Carretera: 'carretera ruta road', Gravel: 'gravel grava', Ciclocross: 'ciclocross cx cyclocross', Pista: 'pista velodromo',
+  XCO: 'xco cross country olimpico', XCM: 'xcm maraton marathon', UXCM: 'uxcm ultra maraton', Descenso: 'descenso dh downhill', Rally: 'rally', Critérium: 'criterium', Contrarreloj: 'contrarreloj cri',
+  Ciclodeportiva: 'ciclodeportiva cicloturista marxa', Máster: 'master', Ultradistancia: 'ultradistancia ultra',
+};
 /**
  * Puntuación de parecido entre lo buscado y una carrera (nombre y lugar). 0 = nada que ver.
  * Cada palabra buscada cuenta si aparece (o empieza) en el nombre o el lugar; las palabras
@@ -911,14 +917,18 @@ export function raceMatchScore(query, race) {
   const q = words(query);
   if (!q.length) return 0;
   const name = words([race.name, race.league].filter(Boolean).join(' ')), place = words([race.place, race.province].filter(Boolean).join(' '));
+  const tags = words([MOD_ALIASES[race.modality], MOD_ALIASES[race.subtype], race.modality, race.subtype].filter(Boolean).join(' '));
   let score = 0, hits = 0;
   for (const w of q) {
+    const inTag = w.length >= 2 && tags.some((t) => t === w || (w.length >= 3 && t.startsWith(w)));
     const inName = name.some((n) => n.startsWith(w) || (w.length >= 4 && n.includes(w)) || oneEditAway(w, n));
     const exact = name.includes(w);
     const inPlace = place.some((n) => n.startsWith(w));
     if (inName || inPlace) hits++;
     const weight = STOP.has(w) ? 0.3 : 1;
-    score += weight * (exact ? 3 : inName ? 2 : inPlace ? 1 : 0);
+    const base = weight * (exact ? 3 : inName ? 2 : inPlace ? 1 : 0);
+    if (inTag) hits += inName || inPlace ? 0 : 1;   // «btt», «mtb», «mountain bike», «xco»…: por modalidad o formato
+    score += inTag ? Math.max(base, 1.5) : base;
   }
   if (!hits) return 0;
   return score * (hits / q.length); // premia que coincidan todas las palabras

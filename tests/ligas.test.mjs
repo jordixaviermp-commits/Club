@@ -96,3 +96,12 @@ test('MB Race (MTB Alpine Cup 2027): sale al buscar por nombre, pueblo o Ultra',
   const r = data.races.find((x) => x.name === n);
   assert.deepEqual([r.date, r.subtype, r.country, r.circuit], ['2027-07-03', 'UXCM', 'Francia', 'MTB Alpine Cup']);
 });
+
+test('el buscador encuentra por modalidad y formato: btt, mtb, mountain bike, xco, descenso', () => {
+  const names = (q) => searchRaces(q, data.races).map((r) => r.name);
+  for (const q of ['btt', 'mtb', 'mountain bike', 'Mountain Bike']) assert.ok(names(q).includes('MTB Alpine Cup – MB Race Megève-Combloux'), q);
+  assert.ok(names('mtb').length >= data.races.filter((r) => r.modality === 'BTT').length);
+  assert.ok(names('xco').includes('Campeonato de Europa UEC MTB XCO Máster – La Molina') && names('downhill').includes('Campeonato de Europa UEC MTB Descenso – La Molina'));
+  assert.ok(!names('mtb').includes('La Invernal Motorland'));   // una de carretera no sale por «mtb»
+  assert.ok(names('mtb marathon').slice(0, 3).every((n) => /Marathon/i.test(n)));   // más palabras afinan
+});
