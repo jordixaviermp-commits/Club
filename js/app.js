@@ -111,6 +111,8 @@ const typeTag = (x) => {
 };
 /** Campos «Disciplina» (según la modalidad: obligatoria en BTT y Carretera) y «Distancia» de los formularios. `attr` = data-f (dirección) o data-rf (corredor). */
 /** Sección numerada de un formulario (cabecera de color con icono) para que se encuentre cada cosa de un vistazo. */
+/** Sección plegable de un formulario: título con su resumen a la derecha; se abre al tocar (y recuerda si estaba abierta). */
+const fsecD = (key, n, icon, title, preview, body, color, openDefault = false) => `<details class="fsec fsec-d" style="--sc:${color}" data-open-key="${key}"${(S.open?.[key] ?? openDefault) ? ' open' : ''}><summary class="fsec-h"><span class="fsec-n">${n}</span>${ico(icon)}<span class="fsec-tx"><span class="fsec-t">${title}</span><span class="fsec-p">${preview ? esc(preview) : ''}</span></span>${ico('chevd', 'fsec-chev')}</summary><div class="fsec-b">${body}</div></details>`;
 const fsec = (n, icon, title, body, color = '#1f6fd1') => `<section class="fsec" style="--sc:${color}"><h3 class="fsec-h"><span class="fsec-n">${n}</span>${ico(icon)}<span>${title}</span></h3><div class="fsec-b">${body}</div></section>`;
 /** Fichas para elegir una opción (en vez de un desplegable): un toque y queda marcada. Son «radio» ocultos, así que todo lo demás funciona igual. */
 const radioChips = (attr, field, options, cur, { required = false, extra = '' } = {}) => `<div class="chips-pick" role="radiogroup">${options.map(([v, l, cls = '', extra = '']) =>
@@ -1657,9 +1659,7 @@ function viewWatch() {
         <p>Guarda aquí las carreras que te gustan pero en las que aún <b>no</b> te inscribes: con su fecha, su web, el precio, el plazo de inscripción y tus notas. Cuando te decidas, un toque y te apuntas.</p>
         <p class="hint">La lista es solo tuya: tu precio, plazo y notas no los ve nadie. La carrera (con su web, sin tu nombre) se crea también en Carreras para que otros la encuentren y no se duplique.</p><a class="btn primary" href="#/valorar/nueva">${ico('plus')}Guardar una carrera</a>
         <p class="hint">Desde <a href="#/federaciones">Federaciones</a> también puedes guardarlas con la estrella ☆.</p></section>`
-      : `<section class="wsum"><div><b>${live.length}</b><span>por valorar</span></div><div class="${next && next.i.urgent ? 'bad' : ''}"><b>${next ? (next.i.toDeadline === 0 ? 'Hoy' : `${next.i.toDeadline} d`) : '—'}</b><span>${next ? `plazo: ${esc(next.w.name.length > 22 ? next.w.name.slice(0, 21) + '…' : next.w.name)}` : 'sin plazos próximos'}</span></div>
-          <div><b>${first ? (first.i.toRace === 0 ? 'Hoy' : `${first.i.toRace} d`) : '—'}</b><span>${first ? `la primera: ${esc(first.w.name.length > 20 ? first.w.name.slice(0, 19) + '…' : first.w.name)}` : 'ninguna próxima'}</span></div></section>
-        ${live.length > 1 ? `<div class="wsort"><span class="muted">Ordenar:</span><button class="chip${mode === 'date' ? ' on' : ''}" data-act="w-sort" data-m="date">Por fecha</button><button class="chip${mode === 'deadline' ? ' on' : ''}" data-act="w-sort" data-m="deadline">Por plazo de inscripción</button></div>` : ''}
+      : `<div class="wrow"><p class="wline"><b>${live.length}</b> por valorar${next ? ` · <span class="${next.i.urgent ? 'bad' : ''}">${ico('clock')}plazo <b>${next.i.toDeadline === 0 ? 'hoy' : `en ${next.i.toDeadline} d`}</b></span>` : ''}</p>${live.length > 1 ? `<button type="button" class="chip wsort-b" data-act="w-sort" data-m="${mode === 'date' ? 'deadline' : 'date'}" title="Cambiar el orden">⇅ ${mode === 'date' ? 'Por fecha' : 'Por plazo'}</button>` : ''}</div>
         <div class="wlist">${live.map((x) => watchCard(x.w, x.i)).join('') || '<p class="empty small">Nada próximo: todo lo guardado ya pasó.</p>'}</div>
         ${old.length ? `<details class="card wold"><summary><b>Ya pasaron (${old.length})</b> <span class="muted">· quítalas cuando quieras</span></summary>${old.map((x) => watchCard(x.w, x.i)).join('')}</details>` : ''}
         <p class="hint center">La lista es solo tuya. La carrera (sin tu nombre) está también en Carreras para que otros la encuentren.</p>`;
@@ -1684,26 +1684,24 @@ function viewWatchForm(id) {
     <label class="flabel-l">Distancia (km)<input type="number" inputmode="decimal" step="0.1" min="0.1" max="1000" data-rf="km" value="${esc(d.km ?? '')}" placeholder="85"></label>`;
   return frame(editing ? 'Editar carrera guardada' : 'Guardar una carrera', `
     <form class="stack rform" data-form="w-save">
-      ${fsec(1, 'flag', 'Qué carrera es', `<label class="flabel-l">Nombre de la carrera<input data-rf="name" value="${esc(d.name)}" required minlength="3" maxlength="120" autocomplete="off" placeholder="Gran Fondo…"></label>
-        ${editing ? '' : `<div id="dup-list">${watchDupSuggestions(d.name)}</div><p class="hint">¿Está en el calendario de las federaciones? También la puedes guardar con la estrella ☆ desde <a href="#/federaciones">Federaciones</a>.</p>`}`, '#1f6fd1')}
-      ${fsec(2, 'cal', 'Cuándo y dónde', `<label class="flabel-l">${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-rf="date" value="${esc(d.date)}" min="${pastLimit()}" required></label>
+      ${fsecD('wf1', 1, 'flag', 'Qué carrera es', d.name, `<label class="flabel-l">Nombre de la carrera<input data-rf="name" value="${esc(d.name)}" required minlength="3" maxlength="120" autocomplete="off" placeholder="Gran Fondo…"></label>
+        ${editing ? '' : `<div id="dup-list">${watchDupSuggestions(d.name)}</div><p class="hint">¿Está en el calendario de las federaciones? También la puedes guardar con la estrella ☆ desde <a href="#/federaciones">Federaciones</a>.</p>`}`, '#1f6fd1', !editing)}
+      ${fsecD('wf2', 2, 'cal', 'Cuándo y dónde', [d.date ? formatDate(d.date) : '', d.place || d.province].filter(Boolean).join(' · '), `<label class="flabel-l">${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-rf="date" value="${esc(d.date)}" min="${pastLimit()}" required></label>
         <label class="check"><input type="checkbox" data-rf-multi ${d.multi ? 'checked' : ''}> Carrera de varios días (por etapas)</label>
         ${d.multi ? `<label class="flabel-l">Último día<input type="date" data-rf="end_date" value="${esc(d.end_date)}" min="${esc(d.date || pastLimit())}" required></label>` : ''}
         <label class="flabel-l">Lugar<input data-rf="place" value="${esc(d.place)}" maxlength="120" placeholder="Ciudad o pueblo"></label>
-        <label class="flabel-l">Provincia<input data-rf="province" list="dl-prov" value="${esc(d.province)}" autocomplete="off"></label>`, '#0f9d8a')}
-      ${fsec(3, 'bars', 'Qué tipo de carrera es', `<div class="disc-field"><span class="flabel">Modalidad</span>${modalityChips(d, 'data-rf')}</div>${detail}`, '#e07800')}
-      ${fsec(4, 'euro', 'Para decidir', `<label class="flabel-l">Web de la carrera<input type="text" inputmode="url" data-rf="url" value="${esc(d.url)}" maxlength="500" placeholder="https://…" autocomplete="off"></label>
+        <label class="flabel-l">Provincia<input data-rf="province" list="dl-prov" value="${esc(d.province)}" autocomplete="off"></label>`, '#0f9d8a', !editing)}
+      ${fsecD('wf3', 3, 'bars', 'Qué tipo de carrera es', [d.modality, d.subtype, d.km ? kmText(d.km) : ''].filter(Boolean).join(' · '), `<div class="disc-field"><span class="flabel">Modalidad</span>${modalityChips(d, 'data-rf')}</div>${detail}`, '#e07800')}
+      ${fsecD('wf4', 4, 'euro', 'Para decidir', [d.price !== '' && d.price != null ? (Number(d.price) === 0 ? 'Gratis' : euros(d.price)) : '', d.deadline ? `plazo ${formatDate(d.deadline)}` : '', d.notes ? 'con notas' : ''].filter(Boolean).join(' · '), `<label class="flabel-l">Web de la carrera<input type="text" inputmode="url" data-rf="url" value="${esc(d.url)}" maxlength="500" placeholder="https://…" autocomplete="off"></label>
         <p class="hint">La web, el precio y el desnivel se comparten: les saldrán a los demás en Carreras. El plazo y tus notas son solo tuyos.</p>
         <div class="grid2"><label class="flabel-l">Precio (€)<input type="number" inputmode="decimal" step="0.5" min="0" max="10000" data-rf="price" value="${esc(d.price ?? '')}" placeholder="25"></label>
           <label class="flabel-l">Desnivel positivo (m)<input type="text" inputmode="numeric" data-rf="elevation" value="${esc(d.elevation ?? '')}" maxlength="6" placeholder="1200" autocomplete="off"></label></div>
         <label class="flabel-l">Inscripciones hasta <small class="muted">(solo lo ves tú)</small><input type="date" data-rf="deadline" value="${esc(d.deadline)}" ${d.date ? `max="${esc(d.date)}"` : ''}></label>
         <label class="flabel-l">Notas<textarea data-rf="notes" rows="3" maxlength="500" placeholder="Qué te gusta, qué dudas tienes, con quién iría…">${esc(d.notes || '')}</textarea></label>`, '#8e44ad')}
       <button class="btn primary big-save">${editing ? 'Guardar cambios' : 'Guardar en «Por valorar»'}</button>
-      <p class="hint">Tu precio, plazo y notas solo los ves tú. La carrera (con su web, sin tu nombre) se crea también en Carreras para que otros la encuentren ya con sus datos y no se duplique. Cuando te decidas, pulsas «Apuntarme» desde la lista.</p>
     </form>
-    ${editing ? `<button class="btn block" data-act="w-repeat" data-id="${item.id}" data-back="1">${ico('cal')}Pasar al año que viene</button>
-    <p class="hint">Si este año no vas, se guarda la misma carrera para el año que viene (52 semanas después, «fecha por confirmar»), con tu web, precio y notas.</p>` : ''}
-    ${editing ? `<button class="btn danger ghost block" data-act="w-del" data-id="${item.id}" data-back="1">${ico('trash')}Descartar esta carrera</button>` : ''}`, { back: '#/mi/valorar', rtab: 'mi' });
+    ${editing ? `<div class="wf-acts"><button class="btn" data-act="w-repeat" data-id="${item.id}" data-back="1" title="Si este año no vas: se guarda la misma carrera para el año que viene (52 semanas después, fecha por confirmar)">${ico('cal')}Pasar al año que viene</button>
+      <button class="btn danger ghost wf-del" data-act="w-del" data-id="${item.id}" data-back="1" aria-label="Descartar esta carrera" title="Descartar esta carrera">${ico('trash')}</button></div>` : ''}`, { back: '#/mi/valorar', rtab: 'mi' });
 }
 
 
@@ -5728,19 +5726,32 @@ function foldHints(root) {
     if (text.length < TIP_MIN) return;                                                            // una frase corta se lee de un vistazo
     let h = 0; for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) | 0;
     const key = `tip:${(h >>> 0).toString(36)}`;
-    const d = document.createElement('details'); d.className = 'tip'; d.dataset.openKey = key; if (S.open?.[key]) d.open = true;
-    const sm = document.createElement('summary'); sm.setAttribute('aria-label', 'Más información'); sm.title = 'Más información'; sm.innerHTML = ico('info');
-    p.replaceWith(d); p.classList.add('tip-body'); d.append(sm, p);
+    const prev = p.previousElementSibling, head = prev && /^H[1-4]$/.test(prev.tagName) && !prev.querySelector('.tip-btn') ? prev : null;
+    p.classList.add('tip-body');
+    if (head) {   // detrás de un título: la «i» va al final de la propia línea del título y el texto cae justo debajo
+      const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'tip-btn'; bt.dataset.tip = key; bt.title = 'Más información'; bt.setAttribute('aria-label', 'Más información'); bt.innerHTML = ico('info');
+      head.classList.add('has-tip'); head.append(bt); p.dataset.tipKey = key; p.hidden = !S.open?.[key]; bt.setAttribute('aria-expanded', String(!p.hidden)); bt.classList.toggle('on', !p.hidden);
+    } else {      // suelta: la «i» queda siempre en el borde derecho, en la misma vertical que las demás
+      const d = document.createElement('details'); d.className = 'tip'; d.dataset.openKey = key; if (S.open?.[key]) d.open = true;
+      const sm = document.createElement('summary'); sm.setAttribute('aria-label', 'Más información'); sm.title = 'Más información'; sm.innerHTML = ico('info');
+      p.replaceWith(d); d.append(sm, p);
+    }
   });
 }
+document.addEventListener('click', (ev) => {
+  const bt = ev.target.closest?.('.tip-btn'); if (!bt) return;
+  const body = bt.closest('h1,h2,h3,h4')?.nextElementSibling; if (!body?.classList.contains('tip-body')) return;
+  ev.preventDefault(); body.hidden = !body.hidden; bt.setAttribute('aria-expanded', String(!body.hidden)); bt.classList.toggle('on', !body.hidden); (S.open ||= {})[bt.dataset.tip] = !body.hidden;
+});
 {
   let queued = false;
   const run = () => { queued = false; foldHints(document.getElementById('app')); document.querySelectorAll('dialog[open]').forEach(foldHints); };
   new MutationObserver(() => { if (!queued) { queued = true; queueMicrotask(run); } }).observe(document.body, { childList: true, subtree: true });
   run();
-  window.addEventListener('beforeprint', () => document.querySelectorAll('details.tip').forEach((d) => { d.dataset.wasOpen = d.open ? '1' : ''; d.open = true; }));
-  window.addEventListener('afterprint', () => document.querySelectorAll('details.tip').forEach((d) => { d.open = d.dataset.wasOpen === '1'; }));
+  window.addEventListener('beforeprint', () => document.querySelectorAll('details.tip, p.tip-body[data-tip-key]').forEach((d) => { if (d.tagName === 'P') { d.dataset.wasHidden = d.hidden ? '1' : ''; d.hidden = false; } else { d.dataset.wasOpen = d.open ? '1' : ''; d.open = true; } }));
+  window.addEventListener('afterprint', () => document.querySelectorAll('details.tip, p.tip-body[data-tip-key]').forEach((d) => { if (d.tagName === 'P') d.hidden = d.dataset.wasHidden === '1'; else d.open = d.dataset.wasOpen === '1'; }));
 }
+document.addEventListener('invalid', (ev) => { const d = ev.target.closest?.('details.fsec-d'); if (d && !d.open) d.open = true; }, true);
 window.addEventListener('hashchange', onRoute);
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); S.installEvt = e; if (S.runnerData) render(); });
 

@@ -2291,3 +2291,34 @@ details.tip > summary .ico { width: 15px; height: 15px; }
 details.tip[open] > summary { background: var(--accent); color: var(--on-accent); }
 details.tip > .tip-body { margin: .4rem 0 .2rem; padding: .55rem .75rem; border-radius: 10px; background: var(--accent-2); color: var(--text); font-size: .86rem; line-height: 1.4; text-align: left; }
 @media print { details.tip > summary { display: none; } }
+
+/* v212: «i» siempre en el borde derecho (en la línea del título si lo hay), carrera guardada con secciones plegables y resumen de Por valorar en una línea */
+.tip-body[hidden] { display: none !important; }
+h1.has-tip, h2.has-tip, h3.has-tip, h4.has-tip { display: flex; align-items: center; gap: .5rem; }
+.tip-btn { margin-left: auto; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; border-radius: 50%; cursor: pointer; color: var(--accent); background: var(--accent-2); border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--card)); }
+.tip-btn .ico { width: 15px; height: 15px; } .tip-btn.on { background: var(--accent); color: var(--on-accent); }
+.has-tip + .tip-body { margin: .1rem 0 .5rem; padding: .55rem .75rem; border-radius: 10px; background: var(--accent-2); color: var(--text); font-size: .86rem; line-height: 1.4; text-align: left; }
+details.tip { display: flex; flex-direction: column; align-items: flex-end; }
+details.tip > .tip-body { align-self: stretch; }
+@media print { .tip-btn { display: none; } }
+
+.fsec-d > summary.fsec-h { cursor: pointer; list-style: none; border-bottom: 0; padding: .45rem .75rem; }
+.fsec-d > summary.fsec-h::-webkit-details-marker { display: none; }
+.fsec-d[open] > summary.fsec-h { border-bottom: 2px solid var(--sc); }
+.fsec-d .fsec-tx { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.2; }
+.fsec-d .fsec-t { font-weight: 700; font-size: .98rem; }
+.fsec-d .fsec-p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .76rem; font-weight: 500; color: var(--muted); }
+.fsec-d .fsec-p:empty, .fsec-d[open] .fsec-p { display: none; }
+.fsec-d .fsec-n { width: 1.5rem; height: 1.5rem; font-size: .82rem; } .fsec-d .fsec-h > .ico:not(.fsec-chev) { width: 20px; height: 20px; }
+.fsec-d .fsec-chev { width: 18px; height: 18px; color: var(--muted); flex: none; transition: transform .15s; }
+.fsec-d[open] .fsec-chev { transform: rotate(180deg); }
+.rform > .fsec-d { margin: 0 0 .45rem; }
+.wf-acts { display: flex; gap: .5rem; margin-top: .6rem; } .wf-acts .btn { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; margin: 0; flex: 1; } .wf-acts .btn .ico { width: 17px; height: 17px; }
+.wf-acts .wf-del { flex: 0 0 auto; padding: .5rem .8rem; }
+
+.wline { display: flex; flex-wrap: wrap; align-items: center; gap: .15rem .4rem; margin: 0 0 .6rem; font-size: .85rem; color: var(--muted); }
+.wline b { color: var(--text); } .wline .ico { width: 14px; height: 14px; vertical-align: -2px; margin-right: .2rem; } .wline .bad, .wline .bad b { color: #c0261b; }
+
+.wrow { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin: 0 0 .6rem; } .wrow .wline { margin: 0; flex: 1; min-width: 0; flex-wrap: nowrap; white-space: nowrap; }
+.wline > span { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.wsort-b { flex: none; font-size: .78rem; padding: .3rem .6rem; }
