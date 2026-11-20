@@ -2244,3 +2244,9 @@ details.card.rcard { margin-bottom: 6px; }
 
 @media (max-width: 400px) { .bz-chips > span { font-size: .7rem; padding: .1rem .35rem; } .bz-chips .ico { display: none; } }
 .bz-chips { align-items: center; }
+
+/* la bonificación solo enseña lo que falta por rellenar */
+.bz-det.warn { margin: .6rem 0; border: 1px solid color-mix(in srgb, #d08a00 50%, var(--line)); border-radius: 12px; background: color-mix(in srgb, #e0a030 12%, var(--card)); padding: .45rem .7rem; }
+.bz-det.warn > summary { display: flex; align-items: center; gap: .45rem; color: var(--text); font-weight: 700; list-style: none; } .bz-det.warn > summary::-webkit-details-marker { display: none; }
+.bz-det.warn > summary .ico:first-child { width: 18px; height: 18px; color: #b87400; flex: none; } .bz-det.warn > summary span { flex: 1; }
+.bz-det.warn > summary .rules-chev { width: 18px; height: 18px; transition: transform .15s; } .bz-det.warn[open] > summary .rules-chev { transform: rotate(180deg); }

@@ -1245,18 +1245,16 @@ function bonusZones(st, cfg, planned = 0) {
   </div>`;
 }
 
-/** Lo que le falta al corredor en la temporada para el bono: inscripciones (y si están pagadas) y carreras sin resultado o sin crónica. */
+/** Lo que le falta rellenar al corredor en la temporada: carreras sin su resultado o sin crónica. */
 function bonusTodo(d, year) {
-  const today = d.today || todayISO(), me = d.me?.id;
-  const up = (d.registrations || []).filter((g) => !g.suspended && g.date >= today && yearOf(g.date) === year && (g.entries || []).some((e) => e.runner_id === me)).sort((a, b) => a.date.localeCompare(b.date));
-  const paid = up.filter((g) => g.entries.find((e) => e.runner_id === me)?.paid).length;
+  const today = d.today || todayISO();
   let rows = [];
   if (S.chron instanceof Set) {
     const c = chronicleStatus(d, S.chron, today, year), doneKeys = new Set(c.done.map((x) => x.key));
     const mineKeys = new Set([...(d.my_results || []).filter((r) => r.position).map(postKeyOf), ...(d.registrations || []).filter((g) => g.my_result).map(postKeyOf)]);
     rows = [...c.pending, ...c.done].map((x) => ({ ...x, res: mineKeys.has(x.key), cro: doneKeys.has(x.key) })).filter((r) => !r.res || !r.cro).sort((a, b) => b.date.localeCompare(a.date));
   }
-  return { up, paid, rows, noRes: rows.filter((r) => !r.res).length, noCro: rows.filter((r) => !r.cro).length };
+  return { rows };
 }
 
 function runnerBonusCard(d) {
@@ -1301,13 +1299,10 @@ function runnerBonusCard(d) {
     ${chips ? `<div class="bn-chips">${chips}</div>` : ''}
     ${msg}
     ${bonusZones(st, cfg, b.planned || 0)}
-    ${(() => { const t = bonusTodo(d, b.year); if (!t.up.length && !t.rows.length) return '';
-      return `<div class="bz-todo"><div class="bz-chips"><span class="ok" title="Carreras que ya cuentan para el bono">${ico('check')}<b>${st.count}</b> cuentan</span>${t.up.length ? `<span title="Inscritas (${t.paid} ${t.paid === 1 ? 'pagada' : 'pagadas'}): el detalle, en «Ver qué te falta»">${ico('cal')}<b>${t.up.length}</b> inscr.</span>` : ''}${t.noRes ? `<span class="warn" title="Carreras corridas sin tu resultado: no cuentan">${ico('flag')}<b>${t.noRes}</b> sin result.</span>` : ''}${t.noCro ? `<span class="warn" title="Carreras sin crónica pasada">${ico('book')}<b>${t.noCro}</b> sin crón.</span>` : ''}</div>
-        <details class="bz-det" data-open-key="bz-todo"${S.open?.['bz-todo'] ? ' open' : ''}><summary>${t.rows.length ? `Ver qué te falta (${t.rows.length + t.up.length})` : `Ver tus inscripciones (${t.up.length})`}</summary>
-          ${t.rows.length ? `<p class="hint">Una carrera <b>sin resultado no cuenta</b> para el bono. El resultado y la crónica son obligación del contrato: pásalos en cuanto puedas.</p>
-          <ul class="bz-rows">${t.rows.map((r) => `<li><span class="bz-n"><b>${esc(r.name)}</b><small class="muted">${esc(formatDate(r.date, false))}</small></span><span class="bz-act">${!r.res && !S.preview ? `<a class="btn small primary" href="${resultHref(r.id)}">Poner resultado</a>` : ''}${!r.cro && !S.preview ? `<button type="button" class="btn small" data-act="chro-toggle" data-key="${esc(r.key)}" data-done="1">✓ Crónica pasada</button>` : ''}</span></li>`).join('')}</ul>` : ''}
-          ${t.up.length ? `<h4>Inscrito en</h4><ul class="bz-rows">${t.up.map((g) => { const pd = g.entries.find((e) => e.runner_id === d.me.id)?.paid; return `<li><span class="bz-n"><b>${esc(g.name)}</b><small class="muted">${esc(formatDate(g.date, false))}</small></span><span class="bz-pay ${pd ? 'ok' : 'wait'}">${pd ? 'pagada' : 'sin pagar'}</span></li>`; }).join('')}</ul>` : ''}
-        </details></div>`; })()}
+    ${(() => { const t = bonusTodo(d, b.year); if (!t.rows.length) return '';   // solo lo que falta por rellenar; si no falta nada, no sale nada
+      return `<details class="bz-det warn" data-open-key="bz-todo"${S.open?.['bz-todo'] ? ' open' : ''}><summary>${ico('alert')}<span>Te falta rellenar <b>${t.rows.length}</b> ${t.rows.length === 1 ? 'carrera' : 'carreras'}</span>${ico('chevd', 'rules-chev')}</summary>
+        <p class="hint">Una carrera <b>sin resultado no cuenta</b> para el bono. El resultado y la crónica son obligación del contrato.</p>
+        <ul class="bz-rows">${t.rows.map((r) => `<li><span class="bz-n"><b>${esc(r.name)}</b><small class="muted">${esc(formatDate(r.date, false))} · falta ${!r.res && !r.cro ? 'resultado y crónica' : !r.res ? 'el resultado' : 'la crónica'}</small></span><span class="bz-act">${!r.res && !S.preview ? `<a class="btn small primary" href="${resultHref(r.id)}">Poner resultado</a>` : ''}${!r.cro && !S.preview ? `<button type="button" class="btn small" data-act="chro-toggle" data-key="${esc(r.key)}" data-done="1">✓ Crónica pasada</button>` : ''}</span></li>`).join('')}</ul></details>`; })()}
     ${b.planned ? `<p class="hint bn-plan">Con tus ${b.planned} inscripcion${b.planned === 1 ? '' : 'es'} de ${b.year} llegarías a ${proj.bonusCount}${proj.tier ? ` (${euros(proj.amount)})` : ''}${proj.reachesMinimum ? '' : ', aún por debajo del mínimo'}.</p>` : ''}
     ${rules}
   </section>`;
