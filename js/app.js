@@ -1227,18 +1227,19 @@ function chronicleCard(d) {
 }
 
 /** Barra de bonificación por zonas reales: pre-mínimo apagado (con la penalización), y un trozo por tramo (12–16, 17–21, 22 o más) con su importe debajo. */
-function bonusZones(st, cfg, planned = 0) {
+function bonusZones(st, cfg, planned = 0, sent = 0) {
   const tiers = tierRanges(st.tiers || tiersFor(cfg, st.contract));
   if (!tiers.length) return '';
   const extra = st.extra || 0, total = st.count + extra, first = tiers[0].from, last = tiers[tiers.length - 1].from;
   const segs = [{ from: 0, units: first, kind: 'pre', range: `0–${first - 1}`, amount: st.penalty ? `−${euros(st.penalty)}` : 'sin bono' },
     ...tiers.map((t, i) => ({ from: t.from, units: t.to != null ? t.to - t.from + 1 : 6, kind: `t${Math.min(i, 2)}`, range: t.text.replace(' a ', '–'), amount: euros(t.amount) }))];
   const max = last + 6, pct = (n) => Math.max(0, Math.min(100, (n / max) * 100));
-  const next = st.next, pill = `<b>${extra ? `${st.count} + ${extra}` : total}</b>${next ? `<small>${extra ? `${total} · ` : ''}+${st.missingToNext} → ${euros(next.amount)}</small>` : st.tier ? `<small>${extra ? `${total} · ` : ''}máximo</small>` : extra ? `<small>${total} con el plus</small>` : ''}`;
+  const conf = Math.max(0, st.count - sent), mixed = extra || sent;   // conf = carreras ya en resultados; sent = puesto enviado, aún sin pasar a resultados
+  const next = st.next, pill = `<b>${mixed ? `${conf}${sent ? ` + ${sent}` : ''}${extra ? ` + ${extra}` : ''}` : total}</b>${next ? `<small>${mixed ? `${total} · ` : ''}+${st.missingToNext} → ${euros(next.amount)}</small>` : st.tier ? `<small>${mixed ? `${total} · ` : ''}máximo</small>` : mixed ? `<small>${total} en total</small>` : ''}`;
   return `<div class="bz" role="img" aria-label="${total} carreras${extra ? ` (con ${extra} de plus)` : ''}; tramos: ${tiers.map((t) => `${t.text} carreras ${euros(t.amount)}`).join(', ')}">
     <div class="bz-bar">
       ${segs.map((g) => { const fill = (n) => Math.max(0, Math.min(1, (n - g.from) / g.units)) * 100;
-        return `<div class="bz-seg ${g.kind}${g.kind === 'pre' && st.reachesMinimum ? ' done' : ''}" style="flex:${g.units}">${extra ? `<i class="x" style="width:${fill(total)}%"></i>` : ''}<i style="width:${fill(st.count)}%"></i></div>`; }).join('')}
+        return `<div class="bz-seg ${g.kind}${g.kind === 'pre' && st.reachesMinimum ? ' done' : ''}" style="flex:${g.units}">${extra ? `<i class="x" style="width:${fill(total)}%"></i>` : ''}${sent ? `<i class="s" style="width:${fill(st.count)}%"></i>` : ''}<i style="width:${fill(conf)}%"></i></div>`; }).join('')}
       ${planned ? `<span class="bz-plan" style="left:${pct(total)}%;width:${Math.max(0, pct(Math.min(max, total + planned)) - pct(total))}%" title="Con tus inscripciones"></span>` : ''}
       <span class="bz-you" style="left:min(max(${pct(total).toFixed(1)}%, 52px), calc(100% - 52px))">${pill}</span>
     </div>
@@ -1281,6 +1282,8 @@ function runnerBonusCard(d) {
     pendingPlus ? `<span class="bn-chip wait">${ico('clock')}${pendingPlus} plus ${plural(pendingPlus, 'pendiente', 'pendientes')}</span>` : '',
     st.suspended ? `<span class="bn-chip">${ico('ban')}${st.suspended} ${plural(st.suspended, 'suspendida', 'suspendidas')}</span>` : '',
   ].filter(Boolean).join('');
+  const sentList = (d.registrations || []).filter((g) => g.my_result && !g.suspended && g.date < (d.today || todayISO()) && yearOf(g.date) === b.year);   // puesto enviado, aún sin pasar a resultados
+  const sentDays = sentList.reduce((n, g) => n + numDays(g.date, g.end_date), 0);
   const tiers = st.tiers || [];
   const rules = `<details class="rules" data-open-key="rules"${S.open?.rules ? ' open' : ''}>
     <summary>${ico('info')}<span>Ver tramos y normativa</span>${ico('chevd', 'rules-chev')}</summary>
@@ -1298,8 +1301,7 @@ function runnerBonusCard(d) {
   <section class="card bonus-card">
     <p class="bn-main"><b>${st.count}</b> ${plural(st.count, 'carrera realizada', 'carreras realizadas')}${st.tier ? ` · <span class="bn-amt">${euros(st.amount)}</span>` : ''}</p>
     ${(() => { // de dónde sale el número: carreras con resultado (con sus jornadas), inscripciones con puesto enviado y, si no cuadra, lo que cuenta el servidor
-      const yr = b.year, today = d.today || todayISO(), resY = (d.my_results || []).filter((r) => yearOf(r.date) === yr), daysRes = resY.reduce((n, r) => n + numDays(r.date, r.end_date), 0);
-      const sentY = (d.registrations || []).filter((g) => g.my_result && !g.suspended && g.date < today && yearOf(g.date) === yr), daysSent = sentY.reduce((n, g) => n + numDays(g.date, g.end_date), 0);
+      const resY = (d.my_results || []).filter((r) => yearOf(r.date) === b.year), daysRes = resY.reduce((n, r) => n + numDays(r.date, r.end_date), 0), sentY = sentList, daysSent = sentDays;
       const calc = daysRes + daysSent;
       if (daysRes === resY.length && !sentY.length && calc === st.count) return '';
       const parts = [`${resY.length} ${plural(resY.length, 'carrera finalizada', 'carreras finalizadas')}${daysRes !== resY.length ? ` (${daysRes} jornadas: las pruebas de varios días cuentan un día cada una)` : ''}`];
@@ -1307,7 +1309,8 @@ function runnerBonusCard(d) {
       return `<p class="bn-how">${parts.join(' + ')}${calc !== st.count ? ` <b>· el servidor cuenta ${st.count}: avisa a la dirección</b>` : ''}.</p>`; })()}
     ${chips ? `<div class="bn-chips">${chips}</div>` : ''}
     ${msg}
-    ${bonusZones(st, cfg, b.planned || 0)}
+    ${bonusZones(st, cfg, b.planned || 0, sentDays)}
+    ${sentDays ? `<p class="bz-key"><i class="k-s"></i>Rayada: puesto enviado, ya cuenta (pasa a resultados en una semana)</p>` : ''}
     ${(() => { const t = bonusTodo(d, b.year); if (!t.rows.length) return '';   // solo lo que falta por rellenar; si no falta nada, no sale nada
       return `<details class="bz-det warn" data-open-key="bz-todo"${S.open?.['bz-todo'] ? ' open' : ''}><summary>${ico('alert')}<span>Te falta rellenar <b>${t.rows.length}</b> ${t.rows.length === 1 ? 'carrera' : 'carreras'}</span>${ico('chevd', 'rules-chev')}</summary>
         <p class="hint">Una carrera <b>sin resultado no cuenta</b> para el bono. El resultado y la crónica son obligación del contrato.</p>
