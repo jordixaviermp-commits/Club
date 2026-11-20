@@ -2139,3 +2139,22 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .nt-me { display: inline-flex; align-items: center; gap: .35rem; font-size: .85rem; font-weight: 700; opacity: .95; } .nt-me .ico { width: 16px; height: 16px; } .nt-me.on { color: #b7ffd0; }
 .nt-btn { background: #fff; color: #222; border: 0; font-weight: 800; }
 .nt-btn { white-space: nowrap; }
+
+/* Calendario más compacto (Carreras y Redes): celdas y cabecera más bajas */
+.cal-grid { gap: 2px; }
+.cal-dow { font-size: .66rem; padding: 0; }
+.cal-cell { height: 32px; font-size: .84rem; border-radius: 8px; }
+.cal-cell .dots { bottom: 2px; gap: 2px; } .cal-cell .dots i { width: 5px; height: 5px; }
+.cal-cell .cnt { top: -5px; right: -4px; min-width: 15px; height: 15px; font-size: .62rem; padding: 0 3px; border-radius: 8px; }
+.cal-cell.sel { outline-width: 2px; }
+.cal-head { gap: .3rem; margin-bottom: .3rem; padding: .2rem; }
+.cal-nav { width: 32px; height: 32px; font-size: 1.25rem; }
+.cal-head { grid-template-columns: 32px 1fr 32px; }
+.cal-title h2 { font-size: 1rem; } .cal-sub { font-size: .74rem; line-height: 1.2; }
+.cal-months { margin-top: .4rem; }
+
+/* con el calendario abierto, la tarjeta de la próxima carrera del equipo ocupa menos */
+.next-team.compact { padding: .6rem .8rem .7rem; margin-bottom: .5rem; }
+.next-team.compact .nt-n { font-size: 1.1rem; } .next-team.compact .nt-d { margin: .1rem 0 .4rem; font-size: .82rem; }
+.next-team.compact .nt-people { display: none; }
+.next-team.compact .nt-foot { margin-top: .45rem; } .next-team.compact .nt-btn { min-height: 34px; padding: .2rem .8rem; }
