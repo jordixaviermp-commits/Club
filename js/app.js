@@ -1701,6 +1701,8 @@ function viewWatchForm(id) {
       <button class="btn primary big-save">${editing ? 'Guardar cambios' : 'Guardar en «Por valorar»'}</button>
       <p class="hint">Tu precio, plazo y notas solo los ves tú. La carrera (con su web, sin tu nombre) se crea también en Carreras para que otros la encuentren ya con sus datos y no se duplique. Cuando te decidas, pulsas «Apuntarme» desde la lista.</p>
     </form>
+    ${editing ? `<button class="btn block" data-act="w-repeat" data-id="${item.id}" data-back="1">${ico('cal')}Pasar al año que viene</button>
+    <p class="hint">Si este año no vas, se guarda la misma carrera para el año que viene (52 semanas después, «fecha por confirmar»), con tu web, precio y notas.</p>` : ''}
     ${editing ? `<button class="btn danger ghost block" data-act="w-del" data-id="${item.id}" data-back="1">${ico('trash')}Descartar esta carrera</button>` : ''}`, { back: '#/mi/valorar', rtab: 'mi' });
 }
 
@@ -4797,6 +4799,7 @@ const actions = {
     const next = nextYearWatch(w);
     const ok = await run(async () => { await api.runnerWatchSave(S.code, null, next); await api.runnerWatchDelete(S.code, w.id); await loadWatch(); return true; },
       `Guardada para el año que viene: ${dayMon(next.date)} (por confirmar)`);
+    if (ok && el.dataset.back) { S.rdraft = null; go('#/mi/valorar'); return; }
     if (ok) render();
   },
   async 'w-add-fed'(el) {
@@ -5712,6 +5715,32 @@ $app.addEventListener('toggle', (ev) => {
   const k = ev.target.dataset?.toggleKey; if (k) S[k] = ev.target.open;
   const o = ev.target.dataset?.openKey; if (o) (S.open ||= {})[o] = ev.target.open;
 }, true);
+// ---------- Textos explicativos plegados ----------
+// Los párrafos de ayuda («hint») no se ven como bloques de texto: quedan en una «i» pequeña que se toca para leerlos. Se hace aquí, una sola vez
+// y para toda la app (pantallas y cuadros), observando lo que se pinta; así cualquier texto de ayuda nuevo sale plegado sin tener que acordarse.
+const TIP_MIN = 60;
+function foldHints(root) {
+  if (!root?.querySelectorAll) return;
+  root.querySelectorAll('p.hint:not(.tip-body)').forEach((p) => {
+    if (p.id || p.className.replace(/\b(hint|center)\b/g, '').trim()) return;                 // los que tienen otra función (estado, contador…) se dejan
+    if (p.closest('details.tip, summary, label, .print-only, .rform-help, .ig-help, [data-nofold]')) return;
+    const text = p.textContent.replace(/\s+/g, ' ').trim();
+    if (text.length < TIP_MIN) return;                                                            // una frase corta se lee de un vistazo
+    let h = 0; for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) | 0;
+    const key = `tip:${(h >>> 0).toString(36)}`;
+    const d = document.createElement('details'); d.className = 'tip'; d.dataset.openKey = key; if (S.open?.[key]) d.open = true;
+    const sm = document.createElement('summary'); sm.setAttribute('aria-label', 'Más información'); sm.title = 'Más información'; sm.innerHTML = ico('info');
+    p.replaceWith(d); p.classList.add('tip-body'); d.append(sm, p);
+  });
+}
+{
+  let queued = false;
+  const run = () => { queued = false; foldHints(document.getElementById('app')); document.querySelectorAll('dialog[open]').forEach(foldHints); };
+  new MutationObserver(() => { if (!queued) { queued = true; queueMicrotask(run); } }).observe(document.body, { childList: true, subtree: true });
+  run();
+  window.addEventListener('beforeprint', () => document.querySelectorAll('details.tip').forEach((d) => { d.dataset.wasOpen = d.open ? '1' : ''; d.open = true; }));
+  window.addEventListener('afterprint', () => document.querySelectorAll('details.tip').forEach((d) => { d.open = d.dataset.wasOpen === '1'; }));
+}
 window.addEventListener('hashchange', onRoute);
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); S.installEvt = e; if (S.runnerData) render(); });
 

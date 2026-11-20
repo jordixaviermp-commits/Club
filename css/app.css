@@ -2278,3 +2278,16 @@ details.card.rcard { margin-bottom: 6px; }
 .wc-acts .btn, .wc-acts .btn.primary { flex: 1 1 auto; margin: 0; justify-content: center; padding: .45rem .35rem; font-size: .78rem; gap: .2rem; white-space: nowrap; min-width: 0; }
 .wc-acts .btn .ico { width: 13px; height: 13px; flex: none; }
 .wc-acts .btn.wc-edit { flex: 0 0 auto; padding: .45rem .6rem; } .wc-acts .btn.wc-edit .ico { width: 16px; height: 16px; }
+
+/* v210: botones de ancho completo (p. ej. «Descartar esta carrera»): icono pequeño y texto centrado, no un icono gigante */
+.btn.block { align-items: center; justify-content: center; gap: .45rem; }
+.btn.block .ico { width: 18px; height: 18px; flex: none; }
+
+/* v211: textos de ayuda plegados en una «i» (se tocan para leer) */
+details.tip { display: block; margin: .25rem 0; }
+details.tip > summary { list-style: none; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; cursor: pointer; color: var(--accent); background: var(--accent-2); border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--card)); user-select: none; -webkit-tap-highlight-color: transparent; }
+details.tip > summary::-webkit-details-marker { display: none; }
+details.tip > summary .ico { width: 15px; height: 15px; }
+details.tip[open] > summary { background: var(--accent); color: var(--on-accent); }
+details.tip > .tip-body { margin: .4rem 0 .2rem; padding: .55rem .75rem; border-radius: 10px; background: var(--accent-2); color: var(--text); font-size: .86rem; line-height: 1.4; text-align: left; }
+@media print { details.tip > summary { display: none; } }
