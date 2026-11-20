@@ -370,6 +370,22 @@
   },
   {
    "source": "LIGA",
+   "league": "MTB Alpine Cup 2027",
+   "circuit": "MTB Alpine Cup",
+   "date": "2027-07-03",
+   "name": "MTB Alpine Cup – MB Race Megève-Combloux",
+   "place": "Megève y Combloux",
+   "province": "",
+   "country": "Francia",
+   "modality": "BTT",
+   "subtype": "UXCM",
+   "discipline": "BTT",
+   "kind": "Competición",
+   "info": "MTB Alpine Cup 2027 · MB Race, del 2 al 4 de julio · MB Ultra Somfy de 70, 100 o 140 km (3.500, 5.000 o 7.000 m D+) · UCI Hors Classe en los 70 km · Alta Saboya",
+   "url": "https://www.alpinecup.com"
+  },
+  {
+   "source": "LIGA",
    "league": "Xallenger BTT Terres de l'Ebre 2027",
    "date": "2027-07-04",
    "name": "16a BTT L'Auberge",
