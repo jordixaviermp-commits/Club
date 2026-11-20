@@ -1,6 +1,6 @@
 {
  "_nota": "Ligas y circuitos que se corren cada año y a los que suele ir gente del club. Se escribe a mano (no lo toca el lector de las federaciones). El campo «subtype» (opcional) rellena el formato. «url» es opcional. Para añadir otra liga, copia un bloque de carrera y cambia source/league/fechas. Comprobar siempre las fechas en la web de la liga. El campo «circuit» (opcional) marca la carrera como puntuable de un circuito con ese nombre: se usa para el podio en la general final (cláusula 9). Escríbelo igual en todas las pruebas de la liga.",
- "updated_at": "2026-11-18",
+ "updated_at": "2026-11-20",
  "races": [
   {
    "source": "LIGA",
@@ -40,6 +40,19 @@
    "discipline": "BTT",
    "kind": "Competición",
    "info": "6a Hivernal de Resistència BTT · Tot Vici en Bici, KPT y Metalbikers"
+  },
+  {
+   "source": "LIGA",
+   "league": "La Invernal Motorland 2027",
+   "date": "2027-01-23",
+   "name": "La Invernal Motorland",
+   "place": "Alcañiz (Motorland Aragón)",
+   "province": "Teruel",
+   "country": "España",
+   "modality": "Carretera",
+   "discipline": "Carretera",
+   "kind": "Competición",
+   "info": "La Invernal · Motorland Aragón · 23 y 24 de enero · Ciclismo, carrera a pie y patinaje en circuito · Inscripciones muy pronto"
   },
   {
    "source": "LIGA",
@@ -369,6 +382,34 @@
    "info": "Xallenger BTT Terres de l'Ebre 2027",
    "url": "https://www.xallengerbtt.net",
    "circuit": "Xallenger BTT Terres de l'Ebre"
+  },
+  {
+   "source": "LIGA",
+   "league": "Europeos UEC MTB La Molina 2027",
+   "date": "2027-08-12",
+   "name": "Campeonato de Europa UEC MTB XCO Máster – La Molina",
+   "place": "La Molina",
+   "province": "Girona",
+   "country": "España",
+   "modality": "BTT",
+   "subtype": "XCO",
+   "discipline": "BTT",
+   "kind": "Competición",
+   "info": "UEC MTB XCO Masters European Championships 2027 · La Molina · 12 al 15 de agosto (las fechas del cartel son las del evento; el día de la prueba de máster aún no está publicado)"
+  },
+  {
+   "source": "LIGA",
+   "league": "Europeos UEC MTB La Molina 2027",
+   "date": "2027-08-12",
+   "name": "Campeonato de Europa UEC MTB Descenso – La Molina",
+   "place": "La Molina",
+   "province": "Girona",
+   "country": "España",
+   "modality": "BTT",
+   "subtype": "Otra",
+   "discipline": "BTT",
+   "kind": "Competición",
+   "info": "UEC MTB Downhill European Championships 2027 · La Molina · 12 al 15 de agosto (las fechas del cartel son las del evento; el día de cada prueba aún no está publicado)"
   },
   {
    "source": "LIGA",

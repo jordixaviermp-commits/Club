@@ -73,3 +73,17 @@ test('Marathon Cup BTT 2027: 3 pruebas de XCM que se encuentran por liga, pueblo
   assert.ok(mc.every((r) => r.subtype === 'XCM' && r.circuit === 'Marathon Cup BTT'));
   assert.equal(mc.find((r) => r.place === 'Naturland').country, 'Andorra');
 });
+
+test('La Invernal Motorland 2027: sale al buscar por nombre o circuito', () => {
+  const names = (q) => searchRaces(q, data.races).map((r) => r.name);
+  assert.ok(names('invernal').includes('La Invernal Motorland'));
+  assert.ok(names('motorland').includes('La Invernal Motorland'));
+  assert.equal(data.races.find((r) => r.name === 'La Invernal Motorland').date, '2027-01-23');
+});
+
+test('Europeos UEC MTB La Molina 2027 (XCO Máster y Descenso): salen al buscar por nombre o pueblo', () => {
+  const names = (q) => searchRaces(q, data.races).map((r) => r.name);
+  assert.ok(names('europa').includes('Campeonato de Europa UEC MTB XCO Máster – La Molina'));
+  assert.ok(names('descenso').includes('Campeonato de Europa UEC MTB Descenso – La Molina'));
+  assert.equal(data.races.filter((r) => r.league === 'Europeos UEC MTB La Molina 2027').length, 2);
+});
