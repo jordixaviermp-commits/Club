@@ -112,7 +112,7 @@ const typeTag = (x) => {
 /** Campos «Disciplina» (según la modalidad: obligatoria en BTT y Carretera) y «Distancia» de los formularios. `attr` = data-f (dirección) o data-rf (corredor). */
 /** Sección numerada de un formulario (cabecera de color con icono) para que se encuentre cada cosa de un vistazo. */
 /** Sección plegable de un formulario: título con su resumen a la derecha; se abre al tocar (y recuerda si estaba abierta). */
-const fsecD = (key, n, icon, title, preview, body, color, openDefault = false) => `<details class="fsec fsec-d" style="--sc:${color}" data-open-key="${key}"${(S.open?.[key] ?? openDefault) ? ' open' : ''}><summary class="fsec-h"><span class="fsec-n">${n}</span>${ico(icon)}<span class="fsec-tx"><span class="fsec-t">${title}</span><span class="fsec-p">${preview ? esc(preview) : ''}</span></span>${ico('chevd', 'fsec-chev')}</summary><div class="fsec-b">${body}</div></details>`;
+const fsecD = (key, n, icon, title, preview, body, color, openDefault = false) => `<details class="fsec fsec-d" style="--sc:${color}" data-open-key="${key}"${S.open?.[key] ? ' open' : ''}><summary class="fsec-h"><span class="fsec-n">${n}</span>${ico(icon)}<span class="fsec-tx"><span class="fsec-t">${title}</span><span class="fsec-p">${preview ? esc(preview) : ''}</span></span>${ico('chevd', 'fsec-chev')}</summary><div class="fsec-b">${body}</div></details>`;
 /** Resumen de una línea de cada sección del formulario de carrera (lo que se ve con la sección plegada). */
 const racePreview = (d) => [
   d.name,
@@ -226,6 +226,10 @@ const go = (hash) => { if (location.hash === hash) onRoute(); else location.hash
 let landed = false;
 async function onRoute() {
   const { view, id } = parseRoute();
+  if (S.lastHash !== location.hash) {      // al entrar en otra pantalla, las secciones plegables de los formularios vuelven a salir plegadas
+    S.lastHash = location.hash;
+    if (S.open) for (const k of Object.keys(S.open)) if (/^(wf|rf|af)\d$/.test(k)) delete S.open[k];
+  }
   if (view === 'c' && id) {               // llegada desde el enlace personal
     const code = extractCode('#/c/' + id);
     S.code = code; store.set(CODE_KEY, code); S.runnerData = null;
