@@ -2185,3 +2185,10 @@ h2.section::before { width: 4px; }
 .rc-ins { min-width: 38px; padding: .1rem .25rem; } .rc-ins b { font-size: 1rem; }
 details.card.rcard { margin-bottom: 6px; }
 .pulse-legend b { color: var(--text); margin-left: .1rem; }
+/* Próxima del equipo: degradado en los colores de la app (azul pizarra → cian de la marca) en vez del naranja */
+.next-team { background: radial-gradient(120% 140% at 100% 0, rgba(0, 169, 214, .55) 0, transparent 60%), linear-gradient(135deg, #284556 0%, #1d5f7a 100%); box-shadow: 0 8px 22px rgba(40, 69, 86, .32); }
+.next-team .nt-btn { color: #284556; }
+.next-team .nt-pill { background: rgba(255, 255, 255, .16); border-color: rgba(255, 255, 255, .32); }
+.next-team .nt-when { background: #ffd84d; color: #3a2a00; border-color: #ffd84d; }
+.next-team .nt-me.on { color: #a9f0c8; }
+.next-team.wk { outline-width: 2px; outline-color: #f3cf55; }
