@@ -774,3 +774,20 @@ test('tramos de bonificación como rangos: 12 a 16 · 17 a 21 · 22 o más', asy
   assert.deepEqual(tierRanges(DEFAULT_BONUS.tiersByContract.renovacion_sin_licencia).map((r) => [r.text, r.amount]), [['12 a 16', 100], ['17 a 21', 150], ['22 o más', 200]]);
   assert.deepEqual(tierRanges([]), []);
 });
+
+test('historial del equipo: barras por semana, orden y tendencia', async () => {
+  const { teamMoves } = await import('../js/logic.js');
+  const now = new Date('2026-11-20T10:00:00Z');   // viernes
+  const at = (d) => `${d}T09:00:00Z`;
+  const moves = [
+    { name: 'A', at: at('2026-11-20') }, { name: 'B', at: at('2026-11-17') }, { name: 'C', at: at('2026-11-16') },   // esta semana (lun 16)
+    { name: 'D', at: at('2026-11-12') },                                                                           // semana anterior
+    { name: 'E', at: at('2026-10-05') }, { name: 'F', at: at('2026-09-01') }, { name: 'X', at: 'no-fecha' },
+  ];
+  const r = teamMoves(moves, now);
+  assert.deepEqual(r.list.map((m) => m.name), ['A', 'B', 'C', 'D', 'E', 'F']);
+  assert.equal(r.list[0].ago, 0); assert.equal(r.list[3].ago, 8);
+  assert.equal(r.bars.length, 8); assert.equal(r.bars[7].n, 3); assert.equal(r.bars[6].n, 1);
+  assert.equal(r.recent, 4); assert.equal(r.before, 1); assert.equal(r.trend, 3);
+  assert.deepEqual(teamMoves(null, now).bars.map((b) => b.n), [0, 0, 0, 0, 0, 0, 0, 0]);
+});

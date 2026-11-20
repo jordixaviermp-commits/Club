@@ -697,6 +697,25 @@ begin
         from registrations g), '[]'::jsonb));
 end $$;
 
+-- Últimas inscripciones del equipo (quién se apunta a qué y cuándo): historial visual de «Carreras».
+create or replace function public.runner_team_moves(p_code text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+begin
+  if not exists (select 1 from runners where code = p_code) then
+    raise exception 'enlace_no_valido' using errcode = '28000';
+  end if;
+  return coalesce((
+    select jsonb_agg(s.x order by s.moved_at desc) from (
+      select jsonb_build_object('runner_id', r.id, 'name', r.name, 'race_id', g.id, 'race', g.name, 'date', g.date,
+                                'modality', g.modality, 'subtype', g.subtype, 'province', g.province, 'at', e.created_at) as x,
+             e.created_at as moved_at
+        from registration_entries e
+        join runners r on r.id = e.runner_id
+        join registrations g on g.id = e.registration_id
+       where e.created_at > now() - interval '120 days' and not g.suspended
+       order by e.created_at desc limit 60) s), '[]'::jsonb);
+end $$;
+
 -- Resumen del equipo para los corredores: todas las carreras con resultados y la plantilla (solo nombres).
 -- No incluye enlaces, contratos, bonos ni notas.
 create or replace function public.runner_team(p_code text)
@@ -1639,7 +1658,7 @@ grant execute on function public.runner_set_registration_url(text, uuid, text), 
                           public.runner_update_race(text, uuid, jsonb), public.runner_delete_race(text, uuid), public.runner_set_suspended(text, uuid, boolean),
                           public.runner_report_result(text, text, uuid, int, text, text, int),
                           public.runner_documents_list(text), public.runner_get_document(text, uuid), public.runner_contract_template(text), public.runner_get_contract_template(text),
-                          public.runner_team(text), public.runner_chronicles(text), public.runner_chronicles_team(text), public.runner_social_impact(text), public.runner_chronicle_set(text, text, boolean),
+                          public.runner_team(text), public.runner_team_moves(text), public.runner_chronicles(text), public.runner_chronicles_team(text), public.runner_social_impact(text), public.runner_chronicle_set(text, text, boolean),
                           public.runner_leave(text, uuid), public.runner_set_paid(text, uuid, boolean, numeric, date), public.runner_join_race(text, uuid, text),
                           public.runner_set_race_type(text, uuid, text, text), public.runner_propose_circuit(text, text, int, int, text),
                           public.runner_cancel_circuit(text, uuid), public.runner_news(text), public.runner_set_race_details(text, uuid, text, numeric), public.runner_complete_race(text, text, uuid, jsonb), public.auto_promote_registrations(),

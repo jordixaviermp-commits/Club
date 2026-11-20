@@ -3,7 +3,7 @@ import { CONFIG } from './config.js';
 import { supabaseApi, demoApi, friendlyError, cleanWeb } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, disciplineKey, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
-  parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
+  teamMoves, parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
   directorBoard, raceImpact, tierRanges, nextTeamRace, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
@@ -112,7 +112,7 @@ const typeTag = (x) => {
 /** Campos «Disciplina» (según la modalidad: obligatoria en BTT y Carretera) y «Distancia» de los formularios. `attr` = data-f (dirección) o data-rf (corredor). */
 /** Sección numerada de un formulario (cabecera de color con icono) para que se encuentre cada cosa de un vistazo. */
 /** Sección plegable de un formulario: título con su resumen a la derecha; se abre al tocar (y recuerda si estaba abierta). */
-const fsecD = (key, n, icon, title, preview, body, color, openDefault = false) => `<details class="fsec fsec-d" style="--sc:${color}" data-open-key="${key}"${(S.open?.[key] ?? openDefault) ? ' open' : ''}><summary class="fsec-h"><span class="fsec-n">${n}</span>${ico(icon)}<span class="fsec-tx"><span class="fsec-t">${title}</span><span class="fsec-p">${preview ? esc(preview) : ''}</span></span>${ico('chevd', 'fsec-chev')}</summary><div class="fsec-b">${body}</div></details>`;
+const fsecD = (key, n, icon, title, preview, body, color, openDefault = false) => `<details class="fsec fsec-d" style="--sc:${color}" data-open-key="${key}"${S.open?.[key] ? ' open' : ''}><summary class="fsec-h"><span class="fsec-n">${n}</span>${ico(icon)}<span class="fsec-tx"><span class="fsec-t">${title}</span><span class="fsec-p">${preview ? esc(preview) : ''}</span></span>${ico('chevd', 'fsec-chev')}</summary><div class="fsec-b">${body}</div></details>`;
 /** Resumen de una línea de cada sección del formulario de carrera (lo que se ve con la sección plegada). */
 const racePreview = (d) => [
   d.name,
@@ -226,6 +226,10 @@ const go = (hash) => { if (location.hash === hash) onRoute(); else location.hash
 let landed = false;
 async function onRoute() {
   const { view, id } = parseRoute();
+  if (S.lastHash !== location.hash) {      // al entrar en otra pantalla, las secciones plegables de los formularios vuelven a salir plegadas
+    S.lastHash = location.hash;
+    if (S.open) for (const k of Object.keys(S.open)) if (/^(wf|rf|af)\d$/.test(k)) delete S.open[k];
+  }
   if (view === 'c' && id) {               // llegada desde el enlace personal
     const code = extractCode('#/c/' + id);
     S.code = code; store.set(CODE_KEY, code); S.runnerData = null;
@@ -292,7 +296,7 @@ async function loadImpact() {
 }
 async function loadRunner() {
   if (!S.session?.isAdmin) api.runnerPing?.(S.code).catch(() => {});   // actividad: última vez que abrió la app
-  try { S.runnerData = await api.runnerView(S.code); await loadNews(); await loadCorrections(); await loadChron(); await loadWatch(); }
+  try { S.moves = undefined; S.runnerData = await api.runnerView(S.code); await loadNews(); await loadCorrections(); await loadChron(); await loadWatch(); }
   catch (e) {
     S.runnerData = null;
     if (/enlace_no_valido/.test(String(e?.message))) { store.del(CODE_KEY); S.code = null; }
@@ -1453,7 +1457,29 @@ function runnerRegCard(g, opts = {}) {
   }
 
 /** Barra de «participaciones futuras» del equipo: cuántas inscripciones hay ya en las próximas carreras, por mes (para animar a apuntarse y a crear carreras). */
+/** Historial visual de inscripciones del equipo: gráfica por semanas, tendencia y línea de tiempo de los últimos movimientos. */
+async function ensureMoves() {
+  if (S.moves !== undefined || !(S.code || S.previewCode)) return;
+  S.moves = 'loading';
+  try { S.moves = (await api.runnerTeamMoves(S.code || S.previewCode)) || null; } catch { S.moves = null; }
+  const box = $app.querySelector('#pulse-box');
+  if (box && S.runnerData && !searchActive()) box.innerHTML = S.regView === 'cal' ? '' : teamPulse(S.runnerData);
+}
+function movesBlock() {
+  if (!Array.isArray(S.moves) || !S.moves.length) return '';
+  const m = teamMoves(S.moves), MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  const mx = Math.max(1, ...m.bars.map((b) => b.n)), items = m.list.slice(0, 30);
+  const ago = (n) => (n === 0 ? 'hoy' : n === 1 ? 'ayer' : n < 14 ? `hace ${n} días` : `hace ${Math.round(n / 7)} sem.`);
+  const row = (x) => `<li class="mv-i"><i class="mv-dot ${discClass(x.modality, x.subtype)}"></i><span class="mv-tx"><b>${esc(x.name.split(' ')[0])}</b> se apuntó a <b>${esc(x.race)}</b><small>${esc(dayMon(x.date))} · ${esc(x.subtype || x.modality)}</small></span><span class="mv-ago">${ago(x.ago)}</span></li>`;
+  const trend = m.trend > 0 ? `<span class="up">▲ ${m.trend} más que las 4 semanas previas</span>` : m.trend < 0 ? `<span class="down">▼ ${-m.trend} menos que las 4 semanas previas</span>` : '<span>= igual que las 4 semanas previas</span>';
+  return `<div class="mv"><h4>${ico('clock')}Últimos movimientos</h4>
+    <div class="mv-bars" role="img" aria-label="Inscripciones por semana, últimas 8 semanas">${m.bars.map((b, i) => { const d = new Date(b.start); return `<div class="mv-b${i === m.bars.length - 1 ? ' now' : ''}"><em>${b.n || ''}</em><span style="height:${Math.max(b.n ? 8 : 2, (b.n / mx) * 100)}%"></span><small>${d.getUTCDate()} ${MES[d.getUTCMonth()]}</small></div>`; }).join('')}</div>
+    <p class="mv-trend">${trend}</p>
+    <ul class="mv-list">${items.slice(0, 6).map(row).join('')}</ul>
+    ${items.length > 6 ? `<details class="mv-more" data-open-key="mvmore"${S.open?.mvmore ? ' open' : ''}><summary>Ver ${items.length - 6} más</summary><ul class="mv-list">${items.slice(6).map(row).join('')}</ul></details>` : ''}</div>`;
+}
 function teamPulse(d) {
+  ensureMoves();
   const today = d.today || todayISO();
   const up = d.registrations.filter((g) => !g.suspended && g.date >= today && (g.entries || []).length);
   if (!up.length) return '';
@@ -1479,7 +1505,7 @@ function teamPulse(d) {
       <em>${m.total}</em><div class="mstack" style="height:${(m.total / mx) * 100}%">${discs.filter((k) => m.discs[k]).reverse().map((k) => { const [dm, ds] = k.split('|');
         return `<span class="${discClass(dm, ds)}" style="flex:${m.discs[k]}" title="${esc(discLabel(dm, ds))}: ${m.discs[k]}"></span>`; }).join('')}</div>
       <b>${MES[Number(ym.slice(5)) - 1]}</b></button>`).join('')}</div>
-    <p class="pulse-legend">${discs.map((k) => { const [dm, ds] = k.split('|'); return `<span class="${discClass(dm, ds)}"><i></i>${esc(discLabel(dm, ds))} <b>${tot[k]}</b></span>`; }).join('')}</p></details>`;
+    <p class="pulse-legend">${discs.map((k) => { const [dm, ds] = k.split('|'); return `<span class="${discClass(dm, ds)}"><i></i>${esc(discLabel(dm, ds))} <b>${tot[k]}</b></span>`; }).join('')}</p>${movesBlock()}</details>`;
 }
 
 /** Tarjeta «Planificar ruta» (herramienta ruta/): va en Carreras, justo bajo el buscador. */
@@ -1743,8 +1769,8 @@ function viewRunnerContract() {
   return frame(runnerTitle(), `
     ${previewBanner()}
     ${runnerBonusCard(S.runnerData)}
-    ${clubLinksCard()}
     ${myDocsCard()}
+    ${clubLinksCard()}
     ${licenseCard()}`,
   { rtab: 'contrato' });
 }

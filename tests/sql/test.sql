@@ -181,6 +181,9 @@ select pg_temp.check((runner_view('BBBBBBBBBB')->'my_results')::text not like '%
 select pg_temp.check(jsonb_array_length(runner_team('BBBBBBBBBB')->'races') >= 1, 'resumen equipo: ve las carreras del equipo');
 select pg_temp.check(runner_team('BBBBBBBBBB')::text !~ '(BBBBBBBBBB|AAAAAAAAAA|contract|renovacion|"notes")', 'resumen equipo: sin enlaces, contratos ni notas');
 select pg_temp.expect_fail($q$select runner_team('XXXXXXXXXXXX')$q$, 'resumen equipo: sin enlace no');
+select pg_temp.check(jsonb_typeof(runner_team_moves('BBBBBBBBBB')) = 'array', 'movimientos del equipo: devuelve una lista');
+select pg_temp.check(runner_team_moves('BBBBBBBBBB')::text !~ '(BBBBBBBBBB|AAAAAAAAAA|contract)', 'movimientos del equipo: sin enlaces ni contratos');
+select pg_temp.expect_fail($q$select runner_team_moves('XXXXXXXXXXXX')$q$, 'movimientos del equipo: sin enlace no');
 -- carreras olvidadas (ya pasadas)
 reset role;
 insert into runners (id, name, code) values ('10000000-0000-0000-0000-000000000004', 'Dani Test', 'DDDDDDDDDD');
