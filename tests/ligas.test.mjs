@@ -113,3 +113,10 @@ test('Gigante de Piedra 2027 (Small y Gigante, NUE Series): salen al buscar por 
   const g = data.races.filter((r) => r.league === 'NUE Series 2027');
   assert.deepEqual(g.map((r) => [r.date, r.subtype]), [['2027-05-08', 'XCM'], ['2027-06-05', 'UXCM']]);
 });
+
+test('Bike Marathon Pulmón de Acero 2027: sale al buscar por nombre o pueblo', () => {
+  const names = (q) => searchRaces(q, data.races).map((r) => r.name);
+  assert.ok(names('pulmon de acero').includes('Bike Marathon Pulmón de Acero') && names('barakaldo').includes('Bike Marathon Pulmón de Acero'));
+  const r = data.races.find((x) => x.name === 'Bike Marathon Pulmón de Acero');
+  assert.deepEqual([r.date, r.subtype, r.province], ['2027-09-25', 'XCM', 'Bizkaia']);
+});

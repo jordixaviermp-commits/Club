@@ -492,6 +492,21 @@
   },
   {
    "source": "LIGA",
+   "league": "Bike Marathon Pulmón de Acero 2027",
+   "date": "2027-09-25",
+   "name": "Bike Marathon Pulmón de Acero",
+   "place": "Barakaldo",
+   "province": "Bizkaia",
+   "country": "España",
+   "modality": "BTT",
+   "subtype": "XCM",
+   "discipline": "BTT",
+   "kind": "Competición",
+   "info": "UCI MTB Class 1 · Cross-country marathon · 25 de septiembre · según el calendario UCI 2027 (código MTB_2027_1_001471)",
+   "url": "https://www.pulmondeacero.com"
+  },
+  {
+   "source": "LIGA",
    "league": "Xallenger BTT Terres de l'Ebre 2027",
    "date": "2027-09-26",
    "name": "9a Emburgada",
