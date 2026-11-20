@@ -42,7 +42,7 @@ test('panel de redes: ventana de fechas, suspendidas y carreras sin inscritos', 
   const b = socialBoard([race('old', 'Antigua', '2026-09-01')], [reg('far', 'Lejana', '2027-03-01'), reg('none', 'Sin inscritos', '2026-11-20', { entries: [] }),
     reg('sus', 'Suspendida', '2026-11-22', { suspended: true })], new Set([postKeyOf({ date: '2026-11-22', name: 'Suspendida' })]), TODAY, null);
   assert.equal(b.items.length, 1);                              // solo la suspendida (con aviso ya publicado)
-  assert.equal(by(b, 'sus').status, 'pend'); assert.match(by(b, 'sus').pieces[0].text, /anulación/);
+  assert.equal(by(b, 'sus').status, 'pend'); assert.match(by(b, 'sus').pieces[0].text, /suspendido/);
   assert.equal(socialBoard([], [], new Set(), TODAY).items.length, 0);
 });
 

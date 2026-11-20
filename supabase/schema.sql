@@ -820,6 +820,18 @@ begin
   if p_reg ? 'price' then update registrations set price = v_price where id = p_id; end if;
 end $$;
 
+-- Cualquier corredor puede marcar (o reabrir) una carrera como suspendida por la organización: cuenta para el mínimo, no para el bono.
+create or replace function public.runner_set_suspended(p_code text, p_id uuid, p_suspended boolean)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_runner uuid; v_who text;
+begin
+  select id, name into v_runner, v_who from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  if not exists (select 1 from registrations where id = p_id) then raise exception 'no_existe'; end if;
+  perform set_config('app.actor', v_who, true);   -- el historial dice quién lo cambió
+  update registrations set suspended = coalesce(p_suspended, false) where id = p_id and suspended is distinct from coalesce(p_suspended, false);
+end $$;
+
 -- Un corredor borra una carrera que creó él, solo si no hay otros compañeros apuntados.
 create or replace function public.runner_delete_registration(p_code text, p_id uuid)
 returns void language plpgsql security definer set search_path = public as $$
@@ -1624,7 +1636,7 @@ revoke execute on all functions in schema public from public, anon;
 grant execute on function public.runner_set_registration_url(text, uuid, text), public.runner_watch_list(text), public.runner_watch_save(text, uuid, jsonb), public.runner_watch_delete(text, uuid), public.runner_ping(text), public.runner_view(text), public.runner_join(text, uuid, text),
                           public.runner_create_registration(text, jsonb, text),
                           public.runner_update_registration(text, uuid, jsonb), public.runner_delete_registration(text, uuid),
-                          public.runner_update_race(text, uuid, jsonb), public.runner_delete_race(text, uuid),
+                          public.runner_update_race(text, uuid, jsonb), public.runner_delete_race(text, uuid), public.runner_set_suspended(text, uuid, boolean),
                           public.runner_report_result(text, text, uuid, int, text, text, int),
                           public.runner_documents_list(text), public.runner_get_document(text, uuid), public.runner_contract_template(text), public.runner_get_contract_template(text),
                           public.runner_team(text), public.runner_chronicles(text), public.runner_chronicles_team(text), public.runner_social_impact(text), public.runner_chronicle_set(text, text, boolean),

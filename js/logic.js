@@ -1110,7 +1110,7 @@ export function socialBoard(races, registrations, posted, today, log = null, { b
     const pk = postKeyOf(g), rk = resKeyOf(g), past = last(g) < today;
     const pieces = [];
     if (g.suspended) {
-      pieces.push({ k: 'aviso', st: posted.has(pk) ? 'pend' : 'na', text: posted.has(pk) ? 'Suspendida: conviene publicar la anulación' : 'Suspendida', key: pk });
+      pieces.push({ k: 'aviso', st: posted.has(pk) ? 'pend' : 'na', text: posted.has(pk) ? 'Suspendida: conviene publicar que se ha suspendido' : 'Suspendida', key: pk });
     } else {
       // historia previa
       const s = storyState(g, log, posted.has(pk), today);

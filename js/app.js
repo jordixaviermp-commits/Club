@@ -827,7 +827,7 @@ function openMate(id) {
     .sort((a, b) => b.date.localeCompare(a.date));
   const done = doneAll.slice(0, 15);
   const row = (g, right = '') => `<li class="mini ${modClass(g.modality)} tappable"><a class="mini-main" href="#/carrera/${g.id}"><b>${esc(g.name)}</b>
-    <small class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''} · ${esc(modText(g))}${g.suspended ? ' · ⛔ anulada' : ''}</small></a>${right}</li>`;
+    <small class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''} · ${esc(modText(g))}${g.suspended ? ' · ⛔ suspendida' : ''}</small></a>${right}</li>`;
   const withMe = (g) => (!isMe && (g.entries || []).some((e) => e.runner_id === meId) ? '<span class="done">✓ Tú también</span>' : '');
   const dlg = document.getElementById('dialog');
   dlg.innerHTML = `<form method="dialog" class="dlg mate">
@@ -1106,7 +1106,7 @@ function myRacesCard(d, afterSummary = () => '') {
       <a href="#" class="tile t-done" data-act="goto-sec" data-to="sec-done"><span class="t-n">${list.length + sent.filter((g) => yearOf(g.date) === S.myYear).length}</span><span class="t-l">Hechas</span>${ico('ok', 't-ico')}<small>${days !== list.length ? `${days} días de competición` : 'con resultado'}</small></a>
       <a href="#" class="tile t-pend${pending.length ? ' alert' : ''}" data-act="goto-sec" data-to="sec-pend"><span class="t-n">${pending.length}</span><span class="t-l">Pendientes</span>${ico('flag', 't-ico')}<small>${pending.length ? 'falta tu resultado' : 'de resultado'}</small></a>
     </div>
-    ${cancelled.length ? `<a href="#" class="canc-line" data-act="goto-sec" data-to="sec-canc">${ico('ban')}<span><b>${cancelled.length}</b> ${cancelled.length === 1 ? 'anulada' : 'anuladas'} · cuenta${cancelled.length === 1 ? '' : 'n'} para el mínimo</span>${ico('go')}</a>` : ''}
+    ${cancelled.length ? `<a href="#" class="canc-line" data-act="goto-sec" data-to="sec-canc">${ico('ban')}<span><b>${cancelled.length}</b> ${cancelled.length === 1 ? 'carrera suspendida' : 'carreras suspendidas'}</span>${ico('go')}</a>` : ''}
     ${(() => { const sentYear = sent.filter((g) => yearOf(g.date) === S.myYear).map((g) => ({ position: g.my_result.position, time_seconds: g.my_result.time_seconds })), allMine = [...list, ...sentYear];   // los enviados también cuentan
       const pod = [1, 2, 3].map((k) => allMine.filter((x) => x.position === k).length), NAMES = [['Oro', 'Oros'], ['Plata', 'Platas'], ['Bronce', 'Bronces']];
       // una sola línea pequeña: tiempo en carrera y, al lado, km de viaje (ida y vuelta, aprox.)
@@ -1151,9 +1151,9 @@ function myRacesCard(d, afterSummary = () => '') {
       <ul class="mini-list">${todo.slice(0, 20).map((x) => miniRow(x, `<span class="badge-pend">${missingFields(x).map((k) => FIELD_LABELS[k]).join(', ')}</span>`, `${runnerHref('carrera')}/race_${x.race_id}`)).join('')}</ul></details>` : ''; })()}
 
   ${cancelled.length ? `<section class="card season-block canc-block" id="sec-canc">
-    <h2 class="sec-h">Anuladas <small>(${cancelled.length})</small></h2>
-    <p class="hint">Suspendidas: cuentan para el mínimo de carreras, no para el bono.</p>
-    <ul class="mini-list">${cancelled.map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, below: '<span class="badge-pend">anulada</span>' })).join('')}</ul>
+    <h2 class="sec-h">Suspendidas <small>(${cancelled.length})</small></h2>
+    <p class="hint">Carreras suspendidas en las que estabas inscrito.</p>
+    <ul class="mini-list">${cancelled.map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, below: '<span class="badge-pend">suspendida</span>' })).join('')}</ul>
   </section>` : ''}
 
   <details class="card season-block done-block desp" id="sec-done" data-open-key="done"${S.open?.done ? ' open' : ''}>
@@ -1258,7 +1258,7 @@ function runnerBonusCard(d) {
   const chips = [
     st.extra ? `<span class="bn-chip gold">${ico('trophy')}+${st.extra} plus</span>` : '',
     pendingPlus ? `<span class="bn-chip wait">${ico('clock')}${pendingPlus} plus ${plural(pendingPlus, 'pendiente', 'pendientes')}</span>` : '',
-    st.suspended ? `<span class="bn-chip" title="Cuentan para el mínimo, no para el bono">${ico('ban')}${st.suspended} ${plural(st.suspended, 'suspendida', 'suspendidas')}</span>` : '',
+    st.suspended ? `<span class="bn-chip">${ico('ban')}${st.suspended} ${plural(st.suspended, 'suspendida', 'suspendidas')}</span>` : '',
   ].filter(Boolean).join('');
   const tiers = st.tiers || [];
   const rules = `<details class="rules" data-open-key="rules"${S.open?.rules ? ' open' : ''}>
@@ -1388,7 +1388,7 @@ function runnerRegCard(g, opts = {}) {
       </summary>
       <div class="rc-body">
       <div class="rc-tags">${modTag(g.modality, g.subtype)}${open && !mine && !g.suspended && !S.preview ? starBtn(g, 'w-add-reg', ['id', g.id]) : ''}</div>${typeTag(g)}
-      ${g.suspended ? `<p class="state-tag">${ico('ban', 't-i')}Suspendida: cuenta para el mínimo de carreras, no para el bono</p>` : ''}
+      ${g.suspended ? `<p class="state-tag">${ico('ban', 't-i')}Carrera suspendida</p>` : ''}
       ${open || g.suspended ? '' : `<p class="state-tag">${mine && g.my_result ? `${ico('check', 't-i')}Ya disputada · tu resultado está enviado` : `${ico('flag', 't-i')}Ya disputada · pendiente de resultados`} ${weekChip(g.end_date || g.date, today)}</p>
         ${mine && !S.preview ? (g.my_result ? `<p class="mine-created">Tu resultado: ${g.my_result.position}º (enviado) · <a href="#/resultado/reg_${g.id}">${ico('pen', 't-i')}Cambiar</a></p>`
           : `<p class="row"><a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>
@@ -1397,6 +1397,7 @@ function runnerRegCard(g, opts = {}) {
            <button class="btn primary" data-act="r-join" data-id="${g.id}">La hice: apuntarme</button></div>` : ''}`}
       ${g.notes ? `<p class="notes">${esc(g.notes)}</p>` : ''}
       ${webRow(g, open && !g.suspended)}
+      ${S.preview || g.date < pastLimit() ? '' : g.suspended ? `<button type="button" class="btn ghost small susp-btn" data-act="r-suspend" data-id="${g.id}" data-v="0">${ico('check')}Se vuelve a celebrar</button>` : `<button type="button" class="btn ghost small susp-btn" data-act="r-suspend" data-id="${g.id}" data-v="1">${ico('ban')}Carrera suspendida</button>`}
       ${mates}
       ${edit}
       ${mine && !S.preview && !g.suspended && (open || !g.my_result) ? `<button type="button" class="pay-btn${mine.paid ? ' on' : ''}" data-act="r-paid" data-id="${g.id}">${ico('euro')}<span>${mine.paid ? `Pagada${mine.paid_amount != null ? ' · ' + euros(mine.paid_amount) : ''}` : 'Marcar como pagada'}</span></button>` : ''}
@@ -1723,7 +1724,7 @@ function viewRegistrations() {
       <div class="race-head"><div><h3>${esc(g.name)}</h3>
       <p class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''}</p></div>${modTag(g.modality, g.subtype)}</div>${typeTag(g)}${pubTags(g)}
       ${g.candidate && !g.entries.length ? '<p class="state-tag">⭐ Sin inscritos: algún corredor la está valorando</p>' : ''}
-      ${g.suspended ? '<p class="state-tag">⛔ Suspendida: cuenta para el mínimo, no para el bono</p>' : g.date < today ? `<p class="state-tag">🏁 Ya disputada${g.entries.some((e) => e.self_position) ? ` · 📝 ${g.entries.filter((e) => e.self_position).length} de ${g.entries.length} han puesto su resultado` : ''}</p>` : ''}
+      ${g.suspended ? '<p class="state-tag">⛔ Carrera suspendida</p>' : g.date < today ? `<p class="state-tag">🏁 Ya disputada${g.entries.some((e) => e.self_position) ? ` · 📝 ${g.entries.filter((e) => e.self_position).length} de ${g.entries.length} han puesto su resultado` : ''}</p>` : ''}
       <p class="count">👥 ${g.entries.length} del club${g.entries.length ? ': ' +
         esc(g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p>
       ${g.created_by ? `<p class="count">Añadida por ${esc(runnerById(g.created_by)?.name || 'un corredor')}</p>` : ''}${editCta()}</a>`;
@@ -1914,7 +1915,6 @@ function viewRegistrationEdit() {
       ${d.id ? '' : `<div id="dup-admin">${dupSuggestions(d.name, S.data.registrations, false)}</div>`}
       <label>Notas<textarea data-f="notes" rows="2">${esc(d.notes || '')}</textarea></label>
       <label class="check"><input type="checkbox" data-act-change="suspended" ${d.suspended ? 'checked' : ''}> ⛔ Carrera suspendida</label>
-      ${d.suspended ? '<p class="hint">Cláusula 6: a los inscritos les cuenta para el mínimo de participaciones, pero <b>no para el bono</b>. No se pasa a resultados.</p>' : ''}
       <h3>Inscritos (${d.people.length})</h3>
       <ul class="edit-list">${d.people.map((p, i) => `<li>
         <span class="name">${esc(p.runner_name)}${p.self_position ? ` <small class="self-res">📝 puso ${p.self_position}º</small>` : ''}</span>
@@ -2140,7 +2140,7 @@ function viewPublications() {
   const anomalies = [
     ...a.resLate.map((x) => ({ icon: '⚠️', text: `Resultados sin publicar desde hace ${x.days} días: <b>${esc(x.race.name)}</b>`, card: resCard(x, true) })),
     ...a.noResults.map((x) => ({ icon: '❓', text: `<b>${esc(x.reg.name)}</b> terminó ${ago(x.days)} y nadie ha puesto su puesto (${x.people} inscrito${x.people === 1 ? '' : 's'}): no hay resultados que publicar`, link: `#/inscripciones/${x.reg.id}` })),
-    ...a.suspendedPosted.map((x) => ({ icon: '⛔', text: `Se publicó el aviso de <b>${esc(x.name)}</b>, pero la carrera está suspendida: conviene publicar la anulación`, link: `#/inscripciones/${x.id}` })),
+    ...a.suspendedPosted.map((x) => ({ icon: '⛔', text: `Se publicó el aviso de <b>${esc(x.name)}</b>, pero la carrera está suspendida: conviene publicar que se ha suspendido`, link: `#/inscripciones/${x.id}` })),
     ...a.storyMissing.map((g) => ({ icon: '📸', text: `No consta la historia previa de <b>${esc(g.name)}</b> (${esc(shortDate(g.date))}); debía salir el ${esc(shortDate(storyDateOf(g)))}. Si se publicó y no consta, márcala a mano`, link: `#/${g.results ? 'carreras' : 'inscripciones'}/${g.id}`, storyKey: postKey(g) })),
     ...(a.orphans.length ? [{ icon: '🔗', text: `<b>${a.orphans.length}</b> marca${a.orphans.length === 1 ? '' : 's'} de «publicada» sin carrera (se cambió el nombre o la fecha después de marcarla, o se borró): ${esc(a.orphans.slice(0, 3).map((o) => o.key.replace('res|', '').split('|')[1] || o.key).join(', '))}${a.orphans.length > 3 ? '…' : ''}`, orphan: true }] : []),
   ];
@@ -3876,7 +3876,7 @@ const balanceLine = (r) => { const n = r.amount - r.penalty;
 function bonusText(st, who = 'Llevas') {
   const parts = [`${who} <b>${st.count}</b> carrera${st.count === 1 ? '' : 's'}`];
   if (st.extra) parts.push(`<span class="extra-chip">🏆 plus +${st.extra} por podio en una general = <b>${st.bonusCount}</b> para el bono</span>`);
-  if (st.suspended) parts.push(`<span class="extra-chip">⛔ +${st.suspended} suspendida${st.suspended === 1 ? '' : 's'}: cuenta${st.suspended === 1 ? '' : 'n'} para el mínimo, no para el bono</span>`);
+  if (st.suspended) parts.push(`<span class="extra-chip">⛔ +${st.suspended} suspendida${st.suspended === 1 ? '' : 's'}</span>`);
   if (st.tier) parts.push(`tramo de <b>${euros(st.amount)}</b>`);
   if (!st.reachesMinimum && st.penalty) parts.push(`<span class="bad">faltan ${st.missingToMinimum} para el mínimo (${st.minimum}) · penalización ${euros(st.penalty)}</span>`);
   else if (!st.reachesMinimum) parts.push(st.next ? `faltan ${st.missingToNext} para ${euros(st.next.amount)}` : `faltan ${st.missingToMinimum} para el mínimo (${st.minimum})`);
@@ -5022,6 +5022,13 @@ const actions = {
     if (ok) render();
   },
   'chro-tab'(el) { S.chroTab = el.dataset.t === 'imp' ? 'imp' : 'cro'; S.open = { ...(S.open || {}), chro: true }; render(); },
+  async 'r-suspend'(el) {
+    const susp = el.dataset.v === '1', g = (S.runnerData?.registrations || []).find((x) => x.id === el.dataset.id);
+    if (!await confirmAction(susp ? 'Carrera suspendida' : 'Se vuelve a celebrar',
+      susp ? `¿Marcar <b>${esc(g?.name || 'esta carrera')}</b> como suspendida? Se puede deshacer.` : `¿<b>${esc(g?.name || 'Esta carrera')}</b> vuelve a celebrarse?`, susp ? 'Sí, suspendida' : 'Sí, se celebra', 'primary')) return;
+    await run(async () => { await api.runnerSetSuspended(S.code, el.dataset.id, susp); await loadRunner(); return true; }, susp ? '⛔ Carrera suspendida' : 'Carrera activa otra vez');
+    render();
+  },
   async 'chro-admin-all'(el) { await setChronicleFor(el.dataset.ids.split(','), el.dataset.key, true); },
   'ig-tab'(el) { S.igTab = el.dataset.t; render(); },
   async 'ig-per-del'(el) {

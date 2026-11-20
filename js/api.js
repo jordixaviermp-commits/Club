@@ -201,6 +201,8 @@ export function supabaseApi(url, key) {
     },
     async runnerUpdate(code, id, reg) { ok(await sb.rpc('runner_update_registration', { p_code: code, p_id: id, p_reg: reg })); },
     async runnerDelete(code, id) { ok(await sb.rpc('runner_delete_registration', { p_code: code, p_id: id })); },
+    /** Cualquier corredor marca (o reabre) una carrera como suspendida por la organización. */
+    async runnerSetSuspended(code, id, suspended) { ok(await sb.rpc('runner_set_suspended', { p_code: code, p_id: id, p_suspended: !!suspended })); },
     async runnerUpdateRace(code, id, race) { ok(await sb.rpc('runner_update_race', { p_code: code, p_id: id, p_race: race })); },
     async runnerDeleteRace(code, id) { ok(await sb.rpc('runner_delete_race', { p_code: code, p_id: id })); },
     async runnerCreate(code, reg, category) { return ok(await sb.rpc('runner_create_registration', { p_code: code, p_reg: reg, p_category: category || null })); },
@@ -694,6 +696,11 @@ export function demoApi(storage = globalThis.localStorage) {
       }
       d.correction_requests = (d.correction_requests || []).filter((c) => !(c.runner_id === me.id && c.target_id === id && c.status === 'pendiente'));
       save();
+    },
+    async runnerSetSuspended(code, id, suspended) {
+      byCode(code); const d = load(); const g = d.registrations.find((x) => x.id === id);
+      if (!g) throw new Error('no_existe');
+      g.suspended = !!suspended; save();
     },
     async runnerUpdate(code, id, reg) {
       const me = byCode(code); const d = load();
