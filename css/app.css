@@ -2066,7 +2066,7 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .mini-acts { display: flex; flex-direction: column; align-items: flex-end; gap: .3rem; flex-shrink: 0; } .mini-acts .star-btn { margin-top: 0; }
 .wchip.tbc { display: inline-block; margin: .15rem 0 0; padding: .1rem .5rem; border-radius: 999px; background: color-mix(in srgb, #e3b93c 18%, var(--card)); font-size: .78rem; font-weight: 700; }
 
-/* Mis carreras: tres fichas en una fila, «Anuladas» como línea solo si hay, y bloque de aportación */
+/* Mis carreras: tres fichas en una fila, «Anuladas» como línea solo si hay, y */
 .sum-card .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .4rem; }
 .sum-card .tiles .tile { grid-template-columns: 1fr auto; grid-template-areas: "n i" "l l" "s s"; row-gap: .1rem; padding: .5rem .45rem; }
 .sum-card .tiles .tile .t-n { font-size: 1.9rem; }
@@ -2075,8 +2075,3 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .sum-card .tiles .tile .t-ico { width: 18px; height: 18px; }
 .canc-line { display: flex; align-items: center; gap: .45rem; margin: .5rem 0 0; padding: .35rem .65rem; border-radius: 10px; background: color-mix(in srgb, #b3261e 10%, var(--card)); border: 1px solid color-mix(in srgb, #b3261e 35%, var(--line)); color: var(--text); text-decoration: none; font-size: .82rem; }
 .canc-line .ico { width: 16px; height: 16px; flex: none; color: #b3261e; } .canc-line span { flex: 1; }
-.aport { margin: .7rem 0 0; padding: .6rem .7rem; border-radius: 14px; background: var(--sec-soft); border: 1px solid var(--sec-line); }
-.aport-t { display: flex; align-items: center; gap: .4rem; margin: 0 0 .35rem; font-weight: 800; font-size: .92rem; color: var(--sec); } .aport-t .ico { width: 18px; height: 18px; }
-.aport ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .3rem; }
-.aport li { display: flex; gap: .5rem; align-items: flex-start; font-size: .84rem; line-height: 1.3; }
-.aport li .ico { width: 16px; height: 16px; flex: none; margin-top: .1rem; color: var(--sec); }
