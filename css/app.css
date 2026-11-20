@@ -2153,8 +2153,42 @@ details.card.rcard.past-reg .rc-name { color: var(--muted); }
 .cal-title h2 { font-size: 1rem; } .cal-sub { font-size: .74rem; line-height: 1.2; }
 .cal-months { margin-top: .4rem; }
 
-/* con el calendario abierto, la tarjeta de la próxima carrera del equipo ocupa menos */
+/* la tarjeta de la próxima carrera del equipo, siempre compacta (lista y calendario) */
 .next-team.compact { padding: .6rem .8rem .7rem; margin-bottom: .5rem; }
 .next-team.compact .nt-n { font-size: 1.1rem; } .next-team.compact .nt-d { margin: .1rem 0 .4rem; font-size: .82rem; }
 .next-team.compact .nt-people { display: none; }
 .next-team.compact .nt-foot { margin-top: .45rem; } .next-team.compact .nt-btn { min-height: 34px; padding: .2rem .8rem; }
+
+/* «El equipo ya está apuntado»: plegado por defecto, una sola línea */
+.pulse-fold { padding: .5rem .7rem; }
+.pulse-fold > summary { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .6rem; cursor: pointer; list-style: none; }
+.pulse-fold > summary::-webkit-details-marker { display: none; }
+.pulse-t { display: inline-flex; align-items: center; gap: .4rem; font-weight: 800; font-size: .95rem; } .pulse-t .ico { width: 18px; height: 18px; color: var(--sec); }
+.pulse-chips { display: inline-flex; flex-wrap: wrap; gap: .2rem .5rem; font-size: .8rem; color: var(--muted); flex: 1; }
+.pulse-chips b { color: var(--text); } .pulse-chips .me { color: #1b7f3b; font-weight: 700; }
+.pulse-chev { margin-left: auto; display: inline-flex; transition: transform .15s; } .pulse-chev .ico { width: 18px; height: 18px; }
+.pulse-fold[open] .pulse-chev { transform: rotate(180deg); }
+.pulse-fold .pulse-sum { margin: .5rem 0 0; font-size: .82rem; color: var(--muted); }
+.pulse-fold .pulse-months { height: 80px; }
+.pulse-fold > summary { flex-wrap: nowrap; gap: .2rem .5rem; display: grid; grid-template-columns: 1fr auto; grid-template-areas: "t c" "k k"; align-items: center; }
+.pulse-t { grid-area: t; } .pulse-chev { grid-area: c; margin: 0; } .pulse-chips { grid-area: k; flex: none; gap: .1rem .9rem; flex-wrap: nowrap; white-space: nowrap; }
+
+/* Carreras: «Esta semana», «Más adelante», meses y tarjetas de carrera, más bajos */
+h2.section { font-size: 1.02rem; margin: .7rem 0 .4rem; gap: .4rem; }
+h2.section::before { width: 4px; }
+.month-head { margin: 8px 0 5px; padding: .3rem .7rem; border-radius: 10px; font-size: .9rem; }
+.month-head .mh-meta { font-size: .78rem; }
+.rc-sum { min-height: 46px; padding: .4rem .6rem .4rem .7rem; gap: .45rem; }
+.rc-name { font-size: .88rem; line-height: 1.15; } .rc-sub { font-size: .78rem; line-height: 1.2; }
+.rc-chips .soon { margin-top: .1rem; font-size: .74rem; padding: 0 .5rem; }
+.rc-chip { font-size: .72rem; padding: .02rem .5rem; }
+.rc-ins { min-width: 38px; padding: .1rem .25rem; } .rc-ins b { font-size: 1rem; }
+details.card.rcard { margin-bottom: 6px; }
+.pulse-legend b { color: var(--text); margin-left: .1rem; }
+/* Próxima del equipo: degradado en los colores de la app (azul pizarra → cian de la marca) en vez del naranja */
+.next-team { background: radial-gradient(120% 140% at 100% 0, rgba(0, 169, 214, .55) 0, transparent 60%), linear-gradient(135deg, #284556 0%, #1d5f7a 100%); box-shadow: 0 8px 22px rgba(40, 69, 86, .32); }
+.next-team .nt-btn { color: #284556; }
+.next-team .nt-pill { background: rgba(255, 255, 255, .16); border-color: rgba(255, 255, 255, .32); }
+.next-team .nt-when { background: #ffd84d; color: #3a2a00; border-color: #ffd84d; }
+.next-team .nt-me.on { color: #a9f0c8; }
+.next-team.wk { outline-width: 2px; outline-color: #f3cf55; }

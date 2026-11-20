@@ -1435,14 +1435,15 @@ function teamPulse(d) {
   const tot = {};
   for (const [, m] of cols) for (const [k, n] of Object.entries(m.discs)) tot[k] = (tot[k] || 0) + n;
   const discs = Object.keys(tot).sort((a, b) => tot[b] - tot[a] || a.localeCompare(b, 'es'));
-  return `<section class="card pulse"><h3>${ico('users')}El equipo ya está apuntado</h3>
-    <div class="pulse-nums"><div class="pn"><b>${up.length}</b><span>carrera${up.length === 1 ? '' : 's'} próxima${up.length === 1 ? '' : 's'}<small>${parts} inscripci${parts === 1 ? 'ón' : 'ones'} · ${people} corredor${people === 1 ? '' : 'es'}</small></span></div>
-      ${mine ? `<div class="pn me"><b>${mine}</b><span><i>Tú estás en</i><small>${mine === 1 ? 'carrera' : 'carreras'}</small></span></div>` : ''}</div>
+  // plegado por defecto: una línea con las cifras; el gráfico por meses se abre al tocar
+  return `<details class="card pulse pulse-fold" data-open-key="pulse"${S.open?.pulse ? ' open' : ''}><summary><span class="pulse-t">${ico('users')}El equipo ya está apuntado</span>
+      <span class="pulse-chips"><span><b>${up.length}</b> carrera${up.length === 1 ? '' : 's'}</span><span><b>${people}</b> corredor${people === 1 ? '' : 'es'}</span>${mine ? `<span class="me">Tú en <b>${mine}</b></span>` : ''}</span><span class="pulse-chev" aria-hidden="true">${ico('chevd')}</span></summary>
+    <p class="pulse-sum">${parts} inscripci${parts === 1 ? 'ón' : 'ones'} en ${up.length} carrera${up.length === 1 ? '' : 's'} próxima${up.length === 1 ? '' : 's'}.</p>
     <div class="months pulse-months" role="group" aria-label="Inscripciones del equipo por mes">${cols.map(([ym, m]) => `<button type="button" class="mcol pulse-col" data-act="pulse-month" data-m="${ym}" aria-label="${MES[Number(ym.slice(5)) - 1]}: ${m.total} inscripciones en ${m.races} carreras">
       <em>${m.total}</em><div class="mstack" style="height:${(m.total / mx) * 100}%">${discs.filter((k) => m.discs[k]).reverse().map((k) => { const [dm, ds] = k.split('|');
         return `<span class="${discClass(dm, ds)}" style="flex:${m.discs[k]}" title="${esc(discLabel(dm, ds))}: ${m.discs[k]}"></span>`; }).join('')}</div>
       <b>${MES[Number(ym.slice(5)) - 1]}</b></button>`).join('')}</div>
-    <p class="pulse-legend">${discs.map((k) => { const [dm, ds] = k.split('|'); return `<span class="${discClass(dm, ds)}"><i></i>${esc(discLabel(dm, ds))}</span>`; }).join('')}</p></section>`;
+    <p class="pulse-legend">${discs.map((k) => { const [dm, ds] = k.split('|'); return `<span class="${discClass(dm, ds)}"><i></i>${esc(discLabel(dm, ds))} <b>${tot[k]}</b></span>`; }).join('')}</p></details>`;
 }
 
 /** Tarjeta «Planificar ruta» (herramienta ruta/): va en Carreras, justo bajo el buscador. */
@@ -1454,7 +1455,7 @@ function nextTeamBanner(d) {
   if (!g) return '';
   const n = daysTo(g.date), going = d.registrations && (g.entries || []).some((e) => e.runner_id === d.me.id), live = g.date <= today;
   const wk = live || n <= 7, names = g.entries.map((e) => e.name.split(' ')[0]), shown = names.slice(0, 6);
-  return `<section class="card next-team${wk ? ' wk' : ''}${S.regView === 'cal' ? ' compact' : ''}" aria-label="Próxima carrera del equipo">
+  return `<section class="card next-team${wk ? ' wk' : ''} compact" aria-label="Próxima carrera del equipo">
     <p class="nt-k">${wk ? `${ico('flag')}Esta semana compite el equipo` : `${ico('flag')}Próxima carrera del equipo`}</p>
     <h2 class="nt-n">${esc(g.name)}</h2>
     <p class="nt-d">${esc(when(g))}${place(g) ? ' · ' + esc(place(g)) : ''}</p>
