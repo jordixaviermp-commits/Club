@@ -1,6 +1,6 @@
 {
  "_nota": "Ligas y circuitos que se corren cada año y a los que suele ir gente del club. Se escribe a mano (no lo toca el lector de las federaciones). El campo «subtype» (opcional) rellena el formato. «url» es opcional. Para añadir otra liga, copia un bloque de carrera y cambia source/league/fechas. Comprobar siempre las fechas en la web de la liga. El campo «circuit» (opcional) marca la carrera como puntuable de un circuito con ese nombre: se usa para el podio en la general final (cláusula 9). Escríbelo igual en todas las pruebas de la liga.",
- "updated_at": "2026-11-20",
+ "updated_at": "2026-11-21",
  "races": [
   {
    "source": "LIGA",
@@ -245,6 +245,22 @@
   },
   {
    "source": "LIGA",
+   "league": "NUE Series 2027",
+   "circuit": "NUE Series",
+   "place": "Sant Joan de Moró",
+   "province": "Castellón",
+   "country": "España",
+   "modality": "BTT",
+   "discipline": "BTT",
+   "kind": "Competición",
+   "url": "https://www.gigantedepiedra.com",
+   "date": "2027-05-08",
+   "name": "Gigante Small – Sant Joan de Moró",
+   "subtype": "XCM",
+   "info": "NUE Series 2027 (National Ultra Endurance Mountain Bike Race Series) · UCI Hors Catégorie · XCM · 8 de mayo · en 2026 fueron 115 km y 3.500 m D+"
+  },
+  {
+   "source": "LIGA",
    "league": "Xallenger BTT Terres de l'Ebre 2027",
    "date": "2027-05-09",
    "name": "5a Argilers Bike Race",
@@ -289,6 +305,22 @@
    "kind": "Competición",
    "info": "Marathon Cup BTT 2027 · Scott Marathon · 2 distancias, Pro y Open · 30 de mayo",
    "url": "https://bikemarathonbtt.com/"
+  },
+  {
+   "source": "LIGA",
+   "league": "NUE Series 2027",
+   "circuit": "NUE Series",
+   "place": "Sant Joan de Moró",
+   "province": "Castellón",
+   "country": "España",
+   "modality": "BTT",
+   "discipline": "BTT",
+   "kind": "Competición",
+   "url": "https://www.gigantedepiedra.com",
+   "date": "2027-06-05",
+   "name": "Gigante de Piedra – Sant Joan de Moró",
+   "subtype": "UXCM",
+   "info": "NUE Series 2027 (National Ultra Endurance Mountain Bike Race Series) · Campeonato Autonómico de la Comunidad Valenciana de XCUM (ultra maratón) · 5 de junio"
   },
   {
    "source": "LIGA",
@@ -457,6 +489,21 @@
    "kind": "Competición",
    "info": "Marathon Cup BTT 2027 · Scott Marathon · 2 distancias, Pro y Open · 19 de septiembre",
    "url": "https://bikemarathonbtt.com/"
+  },
+  {
+   "source": "LIGA",
+   "league": "Bike Marathon Pulmón de Acero 2027",
+   "date": "2027-09-25",
+   "name": "Bike Marathon Pulmón de Acero",
+   "place": "Barakaldo",
+   "province": "Bizkaia",
+   "country": "España",
+   "modality": "BTT",
+   "subtype": "XCM",
+   "discipline": "BTT",
+   "kind": "Competición",
+   "info": "UCI MTB Class 1 · Cross-country marathon · 25 de septiembre · según el calendario UCI 2027 (código MTB_2027_1_001471)",
+   "url": "https://www.pulmondeacero.com"
   },
   {
    "source": "LIGA",
