@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError, cleanWeb } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, disciplineKey, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  directorBoard, raceImpact, nextTeamRace, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
+  directorBoard, raceImpact, tierRanges, nextTeamRace, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -1229,7 +1229,8 @@ function chronicleCard(d) {
 function bonusBarBig(st, cfg, planned = 0) {
   const tiers = st.tiers || tiersFor(cfg, st.contract);
   const extra = st.extra || 0, total = st.count + extra;
-  const max = Math.max(...tiers.map((t) => t.races), st.minimum || 0, total + planned, 1);
+  const lastTier = Math.max(0, ...tiers.map((t) => t.races));
+  const max = Math.max(lastTier + 6, st.minimum || 0, total + planned + 1, 1);   // deja sitio para el último tramo («22 o más»)
   const pct = (n) => Math.min(100, (n / max) * 100).toFixed(1);
   const marks = [...tiers.map((t) => ({ n: t.races, amount: euros(t.amount), min: t.races === st.minimum }))];
   if (st.minimum && !tiers.some((t) => t.races === st.minimum)) marks.push({ n: st.minimum, amount: 'mínimo', min: true });
@@ -1242,8 +1243,9 @@ function bonusBarBig(st, cfg, planned = 0) {
       ${marks.map((m) => `<i class="bb-tick${total >= m.n ? ' hit' : ''}${m.min ? ' min' : ''}" style="left:${pct(m.n)}%"></i>`).join('')}
       <span class="bb-you" style="left:${pct(Math.max(total, 0))}%"><b>${total}</b></span>
     </div>
-    <div class="bb-labels">${marks.map((m) => `<span class="${total >= m.n ? 'hit' : ''}"><b>${m.n} carreras</b><small>(${esc(m.amount)})</small></span>`).join('')}</div>
-  </div>`;
+    <div class="bb-labels seg">${marks.map((m, i) => { const nx = marks[i + 1], cur = total >= m.n && (!nx || total < nx.n), isTier = tiers.some((t) => t.races === m.n);
+      const range = !isTier ? 'mínimo' : nx ? `${m.n}–${nx.n - 1}` : `${m.n} o más`, at = isTier ? (m.n + (nx ? nx.n : max)) / 2 : m.n;   // cada etiqueta, centrada en su tramo
+      return `<span class="${total >= m.n ? 'hit' : ''}${cur ? ' cur' : ''}" style="left:${pct(at)}%"><b>${range}</b><small>${esc(m.amount)}</small></span>`; }).join('')}</div>`;
 }
 
 function runnerBonusCard(d) {
@@ -1270,7 +1272,7 @@ function runnerBonusCard(d) {
     <div class="rules-body">
       <p class="hint">La <b>bonificación</b> es la ayuda económica del club según las carreras que corras en la temporada (cláusula 3 de tu contrato).${b.contract ? ` Tu contrato: <b>${esc(contractLabel(b.contract).toLowerCase())}</b>.` : ''}</p>
       <h4>Tramos${st.contract ? ` (${esc(contractLabel(st.contract).toLowerCase())})` : ''}</h4>
-      <ul class="tier-list">${tiers.map((t) => `<li><span>${t.races} carreras</span><b>${euros(t.amount)}</b></li>`).join('')}</ul>
+      <ul class="tier-list">${tierRanges(tiers).map((r) => `<li><span>${r.text} carreras</span><b>${euros(r.amount)}</b></li>`).join('')}</ul>
       <h4>Mínimo y penalización</h4>
       <p>Hay que correr al menos <b>${cfg.minimum} carreras</b>. Si no se llega a final de temporada, penalización: ${penaltiesLine(cfg)}.</p>
       <h4>Cómo se cuentan las carreras</h4>

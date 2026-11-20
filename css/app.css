@@ -2192,3 +2192,11 @@ details.card.rcard { margin-bottom: 6px; }
 .next-team .nt-when { background: #ffd84d; color: #3a2a00; border-color: #ffd84d; }
 .next-team .nt-me.on { color: #a9f0c8; }
 .next-team.wk { outline-width: 2px; outline-color: #f3cf55; }
+
+/* Bonificación: cada tramo centrado bajo su propio rango de carreras (12–16, 17–21, 22 o más) con su importe */
+.bb-labels.seg { display: block; position: relative; height: 2.5rem; margin-top: .6rem; }
+.bb-labels.seg span { position: absolute; transform: translateX(-50%); align-items: center; text-align: center; white-space: nowrap; }
+.bb-labels.seg span:last-child { transform: translateX(-50%); }
+.bb-labels.seg b { font-size: .86rem; } .bb-labels.seg small { font-size: .84rem; }
+.bb-labels .cur { font-weight: 800; } .bb-labels .cur small { font-weight: 800; color: var(--text); }
+.bb-labels .cur b { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
