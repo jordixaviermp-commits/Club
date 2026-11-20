@@ -1747,8 +1747,8 @@ function viewRunnerContract() {
   return frame(runnerTitle(), `
     ${previewBanner()}
     ${runnerBonusCard(S.runnerData)}
-    ${clubLinksCard()}
     ${myDocsCard()}
+    ${clubLinksCard()}
     ${licenseCard()}`,
   { rtab: 'contrato' });
 }
