@@ -1571,8 +1571,10 @@ begin
             nullif(left(btrim(coalesce(p_data->>'country','')), 60), ''), v_mod, nullif(left(btrim(coalesce(p_data->>'subtype','')), 40), ''), v_km, v_url, v_price, v_deadline,
             nullif(left(btrim(coalesce(p_data->>'notes','')), 500), ''), v_elev)
     returning id into v_id;
+    if coalesce(p_data->>'notes','') not like '📅 Fecha por confirmar%' then   -- fecha estimada del año siguiente: no se publica en Carreras hasta que se confirme
     perform public.watch_publish(v_runner, v_name, v_date, v_end, nullif(left(btrim(coalesce(p_data->>'place','')), 120), ''), nullif(left(btrim(coalesce(p_data->>'province','')), 60), ''),
-                                 nullif(left(btrim(coalesce(p_data->>'country','')), 60), ''), v_mod, nullif(left(btrim(coalesce(p_data->>'subtype','')), 30), ''), v_km, v_url, v_elev, v_price);
+                                   nullif(left(btrim(coalesce(p_data->>'country','')), 60), ''), v_mod, nullif(left(btrim(coalesce(p_data->>'subtype','')), 30), ''), v_km, v_url, v_elev, v_price);
+    end if;
   else
     update runner_watch set name = v_name, date = v_date, end_date = v_end, place = nullif(left(btrim(coalesce(p_data->>'place','')), 120), ''),
            province = nullif(left(btrim(coalesce(p_data->>'province','')), 60), ''), country = nullif(left(btrim(coalesce(p_data->>'country','')), 60), ''), modality = v_mod,
@@ -1580,8 +1582,10 @@ begin
            notes = nullif(left(btrim(coalesce(p_data->>'notes','')), 500), ''), elevation = v_elev
      where id = p_id and runner_id = v_runner returning id into v_id;
     if v_id is null then raise exception 'no_encontrada'; end if;
+    if coalesce(p_data->>'notes','') not like '📅 Fecha por confirmar%' then   -- fecha estimada del año siguiente: no se publica en Carreras hasta que se confirme
     perform public.watch_publish(v_runner, v_name, v_date, v_end, nullif(left(btrim(coalesce(p_data->>'place','')), 120), ''), nullif(left(btrim(coalesce(p_data->>'province','')), 60), ''),
-                                 nullif(left(btrim(coalesce(p_data->>'country','')), 60), ''), v_mod, nullif(left(btrim(coalesce(p_data->>'subtype','')), 30), ''), v_km, v_url, v_elev, v_price);
+                                   nullif(left(btrim(coalesce(p_data->>'country','')), 60), ''), v_mod, nullif(left(btrim(coalesce(p_data->>'subtype','')), 30), ''), v_km, v_url, v_elev, v_price);
+    end if;
     perform public.watch_cleanup();
   end if;
   return v_id;

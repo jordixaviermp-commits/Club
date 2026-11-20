@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  nextYearWatch, watchTbc, WATCH_TBC,
   normalize, matchCategory, parseBulkRunners, yearSummary, csvRows, toCsv, parseCsv, importResultsCsv,
   parseDate, extractCode, newCode, formatDate, planRosterRenewal, monthGrid, addMonths, formatRange, daysOf, podiumsOf, bonusStatus, bonusConfigFor, yearBonuses, DEFAULT_BONUS, matchContract, searchRaces, pastLimit, SUBTYPES, parseKm, kmText, guessSubtype, missingFields, matchPeople, cleanGoogleLink } from '../js/logic.js';
 
@@ -705,4 +706,16 @@ test('el tiempo de las tres casillas (h:mm:ss, con horas 0) se entiende', async 
   assert.equal(parseTime('2:05:30'), 7530);
   assert.equal(parseTime('0:00:30'), 30);
   assert.equal(parseTime('0:61:00'), null);
+});
+
+test('Por valorar: «Repetir el año que viene» mueve 52 semanas, marca la fecha por confirmar y quita el plazo', () => {
+  const w = { name: 'MB Race', date: '2027-07-03', end_date: '2027-07-04', place: 'Megève', modality: 'BTT', subtype: 'UXCM', km: 100, price: 90, url: 'https://www.alpinecup.com', deadline: '2027-06-01', notes: 'Con el grupo' };
+  const n = nextYearWatch(w);
+  assert.equal(n.date, '2028-07-01'); assert.equal(n.end_date, '2028-07-02');
+  assert.equal(new Date(n.date + 'T12:00:00Z').getUTCDay(), new Date(w.date + 'T12:00:00Z').getUTCDay());   // mismo día de la semana
+  assert.equal(n.deadline, ''); assert.equal(n.url, w.url); assert.equal(n.km, 100); assert.equal(n.price, 90);
+  assert.ok(watchTbc(n) && n.notes.includes('Con el grupo') && n.notes.length <= 500);
+  const m = nextYearWatch({ ...w, ...n });   // repetir dos veces no apila la marca ni las notas
+  assert.equal(m.date, '2029-06-30'); assert.equal(m.notes.split(WATCH_TBC).length, 2);
+  assert.equal(watchTbc({ notes: 'Con el grupo' }), false);
 });

@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError, cleanWeb } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, disciplineKey, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  directorBoard, groupMessage, watchInfo, sortWatch, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
+  directorBoard, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -853,9 +853,9 @@ function runnerSearchResults(q) {
       ${mates.length > 6 ? `<p class="hint">…y ${mates.length - 6} más: escribe más letras del nombre.</p>` : ''}` : ''}
     ${club.length ? `<p class="hint"><b>Ya están en el club</b> (apúntate aquí, no hace falta crearla):</p>
       <ul class="mini-list">${club.map((g) => miniRow(g, mine(g) ? '<span class="done">✓ Apuntado</span>'
-        : `<button class="btn primary small" data-act="r-join" data-id="${g.id}">Apuntarme</button>`)).join('')}</ul>` : ''}
+        : `<div class="mini-acts"><button class="btn primary small" data-act="r-join" data-id="${g.id}">Apuntarme</button>${g.suspended ? '' : starBtn(g, 'w-add-reg', ['id', g.id])}</div>`)).join('')}</ul>` : ''}
     ${fed.length ? `<p class="hint"><b>En los calendarios de las federaciones y ligas</b>:</p>
-      <ul class="mini-list">${fed.map((r) => miniRow(r, `<button class="btn small" data-act="r-new-fed" data-i="${S.fed.races.indexOf(r)}">Añadir y apuntarme</button>`)).join('')}</ul>` : ''}
+      <ul class="mini-list">${fed.map((r) => miniRow(r, `<div class="mini-acts"><button class="btn small" data-act="r-new-fed" data-i="${S.fed.races.indexOf(r)}">Añadir y apuntarme</button>${starBtn(r, 'w-add-fed', ['i', S.fed.races.indexOf(r)])}</div>`)).join('')}</ul>` : ''}
     ${!club.length && !fed.length && !mates.length ? `<p class="hint">No hay ninguna carrera parecida a «${esc(q)}».</p>
       <button class="btn primary block" data-act="r-new">＋ ¿No la encuentras? Añádela: «${esc(q.trim())}»</button>`
       : `<button class="btn ghost block small-add" data-act="r-new">＋ ¿No es ninguna de estas? Añadir una carrera nueva</button>`}`;
@@ -1548,12 +1548,12 @@ function watchCard(w, i) {
     open: ['ok', `Plazo hasta el ${dayMon(w.deadline)}`] }[i.deadline];
   const when_ = i.past ? 'Ya pasó' : i.toRace === 0 ? 'Hoy' : i.toRace === 1 ? 'Mañana' : `En ${i.toRace} días`;
   return `<article class="card wcard ${discClass(w.modality, w.subtype)}${i.past ? ' past' : ''}${i.urgent ? ' urgent' : ''}">
-    <div class="wc-top">${dateBadge(w)}<div class="wc-main"><h3>${esc(w.name)}</h3>
+    <div class="wc-top">${dateBadge(w)}<div class="wc-main"><h3>${esc(w.name)}</h3>${watchTbc(w) ? '<p class="wchip tbc">📅 Fecha por confirmar</p>' : ''}
       <p class="muted">${esc(when(w))}${place(w) ? ' · ' + esc(place(w)) : ''} · <b>${when_}</b></p></div></div>
     <div class="wc-chips">${modTag(w.modality, w.subtype)}${w.km ? `<span class="wchip">${ico('ruler')}${esc(kmText(w.km))}</span>` : ''}${w.elevation ? `<span class="wchip">${ico('mountain')}${esc(elevText(w.elevation))}</span>` : ''}${w.price != null ? `<span class="wchip">${ico('money')}${Number(w.price) === 0 ? 'Gratis' : esc(euros(w.price))}</span>` : ''}${dl ? `<span class="wchip ${dl[0]}">${ico('clock')}${dl[1]}</span>` : ''}</div>
     ${mine ? `<p class="wc-club ok">${ico('check')}<span>Ya estás apuntado. Puedes quitarla de aquí.</span></p>` : g ? `<p class="wc-club">${ico('users')}<span>${others.length ? `Ya está en Carreras: <b>${others.length}</b> apuntado${others.length === 1 ? '' : 's'} (${esc(others.map((e) => e.name).slice(0, 4).join(', '))}${others.length > 4 ? '…' : ''})` : 'Está en Carreras: nadie se ha apuntado todavía'}</span></p>` : ''}
     ${w.notes ? `<p class="notes">${esc(w.notes)}</p>` : ''}
-    <div class="wc-acts">${i.past ? '' : mine ? '' : `<button class="btn primary small" data-act="w-sign" data-id="${w.id}">${g ? 'Apuntarme' : 'Inscribirme'}</button>`}
+    <div class="wc-acts">${i.past ? `<button class="btn primary small" data-act="w-repeat" data-id="${w.id}">${ico('star')}Repetir el año que viene</button>` : mine ? '' : `<button class="btn primary small" data-act="w-sign" data-id="${w.id}">${g ? 'Apuntarme' : 'Inscribirme'}</button>`}
       ${w.url ? `<a class="btn small" href="${esc(w.url)}" target="_blank" rel="noopener noreferrer">${ico('ext')}Web</a>` : ''}
       <a class="btn small ghost" href="#/valorar/${w.id}">${ico('pen')}Editar</a>
       <button class="btn small ghost" data-act="w-del" data-id="${w.id}">${ico('trash')}${i.past || mine ? 'Quitar' : 'Descartar'}</button></div></article>`;
@@ -4678,6 +4678,13 @@ const actions = {
     S.rdraft = null; if (el.dataset.back) go('#/mi/valorar'); else render();
   },
   'w-sort'(el) { S.watchSort = el.dataset.m; render(); },
+  async 'w-repeat'(el) {
+    const w = (S.watch || []).find((x) => x.id === el.dataset.id); if (!w) return;
+    const next = nextYearWatch(w);
+    const ok = await run(async () => { await api.runnerWatchSave(S.code, null, next); await api.runnerWatchDelete(S.code, w.id); await loadWatch(); return true; },
+      `Guardada para el año que viene: ${dayMon(next.date)} (por confirmar)`);
+    if (ok) render();
+  },
   async 'w-add-fed'(el) {
     const r = S.fed?.races[Number(el.dataset.i)]; if (!r) return;
     const g = watchMatch(r, S.runnerData.registrations);   // si ya está en Carreras (aunque con otro nombre), se guarda esa para no duplicarla
@@ -5437,7 +5444,7 @@ document.addEventListener('visibilitychange', async () => {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['r-web', 'w-sign', 'w-del', 'w-add-fed', 'w-add-reg', 'chro-toggle', 'chro-all', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
+const RUNNER_ACTIONS = new Set(['r-web', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'chro-toggle', 'chro-all', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
 // los enlaces de la ventana emergente (p. ej. las carreras de un compañero) cierran la ventana al navegar
 document.getElementById('dialog').addEventListener('click', (ev) => { if (ev.target.closest('a[href^="#/"]')) ev.currentTarget.close(); });
 $app.addEventListener('click', (ev) => {
