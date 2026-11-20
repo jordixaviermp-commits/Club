@@ -2250,3 +2250,6 @@ details.card.rcard { margin-bottom: 6px; }
 .bz-det.warn > summary { display: flex; align-items: center; gap: .45rem; color: var(--text); font-weight: 700; list-style: none; } .bz-det.warn > summary::-webkit-details-marker { display: none; }
 .bz-det.warn > summary .ico:first-child { width: 18px; height: 18px; color: #b87400; flex: none; } .bz-det.warn > summary span { flex: 1; }
 .bz-det.warn > summary .rules-chev { width: 18px; height: 18px; transition: transform .15s; } .bz-det.warn[open] > summary .rules-chev { transform: rotate(180deg); }
+
+/* plus de bonificación (podio en una liga): sube el tramo pero no el mínimo; se ve aparte, en dorado, tras las carreras reales */
+.bz-seg i.x { background: repeating-linear-gradient(45deg, #d9a21b 0 5px, #f0c75e 5px 10px); }

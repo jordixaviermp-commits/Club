@@ -1234,11 +1234,11 @@ function bonusZones(st, cfg, planned = 0) {
   const segs = [{ from: 0, units: first, kind: 'pre', range: `0–${first - 1}`, amount: st.penalty ? `−${euros(st.penalty)}` : 'sin bono' },
     ...tiers.map((t, i) => ({ from: t.from, units: t.to != null ? t.to - t.from + 1 : 6, kind: `t${Math.min(i, 2)}`, range: t.text.replace(' a ', '–'), amount: euros(t.amount) }))];
   const max = last + 6, pct = (n) => Math.max(0, Math.min(100, (n / max) * 100));
-  const next = st.next, pill = `<b>${total}</b>${next ? `<small>+${st.missingToNext} → ${euros(next.amount)}</small>` : st.tier ? '<small>máximo</small>' : ''}`;
+  const next = st.next, pill = `<b>${extra ? `${st.count} + ${extra}` : total}</b>${next ? `<small>${extra ? `${total} · ` : ''}+${st.missingToNext} → ${euros(next.amount)}</small>` : st.tier ? `<small>${extra ? `${total} · ` : ''}máximo</small>` : extra ? `<small>${total} con el plus</small>` : ''}`;
   return `<div class="bz" role="img" aria-label="${total} carreras${extra ? ` (con ${extra} de plus)` : ''}; tramos: ${tiers.map((t) => `${t.text} carreras ${euros(t.amount)}`).join(', ')}">
     <div class="bz-bar">
-      ${segs.map((g) => { const fill = Math.max(0, Math.min(1, (total - g.from) / g.units)) * 100;
-        return `<div class="bz-seg ${g.kind}${g.kind === 'pre' && st.reachesMinimum ? ' done' : ''}" style="flex:${g.units}"><i style="width:${fill}%"></i></div>`; }).join('')}
+      ${segs.map((g) => { const fill = (n) => Math.max(0, Math.min(1, (n - g.from) / g.units)) * 100;
+        return `<div class="bz-seg ${g.kind}${g.kind === 'pre' && st.reachesMinimum ? ' done' : ''}" style="flex:${g.units}">${extra ? `<i class="x" style="width:${fill(total)}%"></i>` : ''}<i style="width:${fill(st.count)}%"></i></div>`; }).join('')}
       ${planned ? `<span class="bz-plan" style="left:${pct(total)}%;width:${Math.max(0, pct(Math.min(max, total + planned)) - pct(total))}%" title="Con tus inscripciones"></span>` : ''}
       <span class="bz-you" style="left:min(max(${pct(total).toFixed(1)}%, 52px), calc(100% - 52px))">${pill}</span>
     </div>
