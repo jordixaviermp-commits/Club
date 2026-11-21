@@ -63,5 +63,4 @@ details.fact[data-k="lluvia"] summary b { color: var(--k-lluvia); } details.fact
 /* botón de Pacing destacado (función nueva): ámbar, distinto del azul de las acciones principales, con su etiqueta NUEVO */
 .btn.pacing-go { position: relative; background: linear-gradient(135deg, #ffc21a, #ff8a00); color: #1b1b1b; border: 0; box-shadow: 0 6px 14px rgba(255, 138, 0, .4); }
 .btn.pacing-go svg { stroke-width: 2.4; }
-.btn.pacing-go .new-b { position: absolute; top: -7px; right: -6px; padding: .06rem .3rem; border-radius: 999px; background: #e5381f; color: #fff; font-size: .5rem; font-weight: 800; letter-spacing: .05em; line-height: 1.2; border: 1.5px solid var(--rs-card, #fff); }
 .btn.block.pacing-go { display: flex; align-items: center; justify-content: center; }

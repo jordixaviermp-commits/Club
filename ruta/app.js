@@ -374,7 +374,7 @@ function renderSetup() {
     <div class="step"><b>3</b><h2>Ritmo</h2></div>${ritmoHtml()}
     <div id="arrive">${arriveHtml()}</div>
     <button class="btn go" data-act="go">Ver la previsión</button>
-    <button class="btn block pacing-go" data-act="to-pacing">${svg('bolt')}Vatios y nutrición (Pacing)<b class="new-b">NUEVO</b></button>
+    <button class="btn block pacing-go" data-act="to-pacing">${svg('bolt')}Vatios y nutrición (Pacing)</button>
     ${foot()}`;
 }
 
@@ -421,7 +421,7 @@ function renderTop() {
     <div class="panel">
       ${salidaHtml()}
       <details><summary>Ritmo: <b>${paceText()}</b></summary><div style="margin-top:.6rem">${ritmoHtml()}</div></details>
-      <div class="row" style="margin-top:.6rem"><button class="btn" data-act="reverse">Invertir sentido</button><button class="btn pacing-go" data-act="to-pacing">${svg('bolt')}Pacing<b class="new-b">NUEVO</b></button></div>
+      <div class="row" style="margin-top:.6rem"><button class="btn" data-act="reverse">Invertir sentido</button><button class="btn pacing-go" data-act="to-pacing">${svg('bolt')}Pacing</button></div>
     </div>
     <div class="seg" id="view"><button data-view="sencilla" class="${S.view === 'sencilla' ? 'on' : ''}">Sencilla</button><button data-view="completa" class="${S.view === 'completa' ? 'on' : ''}">Completa</button></div>
     <p class="hint">${S.view === 'completa' ? 'Todo: tiempo detallado, avituallamiento y exportar.' : 'Solo el resumen, el mapa y las subidas.'}</p>`;
