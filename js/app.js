@@ -1046,7 +1046,6 @@ const ICO = {
   star: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
   mountain: 'm8 3 4 8 5-5 5 15H2L8 3z',
   map: 'M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14',
-  bolt: 'M13 2L4 14h7l-1 8 9-12h-7z',
   compass: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM16.2 7.8l-2.1 6.3-6.3 2.1 2.1-6.3z',
   trash: 'M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6',
   plus: 'M12 5v14M5 12h14',
@@ -1371,6 +1370,8 @@ function runnerScreen(sub) {
 const previewBanner = () => (S.session?.isAdmin && S.preview ? `<p class="card warn">👁️ <b>Vista previa</b> de ${esc(S.preview.name)}: no se puede apuntar ni borrar.
   <a href="#/corredores">Salir</a>${S.preview.sqlOk ? '' : '<br><b>⚠️ Falta ejecutar en Supabase el SQL de «Mis carreras»</b> (supabase/cambios/2026-11-11-mis-carreras.sql).'}</p>` : '');
 /** Título de la barra de arriba del corredor: «Hola, Pere Soler» con el nombre completo (hay nombres repetidos); si no cabe, se desliza solo. */
+/** La etiqueta «NUEVO» del botón Pacing se quita sola a final de enero de 2027. */
+const pacingNew = () => todayISO() <= '2027-01-31';
 const runnerTitle = () => (S.session?.isAdmin && S.preview ? `Vista de ${S.preview.name}` : S.runnerData?.me?.name ? `Hola, ${cleanName(S.runnerData.me.name)}` : 'CC Monzón');
 
 /** Tarjeta de una carrera ya disputada (con resultados), para el calendario. */
@@ -1452,7 +1453,7 @@ function runnerRegCard(g, opts = {}) {
       ${!open || g.suspended ? '' : mine
         ? `<div class="joined-acts">
              <button class="btn joined-btn" data-act="r-joined" data-id="${g.id}" aria-label="Estás inscrito${mine.category ? ' en ' + esc(mine.category) : ''}: cambiar categoría o borrarme">${ico('check')}<span>Inscrito${mine.category ? ' (' + esc(mine.category) + ')' : ''}</span>${ico('chevd', 'jb-more')}</button>
-             <a class="btn ghost small" href="pacing/?fecha=${esc(g.date)}" aria-label="Pacing de esta carrera: vatios por tramo y nutrición">${ico('bolt')}Pacing</a>
+             <a class="btn ghost small" href="pacing/?fecha=${esc(g.date)}" aria-label="Pacing de esta carrera: vatios por tramo y nutrición">⚡ Pacing</a>
              <button class="btn ghost small" data-act="r-ics" data-id="${g.id}" aria-label="Añadir al calendario del móvil" title="Añadir al calendario del móvil">${ico('calplus')}Calendario</button></div>`
         : `<div class="row join-row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">Apuntarme</button></div>`}
@@ -1557,7 +1558,7 @@ function viewRunnerHome() {
     <div id="pulse-box">${S.regView === 'cal' || normalize(S.q.runner || '').length >= 2 ? '' : teamPulse(d)}</div>
     <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
     ${body}`,
-  { rtab: '', noSearch: true, head: S.preview ? null : `<a class="hdr-pacing" href="ruta/" aria-label="Pacing y planificar ruta: viento, tiempo, vatios y nutrición" title="Pacing y planificar ruta">${ico('bolt', 'hp-ico')}Pacing</a>` });
+  { rtab: '', noSearch: true, head: S.preview ? null : `<a class="hdr-pacing" href="ruta/" aria-label="Pacing y planificar ruta: viento, tiempo, vatios y nutrición" title="Pacing y planificar ruta"><i aria-hidden="true">⚡</i>Pacing${pacingNew() ? '<b class="hp-new">NUEVO</b>' : ''}</a>` });
 }
 
 const FIELD_LABELS = { province: 'provincia', km: 'distancia', subtype: 'formato', elevation: 'desnivel', price: 'precio' };
