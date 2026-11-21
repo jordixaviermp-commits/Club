@@ -1046,6 +1046,15 @@ const ICO = {
   star: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
   mountain: 'm8 3 4 8 5-5 5 15H2L8 3z',
   map: 'M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14',
+  user: 'M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+  camera: 'M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+  image: 'M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM21 15l-5-5L5 21',
+  printer: 'M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z',
+  download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
+  pin: 'M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0zM12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+  settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z',
+  clip: 'M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48',
+  bell: 'M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0',
   compass: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM16.2 7.8l-2.1 6.3-6.3 2.1 2.1-6.3z',
   trash: 'M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6',
   plus: 'M12 5v14M5 12h14',
@@ -5767,6 +5776,24 @@ $app.addEventListener('toggle', (ev) => {
 // ---------- Textos explicativos plegados ----------
 // Los párrafos de ayuda («hint») no se ven como bloques de texto: quedan en una «i» pequeña que se toca para leerlos. Se hace aquí, una sola vez
 // y para toda la app (pantallas y cuadros), observando lo que se pinta; así cualquier texto de ayuda nuevo sale plegado sin tener que acordarse.
+const EMOJI_ICON = { '⚠': 'alert', '✅': 'ok', '🏁': 'flag', '🏆': 'trophy', '📅': 'cal', '👥': 'users', '👤': 'user', '📊': 'bars', '📸': 'camera', '⏱': 'timer',
+  '📄': 'file', '📋': 'list', '📝': 'pen', '⛔': 'ban', '🗑': 'trash', '✏': 'pen', '⏳': 'clock', '🖼': 'image', '🖨': 'printer', '📣': 'msg', '💶': 'money', '🔗': 'link',
+  '💬': 'msg', '📈': 'act', '🗺': 'map', '⬇': 'download', '📥': 'download', '📍': 'pin', '📏': 'ruler', '🏠': 'home', '🔔': 'bell', '🕘': 'clock', '⭐': 'star',
+  '⛰': 'mountain', '👕': 'shirt', '⚙': 'settings', '📎': 'clip', '✍': 'pen' };
+/** Los emojis decorativos al principio de títulos, botones y etiquetas se pintan como iconos de línea (los de medallas, fiesta y similares se dejan). */
+function iconize(root) {
+  if (!root?.querySelectorAll) return;
+  root.querySelectorAll('h2, h3, h4, summary, .btn, button, .chip, .pill, .tag, .desp-t, .chro-t, .issue, .pen-chip, .pub-tag, .extra-chip, .pending-chip, .imp-pub, .bad-txt, .bad-box, .rc-chip, .wchip, .badge, .state-tag, .flabel, .done').forEach((el) => {
+    if (el.closest('[data-keep-emoji], svg')) return;
+    const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.nodeValue.trim() && !n.parentElement.closest('svg, .ei') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP) });
+    const n = w.nextNode(); if (!n) return;
+    const t = n.nodeValue, lead = t.length - t.trimStart().length, ch = [...t.slice(lead, lead + 4)][0];
+    const key = ch && EMOJI_ICON[ch]; if (!key) return;
+    const rest = t.slice(lead + ch.length).replace(/^\ufe0f/, '');
+    const span = document.createElement('span'); span.className = 'ei'; span.innerHTML = ico(key);
+    n.nodeValue = rest; n.parentNode.insertBefore(span, n); if (lead) n.parentNode.insertBefore(document.createTextNode(t.slice(0, lead)), span);
+  });
+}
 const TIP_MIN = 60;
 function foldHints(root) {
   if (!root?.querySelectorAll) return;
@@ -5796,7 +5823,7 @@ document.addEventListener('click', (ev) => {
 });
 {
   let queued = false;
-  const run = () => { queued = false; foldHints(document.getElementById('app')); document.querySelectorAll('dialog[open]').forEach(foldHints); };
+  const run = () => { queued = false; foldHints(document.getElementById('app')); iconize(document.getElementById('app')); document.querySelectorAll('dialog[open]').forEach((d) => { foldHints(d); iconize(d); }); };
   new MutationObserver(() => { if (!queued) { queued = true; queueMicrotask(run); } }).observe(document.body, { childList: true, subtree: true });
   run();
   window.addEventListener('beforeprint', () => document.querySelectorAll('details.tip, p.tip-body[data-tip-key]').forEach((d) => { if (d.tagName === 'P') { d.dataset.wasHidden = d.hidden ? '1' : ''; d.hidden = false; } else { d.dataset.wasOpen = d.open ? '1' : ''; d.open = true; } }));
