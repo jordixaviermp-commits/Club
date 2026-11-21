@@ -2459,3 +2459,15 @@ header.top .icon-btn.sos { width: 38px; height: 38px; min-width: 38px; padding: 
 .up-row .up-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: .12rem; }
 .up-row .up-main > b { text-transform: none; font-size: var(--fs-4); font-weight: 700; white-space: normal; letter-spacing: 0; }
 .up-row .rc-meta { margin: 0; }
+
+/* v232: casilla plegable de Carreras también en Mi temporada, Por valorar, Federaciones y las listas de la dirección */
+.mini-list li.mrow-fold { position: relative; display: block; padding: 0; background: none; border: 0; box-shadow: none; margin: 0; }
+.mini-list li.mrow-fold > .hero-badge { z-index: 2; }
+details.rcard.hero { background: color-mix(in srgb, var(--brand-cyan) 12%, var(--card)); border: 2px solid var(--brand-cyan); margin-top: .9rem; }
+.rc-body .mrow-below { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin: .1rem 0 .3rem; } .rc-body .mrow-below:empty { display: none; }
+.rc-body .mrow-acts { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-top: .3rem; } .rc-body .mrow-acts:empty { display: none; }
+.rc-body .mrow-acts .btn .ico { width: 15px; height: 15px; margin-left: .2rem; }
+.rc-side .pos { font-size: var(--fs-4); font-weight: 800; white-space: nowrap; text-align: right; } .rc-side .pos small { font-weight: 600; color: var(--muted); }
+.rc-side .src { font-size: var(--fs-1); max-width: 7.5rem; white-space: normal; text-align: right; line-height: 1.15; }
+details.rcard.wcard.urgent { border-left-color: var(--bad-2); }
+details.rcard .rc-body .wc-acts { margin-top: .5rem; }
