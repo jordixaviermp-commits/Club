@@ -1,0 +1,679 @@
+// Planificador de ruta: reglas puras (sin DOM ni red) para poder probarlas con `node --test`.
+// Track → distancias y desnivel → hora de paso por cada punto → subidas → viento relativo a la marcha.
+
+const R_EARTH = 6371008.8;
+const rad = (d) => (d * Math.PI) / 180;
+const deg = (r) => (r * 180) / Math.PI;
+
+/** Distancia en metros entre dos puntos (haversine). */
+export function haversine(lat1, lon1, lat2, lon2) {
+  const dLat = rad(lat2 - lat1), dLon = rad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R_EARTH * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+/** Rumbo en grados (0 = norte, 90 = este) para ir de 1 a 2. */
+export function bearing(lat1, lon1, lat2, lon2) {
+  const y = Math.sin(rad(lon2 - lon1)) * Math.cos(rad(lat2));
+  const x = Math.cos(rad(lat1)) * Math.sin(rad(lat2)) - Math.sin(rad(lat1)) * Math.cos(rad(lat2)) * Math.cos(rad(lon2 - lon1));
+  return (deg(Math.atan2(y, x)) + 360) % 360;
+}
+
+const decodeXml = (s) => s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+  .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&').trim();
+
+/** Lee un GPX (track o, si no hay, ruta). Devuelve { name, points: [{lat, lon, ele|null}] }. */
+export function parseGPX(text) {
+  const read = (tag) => {
+    const out = [];
+    const re = new RegExp(`<(?:\\w+:)?${tag}\\b([^>]*?)(?:\\/>|>([\\s\\S]*?)<\\/(?:\\w+:)?${tag}>)`, 'g');
+    let m;
+    while ((m = re.exec(text))) {
+      const lat = parseFloat(/\blat\s*=\s*["']([^"']+)/.exec(m[1])?.[1]);
+      const lon = parseFloat(/\blon\s*=\s*["']([^"']+)/.exec(m[1])?.[1]);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+      const e = m[2] ? parseFloat(/<(?:\w+:)?ele>\s*([^<]+)</.exec(m[2])?.[1]) : NaN;
+      out.push({ lat, lon, ele: Number.isFinite(e) ? e : null });
+    }
+    return out;
+  };
+  let points = read('trkpt');
+  if (points.length < 2) points = read('rtept');
+  const name = /<(?:\w+:)?name>([\s\S]*?)<\/(?:\w+:)?name>/.exec(text)?.[1];
+  return { name: name ? decodeXml(name) : '', points };
+}
+
+/**
+ * Lee un archivo FIT (actividad o curso de Garmin/Wahoo…): solo los mensajes «record» con posición.
+ * `buf` es un ArrayBuffer o Uint8Array.
+ */
+export function parseFIT(buf) {
+  const u8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  if (u8.length < 14) throw new Error('Archivo FIT demasiado corto');
+  const headerSize = u8[0];
+  if (String.fromCharCode(u8[8], u8[9], u8[10], u8[11]) !== '.FIT') throw new Error('No es un archivo FIT');
+  const end = Math.min(u8.length, headerSize + dv.getUint32(4, true));
+  const defs = {};
+  const points = [];
+  let name = '';
+  let p = headerSize;
+  const SEMI = 180 / 2 ** 31;
+  while (p < end) {
+    const h = u8[p++];
+    let local, isDef = false;
+    if (h & 0x80) local = (h >> 5) & 0x03; // cabecera de marca de tiempo comprimida: siempre datos
+    else { local = h & 0x0f; isDef = !!(h & 0x40); }
+    if (isDef) {
+      const hasDev = !!(h & 0x20);
+      const little = u8[p + 1] === 0;
+      const global = dv.getUint16(p + 2, little);
+      const n = u8[p + 4];
+      p += 5;
+      const fields = [];
+      for (let i = 0; i < n; i++, p += 3) fields.push({ num: u8[p], size: u8[p + 1], type: u8[p + 2] & 0x1f });
+      let devSize = 0;
+      if (hasDev) { const nd = u8[p++]; for (let i = 0; i < nd; i++, p += 3) devSize += u8[p + 1]; }
+      defs[local] = { global, little, fields, devSize };
+      continue;
+    }
+    const d = defs[local];
+    if (!d) throw new Error('Archivo FIT dañado');
+    if (d.global === 20) { // record
+      let lat = null, lon = null, alt = null, ealt = null;
+      let q = p;
+      for (const f of d.fields) {
+        if (f.num === 0 && f.size === 4) { const v = dv.getInt32(q, d.little); if (v !== 0x7fffffff) lat = v * SEMI; }
+        else if (f.num === 1 && f.size === 4) { const v = dv.getInt32(q, d.little); if (v !== 0x7fffffff) lon = v * SEMI; }
+        else if (f.num === 2 && f.size === 2) { const v = dv.getUint16(q, d.little); if (v !== 0xffff) alt = v / 5 - 500; }
+        else if (f.num === 78 && f.size === 4) { const v = dv.getUint32(q, d.little); if (v !== 0xffffffff) ealt = v / 5 - 500; }
+        q += f.size;
+      }
+      if (lat !== null && lon !== null) points.push({ lat, lon, ele: ealt ?? alt });
+    } else if (d.global === 31 && !name) { // course: campo 5 = nombre
+      let q = p;
+      for (const f of d.fields) {
+        if (f.num === 5 && f.type === 7) name = new TextDecoder().decode(u8.subarray(q, q + f.size)).replace(/\0[\s\S]*$/, '').trim();
+        q += f.size;
+      }
+    }
+    p += d.fields.reduce((s, f) => s + f.size, 0) + d.devSize;
+  }
+  return { name, points };
+}
+
+/**
+ * Prepara el track: quita puntos repetidos, calcula distancia acumulada (m), suaviza la altitud
+ * (media móvil de ±`win` m, quita el ruido del GPS) y devuelve el desnivel positivo.
+ */
+export function buildTrack(raw, { win = null } = {}) {
+  const pts = [];
+  for (const r of raw) {
+    const last = pts[pts.length - 1];
+    if (last && last.lat === r.lat && last.lon === r.lon) continue;
+    pts.push({ lat: r.lat, lon: r.lon, ele: r.ele });
+  }
+  if (pts.length < 2) throw new Error('El track necesita al menos dos puntos con posición');
+  const hasEle = pts.some((x) => x.ele !== null);
+  // altitudes que faltan: la del punto anterior conocido (o la primera conocida)
+  let lastE = pts.find((x) => x.ele !== null)?.ele ?? 0;
+  for (const x of pts) { if (x.ele === null) x.ele = lastE; else lastE = x.ele; }
+  let dist = 0;
+  pts.forEach((x, i) => { if (i) dist += haversine(pts[i - 1].lat, pts[i - 1].lon, x.lat, x.lon); x.d = dist; });
+  const e = cleanElevation(pts);
+  // suavizado: más fuerte cuanto más ruido trae la altitud (GPS de móvil o de reloj)
+  const noise = noiseLevel(pts, e);
+  const w = win ?? Math.min(250, Math.max(60, 25 * noise));
+  const sm = movingAvg(pts, e, w);
+  pts.forEach((x, i) => { x.es = sm[i]; });
+  // ruido que queda tras suavizar (lo usa el detector de subidas para no confundirlo con una rampa)
+  const spacing = dist / Math.max(1, pts.length - 1);
+  pts.esNoise = noise / Math.sqrt(Math.max(1, (2 * w) / Math.max(1, spacing)));
+  // desnivel con histéresis: solo cuenta lo que sube o baja más de 3 m seguidos (el ruido no suma)
+  let gain = 0, loss = 0, ref = sm[0];
+  for (const v of sm) { if (v - ref >= 3) { gain += v - ref; ref = v; } else if (ref - v >= 3) { loss += ref - v; ref = v; } }
+  const eles = sm;
+  return { points: pts, distance: dist, gain, loss, hasEle, minEle: Math.min(...eles), maxEle: Math.max(...eles),
+    quality: { noise: Math.round(noise * 10) / 10, window: Math.round(w), repaired: e.repaired } };
+}
+
+/** Media móvil por distancia (±w m) con dos punteros. */
+function movingAvg(pts, vals, w) {
+  const out = new Array(pts.length);
+  let lo = 0, hi = 0, sum = 0;
+  for (let i = 0; i < pts.length; i++) {
+    while (hi < pts.length && pts[hi].d <= pts[i].d + w) sum += vals[hi++];
+    while (pts[lo].d < pts[i].d - w) sum -= vals[lo++];
+    out[i] = sum / (hi - lo);
+  }
+  return out;
+}
+
+/**
+ * Limpia la altitud antes de suavizar: quita picos sueltos y arregla los escalones de ida y vuelta
+ * (túneles, puentes y viaductos en el modelo del terreno, saltos del GPS).
+ * Devuelve las altitudes limpias (con `repaired` = escalones arreglados).
+ */
+export function cleanElevation(pts) {
+  // 1) picos sueltos (filtro de Hampel por distancia, ±50 m)
+  const raw = pts.map((p) => p.ele);
+  const e = raw.slice();
+  let lo = 0, hi = 0;
+  for (let i = 0; i < pts.length; i++) {
+    while (hi < pts.length && pts[hi].d <= pts[i].d + 50) hi++;
+    while (pts[lo].d < pts[i].d - 50) lo++;
+    if (hi - lo < 5) continue;
+    const win = raw.slice(lo, hi).sort((x, y) => x - y);
+    const med = win[win.length >> 1];
+    const mad = win.map((v) => Math.abs(v - med)).sort((x, y) => x - y)[win.length >> 1] * 1.4826;
+    if (Math.abs(raw[i] - med) > Math.max(6, 3 * mad)) e[i] = med;
+  }
+  // 2) escalones de ida y vuelta, buscados sobre la mediana de ±40 m (el ruido del GPS no cuenta):
+  //    un cambio de más de 20 m en menos de 60 m (pendiente imposible en una carretera) que se deshace
+  //    con otro de signo contrario en menos de 3 km se sustituye por una recta entre los extremos.
+  const med = medianFilter(pts, e, 40);
+  const jumps = [];
+  for (let i = 1, j = 0; i < pts.length; i++) {
+    while (pts[i].d - pts[j].d > 60) j++;
+    const dh = med[i] - med[j];
+    if (Math.abs(dh) > 20 && Math.abs(dh) / Math.max(1, pts[i].d - pts[j].d) > 0.4) {
+      if (jumps.length && pts[i].d - pts[jumps[jumps.length - 1].i].d < 80 && Math.sign(jumps[jumps.length - 1].dh) === Math.sign(dh)) {
+        if (Math.abs(dh) > Math.abs(jumps[jumps.length - 1].dh)) jumps[jumps.length - 1] = { i, j, dh };
+      } else jumps.push({ i, j, dh });
+    }
+  }
+  let repaired = 0;
+  const used = new Set();
+  for (let a = 0; a < jumps.length; a++) {
+    if (used.has(a)) continue;
+    for (let b = a + 1; b < jumps.length && pts[jumps[b].i].d - pts[jumps[a].i].d < 3000; b++) {
+      const A = jumps[a], B = jumps[b];
+      if (used.has(b) || Math.sign(A.dh) === Math.sign(B.dh) || Math.abs(A.dh + B.dh) > 0.4 * Math.abs(A.dh)) continue;
+      const i0 = Math.max(0, A.j - 1), i1 = Math.min(pts.length - 1, B.i + 1), e0 = med[i0], e1 = med[i1];
+      for (let k = i0 + 1; k < i1; k++) e[k] = e0 + (e1 - e0) * ((pts[k].d - pts[i0].d) / Math.max(1, pts[i1].d - pts[i0].d));
+      used.add(a); used.add(b); repaired++;
+      break;
+    }
+  }
+  e.repaired = repaired;
+  return e;
+}
+
+/** Mediana móvil por distancia (±w m). */
+function medianFilter(pts, vals, w) {
+  const out = new Array(pts.length);
+  let lo = 0, hi = 0;
+  for (let i = 0; i < pts.length; i++) {
+    while (hi < pts.length && pts[hi].d <= pts[i].d + w) hi++;
+    while (pts[lo].d < pts[i].d - w) lo++;
+    const win = vals.slice(lo, hi).sort((x, y) => x - y);
+    out[i] = win[win.length >> 1];
+  }
+  return out;
+}
+
+/** Ruido de la altitud (m): desviación típica de cada punto respecto a la media de ±100 m. */
+function noiseLevel(pts, e) {
+  if (pts.length < 20) return 0;
+  const ref = movingAvg(pts, e, 100);
+  let s = 0;
+  for (let i = 0; i < pts.length; i++) s += (e[i] - ref[i]) ** 2;
+  return Math.sqrt(s / pts.length);
+}
+
+/** Índice del primer punto con distancia acumulada ≥ d (búsqueda binaria). */
+export function indexAt(points, d) {
+  let a = 0, b = points.length - 1;
+  if (d <= 0) return 0;
+  if (d >= points[b].d) return b;
+  while (a < b) { const m = (a + b) >> 1; if (points[m].d < d) a = m + 1; else b = m; }
+  return a;
+}
+
+/** Posición y altitud interpoladas a la distancia d. */
+export function pointAt(points, d) {
+  const i = indexAt(points, d);
+  if (i === 0) return { ...points[0] };
+  const a = points[i - 1], b = points[i];
+  const t = b.d === a.d ? 0 : (d - a.d) / (b.d - a.d);
+  return { lat: a.lat + (b.lat - a.lat) * t, lon: a.lon + (b.lon - a.lon) * t, es: a.es + (b.es - a.es) * t, d };
+}
+
+/** Pendiente (fracción) entre d−half y d+half, con la altitud suavizada. */
+export function gradeAt(points, d, half = 100) {
+  const total = points[points.length - 1].d;
+  const a = Math.max(0, d - half), b = Math.min(total, d + half);
+  if (b - a < 1) return 0;
+  return (pointAt(points, b).es - pointAt(points, a).es) / (b - a);
+}
+
+/** Rumbo medio de la marcha alrededor de d (de d−half a d+half). */
+export function headingAt(points, d, half = 500) {
+  const total = points[points.length - 1].d;
+  const a = pointAt(points, Math.max(0, d - half)), b = pointAt(points, Math.min(total, d + half));
+  return bearing(a.lat, a.lon, b.lat, b.lon);
+}
+
+// ---------- Modelo de velocidad ----------
+// Potencia constante: la que da la velocidad indicada en llano. En cada tramo se busca la velocidad
+// que con esa potencia vence pendiente, rodadura y aire. Bajando se limita a `vmax`.
+const G = 9.81, RHO = 1.2;
+export function powerFor(v, grade, { mass = 80, cda = 0.32, crr = 0.005 } = {}) {
+  const th = Math.atan(grade);
+  return v * mass * G * (crr * Math.cos(th) + Math.sin(th)) + 0.5 * RHO * cda * v ** 3;
+}
+export function speedFor(power, grade, opts = {}) {
+  let a = 0, b = 40;
+  for (let k = 0; k < 50; k++) { const m = (a + b) / 2; if (powerFor(m, grade, opts) < power) a = m; else b = m; }
+  return (a + b) / 2;
+}
+
+/** Rodadura, aerodinámica y tope bajando según el terreno. */
+export const TERRAIN = {
+  road: { label: 'Carretera', crr: 0.005, cda: 0.36, vmax: 55 },
+  gravel: { label: 'Gravel', crr: 0.011, cda: 0.40, vmax: 45 },
+  mtb: { label: 'MTB', crr: 0.02, cda: 0.48, vmax: 35 },
+};
+
+/**
+ * Hora de paso (ms desde el inicio) para cada punto del track.
+ * Modo velocidad (por defecto): `flatKmh` es la media en llano; se saca la potencia que la da y con ella
+ * la velocidad en cada pendiente. Modo potencia (`mode: 'power'`): `pFlat` W en llano, `pClimb` W desde el 3 %,
+ * 100 W en bajadas desde el −3 %, con el peso `rider` + `bike`. `terrain`: road, gravel o mtb.
+ * Paradas: `stopsPerHour` minutos de cada hora de reloj (o `stopsMin` en total, repartidos).
+ * Devuelve { t (ms desde la salida en cada punto), total, moving (sin paradas), power }.
+ */
+export function timeline(points, { mode = 'speed', flatKmh = 27, mass = 80, pFlat = 200, pClimb = 220, rider = 72, bike = 8,
+  terrain = 'road', vmaxKmh, vminKmh = 5, stopsMin = 0, stopsPerHour = 0 } = {}) {
+  const T = TERRAIN[terrain] || TERRAIN.road;
+  const opts = { mass: mode === 'power' ? rider + bike : mass, crr: T.crr, cda: T.cda };
+  const P0 = mode === 'power' ? pFlat : powerFor(flatKmh / 3.6, 0, opts);
+  // en modo potencia se descuenta un 3 % de pérdidas de la transmisión
+  const powerAt = (g) => (mode !== 'power' ? P0 : 0.97 * (g >= 0.03 ? pClimb : g <= -0.03 ? 100 : pFlat));
+  const vmax = (vmaxKmh ?? T.vmax) / 3.6, vmin = vminKmh / 3.6;
+  const memo = new Map();
+  const v = (g) => {
+    const k = Math.round(Math.max(-0.25, Math.min(0.25, g)) * 1000);
+    if (!memo.has(k)) memo.set(k, Math.min(vmax, Math.max(vmin, speedFor(powerAt(k / 1000), k / 1000, opts))));
+    return memo.get(k);
+  };
+  const t = new Float64Array(points.length);
+  for (let i = 1; i < points.length; i++) {
+    const dd = points[i].d - points[i - 1].d;
+    const g = gradeAt(points, (points[i].d + points[i - 1].d) / 2, 100);
+    t[i] = t[i - 1] + (dd / v(g)) * 1000;
+  }
+  const moving = t[t.length - 1];
+  const total = points[points.length - 1].d;
+  // paradas: X min de cada hora de reloj (la marcha ocupa 60 − X) o un total repartido por la distancia
+  if (stopsPerHour > 0 && stopsPerHour < 60) { const f = 60 / (60 - stopsPerHour); for (let i = 0; i < t.length; i++) t[i] *= f; }
+  if (stopsMin > 0 && total > 0) for (let i = 0; i < t.length; i++) t[i] += (points[i].d / total) * stopsMin * 60000;
+  return { t, total: t[t.length - 1], moving, power: P0 };
+}
+
+/** ms desde la salida a la distancia d (interpolando la línea de tiempos). */
+export function timeAt(points, t, d) {
+  const i = indexAt(points, d);
+  if (i === 0) return t[0];
+  const a = points[i - 1], b = points[i];
+  const f = b.d === a.d ? 0 : (d - a.d) / (b.d - a.d);
+  return t[i - 1] + (t[i] - t[i - 1]) * f;
+}
+
+/**
+ * Subidas.
+ * 1) Tramos de subida: de un mínimo a una cima, cortando cuando se baja más de max(15 m, 25 % de lo subido), y nunca más de 40 m.
+ * 2) Cada tramo se valora por su cuenta (repechos y puertos cortos): ≥ `minGain` m, ≥ `minLen` m y media ≥ `minAvg`.
+ * 3) Aparte, se juntan los tramos seguidos de una misma subida larga (el siguiente llega más alto y la bajada
+ *    entre medias es ≤ max(25 m, 15 % de lo subido hasta ahí)) y se valoran como puerto tendido: ≥ 150 m al 2 % o ≥ 300 m al 1,5 %.
+ * 4) Se muestran las largas aceptadas y las cortas que no quedan dentro de una larga.
+ * En todas se recortan la aproximación y el final llanos (< 1,5 % en 1 km).
+ */
+export function findClimbs(points, { minGain = 40, minLen = 500, minAvg = 0.025, flat = 0.015 } = {}) {
+  const es = (i) => points[i].es;
+  const segs = [];
+  let lo = 0, hi = 0;
+  for (let i = 1; i < points.length; i++) {
+    const e = es(i);
+    if (e > es(hi)) hi = i;
+    else if (es(hi) - e > Math.min(40, Math.max(15, 0.25 * (es(hi) - es(lo))))) { if (hi > lo) segs.push([lo, hi]); lo = hi = i; }
+    if (e < es(lo)) lo = hi = i;
+  }
+  if (hi > lo) segs.push([lo, hi]);
+
+  const measure = ([l, h]) => {
+    let s = l, e = h;
+    // pendiente media de los próximos (o últimos) W m, sin salirse de la subida; W crece con la subida
+    // (200 m en un repecho, hasta 1 km en un puerto largo) para no confundir un rellano con el final
+    const W = Math.min(1000, Math.max(200, 0.05 * (points[h].d - points[l].d)));
+    const ahead = (i) => { const to = Math.min(points[e].d, points[i].d + W); return (pointAt(points, to).es - points[i].es) / Math.max(1, to - points[i].d); };
+    const behind = (i) => { const from = Math.max(points[s].d, points[i].d - W); return (points[i].es - pointAt(points, from).es) / Math.max(1, points[i].d - from); };
+    // primero por altura: desde la cima hacia atrás, la subida empieza donde la altitud deja por última vez
+    // el nivel de la base (unos metros por encima del punto más bajo; el ruido del llano no cuenta)
+    const thr = Math.max(3, 0.03 * (points[h].es - points[l].es), 4 * (points.esNoise || 0));
+    s = h;
+    while (s > l && points[s - 1].es >= points[l].es + thr) s--;
+    if (s > l) s--;
+    while (s < e && points[e].d - points[s].d > 200 && ahead(s) < flat) s++;
+    while (e > s && points[e].d - points[s].d > 200 && behind(e) < flat) e--;
+    const a = points[s], b = points[e];
+    const gain = b.es - a.es, len = b.d - a.d;
+    return { s, e, a, b, gain, len, avg: len > 0 ? gain / len : 0 };
+  };
+  const make = (m) => {
+    let maxG = 0;
+    for (let d = m.a.d; d <= m.b.d - 100; d += 50) maxG = Math.max(maxG, gradeAt(points, d + 50, 50));
+    return { start: m.a.d, end: m.b.d, length: m.len, gain: m.gain, avg: m.avg, max: Math.max(maxG, m.avg), top: m.b.es, startIdx: m.s, endIdx: m.e };
+  };
+  const shortOk = (m) => m.len >= minLen && m.gain >= minGain && m.avg >= minAvg;
+  // repechos pequeños (sin categoría): salen en «Todas»
+  const minorOk = (m) => m.len >= 300 && m.gain >= 20 && m.avg >= 0.03;
+  const longOk = (m) => m.len >= minLen && ((m.gain >= 150 && m.avg >= 0.02) || (m.gain >= 300 && m.avg >= 0.015));
+
+  // subidas largas: tramos seguidos de una misma subida
+  const groups = [];
+  for (const sg of segs) {
+    const g = groups[groups.length - 1];
+    if (g) {
+      const drop = es(g[1]) - es(sg[0]);
+      if (es(sg[1]) > es(g[1]) && drop <= Math.max(25, 0.15 * (es(g[1]) - es(g[0])))) { g[1] = sg[1]; g.n++; continue; }
+    }
+    groups.push(Object.assign([...sg], { n: 1 }));
+  }
+  const longs = groups.map(measure).filter((m) => longOk(m) && (m.len > 3000 || !shortOk(m)));
+  const out = longs.map(make);
+  const inside = (m) => longs.some((L) => m.a.d >= L.a.d - 200 && m.b.d <= L.b.d + 200);
+  for (const m of segs.map(measure)) if ((shortOk(m) || longOk(m) || minorOk(m)) && !inside(m)) out.push(make(m));
+  return out.sort((x, y) => x.start - y.start);
+}
+
+/** Puntos donde se consulta el tiempo: uno cada `step` m (como mucho `max`) más la llegada. */
+export function samplePoints(points, { max = 40, minStep = 2000 } = {}) {
+  const total = points[points.length - 1].d;
+  const step = Math.max(minStep, total / (max - 1));
+  const ds = [];
+  for (let d = 0; d < total - step * 0.3; d += step) ds.push(d);
+  ds.push(total);
+  return ds.map((d) => ({ ...pointAt(points, d), heading: headingAt(points, d) }));
+}
+
+/**
+ * Viento respecto a la marcha. `fromDeg`: de dónde viene (convenio meteorológico).
+ * head > 0 = de cara, < 0 = a favor; cross = componente lateral.
+ */
+export function windRelative(headingDeg, fromDeg, speed) {
+  const diff = ((fromDeg - headingDeg + 540) % 360) - 180; // -180..180, 0 = viene de frente
+  const head = speed * Math.cos(rad(diff));
+  const cross = speed * Math.sin(rad(diff));
+  const kind = Math.abs(diff) <= 45 ? 'cara' : Math.abs(diff) >= 135 ? 'favor' : 'lateral';
+  return { head, cross, diff, kind, side: diff > 0 ? 'derecha' : 'izquierda' };
+}
+
+/** Valor horario interpolado en el instante `ms` (epoch). `times` en segundos unix, ordenados. */
+export function interpHourly(times, values, ms) {
+  const s = ms / 1000;
+  if (!times.length) return null;
+  if (s <= times[0]) return values[0];
+  if (s >= times[times.length - 1]) return values[values.length - 1];
+  let i = 1;
+  while (times[i] < s) i++;
+  const f = (s - times[i - 1]) / (times[i] - times[i - 1]);
+  const a = values[i - 1], b = values[i];
+  if (a === null || b === null) return a ?? b;
+  return a + (b - a) * f;
+}
+
+/** Dirección del viento interpolada como vector (evita que entre 350° y 10° salga 180°). */
+export function interpDirection(times, dirs, speeds, ms) {
+  const u = dirs.map((d, i) => (speeds[i] ?? 0) * Math.sin(rad(d ?? 0)));
+  const v = dirs.map((d, i) => (speeds[i] ?? 0) * Math.cos(rad(d ?? 0)));
+  const uu = interpHourly(times, u, ms), vv = interpHourly(times, v, ms);
+  if (Math.hypot(uu, vv) < 1e-6) return interpHourly(times, dirs, ms);
+  return (deg(Math.atan2(uu, vv)) + 360) % 360;
+}
+
+/** Simplifica para guardar en el móvil: como mucho `max` puntos, conservando los extremos. */
+export function decimate(points, max = 2500) {
+  if (points.length <= max) return points.map((p) => [round(p.lat, 5), round(p.lon, 5), round(p.ele, 1)]);
+  const out = [];
+  const step = (points.length - 1) / (max - 1);
+  for (let k = 0; k < max; k++) { const p = points[Math.round(k * step)]; out.push([round(p.lat, 5), round(p.lon, 5), round(p.ele, 1)]); }
+  return out;
+}
+const round = (x, n) => (x === null || x === undefined ? null : Math.round(x * 10 ** n) / 10 ** n);
+
+/** Código de tiempo WMO de Open-Meteo → icono y texto corto. */
+export function weatherLabel(code) {
+  if (code === null || code === undefined) return ['', ''];
+  if (code === 0) return ['☀️', 'Despejado'];
+  if (code <= 2) return ['🌤️', 'Poco nuboso'];
+  if (code === 3) return ['☁️', 'Cubierto'];
+  if (code <= 48) return ['🌫️', 'Niebla'];
+  if (code <= 57) return ['🌦️', 'Llovizna'];
+  if (code <= 67) return ['🌧️', 'Lluvia'];
+  if (code <= 77) return ['🌨️', 'Nieve'];
+  if (code <= 82) return ['🌦️', 'Chubascos'];
+  if (code <= 86) return ['🌨️', 'Chubascos de nieve'];
+  return ['⛈️', 'Tormenta'];
+}
+
+/** URL de Open-Meteo para varios puntos a la vez, en hora UTC y con tiempos unix. */
+export function forecastUrl(samples, fromMs, toMs) {
+  const day = (ms) => new Date(ms).toISOString().slice(0, 10);
+  const q = new URLSearchParams({
+    latitude: samples.map((s) => s.lat.toFixed(3)).join(','),
+    longitude: samples.map((s) => s.lon.toFixed(3)).join(','),
+    hourly: 'temperature_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,cloud_cover,relative_humidity_2m,dew_point_2m,uv_index,is_day',
+    wind_speed_unit: 'kmh', timezone: 'GMT', timeformat: 'unixtime',
+    start_date: day(fromMs - 3600000), end_date: day(toMs + 3600000),
+  });
+  return `https://api.open-meteo.com/v1/forecast?${q}`;
+}
+
+/** Combina la respuesta de Open-Meteo con las horas de paso: el tiempo que hará en cada punto al pasar. */
+export function weatherAlong(samples, etas, response) {
+  const list = Array.isArray(response) ? response : [response];
+  return samples.map((s, i) => {
+    const h = list[i]?.hourly;
+    if (!h) return { ...s, eta: etas[i] };
+    const at = (k) => (h[k] ? interpHourly(h.time, h[k], etas[i]) : null);
+    const wind = at('wind_speed_10m');
+    const dir = interpDirection(h.time, h.wind_direction_10m, h.wind_speed_10m, etas[i]);
+    const near = h.time.reduce((b, x, j) => (Math.abs(x * 1000 - etas[i]) < Math.abs(h.time[b] * 1000 - etas[i]) ? j : b), 0);
+    return {
+      ...s, eta: etas[i], temp: at('temperature_2m'), feels: at('apparent_temperature'), rainProb: at('precipitation_probability'),
+      rain: at('precipitation'), code: h.weather_code[near], wind, gust: at('wind_gusts_10m'), windFrom: dir,
+      clouds: at('cloud_cover'), hum: at('relative_humidity_2m'), dew: at('dew_point_2m'), uv: at('uv_index'), isDay: h.is_day ? h.is_day[near] : null,
+      rel: windRelative(s.heading, dir, wind),
+    };
+  });
+}
+
+/** Categoría al estilo de las vueltas: longitud (m) × pendiente media (%). */
+export function climbCategory(c) {
+  const score = c.length * c.avg * 100;
+  if (score >= 80000) return 'HC';
+  if (score >= 64000) return '1';
+  if (score >= 32000) return '2';
+  if (score >= 16000) return '3';
+  if (score >= 8000) return '4';
+  return '';
+}
+
+/** Color de cada categoría (la misma escala en el perfil, el mapa y las tarjetas). */
+export const CAT_COLOR = { '': '#9ccc65', 4: '#2e9e4f', 3: '#e6c229', 2: '#f08c2a', 1: '#d9342b', HC: '#8b1a1a' };
+export const catLabel = (c) => (c === '' ? 'Sin categoría' : c === 'HC' ? 'Especial (HC)' : `${c}ª categoría`);
+/** Filtros de la lista: todas; medianas y grandes (con categoría o ≥ 40 m de desnivel); solo grandes (con categoría). */
+export function climbFilter(climbs, which) {
+  if (which === 'todas') return climbs;
+  return climbs.filter((c) => { const k = climbCategory(c); return which === 'grandes' ? k !== '' : k !== '' || c.gain >= 40; });
+}
+
+/** Color por pendiente (fracción), los mismos tramos que la leyenda del perfil. */
+export function gradeColor(g) {
+  if (g < 0.03) return 'var(--g1)';
+  if (g < 0.06) return 'var(--g2)';
+  if (g < 0.09) return 'var(--g3)';
+  if (g < 0.12) return 'var(--g4)';
+  return 'var(--g5)';
+}
+
+/**
+ * Nota de una hora de salida (más baja = mejor): viento de cara, lluvia y salir o llegar de noche.
+ * `wx`: resultado de weatherAlong; `dark`: minutos fuera de la luz del día.
+ */
+export function departureScore(wx, darkMin = 0) {
+  if (!wx.length) return Infinity;
+  let s = 0;
+  for (const w of wx) {
+    if (w.wind === undefined) continue;
+    s += Math.max(0, w.rel.head) + 0.25 * Math.abs(w.rel.cross) + 0.15 * (w.rainProb ?? 0) + 8 * (w.rain ?? 0);
+  }
+  return s / wx.length + darkMin * 0.3;
+}
+
+/** Distancia (m) a la que vas a los `ms` desde la salida. */
+export function distAtTime(points, t, ms) {
+  let a = 0, b = t.length - 1;
+  if (ms <= 0) return 0;
+  if (ms >= t[b]) return points[b].d;
+  while (a < b) { const m = (a + b) >> 1; if (t[m] < ms) a = m + 1; else b = m; }
+  const f = t[a] === t[a - 1] ? 0 : (ms - t[a - 1]) / (t[a] - t[a - 1]);
+  return points[a - 1].d + (points[a].d - points[a - 1].d) * f;
+}
+
+/**
+ * Tomas de comida. Devuelve [{ ms, d, grams, moved }].
+ * Manual: una cada `everyMin` (la primera a los `firstMin`), con lo que toca a `gph` g/h en ese intervalo.
+ * Inteligente (`smart`): las mismas horas hasta `endGapMin` antes de llegar, los hidratos de toda la
+ * salida (redondeados a 10 g) a partes iguales, y cada toma se mueve hasta `shiftMin` minutos para no
+ * caer en una bajada (< −3 %) ni en una rampa dura (> 7 %): se come mejor en llano o subiendo suave.
+ */
+export function feedingPlan(points, t, { gph = 90, everyMin = 30, firstMin = 25, smart = false, endGapMin = 20, shiftMin = 8 } = {}) {
+  const total = t[t.length - 1];
+  const at = (ms) => distAtTime(points, t, ms);
+  if (!smart) {
+    const out = [];
+    const each = Math.round((gph * everyMin) / 60);
+    for (let ms = firstMin * 60000; ms < total - 10 * 60000; ms += everyMin * 60000) out.push({ ms, d: at(ms), grams: each, moved: '' });
+    return out;
+  }
+  const times = [];
+  for (let ms = firstMin * 60000; ms <= total - endGapMin * 60000; ms += everyMin * 60000) times.push(ms);
+  if (!times.length && total > 45 * 60000) times.push(Math.round(total / 2 / 60000) * 60000);
+  if (!times.length) return [];
+  const totalGrams = Math.round((gph * total) / 3600000 / 10) * 10;
+  const grams = Math.max(5, Math.round(totalGrams / times.length / 5) * 5);
+  const terrain = (ms) => gradeAt(points, at(ms), 150);
+  const cost = (g) => (g < -0.03 ? 100 : 0) + (g > 0.07 ? 50 : 0) + Math.abs(g) * 100;
+  const out = [];
+  for (const base of times) {
+    const prev = out[out.length - 1]?.ms ?? -Infinity;
+    let best = base, bestC = Infinity;
+    for (let dm = -shiftMin; dm <= shiftMin; dm++) {
+      const ms = base + dm * 60000;
+      if (ms < 10 * 60000 || ms > total - 5 * 60000 || ms - prev < 15 * 60000) continue;
+      const c = cost(terrain(ms)) + Math.abs(dm) * 0.6;
+      if (c < bestC) { bestC = c; best = ms; }
+    }
+    const g0 = terrain(base);
+    const moved = best === base ? '' : g0 < -0.03 ? 'bajada' : g0 > 0.07 ? 'rampa' : '';
+    out.push({ ms: best, d: at(best), grams, moved });
+  }
+  return out;
+}
+
+const xmlEsc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/** GPX con el track y los waypoints [{lat, lon, name, desc, sym}]. Las horas de paso van en <time> si se dan. */
+export function toGPX(name, points, waypoints = [], { startMs = null, t = null } = {}) {
+  const time = (i) => (startMs !== null && t ? `<time>${new Date(startMs + t[i]).toISOString()}</time>` : '');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="CC Monzón · Planificar ruta" xmlns="http://www.topografix.com/GPX/1/1">
+<metadata><name>${xmlEsc(name)}</name></metadata>
+${waypoints.map((w) => `<wpt lat="${w.lat.toFixed(6)}" lon="${w.lon.toFixed(6)}"><name>${xmlEsc(w.name)}</name>${w.desc ? `<desc>${xmlEsc(w.desc)}</desc>` : ''}<sym>${xmlEsc(w.sym || 'Flag, Blue')}</sym></wpt>`).join('\n')}
+<trk><name>${xmlEsc(name)}</name><trkseg>
+${points.map((p, i) => `<trkpt lat="${p.lat.toFixed(6)}" lon="${p.lon.toFixed(6)}"><ele>${(p.ele ?? p.es).toFixed(1)}</ele>${time(i)}</trkpt>`).join('\n')}
+</trkseg></trk>
+</gpx>
+`;
+}
+
+/** Punto del track más cercano a (lat, lon). Devuelve la distancia acumulada en ese punto. */
+export function nearestD(points, lat, lon) {
+  let best = 0, bd = Infinity;
+  const k = Math.cos(rad(lat));
+  for (const p of points) {
+    const dd = (p.lat - lat) ** 2 + ((p.lon - lon) * k) ** 2;
+    if (dd < bd) { bd = dd; best = p.d; }
+  }
+  return best;
+}
+
+// ---------- Altitud del modelo del terreno (Open-Meteo, Copernicus DEM 90 m) ----------
+/** Puntos donde pedir la altitud del terreno: uno cada `step` m (como mucho `max`). */
+export function demSamples(points, { step = 100, max = 1500 } = {}) {
+  const total = points[points.length - 1].d;
+  const st = Math.max(step, total / (max - 1));
+  const out = [];
+  for (let d = 0; d < total; d += st) out.push(pointAt(points, d));
+  out.push({ ...points[points.length - 1] });
+  return out.map((p) => ({ lat: p.lat, lon: p.lon, d: p.d }));
+}
+/** URLs de Open-Meteo para esas muestras, de 100 en 100 (lo que admite cada petición). */
+export function demUrls(samples) {
+  const urls = [];
+  for (let i = 0; i < samples.length; i += 100) {
+    const part = samples.slice(i, i + 100);
+    urls.push(`https://api.open-meteo.com/v1/elevation?latitude=${part.map((p) => p.lat.toFixed(5)).join(',')}&longitude=${part.map((p) => p.lon.toFixed(5)).join(',')}`);
+  }
+  return urls;
+}
+/** Altitud del terreno en cada punto del track, interpolando entre las muestras. */
+export function applyDem(points, samples, elevs) {
+  let j = 0;
+  return points.map((p) => {
+    while (j < samples.length - 2 && samples[j + 1].d < p.d) j++;
+    const a = samples[j], b = samples[j + 1] || a;
+    const f = b.d === a.d ? 0 : Math.max(0, Math.min(1, (p.d - a.d) / (b.d - a.d)));
+    return elevs[j] + ((elevs[j + 1] ?? elevs[j]) - elevs[j]) * f;
+  });
+}
+
+// ---------- Fuentes de agua (OpenStreetMap, Overpass) ----------
+/**
+ * Consulta de Overpass: fuentes de agua potable a menos de `radius` m de la ruta (la ruta va como
+ * una línea de hasta `max` puntos). Incluye fuentes, grifos y manantiales marcados como potables.
+ */
+export function fountainsQuery(points, { radius = 500, max = 300 } = {}) {
+  const total = points[points.length - 1].d;
+  const n = Math.min(max, Math.max(2, Math.ceil(total / 200)));
+  const line = [];
+  for (let k = 0; k < n; k++) { const p = pointAt(points, (k / (n - 1)) * total); line.push(`${p.lat.toFixed(5)},${p.lon.toFixed(5)}`); }
+  const a = `around:${radius},${line.join(',')}`;
+  return `[out:json][timeout:90];(
+node(${a})["amenity"="drinking_water"]["access"!="private"];
+node(${a})["amenity"="fountain"]["drinking_water"="yes"];
+node(${a})["man_made"="water_tap"]["drinking_water"!="no"];
+node(${a})["natural"="spring"]["drinking_water"="yes"];
+node(${a})["amenity"="water_point"];
+);out body;`;
+}
+/** Fuentes de la respuesta de Overpass que quedan a menos de `radius` m: con su km de ruta y lo que hay que desviarse. */
+export function parseFountains(json, points, { radius = 500 } = {}) {
+  const seen = new Set();
+  const out = [];
+  for (const el of json?.elements || []) {
+    if (el.type !== 'node' || seen.has(el.id)) continue;
+    seen.add(el.id);
+    const d = nearestD(points, el.lat, el.lon);
+    const p = pointAt(points, d);
+    const off = haversine(p.lat, p.lon, el.lat, el.lon);
+    if (off > radius) continue;
+    const t = el.tags || {};
+    const kind = t.natural === 'spring' ? 'Manantial' : t.man_made === 'water_tap' ? 'Grifo' : t.amenity === 'water_point' ? 'Punto de agua' : 'Fuente';
+    out.push({ id: el.id, lat: el.lat, lon: el.lon, d, off, name: t.name || t['name:es'] || t['name:ca'] || '', kind,
+      unsure: t.drinking_water === 'conditional' || t.seasonal === 'yes' || t.disused === 'yes' });
+  }
+  return out.sort((a, b) => a.d - b.d);
+}
