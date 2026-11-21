@@ -1370,6 +1370,8 @@ function runnerScreen(sub) {
 const previewBanner = () => (S.session?.isAdmin && S.preview ? `<p class="card warn">👁️ <b>Vista previa</b> de ${esc(S.preview.name)}: no se puede apuntar ni borrar.
   <a href="#/corredores">Salir</a>${S.preview.sqlOk ? '' : '<br><b>⚠️ Falta ejecutar en Supabase el SQL de «Mis carreras»</b> (supabase/cambios/2026-11-11-mis-carreras.sql).'}</p>` : '');
 /** Título de la barra de arriba del corredor: «Hola, Pere Soler» con el nombre completo (hay nombres repetidos); si no cabe, se desliza solo. */
+/** La etiqueta «NUEVO» del botón Pacing se quita sola a final de enero de 2027. */
+const pacingNew = () => todayISO() <= '2027-01-31';
 const runnerTitle = () => (S.session?.isAdmin && S.preview ? `Vista de ${S.preview.name}` : S.runnerData?.me?.name ? `Hola, ${cleanName(S.runnerData.me.name)}` : 'CC Monzón');
 
 /** Tarjeta de una carrera ya disputada (con resultados), para el calendario. */
@@ -1556,7 +1558,7 @@ function viewRunnerHome() {
     <div id="pulse-box">${S.regView === 'cal' || normalize(S.q.runner || '').length >= 2 ? '' : teamPulse(d)}</div>
     <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
     ${body}`,
-  { rtab: '', noSearch: true, head: S.preview ? null : `<a class="hdr-pacing" href="ruta/" aria-label="Pacing y planificar ruta: viento, tiempo, vatios y nutrición" title="Pacing y planificar ruta"><i aria-hidden="true">⚡</i>Pacing</a>` });
+  { rtab: '', noSearch: true, head: S.preview ? null : `<a class="hdr-pacing" href="ruta/" aria-label="Pacing y planificar ruta: viento, tiempo, vatios y nutrición" title="Pacing y planificar ruta"><i aria-hidden="true">⚡</i>Pacing${pacingNew() ? '<b class="hp-new">NUEVO</b>' : ''}</a>` });
 }
 
 const FIELD_LABELS = { province: 'provincia', km: 'distancia', subtype: 'formato', elevation: 'desnivel', price: 'precio' };

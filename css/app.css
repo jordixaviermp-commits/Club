@@ -2359,4 +2359,6 @@ body.rsearch .ruta-strip { display: none; }
 /* v221: en Carreras, en lugar del saludo, el acceso a Pacing en la cabecera */
 body.rsearch .ruta-strip { display: none; }
 .hdr-pacing { display: inline-flex; align-items: center; gap: .45rem; margin-right: auto; padding: .45rem .9rem; min-height: 38px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-weight: 800; font-size: 1.02rem; text-decoration: none; box-shadow: 0 2px 6px color-mix(in srgb, var(--accent) 35%, transparent); }
+.hdr-pacing { position: relative; }
 .hdr-pacing i { font-style: normal; font-size: 1.05rem; line-height: 1; }
+.hdr-pacing .hp-new { position: absolute; top: -4px; right: -5px; padding: .06rem .28rem; border-radius: 999px; background: #e5381f; color: #fff; font-size: .46rem; font-weight: 800; letter-spacing: .04em; line-height: 1.2; border: 1.5px solid var(--bg, #fff); }
