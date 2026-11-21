@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { parseGPX, buildTrack } from '../pacing/js/track.js';
-import { planRoute, planAt, distAtMs, nutritionPlan, strategyText, freshness, hydration, profileFromQuery, OBJECTIVES, DEFAULT_PROFILE, fmtDur } from '../pacing/js/pacing.js';
+import { planRoute, planAt, distAtMs, nutritionPlan, strategyText, freshness, formAdjust, hydration, profileFromQuery, OBJECTIVES, DEFAULT_PROFILE, fmtDur } from '../pacing/js/pacing.js';
 
 const gpx = parseGPX(readFileSync(new URL('../pacing/ejemplo.gpx', import.meta.url), 'utf8'));
 const track = buildTrack(gpx.points);
@@ -87,4 +87,37 @@ test('el enlace de importación solo acepta números dentro de rango', () => {
   assert.equal(p.age, DEFAULT_PROFILE.age); assert.equal(p.bike, DEFAULT_PROFILE.bike);
   assert.equal(profileFromQuery('ftp=9999&weight=x'), null);
   assert.equal(profileFromQuery(''), null);
+});
+
+test('forma y fatiga: sin CTL el plan no cambia; cargado baja el ritmo y en forma lo sube', () => {
+  const sin = planRoute(track.points, prof, 'good');
+  assert.equal(sin.adjust, null);
+  const mk = (ctl, atl) => planRoute(track.points, { ...prof, ctl, atl }, 'good');
+  // cargado: menos intensidad y más tiempo que fresco, con la misma forma
+  const fresco = mk(90, 70), cargado = mk(90, 130);
+  assert.ok(cargado.IF < fresco.IF && cargado.totalMs > fresco.totalMs);
+  // más forma (con la misma frescura): más intensidad en una ruta que no es excesiva para ella
+  assert.ok(mk(100, 100).IF > mk(40, 40).IF);
+  // el ajuste nunca se sale de sus límites
+  for (const [c, a] of [[10, 250], [250, 0], [60, 300], [5, 5]]) { const r = mk(c, a); assert.ok(r.adjust.dIF >= -0.0801 && r.adjust.dIF <= 0.0201); }
+  // solo ATL (sin CTL) no ajusta nada
+  assert.equal(planRoute(track.points, { ...prof, ctl: 0, atl: 120 }, 'good').adjust, null);
+});
+
+test('formAdjust: razones en español y reglas de la carga de la ruta', () => {
+  assert.deepEqual(formAdjust({ ctl: 0, atl: 50 }, 200).reasons, []);
+  const dura = formAdjust({ ctl: 50, atl: 50 }, 300);          // 6 veces lo que sostiene: guarda fuerzas y afloja más al final
+  assert.ok(dura.dIF < 0 && dura.fadeMul > 1 && dura.reasons.some((r) => r.type === 'load'));
+  const facil = formAdjust({ ctl: 120, atl: 90 }, 120);         // ruta corta para su forma y fresco: algo más fuerte y menos fade
+  assert.ok(facil.dIF > 0 && facil.fadeMul < 1);
+});
+
+test('la estrategia se adapta: forma, calor y el tipo de ruta', () => {
+  const ajustado = planRoute(track.points, { ...prof, ctl: 60, atl: 95 }, 'good');
+  const s = strategyText(ajustado, 'Mi marcha', nutritionPlan(ajustado, 'good', 29), { temp: 29 });
+  assert.match(s.text, /cargado/); assert.match(s.text, /29 °C/);
+  assert.ok(s.chips.some((c) => /Ajuste por tu forma/.test(c.text)) && s.chips.some((c) => /ml\/h/.test(c.text)));
+  const normal = planRoute(track.points, prof, 'good');
+  const t = strategyText(normal, 'Mi marcha', nutritionPlan(normal, 'good', 17), { temp: 17 });
+  assert.doesNotMatch(t.text, /cargado|°C/); assert.ok(!t.chips.some((c) => /Ajuste por tu forma/.test(c.text)));
 });
