@@ -2471,3 +2471,9 @@ details.rcard.hero { background: color-mix(in srgb, var(--brand-cyan) 12%, var(-
 .rc-side .src { font-size: var(--fs-1); max-width: 7.5rem; white-space: normal; text-align: right; line-height: 1.15; }
 details.rcard.wcard.urgent { border-left-color: var(--bad-2); }
 details.rcard .rc-body .wc-acts { margin-top: .5rem; }
+
+/* v234: mis notas privadas en cada inscripción (solo en Mi temporada) */
+.rc-note { margin-top: .6rem; padding: .55rem .7rem; border-radius: var(--r-md); background: color-mix(in srgb, var(--warn) 10%, var(--card)); border: 1px dashed color-mix(in srgb, var(--warn) 55%, var(--line)); }
+.rc-note-h { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; } .rc-note-h .ico { width: 16px; height: 16px; color: var(--warn-t); } .rc-note-h small { flex: 1; font-size: var(--fs-1); }
+.rc-note-h .btn { margin-left: auto; min-height: 32px; padding: .2rem .7rem; }
+.rc-note-t { margin: .4rem 0 0; font-size: var(--fs-3); white-space: pre-wrap; overflow-wrap: anywhere; } .rc-note-t.blank { color: var(--muted); font-style: italic; }
