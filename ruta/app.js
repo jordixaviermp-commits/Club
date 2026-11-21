@@ -372,6 +372,7 @@ function renderSetup() {
     <div class="step"><b>3</b><h2>Ritmo</h2></div>${ritmoHtml()}
     <div id="arrive">${arriveHtml()}</div>
     <button class="btn go" data-act="go">Ver la previsión</button>
+    <button class="btn block" data-act="to-pacing">⚡ Vatios y nutrición (Pacing)</button>
     ${foot()}`;
 }
 
@@ -418,7 +419,7 @@ function renderTop() {
     <div class="panel">
       ${salidaHtml()}
       <details><summary>Ritmo: <b>${paceText()}</b></summary><div style="margin-top:.6rem">${ritmoHtml()}</div></details>
-      <button class="btn" data-act="reverse" style="margin-top:.6rem">Invertir sentido</button>
+      <div class="row" style="margin-top:.6rem"><button class="btn" data-act="reverse">Invertir sentido</button><button class="btn" data-act="to-pacing">⚡ Pacing</button></div>
     </div>
     <div class="seg" id="view"><button data-view="sencilla" class="${S.view === 'sencilla' ? 'on' : ''}">Sencilla</button><button data-view="completa" class="${S.view === 'completa' ? 'on' : ''}">Completa</button></div>
     <p class="hint">${S.view === 'completa' ? 'Todo: tiempo detallado, avituallamiento y exportar.' : 'Solo el resumen, el mapa y las subidas.'}</p>`;
@@ -1097,6 +1098,10 @@ document.addEventListener('click', async (e) => {
   else if (act === 'fuente-go') { focusAt(+b.dataset.d); document.getElementById('profile').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
   else if (act === 'climb-go') { focusAt(+b.dataset.d); document.getElementById('profile').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
   else if (act === 'shift') { S.start += +b.dataset.min * 60000; retime(); update(); fetchWeather(); }
+  else if (act === 'to-pacing') {   // pasa el track (ya limpio, en su sentido y solo el tramo elegido) a Pacing: vatios, tiempo y nutrición
+    try { localStorage.setItem('pacing-route', JSON.stringify({ name: S.name || 'Mi ruta', pts: R.decimate(S.track.points, 3500) })); } catch { return toast('No se pudo pasar la ruta a Pacing'); }
+    location.href = '../pacing/?de=ruta';
+  }
   else if (act === 'reverse') { S.range = null; S.reversed = !S.reversed; S.wps = S.wps.map((w) => ({ ...w, d: S.track.distance - w.d })).sort((a, c) => a.d - c.d); fitted = true; build(); update(); fetchWeather(); toast(S.reversed ? 'Ruta en sentido contrario' : 'Ruta en su sentido original'); }
   else if (act === 'addwp') setAdding(true);
   else if (act === 'cancelwp') setAdding(false);
