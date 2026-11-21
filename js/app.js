@@ -1045,6 +1045,7 @@ const ICO = {
   list: 'M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01',
   star: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
   mountain: 'm8 3 4 8 5-5 5 15H2L8 3z',
+  map: 'M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14',
   compass: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM16.2 7.8l-2.1 6.3-6.3 2.1 2.1-6.3z',
   trash: 'M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6',
   plus: 'M12 5v14M5 12h14',
@@ -1450,8 +1451,8 @@ function runnerRegCard(g, opts = {}) {
       ${!open || g.suspended ? '' : mine
         ? `<div class="joined-acts">
              <button class="btn joined-btn" data-act="r-joined" data-id="${g.id}" aria-label="Estás inscrito${mine.category ? ' en ' + esc(mine.category) : ''}: cambiar categoría o borrarme">${ico('check')}<span>Inscrito${mine.category ? ' (' + esc(mine.category) + ')' : ''}</span>${ico('chevd', 'jb-more')}</button>
-             <a class="btn ghost small" href="ruta/?fecha=${esc(g.date)}" aria-label="Planificar la ruta de esta carrera: viento, tiempo y subidas">${ico('route')}Planificar</a>
-             <button class="btn ghost small" data-act="r-ics" data-id="${g.id}" aria-label="Añadir al calendario del móvil">${ico('calplus')}Calendario</button></div>`
+             <a class="btn ghost small" href="pacing/?fecha=${esc(g.date)}" aria-label="Pacing de esta carrera: vatios por tramo y nutrición">⚡ Pacing</a>
+             <button class="btn ghost small" data-act="r-ics" data-id="${g.id}" aria-label="Añadir al calendario del móvil" title="Añadir al calendario del móvil">${ico('calplus')}Calendario</button></div>`
         : `<div class="row join-row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">Apuntarme</button></div>`}
       </div>
@@ -1549,9 +1550,9 @@ function viewRunnerHome() {
       ${searchBox('runner', 'Buscar…', { marquee: 'Buscar carrera, corredor, lugar…' })}
       <button class="btn primary add-btn" data-act="r-new" aria-label="Añadir una carrera que no está" title="Añadir una carrera que no está">＋</button>
       ${S.fd?.has ? `<button type="button" class="icon-btn fbtn${S.fd.active ? ' on' : ''}" data-act="r-filters" aria-label="Filtros${S.fd.active ? ' (activos)' : ''}" title="Filtros">${icon(ICON_FILTER)}${S.fd.active ? '<i class="fdot"></i>' : ''}</button>` : ''}
-      ${S.preview ? '' : `<a class="icon-btn fbtn ruta-btn" href="ruta/" aria-label="Planificar ruta: sube tu track y mira viento, tiempo y subidas" title="Planificar ruta">${ico('route')}</a>`}
       <button type="button" class="icon-btn fbtn view-btn${S.regView === 'cal' ? ' on' : ''}" data-act="reg-view" aria-label="${S.regView === 'cal' ? 'Ver como lista' : 'Ver calendario'}" title="${S.regView === 'cal' ? 'Ver como lista' : 'Ver calendario'}">${icon(S.regView === 'cal' ? ICON_LIST : ICON_CAL)}</button>
     </div>
+    ${S.preview ? '' : `<a class="ruta-strip" href="ruta/">${ico('map')}<span><b>Planificar ruta</b> · vatios y nutrición</span>${ico('go')}</a>`}
     ${normalize(S.q.runner || '').length >= 2 ? '' : nextTeamBanner(d)}
     <div id="pulse-box">${S.regView === 'cal' || normalize(S.q.runner || '').length >= 2 ? '' : teamPulse(d)}</div>
     <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
