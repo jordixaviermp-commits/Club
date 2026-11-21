@@ -164,6 +164,7 @@ function homeView() {
       <button class="more" data-act="route">Verla completa →</button></div>`;
   }
   h += `<button class="card link" data-act="choose"><div class="cta"><span class="ico">🏆</span><div><b>Elige tu prueba</b><span>${track ? 'Cambia de ruta o sube otro track' : 'Sube un .gpx o .fit y verás cómo repartir el esfuerzo'}</span></div></div></button>`;
+  h += `<a class="card link" href="../ruta/" style="text-decoration:none;color:inherit"><h3>Viento, tiempo y subidas</h3><p>Planifica la ruta a la hora de salida: previsión por tramos, puertos y avituallamiento.</p><span class="more">Planificar ruta →</span></a>`;
   h += `<button class="card link" data-act="connect"><h3>Todavía no te he visto rodar</h3><p>Con tus salidas calcularía tu forma y tu frescura.</p><span class="more">Conectar una cuenta →</span></button>`;
   const label = !p ? 'Crear mi perfil' : track ? 'Ver mi plan' : 'Elegir mi prueba';
   h += `<button class="fab" data-act="${!p ? 'profile' : track ? 'route' : 'choose'}">${ICON.flag} ${label}</button>`;
