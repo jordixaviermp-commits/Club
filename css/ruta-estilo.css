@@ -1,0 +1,61 @@
+/* Estilo común de «Ruta y Pacing»: cabecera con degradado, insignias, tarjetas con relieve, píldoras y cifras grandes.
+   Se carga la última en ruta/ y en pacing/; usa las variables de cada una (--card / --surface, --text, --muted, --line…). */
+:root {
+  --rs-grad: linear-gradient(135deg, #1d3a4c 0%, #25607d 55%, #1aa3cf 100%);
+  --rs-card: var(--card, var(--surface, #fff)); --rs-tint: var(--accent-2, var(--surface2, #e8eef2));
+  --rs-shadow: 0 6px 18px rgba(26, 52, 68, .10); --rs-r: 16px; --rs-num: #1d3a4c; --rs-step: #25607d;
+  --k-viento: #1aa3cf; --k-temp: #e8711a; --k-lluvia: #3a6fd6; --k-luz: #e6b300; --k-subida: #d9342b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --rs-shadow: 0 6px 18px rgba(0, 0, 0, .4); --rs-num: #e8f4fa; --rs-step: #7fd3f0; }
+}
+:root[data-theme="dark"] { --rs-shadow: 0 6px 18px rgba(0, 0, 0, .4); --rs-num: #e8f4fa; --rs-step: #7fd3f0; }
+body { font-feature-settings: "tnum" 1; }
+
+/* cabecera */
+header.top { background: var(--rs-grad); border-bottom: 0; color: #fff; box-shadow: 0 6px 16px rgba(26, 52, 68, .25); }
+header.top h1, header.top .back { color: #fff; }
+header.top .btn { background: rgba(255, 255, 255, .16); color: #fff; border-color: rgba(255, 255, 255, .35); }
+.bar { background: var(--rs-grad); color: #fff; border-radius: 0 0 20px 20px; padding-bottom: 14px; box-shadow: 0 6px 16px rgba(26, 52, 68, .25); }
+.bar .icon, .bar h1 { color: #fff; }
+
+/* pasos: insignia redonda */
+.step { border-top: 0; margin: 1.5rem 0 .7rem; padding-top: 0; align-items: center; gap: .65rem; }
+.step b { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-size: 1rem; color: #fff; background: var(--rs-grad); box-shadow: 0 3px 8px rgba(26, 163, 207, .4); }
+.step h2 { font-size: 1.1rem; letter-spacing: .02em; text-transform: uppercase; color: var(--rs-step); font-weight: 800; }
+
+/* tarjetas */
+.pick { border: 0; border-radius: var(--rs-r); box-shadow: var(--rs-shadow); padding: .9rem 1rem; }
+.pick .ic { border: 0; border-radius: 14px; background: var(--rs-grad); color: #fff; }
+.pick .ic svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pick::after { content: "›"; margin-left: auto; font-size: 1.8rem; line-height: 1; color: var(--rs-step); }
+.panel, .chosen, .resume { border: 0; border-radius: var(--rs-r); box-shadow: var(--rs-shadow); background: var(--rs-card); }
+.chosen { border-left: 0; }
+.card, .tile { border: 0; border-radius: var(--rs-r); box-shadow: var(--rs-shadow); }
+.card.plan { border-left: 5px solid #1aa3cf; background: var(--rs-card); }
+.card.plan h3 { color: var(--rs-step); letter-spacing: .12em; }
+.facts { border: 0; border-radius: var(--rs-r); box-shadow: var(--rs-shadow); overflow: hidden; }
+.facts b { font-size: 1.2rem; font-weight: 800; color: var(--rs-num); }
+.facts small { text-transform: uppercase; letter-spacing: .08em; font-size: .66rem; }
+.stats strong { font-size: 1.7rem; font-weight: 800; letter-spacing: -.02em; color: var(--rs-num); }
+
+/* selectores, botones y etiquetas en píldora */
+.seg { border: 0; border-radius: 999px; background: var(--rs-tint); padding: 3px; gap: 3px; }
+.seg button { border: 0; border-radius: 999px; background: transparent; font-weight: 700; }
+.seg button + button { border-left: 0; }
+.seg button.on { background: var(--rs-grad); color: #fff; box-shadow: 0 3px 8px rgba(26, 163, 207, .35); }
+.btn { border-radius: 999px; font-weight: 700; }
+.btn.go, .btn.primary { background: var(--rs-grad); color: #fff; border: 0; box-shadow: 0 8px 18px rgba(26, 163, 207, .35); }
+.btn.go { padding: .9rem; font-size: 1.05rem; }
+.btn svg { width: 1.05em; height: 1.05em; vertical-align: -.15em; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; margin-right: .25em; }
+.chip { border-radius: 999px; font-weight: 700; }
+.chip.on { background: var(--rs-grad); color: #fff; border: 0; box-shadow: 0 3px 8px rgba(26, 163, 207, .35); }
+.badge { border-radius: 999px; font-weight: 700; }
+
+/* datos con su color: viento, temperatura, lluvia, luz y subida */
+details.fact { border: 0; border-left: 4px solid var(--line); border-radius: 12px; background: var(--rs-card); box-shadow: var(--rs-shadow); padding: .65rem .8rem; margin: .5rem 0; }
+details.fact[data-k="viento"] { border-left-color: var(--k-viento); } details.fact[data-k="temp"] { border-left-color: var(--k-temp); }
+details.fact[data-k="lluvia"] { border-left-color: var(--k-lluvia); } details.fact[data-k="luz"] { border-left-color: var(--k-luz); }
+details.fact[data-k="subida"] { border-left-color: var(--k-subida); }
+details.fact[data-k="viento"] summary b { color: var(--k-viento); } details.fact[data-k="temp"] summary b { color: var(--k-temp); }
+details.fact[data-k="lluvia"] summary b { color: var(--k-lluvia); } details.fact[data-k="luz"] summary b { color: #b88a00; } details.fact[data-k="subida"] summary b { color: var(--k-subida); }
