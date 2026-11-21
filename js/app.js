@@ -158,7 +158,7 @@ const MES3 = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oc
 const raceDays = (x) => (x.end_date && x.end_date > x.date ? numDays(x.date, x.end_date) : 0);
 /** Cajita con el día y el mes (color de la disciplina); con ✓ verde si participas o estás inscrito. */
 const raceTile = (x, { mine = false } = {}) => { const dt = new Date(`${x.date}T12:00:00Z`), n = raceDays(x);
-  return `<span class="rc-date${mine ? ' mine' : ''}" aria-hidden="true"><b>${dt.getUTCDate()}</b><i>${MES3[dt.getUTCMonth()]}</i>${n ? `<small>${n} días</small>` : ''}${mine ? `<em class="rc-tick">${ico('check')}</em>` : ''}</span>${mine ? '<span class="sr-only">Participas. </span>' : ''}`; };
+  return `<span class="rc-date ${modClass(x.modality)}${mine ? ' mine' : ''}" aria-hidden="true"><b>${dt.getUTCDate()}</b><i>${MES3[dt.getUTCMonth()]}</i>${n ? `<small>${n} días</small>` : ''}${mine ? `<em class="rc-tick">${ico('check')}</em>` : ''}</span>${mine ? '<span class="sr-only">Participas. </span>' : ''}`; };
 const raceSub = (x) => { const wd = new Date(`${x.date}T12:00:00Z`).toLocaleDateString('es-ES', { weekday: 'short', timeZone: 'UTC' }).replace('.', '');
   return `${raceDays(x) ? when(x) : wd}${place(x) ? ' · ' + place(x) : ''}`; };
 /** Disciplina (en su color), km, desnivel y precio: lo que falte se omite. */
@@ -171,6 +171,17 @@ const raceCd = (x, today = todayISO()) => { if (x.suspended || x.date < today) r
 function raceHead(x, { mine = false, side = '', today } = {}) {
   const t = today || S.runnerData?.today || todayISO();
   return `<div class="race-head rh2">${raceTile(x, { mine })}<div class="rh-main"><h3>${esc(x.name)}</h3><p class="rh-sub">${esc(raceSub(x))}</p><p class="rc-meta">${raceMeta(x)}</p></div>${raceCd(x, t) || side ? `<div class="rc-side">${raceCd(x, t)}${side}</div>` : ''}</div>`;
+}
+/** Casilla de carrera plegable (la misma de Carreras): cabecera con fecha, nombre, datos y cuenta atrás; al tocar se despliega `body`. */
+function raceFold(x, { key, mine = false, side = '', body = '', today, open = false, id = '', cls = '', noPast = false } = {}) {
+  const t = today || S.runnerData?.today || todayISO(), isOpen = open || !!S.open?.[key];
+  return `<details class="card race rcard ${x.date < t && !noPast ? 'past-reg ' : ''}${modClass(x.modality)}${cls ? ' ' + cls : ''}"${id ? ` id="${id}"` : ''} data-open-key="${esc(key)}"${isOpen ? ' open' : ''}>
+      <summary class="rc-sum">${raceTile(x, { mine })}
+        <span class="rc-main"><b class="rc-name">${esc(x.name)}</b><span class="rc-sub">${esc(raceSub(x))}</span><span class="rc-meta">${raceMeta(x)}</span></span>
+        <span class="rc-side">${raceCd(x, t)}${side}</span><span class="rc-chev" aria-hidden="true">${ico('chevd')}</span>
+      </summary>
+      <div class="rc-body">${body}</div>
+    </details>`;
 }
 
 // ---------- utilidades de interfaz ----------
@@ -1080,16 +1091,14 @@ const ico = (k, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-h
 /** Medalla de podio dibujada (sin emoji): círculo oro / plata / bronce con el puesto. */
 const medalBadge = (p) => `<i class="medal m${p}" aria-label="Puesto ${p}">${p}</i>`;
 /** Fila de carrera de Mi temporada: nombre y etiqueta («en 2 días · M40»), fecha en negrita · lugar y modalidad; flecha › a la derecha. */
-const mrow = (g, { pill = '', edit = '', below = '', end = '', href = '', hero = false } = {}) => `<li class="mrow ${modClass(g.modality)}${hero ? ' hero' : ''}${href ? ' tappable' : ''}">
-  ${hero ? '<span class="hero-badge">Próxima cita</span>' : ''}
-  ${href ? `<a class="mrow-main" href="${href}">` : '<div class="mrow-main">'}
-    ${raceTile(g)}
-    <span class="rh-main"><span class="mrow-l1"><b class="mrow-name">${esc(g.name)}</b></span><span class="rh-sub">${esc(raceSub(g))}</span><span class="rc-meta">${raceMeta(g)}</span>${pill ? `<span class="pill-next">${pill}</span>` : ''}</span>
-  ${href ? '</a>' : '</div>'}
-  ${edit}
-  ${end}
-  ${href ? `<span class="mrow-go" aria-hidden="true">${ico('go')}</span>` : ''}
-  ${below ? `<div class="mrow-below">${below}</div>` : ''}</li>`;
+const mrow = (g, { pill = '', edit = '', below = '', end = '', href = '', hero = false, side = '' } = {}) => {
+  // misma casilla plegable que en Carreras: cabecera con lo esencial y, al tocar, lo que hay que hacer con la carrera
+  const list = g.entries || g.results, key = `mr-${g.race_id ? 'r' + g.race_id : g.id}${hero ? '-h' : ''}`;
+  const count = list ? `<span class="rc-n" title="Inscritos del club" aria-label="${list.length} del club">${ico('users')}${list.length}</span>` : '';
+  const body = `${pill ? `<div class="mrow-below"><span class="pill-next">${pill}</span></div>` : ''}${below ? `<div class="mrow-below">${below}</div>` : ''}
+    <div class="mrow-acts">${edit}${end}${href ? `<a class="btn small ghost" href="${href}">Ver la carrera${ico('go')}</a>` : ''}</div>`;
+  return `<li class="mrow-fold${hero ? ' hero' : ''}">${hero ? '<span class="hero-badge">Próxima cita</span>' : ''}${raceFold(g, { key, side: side || count, body, noPast: true, cls: hero ? 'hero' : '' })}</li>`;
+};
 
 /** «Mis carreras»: sus carreras con resultados por temporada y las apuntadas pendientes de resultado. */
 const dayMon = (iso) => (iso ? `${Number(iso.slice(8, 10))} ${['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'][Number(iso.slice(5, 7)) - 1]}` : '');
@@ -1136,11 +1145,11 @@ function myRacesCard(d, afterSummary = () => '') {
   const days = list.reduce((n, r) => n + numDays(r.date, r.end_date), 0);
   const row = (r) => {
     const stagePods = (r.stage_positions || []).slice(0, (r.stages || []).length).map((p, i) => ({ p, n: stageName(r, i) })).filter((x) => isPodium(x.p));
-    const pos = r.position ? `${isPodium(r.position) ? medalBadge(r.position) : `${r.position}º`}${r.category ? ` <small>${esc(r.category)}</small>` : ''}${r.time_seconds ? `<br><small class="muted">${formatTime(r.time_seconds)}</small>` : ''}${r.self_reported ? '<br><small class="self-res">puesto por ti</small>' : ''}`
-      : (S.preview ? '<span class="muted">sin puesto</span>' : `<a class="btn primary small" href="#/resultado/race_${r.race_id}">Poner mi puesto</a>`);
-    return mrow(r, { href: `${runnerHref('carrera')}/race_${r.race_id}`,
-      end: `<span class="pos">${pos}${r.mine_created && !S.preview ? `<br><a class="edit-btn" href="#/editar/race_${r.race_id}" aria-label="Editar o borrar ${esc(r.name)}">${ico('pen')}Editar</a>` : ''}</span>`,
-      below: stagePods.length ? `<small>${stagePods.map((x) => `${medalBadge(x.p)} ${esc(x.n)}`).join(' · ')}</small>` : '' });
+    const badge = r.position ? `${isPodium(r.position) ? medalBadge(r.position) : `${r.position}º`}${r.category ? ` <small>${esc(r.category)}</small>` : ''}` : '';
+    const extra = [r.time_seconds ? `<small class="muted">${formatTime(r.time_seconds)}</small>` : '', r.self_reported ? '<small class="self-res">puesto por ti</small>' : '',
+      stagePods.length ? `<small>${stagePods.map((x) => `${medalBadge(x.p)} ${esc(x.n)}`).join(' · ')}</small>` : ''].filter(Boolean).join(' · ');
+    return mrow(r, { href: `${runnerHref('carrera')}/race_${r.race_id}`, side: `<span class="pos">${badge || '<span class="rc-none">sin puesto</span>'}</span>`, below: extra,
+      end: `${!r.position && !S.preview ? `<a class="btn primary small" href="#/resultado/race_${r.race_id}">Poner mi puesto</a>` : ''}${r.mine_created && !S.preview ? `<a class="edit-btn" href="#/editar/race_${r.race_id}" aria-label="Editar o borrar ${esc(r.name)}">${ico('pen')}Editar</a>` : ''}` });
   };
   const myCat = (g) => g.entries.find((e) => e.runner_id === d.me.id)?.category;
   const editMine = (g) => (g.mine_created && !S.preview ? `<a class="edit-ico" href="#/editar/${g.id}" aria-label="Editar o borrar ${esc(g.name)}" title="Editar o borrar">${ico('pen')}</a>` : '');
@@ -1403,13 +1412,12 @@ function doneRaceCard(r, { admin = false, meId = null } = {}) {
   const res = r.results || [];
   const pods = res.filter((x) => isPodium(x.position)).sort((a, b) => a.position - b.position);
   const mine = res.find((x) => x.runner_id === meId);
-  const inner = `${raceHead(r)}${typeTag(r)}
+  const inner = `${typeTag(r)}
     <p class="count">🏁 Disputada · ${res.length} del club${res.length ? ': ' + esc(res.map((x) => x.runner_name).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p>
     ${pods.length ? `<p class="pods">${pods.map((x) => `${medal(x.position)} ${esc(x.runner_name)}`).join(' · ')}</p>` : ''}
     ${mine ? `<p class="joined-done">✓ Participaste${mine.position ? ` · ${mine.position}º` : ''}</p>` : ''}
-    ${!admin && meId && !mine && r.date >= pastLimit() && !S.preview ? `<p><button class="btn small" data-act="r-join-race" data-id="${r.id}">La hice y no salgo: añadirme</button></p>` : ''}${admin ? editCta() : ''}`;
-  return admin ? `<a class="card race done-race link-card ${modClass(r.modality)}" href="#/carreras/${r.id}">${inner}</a>`
-    : `<article class="card race done-race ${modClass(r.modality)}">${inner}</article>`;
+    ${!admin && meId && !mine && r.date >= pastLimit() && !S.preview ? `<p><button class="btn small" data-act="r-join-race" data-id="${r.id}">La hice y no salgo: añadirme</button></p>` : ''}${admin ? `<a class="btn small ghost" href="#/carreras/${r.id}">${ico('pen')}Editar${ico('go')}</a>` : ''}`;
+  return raceFold(r, { key: `dr-${r.id}`, mine: !!mine, cls: 'done-race', noPast: true, side: `<span class="rc-n" title="Del club" aria-label="${res.length} del club">${ico('users')}${res.length}</span>`, body: inner });
 }
 
 
@@ -1444,21 +1452,12 @@ function runnerRegCard(g, opts = {}) {
       `<li class="${e.runner_id === me.id ? 'me' : ''}${e.paid ? ' paid' : ''}">${esc(e.name)}${e.category ? ` <small>${esc(e.category)}</small>` : ''}${e.paid ? `<span class="paid-mark" title="Ha pagado la inscripción" aria-label="ha pagado la inscripción">${ico('euro')}</span>` : ''}</li>`).join('')}</ul></div>` : '';
     const key = `rc-${g.id}`, isOpen = !!opts.open || !!S.open?.[key];
     // ficha cerrada: fecha en cajita, disciplina y datos clave, cuenta atrás con color y estado
-    const dateTile = raceTile(g, { mine: !!(mine && !g.suspended) }), subLine = raceSub(g), meta = raceMeta(g), cd = open && !g.suspended ? raceCd(g, today) : '';
     const state = [
       g.suspended ? `<span class="rc-chip off">${ico('ban')}Suspendida</span>` : '',
       !open && !g.suspended && mine && !g.my_result ? `<span class="rc-chip warn">${ico('flag')}Falta tu resultado</span>` : '',
       !open && !g.suspended && !mine ? `<span class="rc-chip off">${ico('flag')}Ya disputada</span>` : '',
     ].filter(Boolean).join('');
-    return `<details class="card race rcard ${open ? '' : 'past-reg '}${modClass(g.modality)}" id="${key}" data-open-key="${key}"${isOpen ? ' open' : ''}>
-      <summary class="rc-sum">
-        ${dateTile}
-        <span class="rc-main"><b class="rc-name">${esc(g.name)}</b>
-          <span class="rc-sub">${esc(subLine)}</span><span class="rc-meta">${meta}</span></span>
-        <span class="rc-side">${cd}${state}<span class="rc-n" title="Inscritos del club" aria-label="${g.entries.length} del club inscrito${g.entries.length === 1 ? '' : 's'}">${ico('users')}${g.entries.length}</span></span>
-        <span class="rc-chev" aria-hidden="true">${ico('chevd')}</span>
-      </summary>
-      <div class="rc-body">
+    const body = `
       <div class="rc-tags">${open && !mine && !g.suspended && !S.preview ? starBtn(g, 'w-add-reg', ['id', g.id]) : ''}</div>${typeTag(g)}
       ${g.suspended ? `<p class="state-tag">${ico('ban', 't-i')}Carrera suspendida</p>` : ''}
       ${open || g.suspended ? '' : `<p class="state-tag">${mine && g.my_result ? `${ico('check', 't-i')}Ya disputada · tu resultado está enviado` : `${ico('flag', 't-i')}Ya disputada · pendiente de resultados`} ${weekChip(g.end_date || g.date, today)}</p>
@@ -1480,8 +1479,8 @@ function runnerRegCard(g, opts = {}) {
              <button class="btn ghost small" data-act="r-ics" data-id="${g.id}" aria-label="Añadir al calendario del móvil" title="Añadir al calendario del móvil">${ico('calplus')}Calendario</button></div>`
         : `<div class="row join-row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">Apuntarme</button></div>`}
-      </div>
-    </details>`;
+    `;
+    return raceFold(g, { key, id: key, mine: !!(mine && !g.suspended), open: !!opts.open, side: `${state}<span class="rc-n" title="Inscritos del club" aria-label="${g.entries.length} del club inscrito${g.entries.length === 1 ? '' : 's'}">${ico('users')}${g.entries.length}</span>`, body, today });
   }
 
 /** Barra de «participaciones futuras» del equipo: cuántas inscripciones hay ya en las próximas carreras, por mes (para animar a apuntarse y a crear carreras). */
@@ -1547,9 +1546,8 @@ function nextTeamBanner(d) {
   const wk = live || n <= 7, names = g.entries.map((e) => e.name.split(' ')[0]), shown = names.slice(0, 6);
   return `<section class="card next-team${wk ? ' wk' : ''} compact" aria-label="Próxima carrera del equipo">
     <p class="nt-k">${wk ? `${ico('flag')}Esta semana compite el equipo` : `${ico('flag')}Próxima carrera del equipo`}</p>
-    <h2 class="nt-n">${esc(g.name)}</h2>
-    <p class="nt-d">${esc(when(g))}${place(g) ? ' · ' + esc(place(g)) : ''}</p>
-    <div class="nt-row"><span class="nt-pill nt-when">${live ? 'En curso' : daysToText(n)}</span>${modTag(g.modality, g.subtype)}<span class="nt-pill">${g.entries.length} del club</span></div>
+    <div class="nt-head">${raceTile(g, { mine: !!going })}<div class="rh-main"><h2 class="nt-n">${esc(g.name)}</h2><p class="rh-sub">${esc(raceSub(g))}</p><p class="rc-meta">${raceMeta(g)}</p></div>
+      <div class="rc-side"><span class="nt-pill nt-when">${live ? 'En curso' : daysToText(n)}</span><span class="nt-pill">${g.entries.length} del club</span></div></div>
     <p class="nt-people">${shown.map(esc).join(' · ')}${names.length > shown.length ? ` · +${names.length - shown.length}` : ''}</p>
     <div class="nt-foot"><span class="nt-me${going ? ' on' : ''}">${going ? `${ico('check')}Tú vas` : 'Tú no estás apuntado'}</span><button type="button" class="btn nt-btn" data-act="goto-sec" data-to="rc-${esc(g.id)}">${going ? 'Ver carrera' : 'Apuntarme'}</button></div></section>`;
 }
@@ -1693,15 +1691,17 @@ function watchCard(w, i) {
   const mine = g && (g.entries || []).some((e) => e.runner_id === me), others = g ? (g.entries || []).filter((e) => e.runner_id !== me) : [];
   const dl = i.deadline && { closed: ['bad', 'Plazo cerrado'], today: ['bad', '¡Último día para inscribirse!'], soon: ['bad', `Plazo: ${i.toDeadline} día${i.toDeadline === 1 ? '' : 's'}`],
     open: ['ok', `Plazo hasta el ${dayMon(w.deadline)}`] }[i.deadline];
-  return `<article class="card wcard ${discClass(w.modality, w.subtype)}${i.past ? ' past' : ''}${i.urgent ? ' urgent' : ''}">
-    ${raceHead(w, { today: watchToday(), mine: !!mine })}
+  const dlShort = dl && { closed: 'Plazo cerrado', today: '¡Último día!', soon: `Plazo: ${i.toDeadline} d`, open: `Plazo ${dayMon(w.deadline)}` }[i.deadline];
+  const side = dl ? `<span class="rc-chip ${dl[0] === 'bad' ? 'warn' : ''}">${ico('clock')}${dlShort}</span>` : '';
+  const body = `
     ${watchTbc(w) || dl ? `<div class="wc-chips">${watchTbc(w) ? `<span class="wchip tbc">${ico('cal')}Fecha por confirmar</span>` : ''}${dl ? `<span class="wchip ${dl[0]}">${ico('clock')}${dl[1]}</span>` : ''}</div>` : ''}
     ${mine ? `<p class="wc-club ok">${ico('check')}<span>Ya estás apuntado. Puedes quitarla de aquí.</span></p>` : g ? `<p class="wc-club">${ico('users')}<span>${others.length ? `Ya está en Carreras: <b>${others.length}</b> apuntado${others.length === 1 ? '' : 's'} (${esc(others.map((e) => e.name).slice(0, 4).join(', '))}${others.length > 4 ? '…' : ''})` : 'Está en Carreras: nadie se ha apuntado todavía'}</span></p>` : ''}
     ${w.notes ? `<p class="notes">${esc(w.notes)}</p>` : ''}
     <div class="wc-acts">${i.past ? `<button class="btn primary small" data-act="w-repeat" data-id="${w.id}">${ico('star')}Repetir el año que viene</button>` : mine ? '' : `<button class="btn primary small" data-act="w-sign" data-id="${w.id}">${g ? 'Apuntarme' : 'Inscribirme'}</button>`}
       ${w.url ? `<a class="btn small" href="${esc(w.url)}" target="_blank" rel="noopener noreferrer">${ico('ext')}Web</a>` : ''}
       <a class="btn small ghost wc-edit" href="#/valorar/${w.id}" aria-label="Editar" title="Editar">${ico('pen')}</a>
-      <button class="btn small ghost wc-edit" data-act="w-del" data-id="${w.id}" aria-label="${i.past || mine ? 'Quitar' : 'Descartar'}" title="${i.past || mine ? 'Quitar' : 'Descartar'}">${ico('trash')}</button></div></article>`;
+      <button class="btn small ghost wc-edit" data-act="w-del" data-id="${w.id}" aria-label="${i.past || mine ? 'Quitar' : 'Descartar'}" title="${i.past || mine ? 'Quitar' : 'Descartar'}">${ico('trash')}</button></div>`;
+  return raceFold(w, { key: `wv-${w.id}`, today: watchToday(), mine: !!mine, side, body, cls: `wcard${i.urgent ? ' urgent' : ''}` });
 }
 
 function viewWatch() {
@@ -1825,13 +1825,13 @@ function viewLogin() {
 function viewRegistrations() {
   const today = todayISO();
   const regs = [...S.data.registrations].sort((a, b) => a.date.localeCompare(b.date) || byName(a, b));
-  const card = (g) => `<a class="card race link-card ${g.date < today ? 'past-reg ' : ''}${modClass(g.modality)}" href="#/inscripciones/${g.id}">
-      ${raceHead(g)}${typeTag(g)}${pubTags(g)}
+  const card = (g) => raceFold(g, { key: `ar-${g.id}`, today, side: `<span class="rc-n" title="Inscritos del club" aria-label="${g.entries.length} del club">${ico('users')}${g.entries.length}</span>${g.suspended ? `<span class="rc-chip off">${ico('ban')}Suspendida</span>` : ''}`, body: `
+      ${typeTag(g)}${pubTags(g)}
       ${g.candidate && !g.entries.length ? '<p class="state-tag">⭐ Sin inscritos: algún corredor la está valorando</p>' : ''}
       ${g.suspended ? '<p class="state-tag">⛔ Carrera suspendida</p>' : g.date < today ? `<p class="state-tag">🏁 Ya disputada${g.entries.some((e) => e.self_position) ? ` · 📝 ${g.entries.filter((e) => e.self_position).length} de ${g.entries.length} han puesto su resultado` : ''}</p>` : ''}
       <p class="count">👥 ${g.entries.length} del club${g.entries.length ? ': ' +
         esc(g.entries.map((e) => runnerById(e.runner_id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p>
-      ${g.created_by ? `<p class="count">Añadida por ${esc(runnerById(g.created_by)?.name || 'un corredor')}</p>` : ''}${editCta()}</a>`;
+      ${g.created_by ? `<p class="count">Añadida por ${esc(runnerById(g.created_by)?.name || 'un corredor')}</p>` : ''}<a class="btn small ghost" href="#/inscripciones/${g.id}">${ico('pen')}Abrir y editar${ico('go')}</a>` });
   return frame('Carreras', `
     ${carTabs('inscripciones')}
     <div class="toolbar">
@@ -1937,14 +1937,13 @@ function viewFed() {
     const ym = r.date.slice(0, 7);
     const head = ym !== month ? `<h2 class="section fed-month">${MONTH_NAMES[Number(ym.slice(5)) - 1][0].toUpperCase() + MONTH_NAMES[Number(ym.slice(5)) - 1].slice(1)} ${ym.slice(0, 4)}<small> · ${perMonth.get(ym)} carrera${perMonth.get(ym) === 1 ? '' : 's'}</small></h2>` : '';
     month = ym;
-    return `${head}<article class="card race fed ${modClass(r.modality)}">
-      ${raceHead(r)}
+    return `${head}${raceFold(r, { key: `fd-${r.source}-${r.date}-${normalize(r.name).replace(/[^a-z0-9]/g, '').slice(0, 24)}`, today: todayISO(), cls: 'fed', side: `<span class="src src-${esc(r.source)}">${esc(r.source === 'LIGA' ? 'Liga' : FED_NAMES[r.source] || r.source)}</span>`, body: `
       <p class="fed-meta"><span class="src src-${esc(r.source)}">${esc(r.source === 'LIGA' ? 'Liga' : FED_NAMES[r.source] || r.source)}</span>
         ${esc(r.source === 'LIGA' ? '' : r.discipline || '')}${r.kind === 'Ocio' ? ' · ocio' : ''}${r.info ? `${r.source === 'LIGA' ? '' : ' · '}<span class="muted">${esc(r.info)}</span>` : ''}</p>
       <div class="row">
         ${r.url ? `<a class="btn small" href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">Ver en la web ↗</a>` : ''}
         ${action(r)}${runner ? starBtn(r, 'w-add-fed', ['i', f.races.indexOf(r)]) : ''}
-      </div></article>`;
+      </div>` })}`;
   }).join('');
   const updated = f.updated_at ? new Date(f.updated_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
   return frame('Federaciones', `
@@ -2572,7 +2571,6 @@ const avatars = (ids, max = 5) => { const names = ids.map((id) => runnerById(id)
 const namesOf = (ids) => ids.map((id) => runnerById(id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es'));
 const MON3 = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
 /** Fecha en bloque (día grande, mes corto) con el color de la disciplina. */
-const dateBadge = (g) => `<span class="dbadge ${discClass(g.modality, g.subtype)}"><b>${Number(g.date.slice(8, 10))}</b><small>${MON3[Number(g.date.slice(5, 7)) - 1]}</small></span>`;
 const seenDot = (r) => (r && Object.prototype.hasOwnProperty.call(r, 'last_seen') ? (() => { const d = seenDays(r.last_seen); return `<i class="seen s-${seenLevel(d)}" title="${esc(seenText(d))}"></i>`; })() : '');
 const agoDays = (n) => (n === 0 ? 'hoy' : n === 1 ? 'ayer' : `hace ${n} días`);
 
@@ -2610,9 +2608,9 @@ function viewToday() {
   const weekN = b.upcoming.filter((x) => x.days <= 7).length;
   const dt = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
   const races = S.data.races.filter((r) => yearOf(r.date) === year).length;
-  const up = b.upcoming.map((x) => `<a class="up-row" href="#/inscripciones/${x.reg.id}">${dateBadge(x.reg)}
-      <span class="up-main"><b>${esc(x.reg.name)}</b><small>${x.days === 0 ? 'Hoy' : x.days === 1 ? 'Mañana' : `En ${x.days} días`}${place(x.reg) ? ' · ' + esc(place(x.reg)) : ''}</small>${avatars(x.ids)}</span>
-      <span class="up-n"><b>${x.ids.length}</b><small>del club</small></span></a>`).join('');
+  const up = b.upcoming.map((x) => `<a class="up-row" href="#/inscripciones/${x.reg.id}">${raceTile(x.reg)}
+      <span class="up-main"><b>${esc(x.reg.name)}</b><span class="rh-sub">${esc(raceSub(x.reg))}</span><span class="rc-meta">${raceMeta(x.reg)}</span>${avatars(x.ids)}</span>
+      <span class="rc-side">${raceCd(x.reg)}<span class="rc-n" title="Inscritos del club">${ico('users')}${x.ids.length}</span></span></a>`).join('');
   return frame('Hoy', `
     <section class="hero-today">
       <p class="ht-date">${esc(dt)}</p>
@@ -2668,7 +2666,7 @@ function viewQuality() {
   const ok = all - b.quality.length, pct = all ? Math.round((ok / all) * 100) : 100;   // km, desnivel y precio no se exigen
   const everything = [...b.quality, ...b.soft];
   const count = (k) => everything.filter((x) => x.gaps.some((g) => g.includes(k))).length;
-  const row = (x) => `<a class="mrow-card ${discClass(x.race.modality, x.race.subtype)}" href="#/carreras/${x.race.id}">${dateBadge(x.race)}
+  const row = (x) => `<a class="mrow-card ${discClass(x.race.modality, x.race.subtype)}" href="#/carreras/${x.race.id}">${raceTile(x.race)}
       <span class="up-main"><b>${esc(x.race.name)}</b><span class="gaps">${x.gaps.map((g) => `<i${SOFT_GAPS.has(g) ? ' class="soft"' : ''}>${SOFT_GAPS.has(g) ? 'sin ' + esc(g) : esc(g)}</i>`).join('')}</span></span><span class="tc-go">${ico('go')}</span></a>`;
   return frame('Datos incompletos', `
     <section class="card q-head"><div class="ring" style="--p:${pct}"><b>${pct}%</b></div>
@@ -2760,11 +2758,11 @@ function raceListHtml() {
     const medals = [n(1) ? `🥇${n(1)}` : '', n(2) ? `🥈${n(2)}` : '', n(3) ? `🥉${n(3)}` : ''].filter(Boolean).join(' ');
     const issues = raceIssues(r);
     const st = podiumsOf(r.results.map((x) => ({ race: r, res: x }))).filter((p) => p.stage);
-    return `<a class="card race link-card ${modClass(r.modality)}" href="#/carreras/${r.id}">
-      ${raceHead(r)}${typeTag(r)}${pubTags(r, true)}
+    return raceFold(r, { key: `ac-${r.id}`, noPast: true, side: `<span class="rc-n" title="Participantes del club" aria-label="${r.results.length} participantes">${ico('users')}${r.results.length}</span>${issues.length ? `<span class="rc-chip warn" title="${esc(issues.join(', '))}">${ico('alert')}${issues.length}</span>` : ''}`, body: `
+      ${typeTag(r)}${pubTags(r, true)}
       <p class="count">${r.results.length} participante${r.results.length === 1 ? '' : 's'}${medals ? ` · ${medals}` : ''}${r.stages?.length ? ` · ${r.stages.length} etapas${st.length ? `, ${st.length} podio${st.length === 1 ? '' : 's'} de etapa` : ''}` : ''}</p>
       ${res.length ? `<p class="pods">${res.map((x) => `${medal(x.position)} ${esc(x.runner_name)}${x.category ? ` <small>${esc(x.category)}</small>` : ''}`).join(' · ')}</p>` : ''}
-      ${issues.length ? `<p class="issues">${issues.map((x) => `<span class="issue">⚠️ ${esc(x)}</span>`).join('')}</p>` : ''}${editCta()}</a>`;
+      ${issues.length ? `<p class="issues">${issues.map((x) => `<span class="issue">⚠️ ${esc(x)}</span>`).join('')}</p>` : ''}<a class="btn small ghost" href="#/carreras/${r.id}">${ico('pen')}Abrir y editar${ico('go')}</a>` });
   };
   return `
     ${mods.length > 1 || S.raceMod !== 'all' ? `<div class="years mod-chips" role="tablist" aria-label="Modalidad">
@@ -3620,7 +3618,7 @@ function resPodiums(pk) {
   const byRace = new Map();
   for (const p of pl) { const k = `${p.raceId}|${p.date}`; (byRace.get(k) || byRace.set(k, { ...p, items: [] }).get(k)).items.push(p); }
   const races = [...byRace.values()].sort((a, b) => b.date.localeCompare(a.date));
-  const raceRow = (r) => `<li class="${discClass(r.modality, r.subtype)}">${dateBadge({ date: r.date, modality: r.modality, subtype: r.subtype })}<div class="pr-body"><a class="rname" href="#/carreras/${r.raceId}">${esc(r.race)}</a>
+  const raceRow = (r) => `<li class="${discClass(r.modality, r.subtype)}">${raceTile({ date: r.date, modality: r.modality, subtype: r.subtype })}<div class="pr-body"><a class="rname" href="#/carreras/${r.raceId}">${esc(r.race)}</a>
     <p class="pr-who">${r.items.sort((a, b) => a.position - b.position).map((p) => `${medal(p.position)} ${esc(p.runner)}${p.category ? ` <small class="muted">${esc(p.category)}</small>` : ''}${p.stage ? ` <small class="muted">(${esc(p.stage)})</small>` : ''}`).join(' · ')}</p></div></li>`;
   return `<section class="card rs-card rs-gold"><h2>Podios ${pk.year}</h2>${medals}
       ${types.length ? `<div class="pills">${types.map((x) => `<span class="pill">${esc(x.label)} <b>${x.podiums}</b>${x.wins ? ` · 🥇 ${x.wins}` : ''}</span>`).join('')}</div>` : ''}</section>

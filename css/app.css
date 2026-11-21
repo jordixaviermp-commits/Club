@@ -2445,3 +2445,29 @@ header.top .icon-btn.sos { width: 38px; height: 38px; min-width: 38px; padding: 
 .mini-list li > a.mini-main, .mini-list li > div.mini-main { flex-direction: row; align-items: center; }
 .mini-list li > a.mini-main .rh-main, .mini-list li > div.mini-main .rh-main { flex-direction: column; }
 .rc-tags:empty, .type-line:empty { display: none; }
+
+/* v231: banner de la próxima carrera del equipo y filas de «Hoy» con la misma casilla */
+.next-team .nt-head { display: flex; align-items: flex-start; gap: .65rem; }
+.next-team .rc-date { background: rgba(255, 255, 255, .14); border-color: rgba(255, 255, 255, .55); color: #fff; }
+.next-team .rc-date i, .next-team .rc-date small { color: rgba(255, 255, 255, .92); }
+.next-team .rc-tick { box-shadow: 0 0 0 2px #1d5f7c; }
+.next-team .rh-main { gap: .15rem; } .next-team .rh-sub { color: rgba(255, 255, 255, .88); font-size: var(--fs-3); }
+.next-team .rc-meta { color: #fff; font-size: var(--fs-3); } .next-team .rc-dis { color: #cfeeff; }
+.next-team .rc-side { align-items: flex-end; gap: .3rem; } .next-team .nt-pill { white-space: nowrap; }
+.next-team .nt-n { font-size: var(--fs-6); font-weight: 800; text-transform: none; letter-spacing: 0; }
+.next-team .nt-people { margin-top: .5rem; }
+.up-row .up-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: .12rem; }
+.up-row .up-main > b { text-transform: none; font-size: var(--fs-4); font-weight: 700; white-space: normal; letter-spacing: 0; }
+.up-row .rc-meta { margin: 0; }
+
+/* v232: casilla plegable de Carreras también en Mi temporada, Por valorar, Federaciones y las listas de la dirección */
+.mini-list li.mrow-fold { position: relative; display: block; padding: 0; background: none; border: 0; box-shadow: none; margin: 0; }
+.mini-list li.mrow-fold > .hero-badge { z-index: 2; }
+details.rcard.hero { background: color-mix(in srgb, var(--brand-cyan) 12%, var(--card)); border: 2px solid var(--brand-cyan); margin-top: .9rem; }
+.rc-body .mrow-below { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin: .1rem 0 .3rem; } .rc-body .mrow-below:empty { display: none; }
+.rc-body .mrow-acts { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-top: .3rem; } .rc-body .mrow-acts:empty { display: none; }
+.rc-body .mrow-acts .btn .ico { width: 15px; height: 15px; margin-left: .2rem; }
+.rc-side .pos { font-size: var(--fs-4); font-weight: 800; white-space: nowrap; text-align: right; } .rc-side .pos small { font-weight: 600; color: var(--muted); }
+.rc-side .src { font-size: var(--fs-1); max-width: 7.5rem; white-space: normal; text-align: right; line-height: 1.15; }
+details.rcard.wcard.urgent { border-left-color: var(--bad-2); }
+details.rcard .rc-body .wc-acts { margin-top: .5rem; }
