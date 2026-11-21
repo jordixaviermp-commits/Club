@@ -28,6 +28,8 @@ export function friendlyError(e) {
   if (/PGRST202|Could not find/i.test(msg) && /runner_set_paid/.test(msg)) return 'Para marcar el pago falta activarlo en la base de datos. Avisa a la dirección.';
   if (/importe_no_valido/.test(msg)) return 'Revisa el importe: entre 0 y 10 000 euros.';
   if (/no_inscrito/.test(msg)) return 'Primero tienes que estar apuntado a esa carrera.';
+  if (/nota_demasiado_larga/.test(msg)) return 'La nota es demasiado larga (máximo 1000 letras).';
+  if (/no_inscrito/.test(msg)) return 'Solo puedes poner notas en las carreras en las que estás inscrito.';
   if (/PGRST202|Could not find/i.test(msg) && /runner_watch/.test(msg)) return 'Esta función aún no está activada en la base de datos. Avisa a la dirección del club.';
   if (/desnivel_no_valido|registrations_extra_check|races_extra_check|runner_watch_elev_check/.test(msg)) return 'Revisa el desnivel (entre 1 y 10 000 m) y el precio (entre 0 y 10 000 €).';
   if (/web_ya_puesta/.test(msg)) return 'Esa carrera ya tiene web, puesta por otro compañero. Si está mal, díselo a la dirección.';
@@ -182,6 +184,8 @@ export function supabaseApi(url, key) {
     async runnerWatchList(code) { try { return ok(await sb.rpc('runner_watch_list', { p_code: code })); } catch (e) { if (/PGRST202|Could not find|runner_watch/.test(String(e?.message))) return null; throw e; } },
     async runnerWatchSave(code, id, data) { return ok(await sb.rpc('runner_watch_save', { p_code: code, p_id: id || null, p_data: data })); },
     async runnerWatchDelete(code, id) { ok(await sb.rpc('runner_watch_delete', { p_code: code, p_id: id })); },
+    async runnerNotes(code) { try { return ok(await sb.rpc('runner_notes_list', { p_code: code })); } catch (e) { if (/PGRST202|Could not find|runner_notes_list/.test(String(e?.message))) return null; throw e; } },   // null = falta el SQL
+    async runnerNoteSet(code, regId, note) { ok(await sb.rpc('runner_note_set', { p_code: code, p_registration: regId, p_note: note })); },
     async runnerPing(code) { try { await sb.rpc('runner_ping', { p_code: code }); } catch { /* sin el SQL de actividad */ } },
     async runnerChroniclesTeam(code) { try { return ok(await sb.rpc('runner_chronicles_team', { p_code: code })); } catch { return null; } },
     // publicaciones del club y cifras agregadas de Instagram (30 días) para «Impacto en redes»; null si falta su SQL
@@ -777,6 +781,21 @@ export function demoApi(storage = globalThis.localStorage) {
       }
       const w = d.runner_watch.find((x) => x.id === id && x.runner_id === me.id); if (!w) throw new Error('no_encontrada');
       Object.assign(w, row); publishWatch(d, row, me.id); cleanCandidates(d); save(); return w.id;
+    },
+    async runnerNotes(code) {
+      const me = byCode(code), d = load(); d.runner_notes = d.runner_notes || [];
+      return Object.fromEntries(d.runner_notes.filter((n) => n.runner_id === me.id).map((n) => [n.registration_id, n.note]));
+    },
+    async runnerNoteSet(code, regId, note) {
+      const me = byCode(code), d = load(); d.runner_notes = d.runner_notes || [];
+      const n = String(note || '').trim();
+      if (n.length > 1000) throw new Error('nota_demasiado_larga');
+      d.runner_notes = d.runner_notes.filter((x) => !(x.runner_id === me.id && x.registration_id === regId));
+      if (n) {
+        if (!d.registration_entries.some((e) => e.registration_id === regId && e.runner_id === me.id)) throw new Error('no_inscrito');
+        d.runner_notes.push({ runner_id: me.id, registration_id: regId, note: n });
+      }
+      save();
     },
     async runnerWatchDelete(code, id) { const me = byCode(code), d = load(); d.runner_watch = (d.runner_watch || []).filter((w) => !(w.id === id && w.runner_id === me.id)); cleanCandidates(d); save(); },
     async runnerPing(code) { const me = byCode(code); me.last_seen = new Date().toISOString(); save(); },

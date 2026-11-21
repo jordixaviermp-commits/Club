@@ -325,7 +325,7 @@ async function loadImpact() {
 }
 async function loadRunner() {
   if (!S.session?.isAdmin) api.runnerPing?.(S.code).catch(() => {});   // actividad: última vez que abrió la app
-  try { S.moves = undefined; S.runnerData = await api.runnerView(S.code); await loadNews(); await loadCorrections(); await loadChron(); await loadWatch(); }
+  try { S.moves = undefined; S.runnerData = await api.runnerView(S.code); await loadNews(); await loadCorrections(); await loadChron(); await loadWatch(); await loadNotes(); }
   catch (e) {
     S.runnerData = null;
     if (/enlace_no_valido/.test(String(e?.message))) { store.del(CODE_KEY); S.code = null; }
@@ -1095,7 +1095,7 @@ const medalBadge = (p) => `<i class="medal m${p}" aria-label="Puesto ${p}">${p}<
 const mrow = (g, { below = '', end = '', hero = false, side = '' } = {}) => {
   // Mi temporada usa la misma ficha desplegable que Carreras: al abrirla sale ya toda la información, sin otro menú
   const badge = hero ? '<span class="hero-badge">Próxima cita</span>' : '';
-  if (g.entries) return `<li class="mrow-fold${hero ? ' hero' : ''}">${badge}${runnerRegCard(g, { cls: hero ? 'hero' : '', noPast: true })}</li>`;
+  if (g.entries) return `<li class="mrow-fold${hero ? ' hero' : ''}">${badge}${runnerRegCard(g, { cls: hero ? 'hero' : '', noPast: true, notes: true })}</li>`;
   // carrera ya disputada con mi resultado (la ficha de «resultados» + lo mío)
   const me = S.runnerData?.me?.id, race = S.team?.races?.find((x) => x.id === g.race_id), count = (race?.results || []).length;
   const body = `${race ? doneRaceBody(race, { meId: me }) : typeTag(g)}${below ? `<div class="mrow-below">${below}</div>` : ''}${end ? `<div class="mrow-acts">${end}</div>` : ''}`;
@@ -1473,6 +1473,7 @@ function runnerRegCard(g, opts = {}) {
            <button class="btn primary" data-act="r-join" data-id="${g.id}">La hice: apuntarme</button></div>` : ''}`}
       ${g.notes ? `<p class="notes">${esc(g.notes)}</p>` : ''}
       ${webRow(g, open && !g.suspended)}
+      ${opts.notes && mine && !S.preview ? noteBlock(g) : ''}
       ${S.preview || g.date < pastLimit() ? '' : g.suspended ? `<button type="button" class="btn ghost small susp-btn" data-act="r-suspend" data-id="${g.id}" data-v="0">${ico('check')}Se vuelve a celebrar</button>` : `<button type="button" class="btn ghost small susp-btn" data-act="r-suspend" data-id="${g.id}" data-v="1">${ico('ban')}Carrera suspendida</button>`}
       ${mates}
       ${edit}
@@ -1674,6 +1675,20 @@ function viewRunnerMine() {
 // ======================================================================
 
 const watchToday = () => S.runnerData?.today || todayISO();
+/** Mis notas personales de cada inscripción (solo las veo yo). null = falta el SQL en la base de datos. */
+async function loadNotes() {
+  if (S.preview || !S.code) { S.notes = null; return; }
+  try { S.notes = (await api.runnerNotes(S.code)) || null; } catch { S.notes = null; }
+}
+const noteOf = (g) => (S.notes && S.notes[g.id]) || '';
+/** Pestañita «Mis notas» de una inscripción mía (solo en Mi temporada): hotel, coche, quién va contigo… */
+const noteBlock = (g) => {
+  if (!S.notes) return '';
+  const t = noteOf(g);
+  // sin nota: una sola línea (botón); con nota: el texto y un botón para editarla
+  return t ? `<div class="rc-note has"><div class="rc-note-h">${ico('pen')}<b>Mis notas</b><button type="button" class="btn small ghost" data-act="note-edit" data-id="${g.id}">Editar</button></div><p class="rc-note-t">${esc(t)}</p></div>`
+    : `<button type="button" class="rc-note-add" data-act="note-edit" data-id="${g.id}">${ico('pen')}<span>Mis notas <small>· hotel, coche…</small></span><b>＋</b></button>`;
+};
 async function loadWatch() {
   if (S.preview || !S.code) return;
   try { const l = await api.runnerWatchList(S.code); S.watch = Array.isArray(l) ? l : null; } catch { S.watch = undefined; }   // null = falta el SQL
@@ -4331,6 +4346,21 @@ function askPaid(name, mine) {
   });
 }
 
+/** Editar mi nota de una inscripción (privada). Devuelve el texto (vacío = borrar) o null si se cancela. */
+function askNote(name, current = '') {
+  return new Promise((resolve) => {
+    const dlg = document.getElementById('dialog');
+    dlg.innerHTML = `<form method="dialog" class="dlg"><h2>Mis notas</h2><p><b>${esc(name || '')}</b></p>
+      <p class="hint">Apunta lo que quieras de esta carrera: hotel, alquiler de coche, horarios… <b>Solo la ves tú</b>: ni la dirección ni tus compañeros.</p>
+      <label>Nota<textarea name="note" rows="6" maxlength="1000" placeholder="Hotel Plaza, reserva 12–13 ene (ref. 4821)…">${esc(current)}</textarea></label>
+      <div class="dlg-actions"><button value="ok" class="btn primary">Guardar</button>${current ? '<button value="del" class="btn danger" formnovalidate>Borrar la nota</button>' : ''}<button value="" class="btn" formnovalidate>Cancelar</button></div></form>`;
+    dlg.onclose = () => { const v = dlg.returnValue; if (v === 'del') return resolve(''); if (v !== 'ok') return resolve(null); resolve(dlg.querySelector('textarea[name="note"]').value); };
+    dlg.returnValue = '';
+    dlg.showModal();
+    dlg.querySelector('textarea')?.focus();
+  });
+}
+
 function askCategory(name, okLabel = 'Apuntarme', current = '') {
   return new Promise((resolve) => {
     const dlg = document.getElementById('dialog');
@@ -4932,6 +4962,13 @@ const actions = {
     render();
   },
   // Pago de la inscripción: lo marca el corredor (con el importe, opcional); los compañeros ven solo «pagada»
+  async 'note-edit'(el) {
+    const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id); if (!g || S.preview) return;
+    const t = await askNote(g.name, noteOf(g));
+    if (t === null) return;
+    const ok = await run(async () => { await api.runnerNoteSet(S.code, g.id, t); await loadNotes(); return true; }, t.trim() ? '✓ Nota guardada' : 'Nota borrada');
+    if (ok) render();
+  },
   async 'r-paid'(el) {
     const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id); if (!g) return;
     const mine = g.entries.find((e) => e.runner_id === S.runnerData.me.id); if (!mine) return;
@@ -5628,7 +5665,7 @@ document.addEventListener('visibilitychange', async () => {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['r-web', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'chro-toggle', 'chro-all', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
+const RUNNER_ACTIONS = new Set(['r-web', 'note-edit', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'chro-toggle', 'chro-all', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
 // los enlaces de la ventana emergente (p. ej. las carreras de un compañero) cierran la ventana al navegar
 document.getElementById('dialog').addEventListener('click', (ev) => { if (ev.target.closest('a[href^="#/"]')) ev.currentTarget.close(); });
 $app.addEventListener('click', (ev) => {

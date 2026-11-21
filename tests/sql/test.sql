@@ -184,6 +184,27 @@ select pg_temp.expect_fail($q$select runner_team('XXXXXXXXXXXX')$q$, 'resumen eq
 select pg_temp.check(jsonb_typeof(runner_team_moves('BBBBBBBBBB')) = 'array', 'movimientos del equipo: devuelve una lista');
 select pg_temp.check(runner_team_moves('BBBBBBBBBB')::text !~ '(BBBBBBBBBB|AAAAAAAAAA|contract)', 'movimientos del equipo: sin enlaces ni contratos');
 select pg_temp.expect_fail($q$select runner_team_moves('XXXXXXXXXXXX')$q$, 'movimientos del equipo: sin enlace no');
+-- notas personales de inscripción (con una carrera en la que Anna está inscrita)
+select set_config('t.reg', (select r->>'id' from jsonb_array_elements(runner_view('BBBBBBBBBB')->'registrations') r where r->'entries' @> '[{"runner_id":"10000000-0000-0000-0000-000000000002"}]'::jsonb limit 1), false);
+reset role;
+insert into runners (id, name, code) values ('10000000-0000-0000-0000-000000000009', 'Eva Test', 'EEEEEEEEEE');
+set role anon;
+select pg_temp.check(runner_notes_list('BBBBBBBBBB') = '{}'::jsonb, 'notas: al principio vacías');
+select runner_note_set('BBBBBBBBBB', current_setting('t.reg')::uuid, '  Hotel Plaza 12-13 ene  ');
+select pg_temp.check(runner_notes_list('BBBBBBBBBB')->>current_setting('t.reg') = 'Hotel Plaza 12-13 ene', 'notas: se guarda y se recorta');
+select pg_temp.check(runner_notes_list('EEEEEEEEEE') = '{}'::jsonb, 'notas: otro corredor no las ve');
+select pg_temp.expect_fail($q$select runner_note_set('EEEEEEEEEE', current_setting('t.reg')::uuid, 'x')$q$, 'notas: solo en carreras en las que estás inscrito');
+select pg_temp.expect_fail($q$select runner_note_set('BBBBBBBBBB', current_setting('t.reg')::uuid, repeat('x', 1001))$q$, 'notas: máximo 1000 letras');
+select pg_temp.expect_fail($q$select runner_notes_list('XXXXXXXXXXXX')$q$, 'notas: sin enlace no');
+select runner_note_set('BBBBBBBBBB', current_setting('t.reg')::uuid, '');
+select pg_temp.check(runner_notes_list('BBBBBBBBBB') = '{}'::jsonb, 'notas: vacío = borrar');
+select runner_note_set('BBBBBBBBBB', current_setting('t.reg')::uuid, 'otra');
+reset role;
+delete from registration_entries where registration_id = current_setting('t.reg')::uuid and runner_id = '10000000-0000-0000-0000-000000000002';
+select pg_temp.check((select count(*) from runner_entry_notes) = 0, 'notas: si te borras de la carrera, la nota desaparece');
+insert into registration_entries (registration_id, runner_id) values (current_setting('t.reg')::uuid, '10000000-0000-0000-0000-000000000002');
+set role anon;
+
 -- carreras olvidadas (ya pasadas)
 reset role;
 insert into runners (id, name, code) values ('10000000-0000-0000-0000-000000000004', 'Dani Test', 'DDDDDDDDDD');
