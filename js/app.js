@@ -1097,7 +1097,7 @@ const mrow = (g, { pill = '', edit = '', below = '', end = '', href = '', hero =
   const count = list ? `<span class="rc-n" title="Inscritos del club" aria-label="${list.length} del club">${ico('users')}${list.length}</span>` : '';
   const body = `${pill ? `<div class="mrow-below"><span class="pill-next">${pill}</span></div>` : ''}${below ? `<div class="mrow-below">${below}</div>` : ''}
     <div class="mrow-acts">${edit}${end}${href ? `<a class="btn small ghost" href="${href}">Ver la carrera${ico('go')}</a>` : ''}</div>`;
-  return `<li class="mrow-fold${hero ? ' hero' : ''}">${hero ? '<span class="hero-badge">Próxima cita</span>' : ''}${raceFold(g, { key, side: side || count, body, cls: hero ? 'hero' : '' })}</li>`;
+  return `<li class="mrow-fold${hero ? ' hero' : ''}">${hero ? '<span class="hero-badge">Próxima cita</span>' : ''}${raceFold(g, { key, side: side || count, body, noPast: true, cls: hero ? 'hero' : '' })}</li>`;
 };
 
 /** «Mis carreras»: sus carreras con resultados por temporada y las apuntadas pendientes de resultado. */
