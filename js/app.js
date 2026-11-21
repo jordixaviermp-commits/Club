@@ -1682,9 +1682,13 @@ async function loadNotes() {
 }
 const noteOf = (g) => (S.notes && S.notes[g.id]) || '';
 /** Pestañita «Mis notas» de una inscripción mía (solo en Mi temporada): hotel, coche, quién va contigo… */
-const noteBlock = (g) => (!S.notes ? '' : `<div class="rc-note"><div class="rc-note-h">${ico('pen')}<b>Mis notas</b><small class="muted">solo las ves tú</small>
-    <button type="button" class="btn small ghost" data-act="note-edit" data-id="${g.id}">${noteOf(g) ? 'Editar' : '＋ Añadir'}</button></div>
-    ${noteOf(g) ? `<p class="rc-note-t">${esc(noteOf(g))}</p>` : '<p class="rc-note-t blank">Hotel, coche de alquiler, quién va contigo…</p>'}</div>`);
+const noteBlock = (g) => {
+  if (!S.notes) return '';
+  const t = noteOf(g);
+  // sin nota: una sola línea (botón); con nota: el texto y un botón para editarla
+  return t ? `<div class="rc-note has"><div class="rc-note-h">${ico('pen')}<b>Mis notas</b><button type="button" class="btn small ghost" data-act="note-edit" data-id="${g.id}">Editar</button></div><p class="rc-note-t">${esc(t)}</p></div>`
+    : `<button type="button" class="rc-note-add" data-act="note-edit" data-id="${g.id}">${ico('pen')}<span>Mis notas <small>· hotel, coche…</small></span><b>＋</b></button>`;
+};
 async function loadWatch() {
   if (S.preview || !S.code) return;
   try { const l = await api.runnerWatchList(S.code); S.watch = Array.isArray(l) ? l : null; } catch { S.watch = undefined; }   // null = falta el SQL

@@ -2472,8 +2472,11 @@ details.rcard.hero { background: color-mix(in srgb, var(--brand-cyan) 12%, var(-
 details.rcard.wcard.urgent { border-left-color: var(--bad-2); }
 details.rcard .rc-body .wc-acts { margin-top: .5rem; }
 
-/* v234: mis notas privadas en cada inscripción (solo en Mi temporada) */
-.rc-note { margin-top: .6rem; padding: .55rem .7rem; border-radius: var(--r-md); background: color-mix(in srgb, var(--warn) 10%, var(--card)); border: 1px dashed color-mix(in srgb, var(--warn) 55%, var(--line)); }
-.rc-note-h { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; } .rc-note-h .ico { width: 16px; height: 16px; color: var(--warn-t); } .rc-note-h small { flex: 1; font-size: var(--fs-1); }
-.rc-note-h .btn { margin-left: auto; min-height: 32px; padding: .2rem .7rem; }
-.rc-note-t { margin: .4rem 0 0; font-size: var(--fs-3); white-space: pre-wrap; overflow-wrap: anywhere; } .rc-note-t.blank { color: var(--muted); font-style: italic; }
+/* v234: mis notas privadas en cada inscripción (solo en Mi temporada): una línea si no hay nota, ampliada si la hay */
+.rc-note-add { display: flex; align-items: center; gap: .45rem; width: 100%; min-height: 36px; padding: .3rem .65rem; border-radius: var(--r-md); border: 1px dashed color-mix(in srgb, var(--warn) 55%, var(--line)); background: color-mix(in srgb, var(--warn) 7%, var(--card)); color: var(--text); font: inherit; font-size: var(--fs-3); font-weight: 600; text-align: left; cursor: pointer; margin-top: .5rem; }
+.rc-note-add .ico { width: 15px; height: 15px; color: var(--warn-t); flex: none; } .rc-note-add > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .rc-note-add small { font-weight: 400; color: var(--muted); }
+.rc-note-add > b { color: var(--warn-t); font-size: 1.1rem; line-height: 1; }
+.rc-note.has { margin-top: .5rem; padding: .5rem .7rem; border-radius: var(--r-md); background: color-mix(in srgb, var(--warn) 10%, var(--card)); border: 1px solid color-mix(in srgb, var(--warn) 50%, var(--line)); }
+.rc-note-h { display: flex; align-items: center; gap: .4rem; } .rc-note-h .ico { width: 15px; height: 15px; color: var(--warn-t); } .rc-note-h b { font-size: var(--fs-3); }
+.rc-note-h .btn { margin-left: auto; min-height: 30px; padding: .15rem .65rem; }
+.rc-note-t { margin: .3rem 0 0; font-size: var(--fs-3); white-space: pre-wrap; overflow-wrap: anywhere; }
