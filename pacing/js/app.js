@@ -420,6 +420,10 @@ let imported = false;
 }
 loadTrack(); await loadWeather(); compute(); render();
 // Llegada desde «Planificar ruta» (…/pacing/?de=ruta): la ruta ya está guardada; se abre directamente el plan (o, si aún no hay perfil, se pide primero).
+{   // …/pacing/?fecha=2027-04-02 (desde una carrera del club): deja puesta la fecha para el tiempo y la nutrición
+  const f = /[?&]fecha=(\d{4}-\d{2}-\d{2})\b/.exec(location.search)?.[1];
+  if (f && !Number.isNaN(Date.parse(f))) { state.date = f; store.set('date', f); await loadWeather(); compute(); render(); history.replaceState(null, '', location.pathname); }
+}
 if (/[?&]de=ruta\b/.test(location.search)) {
   history.replaceState(null, '', location.pathname);
   if (state.saved) { if (state.profile) openRoute(); else { toast('Antes dime tu FTP y tu peso para calcular los vatios', 4000); profileDialog(); } }
