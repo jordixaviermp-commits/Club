@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  projectLeagueRaces,
   nextYearWatch, watchTbc, WATCH_TBC,
   normalize, matchCategory, parseBulkRunners, yearSummary, csvRows, toCsv, parseCsv, importResultsCsv,
   parseDate, extractCode, newCode, formatDate, planRosterRenewal, monthGrid, addMonths, formatRange, daysOf, podiumsOf, bonusStatus, bonusConfigFor, yearBonuses, DEFAULT_BONUS, matchContract, searchRaces, pastLimit, SUBTYPES, parseKm, kmText, guessSubtype, missingFields, matchPeople, cleanGoogleLink } from '../js/logic.js';
@@ -804,4 +805,22 @@ test('resumen: la carrera que más horas costó (el MTB suma pocos km pero mucha
   assert.equal(s.longestTime.race, 'Marathon MTB');                 // la que más horas costó
   assert.equal(s.longestTime.runner, 'Joan'); assert.equal(s.longestTime.seconds, 6 * 3600 + 600);
   assert.equal(yearSummary(2026, [{ ...races[2] }], []).longestTime, null);
+});
+
+test('Ligas: las carreras pasadas se proyectan al año siguiente (+52 semanas) hasta que se escribe la edición nueva', () => {
+  const base = { source: 'LIGA', modality: 'BTT', league: 'Marathon Cup BTT 2027', info: 'Info' };
+  const races = [
+    { ...base, name: 'Marathon Cup BTT – Naturland', date: '2027-05-30' },
+    { ...base, name: 'Marathon Cup BTT – Sea Otter', date: '2027-09-19' },
+    { ...base, name: 'Otra Carrera 2027', league: 'Otra 2027', date: '2027-03-06' },
+    { ...base, name: 'Otra Carrera 2028', league: 'Otra 2028', date: '2028-03-04' },       // ya está la edición nueva: no se proyecta
+    { source: 'FCC', name: 'De federación', date: '2027-01-01', modality: 'BTT' },          // solo se proyectan las de ligas
+  ];
+  assert.deepEqual(projectLeagueRaces(races, '2027-01-01'), []);                             // todo es futuro
+  const p = projectLeagueRaces(races, '2027-06-15');
+  assert.deepEqual(p.map((r) => r.name), ['Marathon Cup BTT – Naturland']);                // Sea Otter aún no pasó; Otra ya tiene 2028
+  assert.equal(p[0].date, '2028-05-28'); assert.equal(new Date('2028-05-28T12:00:00Z').getUTCDay(), new Date('2027-05-30T12:00:00Z').getUTCDay());
+  assert.ok(p[0].tbc && p[0].league === 'Marathon Cup BTT 2028' && p[0].info.includes('Fecha por confirmar'));
+  const q = projectLeagueRaces(races, '2028-12-01').map((r) => [r.name, r.date]);           // pasados dos años: salta a la próxima fecha futura
+  assert.ok(q.every(([, d]) => d >= '2028-12-01') && q.length === 3);
 });

@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError, cleanWeb } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, disciplineKey, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   teamMoves, parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  directorBoard, raceImpact, tierRanges, nextTeamRace, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
+  directorBoard, raceImpact, tierRanges, nextTeamRace, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, projectLeagueRaces, WATCH_TBC, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -909,7 +909,7 @@ function runnerSearchResults(q) {
       <ul class="mini-list">${club.map((g) => miniRow(g, mine(g) ? '<span class="done">✓ Apuntado</span>'
         : `<div class="mini-acts"><button class="btn primary small" data-act="r-join" data-id="${g.id}">Apuntarme</button>${g.suspended ? '' : starBtn(g, 'w-add-reg', ['id', g.id])}</div>`)).join('')}</ul>` : ''}
     ${fed.length ? `<p class="hint"><b>En los calendarios de las federaciones y ligas</b>:</p>
-      <ul class="mini-list">${fed.map((r) => miniRow(r, `<div class="mini-acts"><button class="btn small" data-act="r-new-fed" data-i="${S.fed.races.indexOf(r)}">Añadir y apuntarme</button>${starBtn(r, 'w-add-fed', ['i', S.fed.races.indexOf(r)])}</div>`)).join('')}</ul>` : ''}
+      <ul class="mini-list">${fed.map((r) => miniRow(r, `<div class="mini-acts">${r.tbc ? '<small class="muted">📅 Fecha por confirmar</small>' : `<button class="btn small" data-act="r-new-fed" data-i="${S.fed.races.indexOf(r)}">Añadir y apuntarme</button>`}${starBtn(r, 'w-add-fed', ['i', S.fed.races.indexOf(r)])}</div>`)).join('')}</ul>` : ''}
     ${!club.length && !fed.length && !mates.length ? `<p class="hint">No hay ninguna carrera parecida a «${esc(q)}».</p>
       <button class="btn primary block" data-act="r-new">＋ ¿No la encuentras? Añádela: «${esc(q.trim())}»</button>`
       : `<button class="btn ghost block small-add" data-act="r-new">＋ ¿No es ninguna de estas? Añadir una carrera nueva</button>`}`;
@@ -1916,7 +1916,7 @@ async function loadFed() {
   const [fed, leagues] = await Promise.all([loadJson(FED_DATA_URLS), loadJson(LEAGUE_URLS)]);
   const extra = (leagues?.races || []).filter((r) => r.date && r.name);
   if (fed || extra.length) {
-    const races = [...(fed?.races || []), ...extra]
+    const races = [...(fed?.races || []), ...extra, ...projectLeagueRaces(extra, todayISO())]   // las ligas se conservan de un año a otro
       .sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name, 'es'));
     S.fed = { ...(fed || { errors: [] }), races };
   } else S.fed = { failed: true };
@@ -1937,6 +1937,7 @@ function viewFed() {
   const regByKey = new Map(clubRegs.map((g) => [g.date + '|' + normalize(g.name), g]));
   const meId = S.runnerData?.me?.id;
   const action = (r) => {
+    if (r.tbc) return '<span class="muted">📅 Fecha por confirmar</span>';   // sin fecha oficial no se crea ni se apunta nadie: solo se guarda en «Por valorar»
     const key = r.date + '|' + normalize(r.name);
     if (!runner) return created.has(key) ? '<span class="done">✓ Ya está en la app</span>'
       : `<button class="btn primary small" data-act="fed-create" data-i="${f.races.indexOf(r)}">Crear inscripción</button>`;
@@ -4894,7 +4895,8 @@ const actions = {
   async 'w-add-fed'(el) {
     const r = S.fed?.races[Number(el.dataset.i)]; if (!r) return;
     const g = watchMatch(r, S.runnerData.registrations);   // si ya está en Carreras (aunque con otro nombre), se guarda esa para no duplicarla
-    const data = g ? { ...watchFrom(g, `Calendario: ${srcNote(r)}`.slice(0, 500)), url: watchFrom(r).url } : watchFrom(r, `Calendario: ${srcNote(r)}`.slice(0, 500));
+    const note = `${r.tbc ? WATCH_TBC + ': es la de la edición anterior + 52 semanas, hasta que salga la oficial.\n' : ''}Calendario: ${srcNote(r)}`.slice(0, 500);
+    const data = g ? { ...watchFrom(g, note), url: watchFrom(r).url } : watchFrom(r, note);
     const ok = await run(async () => { await api.runnerWatchSave(S.code, null, data); await loadWatch(); return true; }, 'Guardada en «Por valorar»');
     if (ok) render();
   },
