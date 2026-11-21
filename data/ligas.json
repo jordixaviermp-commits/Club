@@ -276,6 +276,21 @@
   },
   {
    "source": "LIGA",
+   "league": "Valencia Epic Race 2027",
+   "date": "2027-05-14",
+   "name": "Valencia Epic Race",
+   "place": "Buñol",
+   "province": "Valencia",
+   "country": "España",
+   "modality": "BTT",
+   "subtype": "XCM",
+   "discipline": "BTT",
+   "kind": "Competición",
+   "info": "Global Cycling Epic Race · V edición · 14, 15 y 16 de mayo · Buñol",
+   "url": "https://valenciaepicrace.com"
+  },
+  {
+   "source": "LIGA",
    "league": "Copa Catalana Internacional BTT 2027",
    "circuit": "Copa Catalana Internacional BTT",
    "date": "2027-05-29",
