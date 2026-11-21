@@ -163,7 +163,7 @@ function homeView() {
       <p>${esc(fmtKm(track.distance))} · +${Math.round(track.gain).toLocaleString('es')} m · estimado ${esc(fmtDur(plan.totalMs, true))} con el objetivo «${esc(plan.label)}».</p>
       <button class="more" data-act="route">Verla completa →</button></div>`;
   }
-  h += `<button class="card link" data-act="choose"><div class="cta"><span class="ico">🏆</span><div><b>Elige tu prueba</b><span>${track ? 'Cambia de ruta o sube otro track' : 'Sube un .gpx o .fit y verás cómo repartir el esfuerzo'}</span></div></div></button>`;
+  h += `<button class="card link" data-act="choose"><div class="cta"><span class="ico">${ICON.flag}</span><div><b>Elige tu prueba</b><span>${track ? 'Cambia de ruta o sube otro track' : 'Sube un .gpx o .fit y verás cómo repartir el esfuerzo'}</span></div></div></button>`;
   h += `<a class="card link" href="../ruta/" style="text-decoration:none;color:inherit"><h3>Viento, tiempo y subidas</h3><p>Planifica la ruta a la hora de salida: previsión por tramos, puertos y avituallamiento.</p><span class="more">Planificar ruta →</span></a>`;
   const label = !p ? 'Crear mi perfil' : track ? 'Ver mi plan' : 'Elegir mi prueba';
   h += `<button class="fab" data-act="${!p ? 'profile' : track ? 'route' : 'choose'}">${ICON.flag} ${label}</button>`;
@@ -209,7 +209,7 @@ function routeView() {
   h += `<div class="profile" style="position:relative"><div id="profwrap" style="position:relative">${profileSvg('prof', { sel: state.open >= 0 ? plan.segments[state.open] : null })}${markerHtml()}<div id="scrub" class="readout" style="position:absolute;left:0;right:0;top:0;display:none;padding:4px 8px"></div></div></div>`;
   h += `<div class="stats"><div><strong>${esc(num(track.distance / 1000, 1))} km</strong><small>Distancia</small></div><div><strong>+${Math.round(track.gain).toLocaleString('es')} m</strong><small>Desnivel</small></div><div><strong>~${esc(fmtDur(plan.totalMs))}</strong><small>Estimado</small></div></div><div class="hr"></div>`;
   h += `<p class="q">¿Cómo la vas a hacer?</p><div class="chips">${Object.entries(OBJECTIVES).map(([k, v]) => `<button class="chip${k === o ? ' on' : ''}" data-obj="${k}">${v.label}</button>`).join('')}</div>`;
-  h += `<p class="q">¿Cuándo la vas a hacer?</p><label class="field">📅 <input type="date" id="date" value="${esc(state.date)}" aria-label="¿Cuándo la vas a hacer?"></label>`;
+  h += `<p class="q">¿Cuándo la vas a hacer?</p><label class="field"><svg class="cal" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg> <input type="date" id="date" value="${esc(state.date)}" aria-label="¿Cuándo la vas a hacer?"></label>`;
   h += `<div class="card plan"><h3>El plan</h3><p>${esc(strat.text)}</p><div class="badges">${strat.chips.map((c) => `<span class="badge ${c.type}">${esc(c.text)}</span>`).join('')}</div></div>`;
   h += `<p class="hint">IF ${num(plan.IF, 2)} · NP ${Math.round(plan.np)} W · media ${Math.round(plan.avgPower)} W · ${Math.round(plan.kj)} kJ · TSS ≈ ${Math.round(plan.tss)} <span class="note">(estimado con un modelo físico propio, no medido)</span></p>`;
   h += segmentsHtml() + nutritionHtml();

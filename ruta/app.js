@@ -49,6 +49,8 @@ const WP_TYPES = [
 const wpType = (id) => WP_TYPES.find((t) => t[0] === id) || WP_TYPES[WP_TYPES.length - 1];
 
 // ---------- Estado ----------
+const SVG = { up: 'M12 16V4M7 9l5-5 5 5M4 20h16', hist: 'M12 7v5l3 2M3 12a9 9 0 1 0 3-6.7M3 4v5h5', bolt: 'M13 2L4 14h7l-1 8 9-12h-7z' };
+const svg = (k) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${SVG[k]}"/></svg>`;
 const S = {
   id: null, name: '', raw: null, reversed: false, track: null, climbs: [], samples: [], tl: null, etas: [], along: null,
   eleSrc: 'file', dem: null, demLoading: false, demErr: '', fountains: null, fLoading: false, fErr: '',
@@ -277,9 +279,9 @@ function renderHome() {
     <div class="step"><b>1</b><h2>Track</h2></div>
     ${lastRoute ? `<div class="resume">¿Sigues con <b>${esc(lastRoute.name)}</b> donde lo dejaste?
       <div class="row"><button class="btn" data-act="resume">Seguir</button><button class="linkbtn" data-act="forget">No</button></div></div>` : ''}
-    <button class="pick" data-act="file"><span class="ic">⬆️</span><span><b>Archivo</b><span>Sube el archivo .gpx o .fit de la ruta que quieres planificar.</span></span></button>
+    <button class="pick" data-act="file"><span class="ic">${svg('up')}</span><span><b>Archivo</b><span>Sube el archivo .gpx o .fit de la ruta que quieres planificar.</span></span></button>
     <input type="file" id="file" accept=".gpx,.fit,application/gpx+xml,application/octet-stream" hidden>
-    <button class="pick" data-act="recent"><span class="ic">🕘</span><span><b>Recientes</b><span>Las rutas que ya has planificado en este móvil u ordenador, para repetirlas.</span></span></button>
+    <button class="pick" data-act="recent"><span class="ic">${svg('hist')}</span><span><b>Recientes</b><span>Las rutas que ya has planificado en este móvil u ordenador, para repetirlas.</span></span></button>
     <p>¿Sin track a mano? <button class="linkbtn" data-act="example">Probar con una ruta de ejemplo</button></p>
     ${foot()}`;
 }
@@ -372,7 +374,7 @@ function renderSetup() {
     <div class="step"><b>3</b><h2>Ritmo</h2></div>${ritmoHtml()}
     <div id="arrive">${arriveHtml()}</div>
     <button class="btn go" data-act="go">Ver la previsión</button>
-    <button class="btn block" data-act="to-pacing">⚡ Vatios y nutrición (Pacing)</button>
+    <button class="btn block" data-act="to-pacing">${svg('bolt')}Vatios y nutrición (Pacing)</button>
     ${foot()}`;
 }
 
@@ -419,7 +421,7 @@ function renderTop() {
     <div class="panel">
       ${salidaHtml()}
       <details><summary>Ritmo: <b>${paceText()}</b></summary><div style="margin-top:.6rem">${ritmoHtml()}</div></details>
-      <div class="row" style="margin-top:.6rem"><button class="btn" data-act="reverse">Invertir sentido</button><button class="btn" data-act="to-pacing">⚡ Pacing</button></div>
+      <div class="row" style="margin-top:.6rem"><button class="btn" data-act="reverse">Invertir sentido</button><button class="btn" data-act="to-pacing">${svg('bolt')}Pacing</button></div>
     </div>
     <div class="seg" id="view"><button data-view="sencilla" class="${S.view === 'sencilla' ? 'on' : ''}">Sencilla</button><button data-view="completa" class="${S.view === 'completa' ? 'on' : ''}">Completa</button></div>
     <p class="hint">${S.view === 'completa' ? 'Todo: tiempo detallado, avituallamiento y exportar.' : 'Solo el resumen, el mapa y las subidas.'}</p>`;
@@ -459,11 +461,11 @@ function renderSummary() {
     </div>
     ${S.wxLoading ? '<p class="hint">Cargando la previsión…</p>' : ''}
     ${t.hasEle ? '' : '<p class="warn">Este track no trae altitud: los tiempos son como si fuera llano.</p>'}
-    <details class="fact"><summary><b>Viento</b> ${wind}</summary><p>A la hora a la que pasas por cada punto y respecto a tu dirección de marcha. «De cara» es si viene a menos de 45° de tu frente.</p></details>
-    <details class="fact"><summary><b>Temperatura</b> ${temp}</summary><p>Temperatura a 2 m en cada punto a tu hora de paso.</p></details>
-    <details class="fact"><summary><b>Lluvia</b> ${rain}</summary><p>La probabilidad más alta de precipitación a lo largo de la ruta.</p></details>
-    <details class="fact"><summary><b>Luz</b> ${light}</summary><p>Con la salida y la puesta de sol del día, en el punto de salida.</p></details>
-    <details class="fact"><summary><b>Subida más dura</b> ${h ? `${km(h.length)} km al ${pct(h.avg)}` : 'ninguna'}</summary>
+    <details class="fact" data-k="viento"><summary><b>Viento</b> ${wind}</summary><p>A la hora a la que pasas por cada punto y respecto a tu dirección de marcha. «De cara» es si viene a menos de 45° de tu frente.</p></details>
+    <details class="fact" data-k="temp"><summary><b>Temperatura</b> ${temp}</summary><p>Temperatura a 2 m en cada punto a tu hora de paso.</p></details>
+    <details class="fact" data-k="lluvia"><summary><b>Lluvia</b> ${rain}</summary><p>La probabilidad más alta de precipitación a lo largo de la ruta.</p></details>
+    <details class="fact" data-k="luz"><summary><b>Luz</b> ${light}</summary><p>Con la salida y la puesta de sol del día, en el punto de salida.</p></details>
+    <details class="fact" data-k="subida"><summary><b>Subida más dura</b> ${h ? `${km(h.length)} km al ${pct(h.avg)}` : 'ninguna'}</summary>
       <p>${h ? `Empieza en el km ${km(h.start)}, la pasas entre las ${hm(at(h.start))} y las ${hm(at(h.end))}. Sube ${int(h.gain)} m, máx. ${pct(h.max)}.` : 'No hay subidas de 40 m o más al 2,5 % o más, ni puertos largos y tendidos.'}</p></details>`;
 }
 
