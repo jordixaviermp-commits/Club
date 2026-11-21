@@ -2427,3 +2427,21 @@ header.top .icon-btn.sos { width: 38px; height: 38px; min-width: 38px; padding: 
 .month-head .mh-name { font-size: var(--fs-3); font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .month-head .mh-meta { font-size: var(--fs-2); }
 .rc-mi .rc-dis { white-space: normal; } .rc-main { min-width: 0; overflow: hidden; }
+
+/* v230: la misma casilla de carrera en toda la app */
+.race-head.rh2 { display: flex; align-items: center; gap: .65rem; }
+.rh-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: .12rem; }
+.rh-main h3, .rh-main > b { margin: 0; font-size: var(--fs-5); font-weight: 700; line-height: 1.2; text-transform: none; letter-spacing: 0; }
+.rh-sub { margin: 0; font-size: var(--fs-2); color: var(--muted); line-height: 1.25; }
+.race-head.rh2 .rc-meta { margin: .1rem 0 0; }
+.race-head.rh2 .rc-side { align-self: flex-start; }
+.mini-list li.mrow > .mrow-main { flex-direction: row; align-items: center; gap: .65rem; }
+.mini-list li.mrow .rh-main { align-items: flex-start; } .mini-list li.mrow .pill-next { margin-top: .15rem; }
+.mini .mini-main { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+.mini .rc-date { width: 42px; border-radius: 10px; padding: .12rem 0 .18rem; } .mini .rc-date b { font-size: var(--fs-5); } .mini .rc-date i { font-size: .6rem; } .mini .rc-date small { display: none; }
+.mini .rh-main b { font-size: var(--fs-4); font-weight: 700; text-transform: none; letter-spacing: 0; }
+.wcard .race-head.rh2 { margin-bottom: .1rem; }
+.wcard .wc-chips { margin-top: .35rem; }
+.mini-list li > a.mini-main, .mini-list li > div.mini-main { flex-direction: row; align-items: center; }
+.mini-list li > a.mini-main .rh-main, .mini-list li > div.mini-main .rh-main { flex-direction: column; }
+.rc-tags:empty, .type-line:empty { display: none; }
