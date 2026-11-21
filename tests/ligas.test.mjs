@@ -120,3 +120,9 @@ test('Bike Marathon Pulmón de Acero 2027: sale al buscar por nombre o pueblo', 
   const r = data.races.find((x) => x.name === 'Bike Marathon Pulmón de Acero');
   assert.deepEqual([r.date, r.subtype, r.province], ['2027-09-25', 'XCM', 'Bizkaia']);
 });
+
+test('Valencia Epic Race 2027: sale al buscar por nombre o pueblo', () => {
+  const names = (q) => searchRaces(q, data.races).map((r) => r.name);
+  assert.ok(names('epic race').includes('Valencia Epic Race') && names('bunol').includes('Valencia Epic Race'));
+  assert.equal(data.races.find((r) => r.name === 'Valencia Epic Race').date, '2027-05-14');
+});
