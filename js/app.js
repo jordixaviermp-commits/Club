@@ -1423,23 +1423,30 @@ function runnerRegCard(g, opts = {}) {
   const d = S.runnerData, me = d.me, today = d.today || todayISO();
     const mine = g.entries.find((e) => e.runner_id === me.id);
     const open = g.date >= today;
-    const soon = open && !g.suspended && daysTo(g.date) <= 14;
     const edit = g.mine_created && !S.preview ? `<div class="edit-row"><span class="muted">Añadida por ti</span><a class="edit-btn" href="#/editar/${g.id}" aria-label="Editar o borrar la carrera ${esc(g.name)}">${ico('pen')}Editar</a></div>` : '';
     const mates = g.entries.length ? `<div class="club-row"><span class="count">${ico('users')}${g.entries.length} del club</span><ul class="people">${g.entries.map((e) =>
       `<li class="${e.runner_id === me.id ? 'me' : ''}${e.paid ? ' paid' : ''}">${esc(e.name)}${e.category ? ` <small>${esc(e.category)}</small>` : ''}${e.paid ? `<span class="paid-mark" title="Ha pagado la inscripción" aria-label="ha pagado la inscripción">${ico('euro')}</span>` : ''}</li>`).join('')}</ul></div>` : '';
     const key = `rc-${g.id}`, isOpen = !!opts.open || !!S.open?.[key];
-    const chips = [
-      mine && !g.suspended ? `<span class="rc-chip ok">${ico('check')}Inscrito</span>` : '',
+    // ficha cerrada: fecha en cajita, disciplina y datos clave, cuenta atrás con color y estado
+    const dt = new Date(`${g.date}T12:00:00Z`), nd = daysTo(g.date), multi = g.end_date && g.end_date > g.date ? numDays(g.date, g.end_date) : 0;
+    const MES3 = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+    const dateTile = `<span class="rc-date${mine && !g.suspended ? ' mine' : ''}" aria-hidden="true"><b>${dt.getUTCDate()}</b><i>${MES3[dt.getUTCMonth()]}</i>${multi ? `<small>${multi} días</small>` : ''}${mine && !g.suspended ? `<em class="rc-tick">${ico('check')}</em>` : ''}</span>${mine && !g.suspended ? '<span class="sr-only">Inscrito. </span>' : ''}`;
+    const wd = dt.toLocaleDateString('es-ES', { weekday: 'short', timeZone: 'UTC' }).replace('.', '');
+    const subLine = `${multi ? when(g) : wd}${place(g) ? ' · ' + place(g) : ''}`;
+    const meta = [`<span class="rc-dis">${esc(g.modality)}${g.subtype && g.subtype !== 'Otra' ? ' · ' + esc(g.subtype) : ''}</span>`, g.km ? esc(kmText(g.km)) : '', g.elevation ? esc(elevText(g.elevation)) : '',
+      g.price !== null && g.price !== undefined && g.price !== '' ? (Number(g.price) === 0 ? 'Gratis' : esc(euros(g.price))) : ''].filter(Boolean).map((x) => `<span class="rc-mi">${x}</span>`).join(' ');
+    const cd = open && !g.suspended ? `<span class="rc-cd${nd <= 7 ? ' now' : nd <= 30 ? ' soon' : ''}">${nd <= 0 ? 'hoy' : nd === 1 ? 'mañana' : nd < 100 ? `en ${nd} d` : `en ${Math.round(nd / 30)} m`}</span>` : '';
+    const state = [
       g.suspended ? `<span class="rc-chip off">${ico('ban')}Suspendida</span>` : '',
       !open && !g.suspended && mine && !g.my_result ? `<span class="rc-chip warn">${ico('flag')}Falta tu resultado</span>` : '',
       !open && !g.suspended && !mine ? `<span class="rc-chip off">${ico('flag')}Ya disputada</span>` : '',
-      soon ? `<span class="soon${daysTo(g.date) <= 7 ? ' now' : ''}">${ico('clock', 't-i')}${daysToText(daysTo(g.date))}</span>` : '',
     ].filter(Boolean).join('');
     return `<details class="card race rcard ${open ? '' : 'past-reg '}${modClass(g.modality)}" id="${key}" data-open-key="${key}"${isOpen ? ' open' : ''}>
       <summary class="rc-sum">
+        ${dateTile}
         <span class="rc-main"><b class="rc-name">${esc(g.name)}</b>
-          <span class="rc-sub">${esc(when(g))}${place(g) ? ' · ' + esc(place(g)) : ''}</span>${chips ? `<span class="rc-chips">${chips}</span>` : ''}</span>
-        <span class="rc-ins" title="Inscritos del club"><b>${g.entries.length}</b><small>inscrit${g.entries.length === 1 ? 'o' : 'os'}</small></span>
+          <span class="rc-sub">${esc(subLine)}</span><span class="rc-meta">${meta}</span></span>
+        <span class="rc-side">${cd}${state}<span class="rc-n" title="Inscritos del club" aria-label="${g.entries.length} del club inscrito${g.entries.length === 1 ? '' : 's'}">${ico('users')}${g.entries.length}</span></span>
         <span class="rc-chev" aria-hidden="true">${ico('chevd')}</span>
       </summary>
       <div class="rc-body">
