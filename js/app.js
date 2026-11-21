@@ -453,7 +453,7 @@ const ICON_SEARCH = 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3';
 const searchButton = () => `<button type="button" class="icon-btn" data-act="gsearch" aria-label="Buscar en toda la app" title="Buscar">${icon(ICON_SEARCH)}</button>`;
 const accidentButton = () => `<a class="icon-btn sos" href="#/accidente" aria-label="En caso de accidente: teléfono y datos del seguro" title="Accidente">${icon(ICON_AID)}</a>`;
 
-function frame(title, body, { back, actions = '', rtab = null, noSearch = false } = {}) {
+function frame(title, body, { back, actions = '', rtab = null, noSearch = false, head = null } = {}) {
   const { view } = parseRoute();
   const admin = S.session?.isAdmin;
   const tabs = rtab !== null
@@ -465,7 +465,7 @@ function frame(title, body, { back, actions = '', rtab = null, noSearch = false 
     ${api.mode === 'demo' ? `<div class="demo-bar">Modo demostración: datos de prueba guardados solo en este móvil.</div>` : ''}
     <header class="top">
       ${back ? `<a class="back" href="${back}" aria-label="Volver">‹</a>` : '<img class="logo" src="icons/logo.png" alt="">'}
-      ${rtab !== null && !S.preview && S.runnerData?.me?.name && title === runnerTitle() ? `<h1 class="greet" aria-label="${esc(title)}" title="${esc(title)}"><span>${esc(title)}</span></h1>` : `<h1>${esc(title)}</h1>`}${actions}${(admin && rtab === null && !back && S.data) || rtab !== null ? (noSearch ? '' : searchButton()) + accidentButton() : ''}${rtab !== null ? newsBell() : ''}
+      ${head ? head : rtab !== null && !S.preview && S.runnerData?.me?.name && title === runnerTitle() ? `<h1 class="greet" aria-label="${esc(title)}" title="${esc(title)}"><span>${esc(title)}</span></h1>` : `<h1>${esc(title)}</h1>`}${actions}${(admin && rtab === null && !back && S.data) || rtab !== null ? (noSearch ? '' : searchButton()) + accidentButton() : ''}${rtab !== null ? newsBell() : ''}
     </header>
     <main>${body}</main>
     ${tabs}`;
@@ -1552,12 +1552,11 @@ function viewRunnerHome() {
       ${S.fd?.has ? `<button type="button" class="icon-btn fbtn${S.fd.active ? ' on' : ''}" data-act="r-filters" aria-label="Filtros${S.fd.active ? ' (activos)' : ''}" title="Filtros">${icon(ICON_FILTER)}${S.fd.active ? '<i class="fdot"></i>' : ''}</button>` : ''}
       <button type="button" class="icon-btn fbtn view-btn${S.regView === 'cal' ? ' on' : ''}" data-act="reg-view" aria-label="${S.regView === 'cal' ? 'Ver como lista' : 'Ver calendario'}" title="${S.regView === 'cal' ? 'Ver como lista' : 'Ver calendario'}">${icon(S.regView === 'cal' ? ICON_LIST : ICON_CAL)}</button>
     </div>
-    ${S.preview ? '' : `<a class="ruta-strip" href="ruta/">${ico('map')}<span><b>Planificar ruta</b> · vatios y nutrición</span>${ico('go')}</a>`}
     ${normalize(S.q.runner || '').length >= 2 ? '' : nextTeamBanner(d)}
     <div id="pulse-box">${S.regView === 'cal' || normalize(S.q.runner || '').length >= 2 ? '' : teamPulse(d)}</div>
     <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
     ${body}`,
-  { rtab: '', noSearch: true });
+  { rtab: '', noSearch: true, head: S.preview ? null : `<a class="hdr-pacing" href="ruta/" aria-label="Pacing y planificar ruta: viento, tiempo, vatios y nutrición" title="Pacing y planificar ruta"><i aria-hidden="true">⚡</i>Pacing</a>` });
 }
 
 const FIELD_LABELS = { province: 'provincia', km: 'distancia', subtype: 'formato', elevation: 'desnivel', price: 'precio' };
