@@ -158,7 +158,7 @@ const MES3 = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oc
 const raceDays = (x) => (x.end_date && x.end_date > x.date ? numDays(x.date, x.end_date) : 0);
 /** Cajita con el día y el mes (color de la disciplina); con ✓ verde si participas o estás inscrito. */
 const raceTile = (x, { mine = false } = {}) => { const dt = new Date(`${x.date}T12:00:00Z`), n = raceDays(x);
-  return `<span class="rc-date${mine ? ' mine' : ''}" aria-hidden="true"><b>${dt.getUTCDate()}</b><i>${MES3[dt.getUTCMonth()]}</i>${n ? `<small>${n} días</small>` : ''}${mine ? `<em class="rc-tick">${ico('check')}</em>` : ''}</span>${mine ? '<span class="sr-only">Participas. </span>' : ''}`; };
+  return `<span class="rc-date ${modClass(x.modality)}${mine ? ' mine' : ''}" aria-hidden="true"><b>${dt.getUTCDate()}</b><i>${MES3[dt.getUTCMonth()]}</i>${n ? `<small>${n} días</small>` : ''}${mine ? `<em class="rc-tick">${ico('check')}</em>` : ''}</span>${mine ? '<span class="sr-only">Participas. </span>' : ''}`; };
 const raceSub = (x) => { const wd = new Date(`${x.date}T12:00:00Z`).toLocaleDateString('es-ES', { weekday: 'short', timeZone: 'UTC' }).replace('.', '');
   return `${raceDays(x) ? when(x) : wd}${place(x) ? ' · ' + place(x) : ''}`; };
 /** Disciplina (en su color), km, desnivel y precio: lo que falte se omite. */
@@ -1547,9 +1547,8 @@ function nextTeamBanner(d) {
   const wk = live || n <= 7, names = g.entries.map((e) => e.name.split(' ')[0]), shown = names.slice(0, 6);
   return `<section class="card next-team${wk ? ' wk' : ''} compact" aria-label="Próxima carrera del equipo">
     <p class="nt-k">${wk ? `${ico('flag')}Esta semana compite el equipo` : `${ico('flag')}Próxima carrera del equipo`}</p>
-    <h2 class="nt-n">${esc(g.name)}</h2>
-    <p class="nt-d">${esc(when(g))}${place(g) ? ' · ' + esc(place(g)) : ''}</p>
-    <div class="nt-row"><span class="nt-pill nt-when">${live ? 'En curso' : daysToText(n)}</span>${modTag(g.modality, g.subtype)}<span class="nt-pill">${g.entries.length} del club</span></div>
+    <div class="nt-head">${raceTile(g, { mine: !!going })}<div class="rh-main"><h2 class="nt-n">${esc(g.name)}</h2><p class="rh-sub">${esc(raceSub(g))}</p><p class="rc-meta">${raceMeta(g)}</p></div>
+      <div class="rc-side"><span class="nt-pill nt-when">${live ? 'En curso' : daysToText(n)}</span><span class="nt-pill">${g.entries.length} del club</span></div></div>
     <p class="nt-people">${shown.map(esc).join(' · ')}${names.length > shown.length ? ` · +${names.length - shown.length}` : ''}</p>
     <div class="nt-foot"><span class="nt-me${going ? ' on' : ''}">${going ? `${ico('check')}Tú vas` : 'Tú no estás apuntado'}</span><button type="button" class="btn nt-btn" data-act="goto-sec" data-to="rc-${esc(g.id)}">${going ? 'Ver carrera' : 'Apuntarme'}</button></div></section>`;
 }
@@ -2572,7 +2571,6 @@ const avatars = (ids, max = 5) => { const names = ids.map((id) => runnerById(id)
 const namesOf = (ids) => ids.map((id) => runnerById(id)?.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es'));
 const MON3 = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
 /** Fecha en bloque (día grande, mes corto) con el color de la disciplina. */
-const dateBadge = (g) => `<span class="dbadge ${discClass(g.modality, g.subtype)}"><b>${Number(g.date.slice(8, 10))}</b><small>${MON3[Number(g.date.slice(5, 7)) - 1]}</small></span>`;
 const seenDot = (r) => (r && Object.prototype.hasOwnProperty.call(r, 'last_seen') ? (() => { const d = seenDays(r.last_seen); return `<i class="seen s-${seenLevel(d)}" title="${esc(seenText(d))}"></i>`; })() : '');
 const agoDays = (n) => (n === 0 ? 'hoy' : n === 1 ? 'ayer' : `hace ${n} días`);
 
@@ -2610,9 +2608,9 @@ function viewToday() {
   const weekN = b.upcoming.filter((x) => x.days <= 7).length;
   const dt = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
   const races = S.data.races.filter((r) => yearOf(r.date) === year).length;
-  const up = b.upcoming.map((x) => `<a class="up-row" href="#/inscripciones/${x.reg.id}">${dateBadge(x.reg)}
-      <span class="up-main"><b>${esc(x.reg.name)}</b><small>${x.days === 0 ? 'Hoy' : x.days === 1 ? 'Mañana' : `En ${x.days} días`}${place(x.reg) ? ' · ' + esc(place(x.reg)) : ''}</small>${avatars(x.ids)}</span>
-      <span class="up-n"><b>${x.ids.length}</b><small>del club</small></span></a>`).join('');
+  const up = b.upcoming.map((x) => `<a class="up-row" href="#/inscripciones/${x.reg.id}">${raceTile(x.reg)}
+      <span class="up-main"><b>${esc(x.reg.name)}</b><span class="rh-sub">${esc(raceSub(x.reg))}</span><span class="rc-meta">${raceMeta(x.reg)}</span>${avatars(x.ids)}</span>
+      <span class="rc-side">${raceCd(x.reg)}<span class="rc-n" title="Inscritos del club">${ico('users')}${x.ids.length}</span></span></a>`).join('');
   return frame('Hoy', `
     <section class="hero-today">
       <p class="ht-date">${esc(dt)}</p>
@@ -2668,7 +2666,7 @@ function viewQuality() {
   const ok = all - b.quality.length, pct = all ? Math.round((ok / all) * 100) : 100;   // km, desnivel y precio no se exigen
   const everything = [...b.quality, ...b.soft];
   const count = (k) => everything.filter((x) => x.gaps.some((g) => g.includes(k))).length;
-  const row = (x) => `<a class="mrow-card ${discClass(x.race.modality, x.race.subtype)}" href="#/carreras/${x.race.id}">${dateBadge(x.race)}
+  const row = (x) => `<a class="mrow-card ${discClass(x.race.modality, x.race.subtype)}" href="#/carreras/${x.race.id}">${raceTile(x.race)}
       <span class="up-main"><b>${esc(x.race.name)}</b><span class="gaps">${x.gaps.map((g) => `<i${SOFT_GAPS.has(g) ? ' class="soft"' : ''}>${SOFT_GAPS.has(g) ? 'sin ' + esc(g) : esc(g)}</i>`).join('')}</span></span><span class="tc-go">${ico('go')}</span></a>`;
   return frame('Datos incompletos', `
     <section class="card q-head"><div class="ring" style="--p:${pct}"><b>${pct}%</b></div>
@@ -3620,7 +3618,7 @@ function resPodiums(pk) {
   const byRace = new Map();
   for (const p of pl) { const k = `${p.raceId}|${p.date}`; (byRace.get(k) || byRace.set(k, { ...p, items: [] }).get(k)).items.push(p); }
   const races = [...byRace.values()].sort((a, b) => b.date.localeCompare(a.date));
-  const raceRow = (r) => `<li class="${discClass(r.modality, r.subtype)}">${dateBadge({ date: r.date, modality: r.modality, subtype: r.subtype })}<div class="pr-body"><a class="rname" href="#/carreras/${r.raceId}">${esc(r.race)}</a>
+  const raceRow = (r) => `<li class="${discClass(r.modality, r.subtype)}">${raceTile({ date: r.date, modality: r.modality, subtype: r.subtype })}<div class="pr-body"><a class="rname" href="#/carreras/${r.raceId}">${esc(r.race)}</a>
     <p class="pr-who">${r.items.sort((a, b) => a.position - b.position).map((p) => `${medal(p.position)} ${esc(p.runner)}${p.category ? ` <small class="muted">${esc(p.category)}</small>` : ''}${p.stage ? ` <small class="muted">(${esc(p.stage)})</small>` : ''}`).join(' · ')}</p></div></li>`;
   return `<section class="card rs-card rs-gold"><h2>Podios ${pk.year}</h2>${medals}
       ${types.length ? `<div class="pills">${types.map((x) => `<span class="pill">${esc(x.label)} <b>${x.podiums}</b>${x.wins ? ` · 🥇 ${x.wins}` : ''}</span>`).join('')}</div>` : ''}</section>
