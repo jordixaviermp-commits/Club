@@ -146,20 +146,28 @@ function simulate(points, segs, p, ftp, k, obj, opts, vmax) {
  * Ajusta un factor único para que la potencia normalizada de toda la ruta dé el IF del objetivo.
  */
 export function planRoute(points, profile, objective = 'good', { terrain = 'road', climbs } = {}) {
-  const obj = OBJECTIVES[objective] || OBJECTIVES.good;
+  const base = OBJECTIVES[objective] || OBJECTIVES.good;
   const T = TERRAIN[terrain] || TERRAIN.road;
   const ftp = profile.ftp;
   const opts = { mass: profile.weight + profile.bike, crr: T.crr, cda: profile.cda ?? T.cda };
   const vmax = T.vmax / 3.6;
   const segs = segmentTrack(points, climbs);
-  let lo = 0.4, hi = 1.6, sim = null;
-  for (let it = 0; it < 22; it++) {
-    const m = (lo + hi) / 2;
-    sim = simulate(points, segs, null, ftp, m, obj, opts, vmax);
-    if (sim.np < ftp * obj.ifTarget) lo = m; else hi = m;
+  const solve = (o) => {
+    let lo = 0.4, hi = 1.6;
+    for (let it = 0; it < 22; it++) {
+      const m = (lo + hi) / 2;
+      if (simulate(points, segs, null, ftp, m, o, opts, vmax).np < ftp * o.ifTarget) lo = m; else hi = m;
+    }
+    const k = (lo + hi) / 2;
+    return { k, sim: simulate(points, segs, null, ftp, k, o, opts, vmax) };
+  };
+  let obj = base, { k, sim } = solve(base), adjust = null;
+  if (profile.ctl > 0) {   // con tu forma (CTL) y tu fatiga (ATL) se ajusta la intensidad objetivo y cuánto se afloja al final
+    const tss0 = (sim.total / 3600000) * (sim.np / ftp) ** 2 * 100;
+    adjust = formAdjust(profile, tss0, base.ifTarget);
+    if (adjust.dIF || adjust.fadeMul !== 1) { obj = { ...base, ifTarget: base.ifTarget + adjust.dIF, fade: base.fade * adjust.fadeMul }; ({ k, sim } = solve(obj)); }
+    adjust.baseIF = base.ifTarget; adjust.ifTarget = obj.ifTarget;
   }
-  const k = (lo + hi) / 2;
-  sim = simulate(points, segs, null, ftp, k, obj, opts, vmax);
   const total = points[points.length - 1].d;
 
   const out = segs.map((s) => ({ ...s, durMs: 0, joules: 0, targets: [] }));
@@ -184,7 +192,7 @@ export function planRoute(points, profile, objective = 'good', { terrain = 'road
   return {
     objective, label: obj.label, ftp, segments: out, sim, k, step: STEP, total, totalMs: sim.total,
     np: sim.np, avgPower: sim.avg, kj: sim.kj, IF: sim.np / ftp, tss: hours * (sim.np / ftp) ** 2 * 100,
-    opts, climbs: out.filter((s) => s.kind === 'climb'),
+    opts, climbs: out.filter((s) => s.kind === 'climb'), adjust,
   };
 }
 
@@ -261,6 +269,33 @@ export const TYPE_LABEL = { gel: 'Gel', drink: 'Bebida', solid: 'Comida sólida'
 
 // ---------- Forma y texto ----------
 
+/**
+ * Ajuste de la intensidad objetivo según tu forma. No es una medida: es una regla prudente.
+ *  · Frescura (TSB = CTL − ATL): cargado baja la intensidad hasta ~4,5 puntos de IF; muy fresco la sube como mucho ~1,2.
+ *  · Carga de la ruta frente a tu forma (TSS previsto ÷ CTL): una ruta que pide más de ~1,8 veces lo que sueles sostener
+ *    baja la intensidad (y hace que se afloje más al final); una que pide menos de ~1,2 veces la sube un poco y afloja menos.
+ * Sin CTL no se ajusta nada. El total queda entre −0,08 y +0,02 de IF.
+ */
+export function formAdjust({ ctl = 0, atl = 0 } = {}, tss = 0, baseIF = 0.76) {
+  const out = { dIF: 0, fadeMul: 1, tsb: 0, ratio: null, reasons: [] };
+  if (!(ctl > 0)) return out;
+  const pc = (d) => `${(Math.abs(d / baseIF) * 100).toFixed(1).replace('.', ',')} %`;
+  out.tsb = Math.round(ctl - atl);
+  const dF = clamp((ctl - atl) * 0.0012, -0.045, 0.012);
+  if (dF <= -0.008) out.reasons.push({ type: 'tired', text: `Vienes cargado (forma − fatiga = ${String(out.tsb).replace('-', '−')}): bajo la intensidad un ${pc(dF)}.` });
+  else if (dF >= 0.006) out.reasons.push({ type: 'fresh', text: `Llegas fresco (forma − fatiga = +${out.tsb}): puedes ir un ${pc(dF)} más fuerte.` });
+  let dB = 0;
+  if (tss > 0) {
+    out.ratio = tss / ctl;
+    dB = clamp((1.8 - out.ratio) * 0.02, -0.05, 0.015);
+    out.fadeMul = out.ratio > 1.8 ? 1 + clamp((out.ratio - 1.8) * 0.15, 0, 0.5) : out.ratio < 1.2 ? 0.85 : 1;
+    if (dB <= -0.008) out.reasons.push({ type: 'load', text: `La ruta pide unos ${Math.round(tss)} TSS, ${dB <= -0.025 ? 'bastante' : 'algo'} más de lo que tu forma (CTL ${Math.round(ctl)}) suele sostener: guardo fuerzas para el final (${pc(dB)} menos).` });
+    else if (dB >= 0.006) out.reasons.push({ type: 'fit', text: `Tu forma (CTL ${Math.round(ctl)}) cubre de sobra los ~${Math.round(tss)} TSS de la ruta: ritmo algo más alto (${pc(dB)} más).` });
+  }
+  out.dIF = clamp(dF + dB, -0.08, 0.02);
+  return out;
+}
+
 /** Frescura estimada (TSB = CTL − ATL, convertido a %). Es una estimación, no una medida de ningún servicio. */
 export function freshness(ctl = 0, atl = 0) {
   if (!ctl && !atl) return { pct: 100, label: 'Fresca', tsb: 0 };
@@ -278,26 +313,45 @@ export const fmtKm = (m, dec = 1) => `${(m / 1000).toFixed(dec).replace('.', ','
 export const fmtPct = (g, dec = 1) => `${(g * 100).toFixed(dec).replace('.', ',')}%`;
 
 /** Texto del plan (en español) a partir de los datos: nada se inventa. */
-export function strategyText(plan, name = 'la ruta', nutri = null) {
-  const segs = plan.segments, climbs = plan.climbs;
+export function strategyText(plan, name = 'la ruta', nutri = null, { temp = 17 } = {}) {
+  const segs = plan.segments, climbs = plan.climbs, total = plan.total;
   const km = (m) => Math.round(m / 1000);
-  const third = plan.total / 3;
+  const hours = plan.totalMs / 3600000;
+  const third = total / 3;
   const first = segs.filter((s) => s.start < third && s.kind !== 'descent');
   const firstMax = Math.max(0, ...first.map((s) => s.pHi));
   const tough = [...climbs].sort((a, b) => b.gain * b.avg - a.gain * a.avg)[0];
   const lastClimb = climbs[climbs.length - 1];
-  const parts = [];
+  const lastSeg = segs[segs.length - 1];
+  const parts = [], chips = [];
   const head = { finish: `${name} se gana con paciencia: el objetivo es llegar entero, sin picos ni deudas.`,
     good: `${name} se gana con paciencia: controla el primer tercio y guarda piernas para la segunda mitad.`,
     max: `${name} a tope pide valentía y orden: ataca los puertos y recupera en cada bajada.` }[plan.objective];
-  parts.push(head);
+  parts.push(hours >= 5 ? `${head} Son unas ${fmtDur(plan.totalMs, true)} sobre la bici: aquí manda la regularidad, y comer a tiempo importa tanto como las piernas.` : head);
+  // la forma del día
+  for (const r of plan.adjust?.reasons || []) parts.push(r.text);
   if (firstMax) parts.push(`Hasta el km ${km(third)} no pases de ${firstMax} W; ahí se decide la carrera.`);
-  if (tough) parts.push(`La subida clave empieza en el km ${km(tough.start)} (${km(tough.length)} km, +${Math.round(tough.gain)} m al ${fmtPct(tough.avg)}): mantén ${tough.pLo}–${tough.pHi} W, sin salirte.`);
+  if (tough) {
+    const at = tough.start / total, win = `${tough.pLo}–${tough.pHi} W`;
+    const where = at < 0.2 ? `llega pronto, en el km ${km(tough.start)}: sal a ritmo de calentamiento y no te vacíes en la primera subida`
+      : at > 0.6 ? `llega tarde, en el km ${km(tough.start)}, con las piernas ya cargadas: lo que ahorres antes lo cobras aquí`
+        : `empieza en el km ${km(tough.start)}`;
+    parts.push(`La subida clave ${where} (${km(tough.length)} km, +${Math.round(tough.gain)} m al ${fmtPct(tough.avg)}): mantén ${win}, sin salirte.`);
+    const after = segs.find((x) => x.start >= tough.end && x.kind === 'descent' && x.length >= 4000);
+    if (after) parts.push(`Después hay una bajada de ${km(after.length)} km: aprovéchala para comer y beber, no para recuperar sin más.`);
+  }
   if (lastClimb && lastClimb !== tough) parts.push(`Si llegas con fuerzas al último puerto (km ${km(lastClimb.start)}), puedes subir a ${lastClimb.pHi + 5} W.`);
-  const chips = [];
+  if (lastSeg && lastSeg.kind === 'climb') parts.push('El final es cuesta arriba: guarda algo, porque la meta no perdona.');
+  else if (lastSeg && lastSeg.kind === 'descent' && lastSeg.length >= 3000) parts.push('Terminas bajando: puedes apretar al final del último puerto sin miedo a pagarlo.');
+  if (temp >= 26) parts.push(`Se esperan unos ${Math.round(temp)} °C: bebe desde el principio, no esperes a tener sed.`);
+  else if (temp <= 8) parts.push(`Se esperan unos ${Math.round(temp)} °C: el frío engaña con la sed, bebe igualmente y abrígate en las bajadas.`);
+  // etiquetas
   if (climbs.length) chips.push({ type: 'power', text: `Respeta ${Math.max(...climbs.map((c) => c.pHi))} W en puertos` });
-  chips.push({ type: 'tip', text: 'No persigas cada repecho' });
+  if (firstMax) chips.push({ type: 'power', text: `Primer tercio: máx. ${firstMax} W` });
+  if (plan.adjust && Math.abs(plan.adjust.dIF) >= 0.004) chips.push({ type: 'tip', text: `Ajuste por tu forma: ${plan.adjust.dIF < 0 ? '−' : '+'}${(Math.abs(plan.adjust.dIF / plan.adjust.baseIF) * 100).toFixed(1).replace('.', ',')} %` });
+  if (segs.filter((x) => x.kind === 'rolling').length >= 3) chips.push({ type: 'tip', text: 'No persigas cada repecho' });
   if (nutri) chips.push({ type: 'fuel', text: `Toma ${Math.round(nutri.gph)} g CH/h` });
+  if (nutri && temp >= 22) chips.push({ type: 'fuel', text: `Bebe unos ${nutri.mlPerHour} ml/h` });
   return { text: parts.join(' '), chips };
 }
 

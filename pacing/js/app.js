@@ -45,7 +45,7 @@ function compute() {
   const prof = { ...DEFAULT_PROFILE, ...(state.profile || {}) };
   plan = planRoute(track.points, prof, state.objective, { climbs });
   nutri = nutritionPlan(plan, state.objective, state.temp);
-  strat = strategyText(plan, state.saved.name || 'La ruta', nutri);
+  strat = strategyText(plan, state.saved.name || 'La ruta', nutri, { temp: state.temp });
 }
 
 async function loadWeather() {
@@ -304,7 +304,7 @@ function profileDialog() {
     <div class="two"><label>FTP (W)<input name="ftp" type="number" min="80" max="500" value="${p.ftp}" required></label><label>Peso bici + equipo (kg)<input name="bike" type="number" step="0.1" min="5" max="25" value="${p.bike}" required></label></div>
     <label>Posición en la bici<select name="cda">${sel('0.40', p.cda.toFixed(2), 'Relajada (manos arriba)')}${sel('0.36', p.cda.toFixed(2), 'Normal (manos abajo del manillar)')}${sel('0.32', p.cda.toFixed(2), 'Agresiva / aerodinámica')}</select></label>
     <div class="two"><label>Forma CTL (opcional)<input name="ctl" type="number" min="0" max="250" value="${p.ctl || 0}"></label><label>Fatiga ATL (opcional)<input name="atl" type="number" min="0" max="300" value="${p.atl || 0}"></label></div>
-    <p class="note">CTL y ATL salen de tu plataforma de entrenamiento. Sin ellos, la frescura se muestra al 100 %.</p>
+    <p class="note">CTL (forma) y ATL (fatiga) salen de tu plataforma de entrenamiento y se escriben a mano. Con ellos el plan ajusta la intensidad: si vas cargado o la ruta es muy dura para tu forma, baja el ritmo; si vas fresco y en forma, lo sube un poco. Sin ellos, el plan no se ajusta.</p>
     <div class="row"><button type="button" class="btn" data-act="close">Cancelar</button><button class="btn primary">Guardar</button></div></form>`);
   $('#pf', d).addEventListener('submit', (e) => {
     e.preventDefault();
