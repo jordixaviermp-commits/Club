@@ -1549,7 +1549,7 @@ function viewRunnerHome() {
       ${searchBox('runner', 'Buscar…', { marquee: 'Buscar carrera, corredor, lugar…' })}
       <button class="btn primary add-btn" data-act="r-new" aria-label="Añadir una carrera que no está" title="Añadir una carrera que no está">＋</button>
       ${S.fd?.has ? `<button type="button" class="icon-btn fbtn${S.fd.active ? ' on' : ''}" data-act="r-filters" aria-label="Filtros${S.fd.active ? ' (activos)' : ''}" title="Filtros">${icon(ICON_FILTER)}${S.fd.active ? '<i class="fdot"></i>' : ''}</button>` : ''}
-      ${S.preview ? '' : `<a class="icon-btn fbtn ruta-btn" href="ruta/" aria-label="Planificar ruta: sube tu track y mira viento, tiempo y subidas" title="Planificar ruta">${ico('route')}</a>`}
+      ${S.preview ? '' : `<a class="icon-btn fbtn ruta-btn" href="ruta/" aria-label="Planificar ruta: sube tu track y mira viento, tiempo y subidas" title="Planificar ruta y calcular vatios">${ico('route')}<i class="ruta-bolt" aria-hidden="true">⚡</i></a>`}
       <button type="button" class="icon-btn fbtn view-btn${S.regView === 'cal' ? ' on' : ''}" data-act="reg-view" aria-label="${S.regView === 'cal' ? 'Ver como lista' : 'Ver calendario'}" title="${S.regView === 'cal' ? 'Ver como lista' : 'Ver calendario'}">${icon(S.regView === 'cal' ? ICON_LIST : ICON_CAL)}</button>
     </div>
     ${normalize(S.q.runner || '').length >= 2 ? '' : nextTeamBanner(d)}
