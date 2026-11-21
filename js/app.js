@@ -289,6 +289,7 @@ async function onRoute() {
       if (sub === 'noticias') enterNews();
       if (sub === 'nueva' && !S.team) loadTeam();
       if (sub === 'carrera' && !S.team) loadTeam();
+      if (sub === 'mi' && !S.team) loadTeam();
     }
   }
   if (S.session?.isAdmin && view === 'historial') loadChanges();
@@ -1091,13 +1092,14 @@ const ico = (k, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-h
 /** Medalla de podio dibujada (sin emoji): círculo oro / plata / bronce con el puesto. */
 const medalBadge = (p) => `<i class="medal m${p}" aria-label="Puesto ${p}">${p}</i>`;
 /** Fila de carrera de Mi temporada: nombre y etiqueta («en 2 días · M40»), fecha en negrita · lugar y modalidad; flecha › a la derecha. */
-const mrow = (g, { pill = '', edit = '', below = '', end = '', href = '', hero = false, side = '' } = {}) => {
-  // misma casilla plegable que en Carreras: cabecera con lo esencial y, al tocar, lo que hay que hacer con la carrera
-  const list = g.entries || g.results, key = `mr-${g.race_id ? 'r' + g.race_id : g.id}${hero ? '-h' : ''}`;
-  const count = list ? `<span class="rc-n" title="Inscritos del club" aria-label="${list.length} del club">${ico('users')}${list.length}</span>` : '';
-  const body = `${pill ? `<div class="mrow-below"><span class="pill-next">${pill}</span></div>` : ''}${below ? `<div class="mrow-below">${below}</div>` : ''}
-    <div class="mrow-acts">${edit}${end}${href ? `<a class="btn small ghost" href="${href}">Ver la carrera${ico('go')}</a>` : ''}</div>`;
-  return `<li class="mrow-fold${hero ? ' hero' : ''}">${hero ? '<span class="hero-badge">Próxima cita</span>' : ''}${raceFold(g, { key, side: side || count, body, noPast: true, cls: hero ? 'hero' : '' })}</li>`;
+const mrow = (g, { below = '', end = '', hero = false, side = '' } = {}) => {
+  // Mi temporada usa la misma ficha desplegable que Carreras: al abrirla sale ya toda la información, sin otro menú
+  const badge = hero ? '<span class="hero-badge">Próxima cita</span>' : '';
+  if (g.entries) return `<li class="mrow-fold${hero ? ' hero' : ''}">${badge}${runnerRegCard(g, { cls: hero ? 'hero' : '', noPast: true })}</li>`;
+  // carrera ya disputada con mi resultado (la ficha de «resultados» + lo mío)
+  const me = S.runnerData?.me?.id, race = S.team?.races?.find((x) => x.id === g.race_id), count = (race?.results || []).length;
+  const body = `${race ? doneRaceBody(race, { meId: me }) : typeTag(g)}${below ? `<div class="mrow-below">${below}</div>` : ''}${end ? `<div class="mrow-acts">${end}</div>` : ''}`;
+  return `<li class="mrow-fold">${raceFold(g, { key: `mr-r${g.race_id}`, side: side || (race ? `<span class="rc-n" title="Del club" aria-label="${count} del club">${ico('users')}${count}</span>` : ''), body, noPast: true, cls: 'done-race' })}</li>`;
 };
 
 /** «Mis carreras»: sus carreras con resultados por temporada y las apuntadas pendientes de resultado. */
@@ -1408,16 +1410,19 @@ const previewBanner = () => (S.session?.isAdmin && S.preview ? `<p class="card w
 const runnerTitle = () => (S.session?.isAdmin && S.preview ? `Vista de ${S.preview.name}` : S.runnerData?.me?.name ? `Hola, ${cleanName(S.runnerData.me.name)}` : 'CC Monzón');
 
 /** Tarjeta de una carrera ya disputada (con resultados), para el calendario. */
-function doneRaceCard(r, { admin = false, meId = null } = {}) {
+function doneRaceBody(r, { admin = false, meId = null } = {}) {
   const res = r.results || [];
   const pods = res.filter((x) => isPodium(x.position)).sort((a, b) => a.position - b.position);
   const mine = res.find((x) => x.runner_id === meId);
-  const inner = `${typeTag(r)}
+  return `${typeTag(r)}
     <p class="count">🏁 Disputada · ${res.length} del club${res.length ? ': ' + esc(res.map((x) => x.runner_name).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p>
     ${pods.length ? `<p class="pods">${pods.map((x) => `${medal(x.position)} ${esc(x.runner_name)}`).join(' · ')}</p>` : ''}
     ${mine ? `<p class="joined-done">✓ Participaste${mine.position ? ` · ${mine.position}º` : ''}</p>` : ''}
     ${!admin && meId && !mine && r.date >= pastLimit() && !S.preview ? `<p><button class="btn small" data-act="r-join-race" data-id="${r.id}">La hice y no salgo: añadirme</button></p>` : ''}${admin ? `<a class="btn small ghost" href="#/carreras/${r.id}">${ico('pen')}Editar${ico('go')}</a>` : ''}`;
-  return raceFold(r, { key: `dr-${r.id}`, mine: !!mine, cls: 'done-race', noPast: true, side: `<span class="rc-n" title="Del club" aria-label="${res.length} del club">${ico('users')}${res.length}</span>`, body: inner });
+}
+function doneRaceCard(r, { admin = false, meId = null } = {}) {
+  const res = r.results || [], mine = res.find((x) => x.runner_id === meId);
+  return raceFold(r, { key: `dr-${r.id}`, mine: !!mine, cls: 'done-race', noPast: true, side: `<span class="rc-n" title="Del club" aria-label="${res.length} del club">${ico('users')}${res.length}</span>`, body: doneRaceBody(r, { admin, meId }) });
 }
 
 
@@ -1480,7 +1485,7 @@ function runnerRegCard(g, opts = {}) {
         : `<div class="row join-row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">Apuntarme</button></div>`}
     `;
-    return raceFold(g, { key, id: key, mine: !!(mine && !g.suspended), open: !!opts.open, side: `${state}<span class="rc-n" title="Inscritos del club" aria-label="${g.entries.length} del club inscrito${g.entries.length === 1 ? '' : 's'}">${ico('users')}${g.entries.length}</span>`, body, today });
+    return raceFold(g, { key, id: key, mine: !!(mine && !g.suspended), open: !!opts.open, cls: opts.cls || '', noPast: !!opts.noPast, side: `${state}<span class="rc-n" title="Inscritos del club" aria-label="${g.entries.length} del club inscrito${g.entries.length === 1 ? '' : 's'}">${ico('users')}${g.entries.length}</span>`, body, today });
   }
 
 /** Barra de «participaciones futuras» del equipo: cuántas inscripciones hay ya en las próximas carreras, por mes (para animar a apuntarse y a crear carreras). */
