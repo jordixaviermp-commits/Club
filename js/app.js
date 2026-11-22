@@ -1110,7 +1110,7 @@ const mrow = (g, { below = '', end = '', hero = false, side = '' } = {}) => {
   if (g.entries) return `<li class="mrow-fold${hero ? ' hero' : ''}">${badge}${runnerRegCard(g, { cls: hero ? 'hero' : '', noPast: true, notes: true })}</li>`;
   // carrera ya disputada con mi resultado (la ficha de «resultados» + lo mío)
   const me = S.runnerData?.me?.id, race = S.team?.races?.find((x) => x.id === g.race_id), count = (race?.results || []).length;
-  const body = `${myPubLine({ ...g, entries: undefined })}${race ? doneRaceBody(race, { meId: me }) : typeTag(g)}${below ? `<div class="mrow-below">${below}</div>` : ''}${end ? `<div class="mrow-acts">${end}</div>` : ''}`;
+  const body = `${myPubLine({ ...g, entries: undefined })}${race ? doneRaceBody(race, { meId: me }) : typeTag(g)}${completeBox({ ...(race || {}), ...g }, 'race', g.race_id)}${below ? `<div class="mrow-below">${below}</div>` : ''}${end ? `<div class="mrow-acts">${end}</div>` : ''}`;
   return `<li class="mrow-fold">${raceFold(g, { key: `mr-r${g.race_id}`, side: `${myPubChip({ ...g, entries: undefined })}${side || (race ? `<span class="rc-n" title="Del club" aria-label="${count} del club">${ico('users')}${count}</span>` : '')}`, body, noPast: true, cls: 'done-race' })}</li>`;
 };
 
@@ -1487,6 +1487,7 @@ function runnerRegCard(g, opts = {}) {
       ${myPubLine(g)}
       ${webRow(g, open && !g.suspended)}
       ${opts.notes && mine && !S.preview ? noteBlock(g) : ''}
+      ${opts.notes ? completeBox(g, 'reg', g.id) : ''}
       ${S.preview || g.date < pastLimit() ? '' : g.suspended ? `<button type="button" class="btn ghost small susp-btn" data-act="r-suspend" data-id="${g.id}" data-v="0">${ico('check')}Se vuelve a celebrar</button>` : `<button type="button" class="btn ghost small susp-btn" data-act="r-suspend" data-id="${g.id}" data-v="1">${ico('ban')}Carrera suspendida</button>`}
       ${mates}
       ${edit}

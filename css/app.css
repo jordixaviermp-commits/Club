@@ -2486,3 +2486,8 @@ details.rcard .rc-body .wc-acts { margin-top: .5rem; }
 .rc-pub .ico { width: 13px; height: 13px; } .rc-pub .rc-pub-ok { width: 11px; height: 11px; stroke-width: 3.2; }
 .rc-pubs p { display: flex; align-items: center; gap: .5rem; margin: .25rem 0; font-size: var(--fs-3); }
 .rc-side:has(.rc-pub) { flex-wrap: nowrap; }
+
+/* v236: «Faltan datos» dentro de la casilla desplegada: sin tarjeta dentro de la tarjeta */
+.rc-body .complete-box { margin: .5rem 0 0; padding: .55rem .7rem; box-shadow: none; border-radius: var(--r-md); background: color-mix(in srgb, var(--warn) 7%, var(--card)); border: 1px dashed color-mix(in srgb, var(--warn) 55%, var(--line)); }
+.rc-body .complete-box h3 { margin: 0 0 .2rem; font-size: var(--fs-3); }
+.rc-body .complete-box .stack { gap: .5rem; }
