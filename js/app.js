@@ -296,6 +296,7 @@ async function onRoute() {
     }
   }
   if (S.session?.isAdmin && view === 'historial') loadChanges();
+  if (S.session?.isAdmin && ['', 'hoy', 'movimientos'].includes(view)) loadMovements();
   if (S.session?.isAdmin && ['resumen', 'temporada', 'calidad', 'memoria'].includes(view)) geocodeMissing();
   if (S.session?.isAdmin && view === 'corredores' && id && RFILTERS.some(([f]) => f === id)) S.rfilter = id;
   if (S.session?.isAdmin) {
@@ -373,7 +374,7 @@ const ADMIN_TABS = [
   ['redes', 'Redes', 'M18 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM8.6 13.5l6.8 4M15.4 6.5l-6.8 4'],
 ];
 /** Pestaña de la dirección a la que pertenece cada pantalla (y su color). */
-const ADMIN_GROUP = { '': 'hoy', hoy: 'hoy', avisos: 'hoy', mensajes: 'hoy', calidad: 'hoy', actividad: 'hoy', noticias: 'hoy', historial: 'hoy',
+const ADMIN_GROUP = { '': 'hoy', hoy: 'hoy', movimientos: 'hoy', avisos: 'hoy', mensajes: 'hoy', calidad: 'hoy', actividad: 'hoy', noticias: 'hoy', historial: 'hoy',
   inscripciones: 'inscripciones', carreras: 'inscripciones', federaciones: 'inscripciones',
   corredores: 'corredores', contratos: 'corredores', computo: 'corredores', informe: 'corredores', bonos: 'corredores', corredor: 'corredores', docs: 'corredores',
   resumen: 'resumen', instagram: 'redes', datos: 'resumen', temporada: 'resumen', memoria: 'resumen', vista: 'corredores', equipo: 'resumen',
@@ -414,6 +415,7 @@ const adminScreens = () => [
   ['🔔', 'Avisos', '#/avisos', 'avisos pendientes campanita correcciones puestos'],
   ['📣', 'Noticias para los corredores', '#/noticias', 'noticias anuncios quedada comunicado'],
   ['🗂️', 'Datos: copias, versión y aspecto (en Resumen)', '#/resumen', 'datos copia seguridad backup restaurar importar csv version aspecto oscuro claro sesion cerrar'],
+  ['🕘', 'Movimientos de la app (quién hace qué)', '#/movimientos', 'movimientos historial inscripciones pagos cronicas quien se inscribio actividad control'],
   ['🕘', 'Historial de cambios', '#/historial', 'historial cambios quien modifico'],
   ['🏁', 'Federaciones y ligas', '#/federaciones', 'federaciones ligas calendario fcc fac catalana aragonesa'],
   ['⚕️', 'En caso de accidente', '#/accidente', 'accidente seguro poliza telefono gerosalud divina rc responsabilidad civil'],
@@ -560,7 +562,7 @@ function render() {
   else if (view === 'accidente' && (admin || S.code)) html = viewAccident();
   else if (admin) {
     html = ({
-      '': viewToday, hoy: viewToday, mensajes: viewMessages, calidad: viewQuality, actividad: viewActivity,
+      '': viewToday, hoy: viewToday, movimientos: viewMovements, mensajes: viewMessages, calidad: viewQuality, actividad: viewActivity,
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
       carreras: S.draft ? viewRaceEdit : viewRaces,
       resumen: viewSummary, temporada: viewSummary, memoria: viewMemoria, instagram: viewInstagram, redes: viewNetworks, corredores: viewRunners, contratos: viewContracts, computo: viewSeasonCount, informe: viewSeasonReport, publicaciones: viewPublications, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
@@ -2415,6 +2417,33 @@ const timeAgo = (iso) => {
   if (m < 1440) return `hace ${Math.round(m / 60)} h`;
   if (m < 2880) return 'ayer'; return formatDate(String(iso).slice(0, 10), false);
 };
+// ---------- Movimientos de la app (dirección): quién hace qué ----------
+const MOV = { inscripcion: ['calplus', 'Inscripciones'], baja: ['trash', 'Bajas'], pago: ['euro', 'Pagos'], cronica: ['pen', 'Crónicas'], carrera: ['flag', 'Carreras'], resultado: ['trophy', 'Resultados'], otro: ['info', 'Otros'] };
+async function loadMovements() {
+  try { S.movs = await api.adminMovements(300); } catch { S.movs = null; }
+  if (S.session?.isAdmin && ['', 'hoy', 'movimientos'].includes(parseRoute().view) && !S.draft) render();
+}
+const movRow = (m) => `<li class="mv-row mvk-${esc(m.kind)}"><span class="mv-ic">${ico(MOV[m.kind]?.[0] || 'info')}</span><span class="mv-t"><b>${esc(m.who)}</b> ${esc(m.text)}</span><time class="mv-when" title="${esc(new Date(m.at).toLocaleString('es-ES'))}">${esc(timeAgo(m.at))}</time></li>`;
+/** Tarjeta de Hoy con los últimos movimientos. */
+function movementsCard() {
+  const l = S.movs;
+  if (l === undefined) return '';
+  if (l === null) return `<section class="card warn"><h2>Movimientos de la app</h2><p class="hint">Falta ejecutar en Supabase <code>supabase/cambios/2026-11-22-movimientos.sql</code>.</p></section>`;
+  return `<h2 class="sec-h">${ico('clock')} Movimientos</h2>
+    ${l.length ? `<ul class="mv-list">${l.slice(0, 6).map(movRow).join('')}</ul><p class="center"><a class="btn small" href="#/movimientos">Ver todos los movimientos${ico('go')}</a></p>` : '<p class="empty small">Todavía no hay movimientos.</p>'}`;
+}
+function viewMovements() {
+  const l = S.movs, f = S.movFilter || 'all', shown = (l || []).filter((m) => f === 'all' || m.kind === f);
+  const day = (iso) => { const d = String(iso).slice(0, 10), t = todayISO(), y = new Date(Date.now() - 864e5).toISOString().slice(0, 10); return d === t ? 'Hoy' : d === y ? 'Ayer' : formatDate(d, true); };
+  let last = '';
+  const items = shown.map((m) => { const d = day(m.at); const h = d !== last ? `<li class="mv-day">${esc(d)}</li>` : ''; last = d; return h + movRow(m); }).join('');
+  const counts = Object.fromEntries(Object.keys(MOV).map((k) => [k, (l || []).filter((m) => m.kind === k).length]));
+  return frame('Movimientos', `
+    <p class="hint">Todo lo que hacen los corredores en la app, en orden: inscripciones, pagos, crónicas, carreras creadas o cambiadas, resultados y bajas. Para ver el detalle de los datos que se han cambiado, mira el <a href="#/historial">historial de cambios</a>.</p>
+    ${l === undefined ? '<p class="empty">Cargando…</p>' : l === null ? '<p class="card warn">Falta ejecutar en Supabase <code>supabase/cambios/2026-11-22-movimientos.sql</code>.</p>' : `
+    <div class="years">${[['all', 'Todo', (l || []).length], ...Object.entries(MOV).filter(([k]) => counts[k]).map(([k, [, n]]) => [k, n, counts[k]])].map(([k, n, c]) => `<button class="chip${f === k ? ' on' : ''}" data-act="mov-filter" data-f="${k}">${n} <small>${c}</small></button>`).join('')}</div>
+    ${shown.length ? `<ul class="mv-list">${items}</ul>` : '<p class="empty">No hay movimientos de este tipo.</p>'}`}`, { back: '#/' });
+}
 function viewHistory() {
   const list = S.changes;
   const f = S.histFilter || 'all';
@@ -2693,6 +2722,7 @@ function viewToday() {
     <h2 class="sec-h">${ico('cal')} Próximos 10 días</h2>
     ${up ? `<div class="up-list">${up}</div>` : '<p class="empty small">No hay carreras con gente del club en los próximos 10 días.</p>'}
     ${b.upcoming.length ? `<p class="center">${msgBtn('next', b.upcoming[0].reg.id, `Animar a apuntarse a ${esc(b.upcoming[0].reg.name)}`)}</p>` : ''}
+    ${movementsCard()}
     <h2 class="sec-h">${ico('layers')} Atajos</h2>
     <div class="qgrid">
       <a class="qtile q-cyan" href="#/noticias">${ico('msg')}<b>Noticia</b><small>a todo el equipo</small></a>
@@ -5335,6 +5365,7 @@ const actions = {
     render();
   },
   'goto-sec'(el) { const t = document.getElementById(el.dataset.to); if (t) { const dt = t.matches('details') ? t : t.querySelector('details'); if (dt) { dt.open = true; S.open = { ...(S.open || {}), [dt.dataset.openKey]: true }; } for (let a = t.parentElement; a; a = a.parentElement) if (a.tagName === 'DETAILS' && !a.open) { a.open = true; if (a.dataset.openKey) S.open = { ...(S.open || {}), [a.dataset.openKey]: true }; } t.scrollIntoView({ behavior: 'smooth', block: 'start' }); } else toast('No tienes carreras en este apartado.'); },
+  'mov-filter'(el) { S.movFilter = el.dataset.f; render(); },
   'hist-filter'(el) { S.histFilter = el.dataset.f; render(); },
   'week-view'(el) { S.weekView = el.dataset.v; render(); },
   'week-all'() { const set = postedSet(), list = weekRaces(S.weekDays || 14); setPostedKeys(list.map(postKey), !list.every((g) => set.has(postKey(g)))); },

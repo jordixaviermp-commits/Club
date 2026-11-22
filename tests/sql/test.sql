@@ -24,6 +24,7 @@ insert into runners (id, name, category, code) values
 select save_registration('{"name":"Volta Futura","date":"2099-06-14","province":"Girona","country":"España","modality":"BTT"}',
                          '[{"runner_id":"10000000-0000-0000-0000-000000000001","category":"M40"}]') as reg \gset
 select pg_temp.check((select count(*) from registration_entries) = 1, 'inscripción con 1 inscrito');
+select pg_temp.check(jsonb_array_length(admin_movements()) >= 1 and admin_movements()::text like '%se inscribió en Volta Futura%', 'movimientos: la dirección ve las inscripciones');
 select save_registration(jsonb_build_object('id', :'reg', 'name','Volta Futura','date','2099-06-14','modality','BTT'), '[]');
 select pg_temp.check((select count(*) from registration_entries) = 0, 'quitar inscritos al guardar lista vacía');
 select save_registration(jsonb_build_object('id', :'reg', 'name','Volta Futura','date','2099-06-14','modality','BTT'),
@@ -206,6 +207,10 @@ select pg_temp.check((select (e->>'streak')::int from jsonb_array_elements(runne
 select pg_temp.check((select (e->>'streak')::int from jsonb_array_elements(runner_streaks('RRRRRRRRR1')) e where e->>'name' = 'Racha Dos') = 3, 'racha: la crónica la pasó otro y vale para todos');
 select pg_temp.check(runner_streaks('RRRRRRRRR1')::text !~ '(RRRRRRRRR|code)', 'racha: sin enlaces');
 select pg_temp.expect_fail($q$select runner_streaks('XXXXXXXXXXXX')$q$, 'racha: sin enlace no');
+select pg_temp.expect_fail($q$select admin_movements()$q$, 'movimientos: un corredor no los lee');
+reset role;
+select pg_temp.check(exists (select 1 from change_log where action = 'baja' and summary like 'se borró de %'), 'movimientos: se anota cuando alguien se borra de una carrera');
+set role anon;
 reset role;
 delete from chronicles where runner_id in ('10000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-0000000000a2');
 delete from races where id::text like '30000000-0000-0000-0000-0000000000a%';

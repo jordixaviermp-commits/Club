@@ -218,6 +218,8 @@ export function supabaseApi(url, key) {
     async runnerJoinRace(code, raceId, category) { ok(await sb.rpc('runner_join_race', { p_code: code, p_race: raceId, p_category: category || null })); },
     async autoPromote() { try { return ok(await sb.rpc('auto_promote_registrations')); } catch { return 0; } },
     async runnerComplete(code, kind, id, data) { ok(await sb.rpc('runner_complete_race', { p_code: code, p_kind: kind, p_id: id, p_data: data })); },
+    /** Movimientos para la dirección (inscripciones, pagos, crónicas, carreras, resultados, bajas). null = falta ejecutar el SQL. */
+    async adminMovements(limit = 300) { try { return ok(await sb.rpc('admin_movements', { p_limit: limit })); } catch (e) { if (/PGRST202|Could not find|admin_movements/.test(String(e?.message))) return null; throw e; } },
     async listChanges() { try { return ok(await sb.from('change_log').select('*').order('at', { ascending: false }).limit(300)); } catch { return null; } },
     async socialView(code) { return ok(await sb.rpc('social_view', { p_code: code })); },
     async socialMark(code, key, posted) { ok(await sb.rpc('social_mark', { p_code: code, p_key: key, p_posted: !!posted })); },
@@ -402,6 +404,16 @@ export function demoApi(storage = globalThis.localStorage) {
 
     async loadAll() { requireAdmin(); autoPromote(); const { runner_watch, ...d } = load(); return clone(nest({ circuit_podiums: [], announcements: [], announcement_replies: [], correction_requests: [], social_posts: [], chronicles: [], ...d })); },
     async autoPromote() { requireAdmin(); return autoPromote(); },
+    async adminMovements(limit = 300) {
+      requireAdmin(); const d = load(), nm = Object.fromEntries(d.runners.map((r) => [r.id, r.name])), out = [];
+      const fd = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+      for (const e of d.registration_entries) { const g = d.registrations.find((x) => x.id === e.registration_id); if (!g || !nm[e.runner_id]) continue;
+        if (e.created_at) out.push({ at: e.created_at, who: nm[e.runner_id], kind: 'inscripcion', text: `se inscribió en ${g.name} (${fd(g.date)})` });
+        if (e.paid_at) out.push({ at: e.paid_at, who: nm[e.runner_id], kind: 'pago', text: `marcó como pagada su inscripción en ${g.name}` }); }
+      for (const c of d.chronicles || []) if (c.done_at && nm[c.runner_id]) out.push({ at: c.done_at, who: nm[c.runner_id], kind: 'cronica', text: `pasó la crónica de ${c.race_key.split('|')[1].replace(/\b\w/g, (m) => m.toUpperCase())} (${c.race_key.split('|')[0]})` });
+      for (const l of d.change_log || []) out.push({ at: l.at, who: l.actor, kind: l.action === 'baja' ? 'baja' : l.entity === 'result' ? 'resultado' : ['race', 'registration'].includes(l.entity) ? 'carrera' : 'otro', text: l.summary });
+      return clone(out.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit));
+    },
     async listChanges() { requireAdmin(); return clone([...(load().change_log || [])].sort((a, b) => b.at.localeCompare(a.at))); },
     async runnerComplete(code, kind, id, data) {
       const me = byCode(code); const d = load();
