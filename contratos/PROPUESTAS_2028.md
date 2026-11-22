@@ -1,6 +1,6 @@
 # Propuestas de mejora para el contrato 2028
 
-Lista abierta. Cada punto indica qué cambia respecto al contrato 2027 y lo que queda por decidir.
+Lista abierta. Cada punto indica qué cambia respecto al contrato 2027. De momento no queda nada pendiente de decidir.
 
 ## 1. Material incluido: solo lo básico; el resto, por pedido de club
 
@@ -22,7 +22,7 @@ Lista abierta. Cada punto indica qué cambia respecto al contrato 2027 y lo que 
 | 18 | 100 € | 150 € |
 | 23 | 150 € | 200 € |
 
-- **Renovación sin licencia:** mantiene los mismos importes que en 2027 (100/150/200 €), porque no recibe material y se paga su licencia. Solo cambian los tramos (13/18/23).
+- **Renovación sin licencia:** tiene un bono distinto y mantiene sus importes de 2027 (100/150/200 €), porque no recibe material y se paga su licencia. Nuevo y renovación siguen con 50/100/150 €. Solo cambian los tramos (13/18/23).
 
 ## 3. Bonificación plus (+4 carreras): también por parejas
 
@@ -33,7 +33,7 @@ Lista abierta. Cada punto indica qué cambia respecto al contrato 2027 y lo que 
 - Diferencia con la individual: en individual tiene que ser la general final de un Open, Critérium, Copa o Liga; en parejas, como es mucho más difícil, también vale la general final de una sola carrera de varios días.
 - **La pareja tiene que ser del mismo equipo y correr con los mismos colores** (los dos del Club Ciclista Monzón, con la equipación oficial). Una pareja con alguien de otro equipo no cuenta.
 - Igual que en la individual, la prueba tiene que estar anunciada en la web de una Federación y tener clasificación general y podio.
-- **Pendiente de decidir:** si cada miembro de la pareja recibe las +4 carreras.
+- **Cada miembro de la pareja recibe las +4 carreras.** Aunque corran juntos, el bono es individual: por eso los dos tienen que ser del mismo equipo.
 
 ## Al aplicar estos cambios
 
