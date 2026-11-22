@@ -26,13 +26,14 @@ Lista abierta. Cada punto indica qué cambia respecto al contrato 2027 y lo que 
 
 ## 3. Bonificación plus (+4 carreras): también por parejas
 
-- Además de las clasificaciones individuales, la bonificación también se gana con:
-  - clasificaciones **generales por parejas**, y
-  - **podios por parejas en ligas**.
+- Además de las clasificaciones individuales, la bonificación también se gana con un **podio en una general final por parejas**:
+  - la **general final de una carrera por parejas de varios días** (por ejemplo, una prueba de 2 días o una carrera mediterránea de 4 días), o
+  - la **general final de una liga por parejas**.
+- **Solo cuenta la general final.** No cuentan los podios de una etapa ni de una prueba suelta de la liga.
+- Diferencia con la individual: en individual tiene que ser la general final de un Open, Critérium, Copa o Liga; en parejas, como es mucho más difícil, también vale la general final de una sola carrera de varios días.
 - **La pareja tiene que ser del mismo equipo y correr con los mismos colores** (los dos del Club Ciclista Monzón, con la equipación oficial). Una pareja con alguien de otro equipo no cuenta.
-- **Pendiente de decidir:**
-  - Si cada miembro de la pareja recibe las +4 carreras.
-  - Si los podios por parejas en una prueba de la liga cuentan por sí solos o solo la general final, como en la bonificación individual.
+- Igual que en la individual, la prueba tiene que estar anunciada en la web de una Federación y tener clasificación general y podio.
+- **Pendiente de decidir:** si cada miembro de la pareja recibe las +4 carreras.
 
 ## Al aplicar estos cambios
 
