@@ -893,16 +893,17 @@ const upcomingOf = (id) => (S.runnerData?.registrations || []).filter((g) => g.d
   && (g.entries || []).some((e) => e.runner_id === id));
 
 /** Ventana con dónde se ha apuntado un compañero (próximas carreras) y cómo le fue en las últimas. */
-function openMate(id) {
+function openMate(id, forYear = null) {
   const d = S.runnerData, today = d.today || todayISO(), meId = d.me.id;
   const person = [...teamRoster(), { id: meId, name: d.me.name }].find((x) => x.id === id);
   if (!person) return;
-  const year = S.year || new Date().getFullYear(), isMe = id === meId;
+  const myYears = [...new Set((S.team?.races || []).filter((r) => (r.results || []).some((x) => x.runner_id === id)).map((r) => r.date.slice(0, 4)))].sort().reverse();
+  const year = Number(forYear) || S.year || new Date().getFullYear(), isMe = id === meId;
   const regs = d.registrations.filter((g) => (g.entries || []).some((e) => e.runner_id === id)).sort((a, b) => a.date.localeCompare(b.date));
   const upcoming = regs.filter((g) => g.date >= today), waiting = regs.filter((g) => g.date < today);
   const doneAll = (S.team?.races || []).filter((r) => r.date.slice(0, 4) === String(year) && (r.results || []).some((x) => x.runner_id === id))
     .sort((a, b) => b.date.localeCompare(a.date));
-  const done = doneAll.slice(0, 15);
+  const done = doneAll;
   const row = (g, right = '') => `<li class="mini ${modClass(g.modality)} tappable"><a class="mini-main" href="#/carrera/${g.id}"><b>${esc(g.name)}</b>
     <small class="muted">${when(g)}${place(g) ? ' · ' + esc(place(g)) : ''} · ${esc(modText(g))}${g.suspended ? ' · ⛔ suspendida' : ''}</small></a>${right}</li>`;
   const withMe = (g) => (!isMe && (g.entries || []).some((e) => e.runner_id === meId) ? '<span class="done">✓ Tú también</span>' : '');
@@ -912,6 +913,7 @@ function openMate(id) {
     <p class="hint">${upcoming.length ? `Apuntado a <b>${upcoming.length}</b> carrera${upcoming.length === 1 ? '' : 's'} próxima${upcoming.length === 1 ? '' : 's'}. Toca una para verla${S.preview || isMe ? '' : ' o apuntarte'}.` : `${isMe ? 'No estás apuntado' : 'No está apuntado'} a ninguna carrera próxima.`}</p>
     ${upcoming.length ? `<ul class="mini-list">${upcoming.map((g) => row(g, withMe(g))).join('')}</ul>` : ''}
     ${waiting.length ? `<h3 class="mate-h">🏁 Ya disputadas, sin resultado</h3><ul class="mini-list">${waiting.map((g) => row(g)).join('')}</ul>` : ''}
+    ${myYears.length > 1 ? `<div class="years mate-years">${myYears.map((y) => `<button type="button" class="chip${String(y) === String(year) ? ' on' : ''}" data-mate-id="${esc(id)}" data-mate-y="${y}">${y}</button>`).join('')}</div>` : ''}
     ${done.length ? `<h3 class="mate-h">Carreras de ${year} (${doneAll.length})</h3><ul class="mini-list">${done.map((r) => {
       const x = r.results.find((y) => y.runner_id === id);
       return `<li class="mini ${modClass(r.modality)} tappable"><a class="mini-main" href="#/carrera/race_${r.id}"><b>${esc(r.name)}</b>
@@ -919,7 +921,7 @@ function openMate(id) {
         ${x.position ? `<span class="pos">${medal(x.position)} ${x.position}º</span>` : ''}${x.time_seconds ? `<small class="muted">⏱️ ${formatTime(x.time_seconds)}</small>` : ''}</li>`; }).join('')}</ul>${doneAll.length > done.length ? `<p class="hint">…y ${doneAll.length - done.length} más.</p>` : ''}` : (S.team ? `<h3 class="mate-h">Carreras de ${year}</h3><p class="hint">Todavía ninguna con resultado.</p>` : '')}
     <div class="dlg-actions"><button value="" class="btn ghost">Cerrar</button></div></form>`;
   dlg.onclose = null;
-  dlg.showModal();
+  if (!dlg.open) dlg.showModal();
 }
 
 /** Resultados del buscador del corredor: compañeros, carreras del club (apuntarse) y de las federaciones (añadir). */
@@ -1181,7 +1183,13 @@ function myRacesCard(d, afterSummary = () => '') {
   const cancelled = mineReg.filter((g) => g.suspended).sort((a, b) => a.date.localeCompare(b.date));
   const years = [...new Set([new Date().getFullYear(), ...results.map((r) => yearOf(r.date))])].sort((a, b) => b - a);
   if (!years.includes(S.myYear)) S.myYear = years[0];
-  const upcomingYear = upcoming.filter((g) => yearOf(g.date) === S.myYear);   // el recuadro es de UNA temporada: las de otros años no se cuentan ahí
+  const upcomingYear = upcoming.filter((g) => yearOf(g.date) === S.myYear);
+  // «Próximas» es de una temporada, salvo el solape de fin de año: las carreras de la temporada siguiente que caen en los próximos 60 días
+  // (por ejemplo las de enero cuando estamos en noviembre o diciembre) también cuentan. Las de más adelante (febrero, junio…) no se mezclan.
+  const OVERLAP_DAYS = 60, curYear = new Date().getFullYear();
+  const upOther = S.myYear === curYear ? upcoming.filter((g) => yearOf(g.date) > S.myYear && daysTo(g.date) <= OVERLAP_DAYS) : [];
+  const upTile = [...upcomingYear, ...upOther], upOtherYears = [...new Set(upOther.map((g) => yearOf(g.date)))].sort();
+  const upSub = upOther.length ? `${upcomingYear.length} de ${S.myYear} + ${upOther.length} de ${upOtherYears.length === 1 ? upOtherYears[0] : 'enero'}` : 'inscrito';
   const list = results.filter((r) => yearOf(r.date) === S.myYear);
   const days = list.reduce((n, r) => n + numDays(r.date, r.end_date), 0);
   const row = (r) => {
@@ -1199,7 +1207,7 @@ function myRacesCard(d, afterSummary = () => '') {
   return `
   <section class="card sum-card"><div class="sum-head"><h2>Mis carreras ${S.myYear}</h2>${ico('trophy', 'sum-trophy')}</div>
     <div class="tiles">
-      <a href="#" class="tile t-next" data-act="goto-sec" data-to="sec-next"><span class="t-n">${upcomingYear.length}</span><span class="t-l">Próximas</span>${ico('cal', 't-ico')}<small>inscrito</small></a>
+      <a href="#" class="tile t-next" data-act="goto-sec" data-to="sec-next"><span class="t-n">${upTile.length}</span><span class="t-l">Próximas</span>${ico('cal', 't-ico')}<small>${upSub}</small></a>
       <a href="#" class="tile t-done" data-act="goto-sec" data-to="sec-done"><span class="t-n">${list.length + sent.filter((g) => yearOf(g.date) === S.myYear).length}</span><span class="t-l">Hechas</span>${ico('ok', 't-ico')}<small>${days !== list.length ? `${days} días de competición` : 'con resultado'}</small></a>
       <a href="#" class="tile t-pend${todoN ? ' alert' : ''}" data-act="goto-sec" data-to="${todoTo}"><span class="t-n">${todoN}</span><span class="t-l">Pendientes</span>${ico('flag', 't-ico')}<small>${todoTxt}</small></a>
     </div>
@@ -3585,7 +3593,10 @@ async function geocodeMissing(max = 12) {
 /** ¿Mira la dirección (con enlaces a fichas) o un corredor (o la vista previa de uno)? */
 const viewerIsAdmin = () => !!S.session?.isAdmin && !S.preview;
 const raceHref = (id) => (viewerIsAdmin() ? `#/carreras/${id}` : `${runnerHref('carrera')}/race_${id}`);
-const personTag = (key, name) => (viewerIsAdmin() ? `<a href="#/corredor/${esc(key)}"><b>${esc(name)}</b></a>` : `<b>${esc(name)}</b>`);
+/** Nombre de un corredor en un ranking: la dirección va a su ficha; un corredor abre «dónde ha participado» (si es de la plantilla). */
+const mateIds = () => new Set([...teamRoster().map((x) => x.id), S.runnerData?.me?.id].filter(Boolean));
+const personTag = (key, name) => (viewerIsAdmin() ? `<a href="#/corredor/${esc(key)}"><b>${esc(name)}</b></a>`
+  : S.runnerData && mateIds().has(key) ? `<button type="button" class="mate-link" data-act="mate-open" data-id="${esc(key)}" aria-label="Ver en qué carreras ha participado ${esc(name)}"><b>${esc(name)}</b></button>` : `<b>${esc(name)}</b>`);
 const RES_TABS = [['pan', 'Panorama', 'bars'], ['pod', 'Podios', 'trophy'], ['eq', 'Equipo', 'users'], ['alc', 'Alcance', 'flag']];
 const cap1 = (t) => String(t).charAt(0).toUpperCase() + String(t).slice(1);
 const pctOf = (n, d) => (d ? Math.round((n / d) * 100) : 0);
@@ -5959,6 +5970,11 @@ document.addEventListener('focusin', (ev) => {
   const bar = ev.target.closest('.toolbar'); if (bar) setTimeout(() => bar.scrollIntoView({ block: 'start', behavior: 'smooth' }), 120);
 });
 document.addEventListener('focusout', (ev) => { if (ev.target.dataset?.search === 'runner') setTimeout(syncSearchMode, 150); });
+// los botones de año del diálogo «dónde ha participado» (el diálogo está fuera de #app)
+document.getElementById('dialog').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-mate-y]'); if (!b) return;
+  ev.preventDefault(); openMate(b.dataset.mateId, b.dataset.mateY);
+});
 window.addEventListener('hashchange', onRoute);
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); S.installEvt = e; if (S.runnerData) render(); });
 
