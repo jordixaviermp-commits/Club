@@ -844,24 +844,23 @@ end $$;
 create or replace function public.runner_update_registration(p_code text, p_id uuid, p_reg jsonb)
 returns void language plpgsql security definer set search_path = public as $$
 declare
-  v_runner uuid;
+  v_runner uuid; v_who text;
   v_name text := btrim(regexp_replace(coalesce(p_reg->>'name',''), '\s+', ' ', 'g'));
   v_date date := nullif(p_reg->>'date','')::date;
   v_end  date := nullif(nullif(p_reg->>'end_date',''), p_reg->>'date')::date;
   v_elev int := case when coalesce(p_reg->>'elevation','') ~ '^[0-9]{1,5}$' and (p_reg->>'elevation')::int between 1 and 10000 then (p_reg->>'elevation')::int end;
   v_price numeric := case when coalesce(p_reg->>'price','') ~ '^[0-9]{1,5}([.][0-9]{1,2})?$' and (p_reg->>'price')::numeric <= 10000 then (p_reg->>'price')::numeric end;
 begin
-  select id into v_runner from runners where code = p_code;
+  select id, name into v_runner, v_who from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
-  if not exists (select 1 from registrations where id = p_id and created_by = v_runner) then
-    raise exception 'no_es_tuya' using errcode = '42501';
-  end if;
+  if not exists (select 1 from registrations where id = p_id) then raise exception 'no_existe'; end if;
   if length(v_name) < 3 or length(v_name) > 120 then raise exception 'nombre_no_valido'; end if;
   if v_date is null or v_date < make_date(extract(year from current_date)::int - 1, 1, 1) or v_date > current_date + 730 then raise exception 'fecha_no_valida'; end if;
   if v_end is not null and (v_end < v_date or v_end > v_date + 30) then raise exception 'fecha_no_valida'; end if;
   if exists (select 1 from registrations where id <> p_id and date = v_date and lower(name) = lower(v_name)) then
     raise exception 'ya_existe';
   end if;
+  perform set_config('app.actor', v_who, true);   -- el historial dice quién lo cambió
   update registrations set name = v_name, date = v_date, end_date = v_end,
     place = nullif(left(btrim(coalesce(p_reg->>'place','')), 120), ''),
     province = nullif(left(btrim(coalesce(p_reg->>'province','')), 60), ''),
@@ -871,6 +870,7 @@ begin
   where id = p_id;
   if p_reg ? 'elevation' then update registrations set elevation = v_elev where id = p_id; end if;
   if p_reg ? 'price' then update registrations set price = v_price where id = p_id; end if;
+  perform set_config('app.actor', '', true);
 end $$;
 
 -- Cualquier corredor puede marcar (o reabrir) una carrera como suspendida por la organización: cuenta para el mínimo, no para el bono.
@@ -916,9 +916,7 @@ declare
 begin
   select id, name into v_runner, v_who from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
-  if not exists (select 1 from races where id = p_id and created_by = v_runner) then
-    raise exception 'no_es_tuya' using errcode = '42501';
-  end if;
+  if not exists (select 1 from races where id = p_id) then raise exception 'no_existe'; end if;
   if length(v_name) < 3 or length(v_name) > 120 then raise exception 'nombre_no_valido'; end if;
   if v_date is null or v_date < make_date(extract(year from current_date)::int - 1, 1, 1) or v_date > current_date then raise exception 'fecha_no_valida'; end if;
   if v_end is not null and (v_end < v_date or v_end > v_date + 30) then raise exception 'fecha_no_valida'; end if;
@@ -1116,27 +1114,31 @@ end $$;
 -- El corredor indica el tipo de una carrera que creó él (campeonato o puntuable de un circuito).
 create or replace function public.runner_set_race_type(p_code text, p_id uuid, p_type text, p_circuit text)
 returns void language plpgsql security definer set search_path = public as $$
-declare v_runner uuid; v_type text := coalesce(nullif(p_type, ''), 'suelta');
+declare v_runner uuid; v_who text; v_type text := coalesce(nullif(p_type, ''), 'suelta');
 begin
-  select id into v_runner from runners where code = p_code;
+  select id, name into v_runner, v_who from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  perform set_config('app.actor', v_who, true);
   update registrations set race_type = v_type,
          circuit = case when v_type = 'circuito' then nullif(left(btrim(coalesce(p_circuit, '')), 120), '') end
-   where id = p_id and created_by = v_runner;
-  if not found then raise exception 'no_es_tuya' using errcode = '42501'; end if;
+   where id = p_id;
+  if not found then raise exception 'no_existe'; end if;
+  perform set_config('app.actor', '', true);
 end $$;
 
 -- El corredor indica el formato y los km de una carrera que creó él.
 create or replace function public.runner_set_race_details(p_code text, p_id uuid, p_subtype text, p_km numeric)
 returns void language plpgsql security definer set search_path = public as $$
-declare v_runner uuid;
+declare v_runner uuid; v_who text;
 begin
-  select id into v_runner from runners where code = p_code;
+  select id, name into v_runner, v_who from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  perform set_config('app.actor', v_who, true);
   update registrations set subtype = nullif(left(btrim(coalesce(p_subtype, '')), 30), ''),
          km = case when p_km > 0 and p_km <= 1000 then round(p_km, 1) end
-   where id = p_id and created_by = v_runner;
-  if not found then raise exception 'no_es_tuya' using errcode = '42501'; end if;
+   where id = p_id;
+  if not found then raise exception 'no_existe'; end if;
+  perform set_config('app.actor', '', true);
 end $$;
 
 -- El corredor comunica un podio en la general final de un circuito: queda pendiente hasta que la dirección lo confirme.
@@ -1416,7 +1418,7 @@ begin
   if coalesce(p_done, true) then
     insert into chronicles (runner_id, race_key) values (v_runner, p_key) on conflict do nothing;
   else
-    delete from chronicles where runner_id = v_runner and race_key = p_key;
+    delete from chronicles where race_key = p_key;
   end if;
 end $$;
 
