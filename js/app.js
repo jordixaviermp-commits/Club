@@ -1150,6 +1150,10 @@ function myRacesCard(d, afterSummary = () => '') {
   const pending = pastReg.filter((g) => !g.my_result);   // les falta poner el puesto
   const noPos = results.filter((r) => !r.position);          // carreras ya en resultados donde participó pero no consta su puesto: también le falta ponerlo
   const pendingN = pending.length + noPos.length;
+  // crónicas sin pasar (otra obligación del contrato): también cuentan como pendientes
+  const cronN = S.chron instanceof Set ? chronicleStatus(d, S.chron, today, S.myYear || new Date().getFullYear()).pending.length : 0;
+  const todoN = pendingN + cronN, pl = (n, a, b) => (n === 1 ? a : b);
+  const todoTxt = pendingN && cronN ? `${pendingN} resultado${pl(pendingN, '', 's')} y ${cronN} crónica${pl(cronN, '', 's')}` : pendingN ? (pendingN === 1 ? 'falta tu resultado' : `faltan ${pendingN} resultados`) : cronN ? `falta${pl(cronN, '', 'n')} ${cronN} crónica${pl(cronN, '', 's')}` : 'todo al día';
   const sent = pastReg.filter((g) => g.my_result);        // ya puso su puesto: cuenta para el bono aunque la dirección aún no la haya pasado a resultados
   const upcoming = mineReg.filter((g) => g.date >= today && !g.suspended).sort((a, b) => a.date.localeCompare(b.date));
   const cancelled = mineReg.filter((g) => g.suspended).sort((a, b) => a.date.localeCompare(b.date));
@@ -1175,7 +1179,7 @@ function myRacesCard(d, afterSummary = () => '') {
     <div class="tiles">
       <a href="#" class="tile t-next" data-act="goto-sec" data-to="sec-next"><span class="t-n">${upcomingYear.length}</span><span class="t-l">Próximas</span>${ico('cal', 't-ico')}<small>inscrito</small></a>
       <a href="#" class="tile t-done" data-act="goto-sec" data-to="sec-done"><span class="t-n">${list.length + sent.filter((g) => yearOf(g.date) === S.myYear).length}</span><span class="t-l">Hechas</span>${ico('ok', 't-ico')}<small>${days !== list.length ? `${days} días de competición` : 'con resultado'}</small></a>
-      <a href="#" class="tile t-pend${pendingN ? ' alert' : ''}" data-act="goto-sec" data-to="sec-pend"><span class="t-n">${pendingN}</span><span class="t-l">Pendientes</span>${ico('flag', 't-ico')}<small>${pendingN ? 'falta tu resultado' : 'todo al día'}</small></a>
+      <a href="#" class="tile t-pend${todoN ? ' alert' : ''}" data-act="goto-sec" data-to="${pendingN || !cronN ? 'sec-pend' : 'sec-chro'}"><span class="t-n">${todoN}</span><span class="t-l">Pendientes</span>${ico('flag', 't-ico')}<small>${todoTxt}</small></a>
     </div>
     ${cancelled.length ? `<a href="#" class="canc-line" data-act="goto-sec" data-to="sec-canc">${ico('ban')}<span><b>${cancelled.length}</b> ${cancelled.length === 1 ? 'carrera suspendida' : 'carreras suspendidas'}</span>${ico('go')}</a>` : ''}
     ${(() => { const sentYear = sent.filter((g) => yearOf(g.date) === S.myYear).map((g) => ({ position: g.my_result.position, time_seconds: g.my_result.time_seconds })), allMine = [...list, ...sentYear];   // los enviados también cuentan
@@ -1284,7 +1288,7 @@ function chronicleCard(d) {
       <details class="imp-races" data-open-key="imp-races"${S.open?.['imp-races'] ? ' open' : ''}><summary>Mis carreras (${imp.rows.length})${todo ? ` · <b>${todo}</b> con algo por hacer` : ' · todo al día 🎉'}</summary>
         <ul class="imp-list">${imp.rows.map(rowHtml).join('')}</ul></details>`;
   };
-  return `<section class="card chro-card${pend ? ' has-pend' : ''}"><details class="chro-det" data-open-key="chro"${S.open?.chro ? ' open' : ''}>
+  return `<section class="card chro-card${pend ? ' has-pend' : ''}" id="sec-chro"><details class="chro-det" data-open-key="chro"${S.open?.chro ? ' open' : ''}>
     <summary><span class="chro-ic">${ico('book')}</span><b class="chro-t">Crónicas${year === new Date().getFullYear() ? '' : ` <small class="muted">${year}</small>`}</b>
       <span class="chro-tag ${pend ? 'pend' : 'ok'}">${pend ? `${pend} ${plural(pend, 'pendiente', 'pendientes')}` : `${c.done.length} ${plural(c.done.length, 'pasada', 'pasadas')}`}${ico('go')}</span></summary>
     <div class="seg-sw chro-sw" role="tablist" aria-label="Crónicas o impacto en redes"><button type="button" role="tab" class="${tabImp ? '' : 'on'}" data-act="chro-tab" data-t="cro">Crónicas</button><button type="button" role="tab" class="${tabImp ? 'on' : ''}" data-act="chro-tab" data-t="imp">Impacto en redes</button></div>
