@@ -18,7 +18,7 @@ export function friendlyError(e) {
   if (/otros_apuntados/.test(msg)) return 'No puedes borrarla: hay más compañeros apuntados. Pídeselo a la dirección del club.';
   if (/plus_confirmado/.test(msg)) return 'La dirección ya ha confirmado este plus, así que no se puede retirar. Si hay un error, díselo a la dirección.';
   if (/PGRST202|Could not find/i.test(msg) && /runner_(update|delete)_race/.test(msg)) return 'Para editar carreras ya pasadas a resultados falta activarlo en la base de datos. Avisa a la dirección.';
-  if (/no_es_tuya/.test(msg)) return 'Solo puedes cambiar las carreras que has añadido tú.';
+  if (/no_es_tuya/.test(msg)) return 'Solo puedes borrar las carreras que has añadido tú.';
   if (/ya_existe/.test(msg)) return 'Ya existe: otra carrera con ese nombre ese día, un circuito ya comunicado o una petición tuya pendiente.';
   if (/sin_cambios/.test(msg)) return 'Eso es lo mismo que ya pusiste: cambia el puesto, la categoría o el tipo de podio.';
   if (/nombre_no_valido/.test(msg)) return 'Pon un nombre de carrera de al menos 3 letras.';
@@ -710,13 +710,13 @@ export function demoApi(storage = globalThis.localStorage) {
     },
     async runnerUpdate(code, id, reg) {
       const me = byCode(code); const d = load();
-      const g = d.registrations.find((x) => x.id === id && x.created_by === me.id);
-      if (!g) throw new Error('no_es_tuya');
+      const g = d.registrations.find((x) => x.id === id);
+      if (!g) throw new Error('no_existe');
       const name = String(reg.name || '').replace(/\s+/g, ' ').trim();
       if (name.length < 3) throw new Error('nombre_no_valido');
       if (!reg.date) throw new Error('fecha_no_valida');
       if (d.registrations.some((x) => x.id !== id && x.date === reg.date && x.name.toLowerCase() === name.toLowerCase())) throw new Error('ya_existe');
-      Object.assign(g, fields({ ...reg, name })); save();
+      Object.assign(g, fields({ ...reg, name })); logc(me.name, 'update', `cambió la inscripción ${name}`); save();
     },
     async runnerDelete(code, id) {
       const me = byCode(code); const d = load();
@@ -727,8 +727,8 @@ export function demoApi(storage = globalThis.localStorage) {
     },
     async runnerUpdateRace(code, id, race) {
       const me = byCode(code); const d = load();
-      const r = d.races.find((x) => x.id === id && x.created_by === me.id);
-      if (!r) throw new Error('no_es_tuya');
+      const r = d.races.find((x) => x.id === id);
+      if (!r) throw new Error('no_existe');
       const name = String(race.name || '').replace(/\s+/g, ' ').trim();
       if (name.length < 3 || name.length > 120) throw new Error('nombre_no_valido');
       if (!race.date || race.date < pastLimit() || race.date > todayISO()) throw new Error('fecha_no_valida');
@@ -813,7 +813,7 @@ export function demoApi(storage = globalThis.localStorage) {
       return clone([...by.values()]);
     },
     async runnerSetChronicle(code, key, done) {
-      const me = byCode(code), d = load(); d.chronicles = (d.chronicles || []).filter((x) => !(x.runner_id === me.id && x.race_key === key));
+      const me = byCode(code), d = load(); d.chronicles = (d.chronicles || []).filter((x) => (done ? !(x.runner_id === me.id && x.race_key === key) : x.race_key !== key));   // deshacer = pendiente para todos
       if (done) d.chronicles.push({ runner_id: me.id, race_key: key, done_at: new Date().toISOString() });
       save();
     },
@@ -885,13 +885,13 @@ export function demoApi(storage = globalThis.localStorage) {
       save();
     },
     async runnerSetDetails(code, id, subtype, km) {
-      const me = byCode(code); const g = load().registrations.find((x) => x.id === id && x.created_by === me.id);
-      if (!g) throw new Error('no_es_tuya');
+      byCode(code); const g = load().registrations.find((x) => x.id === id);
+      if (!g) throw new Error('no_existe');
       Object.assign(g, detailFields({ modality: g.modality, subtype, km })); save();
     },
     async runnerSetType(code, id, type, circuit) {
-      const me = byCode(code); const g = load().registrations.find((x) => x.id === id && x.created_by === me.id);
-      if (!g) throw new Error('no_es_tuya');
+      byCode(code); const g = load().registrations.find((x) => x.id === id);
+      if (!g) throw new Error('no_existe');
       Object.assign(g, typeFields({ race_type: type, circuit })); save();
     },
     async runnerProposeCircuit(code, circuit, year, position, scope) {
