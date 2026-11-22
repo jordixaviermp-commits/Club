@@ -2547,3 +2547,7 @@ a.sum-streak { text-decoration: none; color: var(--text); }
 .rc-body .club-row { margin: .3rem 0; }
 .rc-body > .rc-tools + .type-line { margin-top: -.2rem; }
 .join-row select { font-size: var(--fs-3); padding-left: .6rem; padding-right: .3rem; } .join-row .btn.primary { flex: 0 0 auto; }
+/* pago en la fila de iconos: ámbar discontinuo si falta, verde con ✓ si está pagada */
+.rc-tool.pay { color: color-mix(in srgb, var(--warn-t) 80%, var(--text)); border-style: dashed; border-color: var(--warn); background: color-mix(in srgb, var(--warn) 9%, var(--card)); }
+.rc-tool.pay.on { color: var(--ok); border-style: solid; border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); background: color-mix(in srgb, var(--ok) 12%, var(--card)); }
+.rc-tool.pay .pay-ok { width: 14px; height: 14px; stroke-width: 3; }
