@@ -2519,3 +2519,9 @@ a.sum-streak { text-decoration: none; color: var(--text); }
 .mvk-pago .mv-ic { background: color-mix(in srgb, var(--ok) 16%, var(--card)); color: var(--ok); } .mvk-baja .mv-ic { background: color-mix(in srgb, var(--bad-2) 14%, var(--card)); color: var(--bad-2); }
 .mvk-cronica .mv-ic { background: color-mix(in srgb, var(--warn) 18%, var(--card)); color: var(--warn-t); } .mvk-resultado .mv-ic { background: color-mix(in srgb, var(--gold) 20%, var(--card)); color: #8a6d00; }
 .mv-day { margin: .5rem 0 .1rem; font-size: var(--fs-2); font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+
+/* v243: nombres de corredor tocables en los rankings (abren «en qué carreras ha participado») */
+.mate-link { background: none; border: 0; padding: 0; font: inherit; color: var(--text); text-align: left; cursor: pointer; text-decoration: underline dotted color-mix(in srgb, var(--accent) 60%, transparent); text-underline-offset: 3px; }
+.mate-link:active { color: var(--accent); }
+.mate-years { margin: .4rem 0; }
+.mate .mini-list li > a.mini-main { flex-direction: column; align-items: flex-start; gap: .1rem; }
