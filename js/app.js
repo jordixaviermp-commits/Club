@@ -3506,37 +3506,135 @@ function seasonRunnerRows(pk) {
   });
 }
 const TP_COLS = [['name', 'Corredor', 'text'], ['races', 'Carr.'], ['km', 'Km'], ['elev', 'Desn.'], ['trip', 'Viaje'], ['cost', '€ insc.'], ['time', 'Tiempo'], ['nd', 'Disc.'], ['p1', '🥇'], ['p2', '🥈'], ['p3', '🥉'], ['nm', 'Meses']];
+/** €/km del kilometraje exento en España: solo para estimar lo que cuesta ir a las carreras. */
+const KM_EUR = 0.26;
+const nfEs = (n) => Number(n || 0).toLocaleString('es-ES');
+/** Memoria para sponsors: un informe único, capítulo tras capítulo, con todas las cifras de la temporada (sin bonos, contratos ni datos personales). */
 function viewMemoria() {
   const years = availableYears(S.data.races);
   if (!years.includes(S.year)) S.year = years[0];
   if (!S.ig) loadIg();
-  const pk = seasonPack(S.year);
-  const memIns = yearInsights(S.year, S.data.races, S.data.runners);
-  const igOk = S.ig?.rows;
-  const g = igOk ? igSummary(S.ig.rows, `${S.year}-01-01`, `${S.year}-12-31`) : null, acc = g?.account, t = g?.totals;
-  const nf2 = (n) => (n == null ? '—' : Number(n).toLocaleString('de-DE'));
-  const redes = g && (g.nDays || acc) ? `<section class="mem-sec"><h2>Presencia en redes</h2><div class="rp-kpis">
-      ${acc ? `<div class="rp-kpi"><b>${nf2(acc.followers)}</b><span>seguidores en Instagram</span></div>` : ''}
-      ${g.nDays ? `<div class="rp-kpi"><b>${nf2(t.views)}</b><span>visualizaciones</span></div><div class="rp-kpi"><b>${nf2(t.interactions)}</b><span>interacciones</span></div>` : ''}
-      ${g.nDays && t.reachAvg ? `<div class="rp-kpi"><b>${nf2(t.reachAvg)}</b><span>alcance medio diario</span></div>` : ''}</div>
-      <p class="rp-note">@hinacoclubciclistamonzon · ${g.nDays ? `${g.nDays} días de datos guardados en ${S.year}` : `datos a ${acc ? igShort(acc.until) : ''}`}.</p></section>` : '';
-  const top = pk.s.perRunner.filter((r) => r.races > 0).slice(0, 10);
+  const year = S.year, pk = resPack(year, null), s = pk.s, t = s.totals, i = pk.ins, cal = i.cal;
+  const plural = (n, a, b = `${a}s`) => `${nfEs(n)} ${n === 1 ? a : b}`;
+  const tile = (ic, label, val, sub = '') => `<div class="rs-tile">${ico(ic)}<small>${label}</small><b>${val}</b>${sub ? `<em>${sub}</em>` : ''}</div>`;
+  const box = (title, html) => (html ? `<div class="mem-box">${title ? `<h3>${title}</h3>` : ''}${html}</div>` : '');
+  const rank = (rows, key, fmt, n = 5) => { const l = rows.filter((r) => r[key] > 0).sort((a, b) => b[key] - a[key]).slice(0, n), mx = Math.max(1, ...l.map((r) => r[key]));
+    return l.length ? `<ol class="rs-rank">${l.map((r, k) => `<li><span class="pos">${k + 1}</span><div><b>${esc(r.name)}</b>${bar((r[key] / mx) * 100)}</div><span class="rk-m">${fmt(r[key])}</span></li>`).join('')}</ol>` : ''; };
+  // ---- datos por carrera (para la tabla completa y los destacados)
+  const podBy = new Map(); for (const p of s.podiumList) (podBy.get(p.raceId) || podBy.set(p.raceId, []).get(p.raceId)).push(p);
+  const races = [...cal].sort((a, b) => a.date.localeCompare(b.date));
+  const crowd = [...cal].sort((a, b) => b.n - a.n)[0];
+  const tripOne = Math.round(cal.reduce((n, r) => n + (r.dist != null ? 2 * r.dist : 0), 0));   // un coche por carrera
+  const span = i.first && i.last ? `${formatDate(i.first, false)} – ${formatDate(i.last, false)}` : '';
+  // ---- capítulos
+  const CH = [];
+  const ch = (id, ic, title, lead, body) => { if (body) CH.push({ id, ic, title, lead, body }); };
+
+  ch('cifras', 'bars', 'La temporada en cifras',
+    `${year}: <b>${plural(t.races, 'carrera')}</b>${i.days > t.races ? ` (${i.days} días de competición)` : ''}, <b>${plural(t.runners, 'corredor', 'corredores')}</b> del club y <b>${plural(t.participations, 'participación', 'participaciones')}</b>. <b>${plural(t.podiums, 'podio')}</b>${t.wins ? `, ${plural(t.wins, 'victoria')}` : ''}.`,
+    `${seasonKpis(pk)}${pk.hasPrev ? box(`Frente a ${year - 1}`, resCompare(pk)) : ''}`);
+
+  const best = [
+    t.wins ? `🥇 <b>${plural(t.wins, 'victoria')}</b> y ${plural(t.podiums, 'podio')} (${i.podiumRate} % de las participaciones)` : t.podiums ? `🏆 <b>${plural(t.podiums, 'podio')}</b>` : '',
+    crowd?.n ? `👥 La carrera con más gente del club: <b>${esc(crowd.name)}</b> (${crowd.n} corredores)` : '',
+    s.longest ? `📏 La más larga: <b>${esc(s.longest.race)}</b> (${esc(kmText(s.longest.km))})` : '',
+    s.hardest ? `⛰️ La más dura: <b>${esc(s.hardest.race)}</b> (${esc(elevText(s.hardest.elevation))})` : '',
+    s.farthest ? `🧭 La más lejana: <b>${esc(s.farthest.race)}</b> (${esc(kmText(s.farthest.value))} de ida)` : '',
+    s.longestTime ? `⏱️ La que más horas costó: <b>${esc(s.longestTime.race)}</b> (${esc(formatTime(s.longestTime.seconds, true))})` : '',
+    i.bestMonth ? `📅 El mes más intenso: <b>${cap1(MONTH_NAMES[i.bestMonth.month])}</b> (${plural(i.bestMonth.total, 'carrera')})` : '',
+    s.provinces.length ? `📍 <b>${plural(s.provinces.length, 'provincia')}</b>${s.countries.length > 1 ? ` y ${plural(s.countries.length, 'país', 'países')}` : ''}` : '',
+  ].filter(Boolean);
+  ch('destacados', 'star', 'Lo más destacado', '', best.length ? `<ul class="mem-best">${best.map((x) => `<li>${x}</li>`).join('')}</ul>` : '');
+
+  // Equipo y participación (sin contratos ni bonos)
+  const pct = pctOf(i.activeCount, i.rosterSize), hmx = Math.max(1, ...i.hist.map((h) => h.runners));
+  const cats = s.byCategory.filter((c) => c.participations);
+  const catTbl = cats.length ? `<div class="tp-scroll"><table class="tp-table"><thead><tr><th class="l">Categoría</th><th>Corredores</th><th>Particip.</th><th>🥇</th><th>🥈</th><th>🥉</th></tr></thead><tbody>${cats.map((c) => `<tr><td class="l"><b>${esc(c.category || 'Sin categoría')}</b></td><td>${c.runners}</td><td>${c.participations}</td><td>${c.p1 || ''}</td><td>${c.p2 || ''}</td><td>${c.p3 || ''}</td></tr>`).join('')}</tbody></table></div>` : '';
+  const rows = seasonRunnerRows(pk).sort((a, b) => b.races - a.races || b.pod - a.pod || a.name.localeCompare(b.name, 'es'));
+  const cols = [['races', 'Carr.', (n) => n], ['km', 'Km', (n) => (n ? nfEs(Math.round(n)) : '')], ['elev', 'Desn. m', (n) => (n ? nfEs(n) : '')], ['trip', 'Viaje km', (n) => (n ? nfEs(Math.round(n)) : '')], ['time', 'Tiempo', (n) => (n ? formatTime(n, true) : '')], ['nd', 'Disc.', (n) => n || ''], ['p1', '🥇', (n) => n || ''], ['p2', '🥈', (n) => n || ''], ['p3', '🥉', (n) => n || '']];
+  const runTbl = rows.length ? `<div class="tp-scroll"><table class="tp-table mem-runners"><thead><tr><th class="l">#</th><th class="l">Corredor</th>${cols.map(([, l]) => `<th class="num">${l}</th>`).join('')}</tr></thead><tbody>${rows.map((r, k) => `<tr><td class="l muted">${k + 1}</td><td class="l"><b>${esc(r.name)}</b>${r.cat ? ` <small class="muted">${esc(r.cat)}</small>` : ''}</td>${cols.map(([key, , f]) => `<td class="num">${f(r[key])}</td>`).join('')}</tr>`).join('')}</tbody>
+    <tfoot><tr><td></td><td class="l"><b>Equipo</b></td><td class="num"><b>${t.participations}</b></td><td class="num"><b>${t.km ? nfEs(Math.round(t.km)) : ''}</b></td><td class="num"><b>${t.elevation ? nfEs(rows.reduce((n, r) => n + r.elev, 0)) : ''}</b></td><td class="num"><b>${t.travelKm ? nfEs(Math.round(t.travelKm)) : ''}</b></td><td class="num"><b>${t.timed ? formatTime(t.time, true) : ''}</b></td><td></td><td class="num"><b>${s.podiumList.filter((p) => p.position === 1).length || ''}</b></td><td class="num"><b>${s.podiumList.filter((p) => p.position === 2).length || ''}</b></td><td class="num"><b>${s.podiumList.filter((p) => p.position === 3).length || ''}</b></td></tr></tfoot></table></div>` : '';
+  ch('equipo', 'users', 'El equipo',
+    `<b>${i.activeCount} de ${i.rosterSize}</b> corredores de la plantilla han competido (${pct} %). De media, <b>${String(i.avgPart).replace('.', ',')}</b> corredores del club en cada carrera.`,
+    `<div class="mem-two">${box('Participación', `<div class="rs-part"><div class="ring" style="--p:${pct}"><b>${pct}%</b></div><div><p><b>${plural(t.participations, 'participación', 'participaciones')}</b> en ${plural(t.races, 'carrera')}.</p><p class="muted small">${plural(i.activeCount, 'corredor', 'corredores')} en activo.</p></div></div>`)}
+      ${box('Carreras por corredor', `<div class="rs-hist">${i.hist.map((h) => `<div><em>${h.runners || ''}</em><span style="height:${(h.runners / hmx) * 100}%"></span><b>${h.label}</b></div>`).join('')}</div><p class="rp-note">Cuántos corredores han hecho 1, 2–3, 4–6… carreras.</p>`)}</div>
+    ${box('Por categoría', catTbl)}${box(`Todos los corredores (${rows.length})`, runTbl)}`);
+
+  // Calendario
+  ch('calendario', 'cal', 'Calendario y ritmo',
+    `${span ? `De ${esc(span)}. ` : ''}${i.multiDay ? `${plural(i.multiDay, 'prueba', 'pruebas')} de varios días. ` : ''}${i.bestMonth ? `El mes con más carreras fue ${MONTH_NAMES[i.bestMonth.month]}.` : ''}`,
+    `${box('Carreras por mes', seasonMonths(pk))}${box(`Ritmo del año${pk.hasPrev ? ` frente a ${year - 1}` : ''}`, resPace(pk))}${box('Calendario', resHeat(pk))}${box('Día de la semana', resWeekdays(pk))}`);
+
+  // Disciplinas
+  const blocks = disciplineBlocks(pk, { cost: false });
+  ch('disciplinas', 'layers', 'Modalidades y disciplinas',
+    `${plural(s.byModality.filter((m) => m.races).length, 'modalidad', 'modalidades')} y ${plural(s.disciplines.length, 'disciplina')} distintas.`,
+    `${box('Por modalidad', modalityOverview(pk))}${blocks.map((b) => box(`${esc(b.modality)}: por disciplina`, b.html)).join('')}`);
+
+  // Resultados
+  const n = (k) => s.podiumList.filter((x) => x.position === k).length;
+  const medals = `<div class="rs-medals"><div class="m1"><b>${n(1)}</b><span>🥇 Oros</span></div><div class="m2"><b>${n(2)}</b><span>🥈 Platas</span></div><div class="m3"><b>${n(3)}</b><span>🥉 Bronces</span></div></div>`;
+  const hunters = s.perRunner.map((r) => ({ ...r, pod: r.p1 + r.p2 + r.p3 })).filter((r) => r.pod);
+  const podRaces = races.filter((r) => podBy.has(r.id)).reverse();
+  const podList = podRaces.length ? `<ul class="mem-pods">${podRaces.map((r) => `<li><span class="mp-d">${esc(formatDate(r.date, false))}</span><b>${esc(r.name)}</b><span class="mp-w">${podBy.get(r.id).sort((a, b) => a.position - b.position).map((p) => `${medal(p.position)} ${esc(p.runner)}${p.category ? ` <small class="muted">${esc(p.category)}</small>` : ''}${p.stage ? ` <small class="muted">(${esc(p.stage)})</small>` : ''}`).join(' · ')}</span></li>`).join('')}</ul>` : '';
+  ch('resultados', 'trophy', 'Resultados',
+    t.podiums ? `<b>${plural(t.podiums, 'podio')}</b> en ${plural(podRaces.length, 'carrera')}: ${i.podiumRate} % de las participaciones acaban en el podio.` : 'Esta temporada todavía no hay podios.',
+    t.podiums ? `${medals}<div class="mem-two">${box('Los que más suben al podio', rank(hunters, 'pod', (v) => v, 8))}${box('Récords del equipo', seasonRecords(pk).replace('class="tp-table"', 'class="tp-table mem-rec"'))}</div>${box('Por categoría y disciplina', seasonPodiums(pk))}${box(`Todos los podios (${podRaces.length} carreras)`, podList)}` : box('Récords del equipo', seasonRecords(pk).replace('class="tp-table"', 'class="tp-table mem-rec"')));
+
+  // Dónde
+  ch('lugares', 'pin', 'Dónde hemos competido',
+    `${plural(s.provinces.length, 'provincia')}${s.countries.length ? ` y ${plural(s.countries.length, 'país', 'países')}` : ''}.`,
+    `<div class="mem-two">${box('', placeDonut(s.provinces, { title: 'Provincias', max: 6 }))}${s.countries.length > 1 ? box('', placeDonut(s.countries, { title: 'Países', max: 5 })) : ''}</div>${box('Mapa de desplazamientos', resTripMap(pk))}`);
+
+  // Desplazamientos
+  ch('viajes', 'compass', 'Desplazamientos',
+    t.travelKm ? `Los corredores han recorrido unos <b>${esc(kmText(Math.round(t.travelKm)))}</b> para ir a las carreras (ida y vuelta)${tripOne ? `; como club, a razón de un viaje por carrera, <b>${esc(kmText(tripOne))}</b>` : ''}.` : '',
+    box('', resTravel(pk)));
+
+  // Km, tiempo y desnivel
+  const pr = s.perRunner;
+  ch('kilometros', 'ruler', 'Kilómetros, tiempo y desnivel',
+    `${t.km ? `<b>${esc(kmText(Math.round(t.km)))}</b> de competición entre todos` : ''}${t.elevation ? ` · <b>${esc(elevText(t.elevation))}</b> de subida` : ''}${t.timed ? ` · <b>${esc(formatTime(t.time, true))}</b> en carrera` : ''}.`,
+    `<div class="rs-tiles">
+      ${tile('ruler', 'Km recorridos', t.km ? esc(kmText(Math.round(t.km))) : '—', 'entre todos')}
+      ${tile('flag', 'Km por carrera', i.avgRaceKm ? esc(kmText(i.avgRaceKm)) : '—', `${i.withKm} de ${t.races} con km`)}
+      ${tile('timer', 'Velocidad media', t.secTimed ? esc(speedText(t.kmTimed / (t.secTimed / 3600))) : '—', 'en carrera')}
+      ${tile('clock', 'Tiempo total', t.timed ? esc(formatTime(t.time, true)) : '—', `${t.timed} de ${t.participations} con tiempo`)}
+      ${tile('mountain', 'Desnivel positivo', t.elevation ? esc(elevText(t.elevation)) : '—', 'entre todos')}
+      ${tile('mountain', 'Subida por km', i.climb ? `${String(i.climb).replace('.', ',')} m` : '—', 'de media')}</div>
+    ${t.km ? box('Km del equipo, mes a mes', monthBars(pk, 'km', (v) => kmShort(v))) : ''}
+    ${t.elevation ? box('Metros de subida, mes a mes', seasonElevMonths(pk)) : ''}
+    ${t.timed ? box('Horas de carrera, mes a mes', monthBars(pk, 'time', (v) => `${Math.round(v / 3600)}h`)) : ''}
+    <div class="mem-two">${box('Quién ha recorrido más', rank(pr, 'km', (v) => esc(kmText(Math.round(v)))))}${box('Quién ha subido más', rank(pr, 'elev', (v) => esc(elevText(v))))}${box('Más tiempo en carrera', rank(pr, 'time', (v) => formatTime(v, true)))}${box('Las carreras más duras', cal.some((r) => r.elevation) ? resHardest(pk) : '')}</div>
+    ${cal.filter((r) => r.km && r.elevation).length > 1 ? box('Km frente a desnivel', resScatter(pk)) : ''}`);
+
+  // Coste
+  const tripCostLo = Math.round(tripOne * KM_EUR), tripCostHi = Math.round(t.travelKm * KM_EUR);
+  ch('coste', 'money', 'Lo que cuesta competir',
+    t.cost || tripOne ? `Inscripciones: <b>${esc(euros(Math.round(t.cost)))}</b>${tripOne ? ` · desplazamientos (estimado): <b>${esc(euros(tripCostLo))} – ${esc(euros(tripCostHi))}</b>` : ''}.` : '',
+    `${t.pricedRaces ? box('Inscripciones', resCost(pk)) : ''}${tripOne ? box('Desplazamientos (estimación)', `<div class="rs-money"><div><small>Un coche por carrera</small><b>${esc(euros(tripCostLo))}</b></div><div><small>Cada corredor en su coche</small><b>${esc(euros(tripCostHi))}</b></div><div><small>Total con inscripciones</small><b>${esc(euros(Math.round(t.cost) + tripCostLo))} – ${esc(euros(Math.round(t.cost) + tripCostHi))}</b></div></div>
+      <p class="rp-note">A ${String(KM_EUR).replace('.', ',')} €/km (kilometraje exento) sobre los km de ida y vuelta estimados. El gasto real queda entre los dos extremos según cuántos compartan coche.</p>`) : ''}`);
+
+  // Todas las carreras
+  const raceTbl = races.length ? `<div class="tp-scroll"><table class="tp-table mem-races"><thead><tr><th class="l">Fecha</th><th class="l">Carrera</th><th class="num">Club</th><th class="num">Km</th><th class="num">Desn.</th><th class="l">Podios</th></tr></thead><tbody>${races.map((r) => { const pd = podBy.get(r.id) || [];
+    return `<tr><td class="l nw">${Number(r.date.slice(8))} ${MES3[Number(r.date.slice(5, 7)) - 1]}</td><td class="l"><b>${esc(r.name)}</b><small class="muted mr-sub">${esc(discLabel(r.modality, r.subtype))}${r.place ? ` · ${esc(r.place)}` : ''}</small></td><td class="num">${r.n || ''}</td><td class="num">${r.km ? nfEs(r.km) : ''}</td><td class="num">${r.elevation ? nfEs(r.elevation) : ''}</td><td class="l nw">${[1, 2, 3].map((k) => { const c = pd.filter((p) => p.position === k).length; return c ? `${medal(k)}${c > 1 ? `×${c}` : ''}` : ''; }).join(' ')}</td></tr>`; }).join('')}</tbody></table></div>` : '';
+  ch('carreras', 'list', 'Todas las carreras', `Las ${plural(races.length, 'carrera')} de ${year}, una a una, con los corredores del club que fueron.`, raceTbl);
+
+  // Redes
+  const igOk = S.ig?.rows, g = igOk ? igSummary(S.ig.rows, `${year}-01-01`, `${year}-12-31`) : null, acc = g?.account, it = g?.totals;
+  const nf2 = (v) => (v == null ? '—' : nfEs(v));
+  if (g && (g.nDays || acc)) ch('redes', 'image', 'Presencia en redes', `Instagram @hinacoclubciclistamonzon${g.nDays ? ` · ${g.nDays} días de datos en ${year}` : ''}.`,
+    `<div class="rp-kpis">${acc ? `<div class="rp-kpi"><b>${nf2(acc.followers)}</b><span>seguidores</span></div>` : ''}${g.nDays ? `<div class="rp-kpi"><b>${nf2(it.views)}</b><span>visualizaciones</span></div><div class="rp-kpi"><b>${nf2(it.interactions)}</b><span>interacciones</span></div>` : ''}${g.nDays && it.reachAvg ? `<div class="rp-kpi"><b>${nf2(it.reachAvg)}</b><span>alcance medio diario</span></div>` : ''}</div>`);
+
+  const num = (k) => String(k + 1).padStart(2, '0');
   return frame('Memoria de la temporada', `
-    <div class="no-print">${yearPicker(years)}<div class="row-btns rp-actions"><button class="btn primary" data-act="print-report">🖨️ Imprimir o guardar PDF</button><a class="btn" href="#/resumen">‹ Volver al Resumen</a></div>
-      <p class="hint">En el cuadro de imprimir elige «Guardar como PDF». No incluye bonos, contratos ni datos personales: es para enseñar a sponsors.</p></div>
-    <article class="report memoria">
-      <header class="rp-head"><img src="icons/logo.png" alt=""><div><h2>Club Ciclista Monzón · Memoria ${S.year}</h2><p>Resumen de la temporada del equipo de competición</p></div></header>
-      <section class="mem-sec"><h2>La temporada en cifras</h2>${seasonKpis(pk)}</section>
-      <section class="mem-sec"><h2>Carreras por mes</h2>${seasonMonths(pk)}</section>
-      ${pk.s.totals.elevation ? `<section class="mem-sec"><h2>Metros de subida</h2><p class="rp-note">${esc(elevText(pk.s.totals.elevation))} de desnivel positivo entre todos${memIns.climb ? ` · ${String(memIns.climb).replace('.', ',')} m de subida por km de media` : ''}${pk.s.hardest ? ` · la más dura, ${esc(pk.s.hardest.race)} (${esc(elevText(pk.s.hardest.elevation))})` : ''}.</p>${seasonElevMonths(pk)}</section>` : ''}
-      <section class="mem-sec"><h2>Por modalidad</h2>${modalityOverview(pk)}</section>
-      ${disciplineBlocks(pk).map((b) => `<section class="mem-sec"><h2>${esc(b.modality)}: por disciplina</h2>${b.html}</section>`).join('')}
-      <section class="mem-sec"><h2>Podios</h2>${seasonPodiums(pk)}</section>
-      <section class="mem-sec"><h2>Récords del equipo</h2>${seasonRecords(pk)}</section>
-      <section class="mem-sec"><h2>Dónde hemos competido</h2>${seasonReach(pk)}</section>
-      ${top.length ? `<section class="mem-sec"><h2>Los que más han corrido</h2><table class="tp-table"><tbody>${top.map((r, i) => `<tr><td>${i + 1}</td><td><b>${esc(r.name)}</b></td><td>${r.races} carreras</td><td>${r.km ? esc(kmText(r.km)) : ''}</td><td>${r.p1 ? `🥇${r.p1} ` : ''}${r.p2 ? `🥈${r.p2} ` : ''}${r.p3 ? `🥉${r.p3}` : ''}</td></tr>`).join('')}</tbody></table></section>` : ''}
-      ${redes}
-      <footer class="rp-note">Datos del club a ${dateEs(todayISO())}.</footer>
+    <div class="no-print">${yearPicker(years)}<div class="row-btns rp-actions"><button class="btn primary" data-act="print-report">🖨️ Imprimir o guardar PDF</button><a class="btn" href="#/resumen">‹ Resumen</a></div></div>
+    <article class="report memoria" data-nofold>
+      <header class="mem-cover"><img src="icons/logo.png" alt=""><p class="mem-kick">Club Ciclista Monzón · equipo de competición</p><h2>Memoria de la temporada ${year}</h2>${span ? `<p class="mem-span">${esc(span)}</p>` : ''}
+        <div class="mem-cover-n"><div><b>${t.races}</b><span>carreras</span></div><div><b>${t.runners}</b><span>corredores</span></div><div><b>${t.podiums}</b><span>podios</span></div><div><b>${t.km ? kmShort(t.km) : '—'}</b><span>km</span></div></div></header>
+      <nav class="mem-toc no-print-links" aria-label="Índice"><h3>Índice</h3><ol>${CH.map((c, k) => `<li><a href="#" data-act="goto-sec" data-to="mem-${c.id}"><span>${num(k)}</span>${esc(c.title)}</a></li>`).join('')}</ol></nav>
+      ${CH.map((c, k) => `<section class="mem-ch" id="mem-${c.id}"><header class="mem-ch-h"><span class="mem-n">${num(k)}</span>${ico(c.ic)}<h2>${esc(c.title)}</h2></header>${c.lead ? `<p class="mem-lead">${c.lead}</p>` : ''}${c.body}</section>`).join('')}
+      <footer class="mem-foot"><img src="icons/logo.png" alt=""><p><b>Club Ciclista Monzón</b> · Memoria ${year}<br>Datos del club a ${dateEs(todayISO())}. Desplazamientos y costes de viaje son estimaciones.</p></footer>
     </article>`, { back: '#/resumen' });
 }
 
