@@ -1505,7 +1505,13 @@ function runnerRegCard(g, opts = {}) {
   const d = S.runnerData, me = d.me, today = d.today || todayISO();
     const mine = g.entries.find((e) => e.runner_id === me.id);
     const open = g.date >= today;
-    const edit = !S.preview ? `<div class="edit-row"><span class="muted">${g.mine_created ? 'Añadida por ti' : 'Datos de la carrera'}</span><a class="edit-btn" href="#/editar/${g.id}" aria-label="Editar los datos de ${esc(g.name)}">${ico('pen')}Editar datos</a></div>` : '';
+    // una sola fila de herramientas con iconos: valorar, web, editar datos y suspender (antes eran cuatro filas con frases)
+    const canSusp = !S.preview && g.date >= pastLimit();
+    const tools = `<div class="rc-tools">${open && !mine && !g.suspended && !S.preview ? starBtn(g, 'w-add-reg', ['id', g.id]) : ''}${g.url ? `<a class="rc-tool lab" href="${esc(g.url)}" target="_blank" rel="noopener noreferrer" title="Web de la carrera">${ico('ext')}<span>Web</span></a>`
+      : open && !g.suspended && !S.preview ? `<button type="button" class="rc-tool" data-act="r-web" data-id="${g.id}" aria-label="Añadir la web de la carrera" title="Añadir la web (para todos)">${ico('link')}</button>` : ''}
+      <span class="rc-tools-sp"></span>${!S.preview ? `<a class="rc-tool" href="#/editar/${g.id}" aria-label="Editar los datos de ${esc(g.name)}" title="Editar datos${g.mine_created ? ' (la añadiste tú)' : ''}">${ico('pen')}</a>` : ''}${canSusp ? (g.suspended
+        ? `<button type="button" class="rc-tool" data-act="r-suspend" data-id="${g.id}" data-v="0" aria-label="Se vuelve a celebrar" title="Se vuelve a celebrar">${ico('check')}</button>`
+        : `<button type="button" class="rc-tool" data-act="r-suspend" data-id="${g.id}" data-v="1" aria-label="Marcar como suspendida" title="Marcar como suspendida">${ico('ban')}</button>`) : ''}</div>`;
     const mates = g.entries.length ? `<div class="club-row"><span class="count">${ico('users')}${g.entries.length} del club</span><ul class="people">${g.entries.map((e) =>
       `<li class="${e.runner_id === me.id ? 'me' : ''}${e.paid ? ' paid' : ''}">${esc(e.name)}${e.category ? ` <small>${esc(e.category)}</small>` : ''}${e.paid ? `<span class="paid-mark" title="Ha pagado la inscripción" aria-label="ha pagado la inscripción">${ico('euro')}</span>` : ''}</li>`).join('')}</ul></div>` : '';
     const key = `rc-${g.id}`, isOpen = !!opts.open || !!S.open?.[key];
@@ -1516,8 +1522,7 @@ function runnerRegCard(g, opts = {}) {
       !open && !g.suspended && !mine ? `<span class="rc-chip off">${ico('flag')}Ya disputada</span>` : '',
     ].filter(Boolean).join('');
     const body = `
-      <div class="rc-tags">${open && !mine && !g.suspended && !S.preview ? starBtn(g, 'w-add-reg', ['id', g.id]) : ''}</div>${typeTag(g)}
-      ${g.suspended ? `<p class="state-tag">${ico('ban', 't-i')}Carrera suspendida</p>` : ''}
+      ${tools}${typeTag(g)}
       ${open || g.suspended ? '' : `<p class="state-tag">${mine && g.my_result ? `${ico('check', 't-i')}Ya disputada · tu resultado está enviado` : `${ico('flag', 't-i')}Ya disputada · pendiente de resultados`} ${weekChip(g.end_date || g.date, today)}</p>
         ${mine && !S.preview ? (g.my_result ? `<p class="mine-created">Tu resultado: ${g.my_result.position}º (enviado) · <a href="#/resultado/reg_${g.id}">${ico('pen', 't-i')}Cambiar</a></p>`
           : `<p class="row"><a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>
@@ -1526,12 +1531,9 @@ function runnerRegCard(g, opts = {}) {
            <button class="btn primary" data-act="r-join" data-id="${g.id}">La hice: apuntarme</button></div>` : ''}`}
       ${g.notes ? `<p class="notes">${esc(g.notes)}</p>` : ''}
       ${myPubLine(g)}
-      ${webRow(g, open && !g.suspended)}
       ${opts.notes && mine && !S.preview ? noteBlock(g) : ''}
       ${opts.notes ? completeBox(g, 'reg', g.id) : ''}
-      ${S.preview || g.date < pastLimit() ? '' : g.suspended ? `<button type="button" class="btn ghost small susp-btn" data-act="r-suspend" data-id="${g.id}" data-v="0">${ico('check')}Se vuelve a celebrar</button>` : `<button type="button" class="btn ghost small susp-btn" data-act="r-suspend" data-id="${g.id}" data-v="1">${ico('ban')}Carrera suspendida</button>`}
       ${mates}
-      ${edit}
       ${mine && !S.preview && !g.suspended && (open || !g.my_result) ? `<button type="button" class="pay-btn${mine.paid ? ' on' : ''}" data-act="r-paid" data-id="${g.id}">${ico('euro')}<span>${mine.paid ? `Pagada${mine.paid_amount != null ? ' · ' + euros(mine.paid_amount) : ''}` : 'Marcar como pagada'}</span></button>` : ''}
       ${!open || g.suspended ? '' : mine
         ? `<div class="joined-acts">
