@@ -1463,3 +1463,42 @@ export function teamMoves(moves, now = new Date(), weeks = 8) {
   const recent = bars.slice(-4).reduce((n, b) => n + b.n, 0), before = bars.slice(-8, -4).reduce((n, b) => n + b.n, 0);
   return { list, bars, total: bars.reduce((n, b) => n + b.n, 0), recent, before, trend: recent - before };
 }
+
+/**
+ * «Estar al día» del corredor: lo que le falta por hacer (resultados sin poner, crónicas sin pasar y pagos de inscripciones
+ * que ya tocan), lo siguiente más urgente y la racha de carreras seguidas con todo hecho.
+ *  · `d`: datos del corredor (me, registrations, my_results); `chronDone`: Set de crónicas pasadas por cualquiera; `year`: temporada de las crónicas.
+ *  · Pagos: solo cuentan si la carrera es dentro de `payDays` días (una semana), para no poner rojo por carreras lejanas.
+ *  · Racha: de la carrera más reciente hacia atrás, cuántas seguidas tienen resultado y crónica. Las de la última semana
+ *    sin terminar no la rompen (hay una semana de plazo); la primera más antigua sin terminar sí.
+ */
+export function alDia(d, chronDone, today, year = null, { payDays = 7, graceDays = 7 } = {}) {
+  const me = d.me?.id, diff = (a, b) => Math.round((Date.parse(String(a).slice(0, 10) + 'T12:00:00Z') - Date.parse(String(b).slice(0, 10) + 'T12:00:00Z')) / 864e5);
+  const mineReg = (d.registrations || []).filter((g) => (g.entries || []).some((e) => e.runner_id === me));
+  const out = [];
+  for (const g of mineReg.filter((x) => x.date < today && !x.suspended && !x.my_result)) out.push({ type: 'result', id: g.id, kind: 'reg', name: g.name, date: g.date, age: diff(today, g.end_date || g.date) });
+  for (const r of (d.my_results || []).filter((x) => !x.position)) out.push({ type: 'result', id: r.race_id, kind: 'race', name: r.name, date: r.date, age: diff(today, r.end_date || r.date) });
+  const status = chronDone instanceof Set ? chronicleStatus(d, chronDone, today, year) : { pending: [] };
+  for (const x of status.pending) out.push({ type: 'cron', id: x.id, kind: x.kind, name: x.name, date: x.date, age: diff(today, x.end_date || x.date) });
+  for (const g of mineReg.filter((x) => x.date >= today && !x.suspended)) {
+    const e = g.entries.find((y) => y.runner_id === me), n = diff(g.date, today);
+    if (e && !e.paid && n <= payDays) out.push({ type: 'pay', id: g.id, kind: 'reg', name: g.name, date: g.date, in: n });
+  }
+  const counts = { result: out.filter((x) => x.type === 'result').length, cron: out.filter((x) => x.type === 'cron').length, pay: out.filter((x) => x.type === 'pay').length };
+  // lo siguiente: primero lo que ya se ha pasado (la más antigua primero), luego los pagos más cercanos
+  const rank = { result: 0, cron: 1, pay: 2 };
+  const next = [...out].sort((a, b) => rank[a.type] - rank[b.type] || (a.type === 'pay' ? a.in - b.in : b.age - a.age))[0] || null;
+  // racha
+  const all = chronicleStatus(d, chronDone instanceof Set ? chronDone : new Set(), today, null);
+  const items = [...all.pending, ...all.done].map((x) => {
+    const hasResult = x.kind === 'race' ? !!(d.my_results || []).find((r) => r.race_id === x.id)?.position : !!(d.registrations || []).find((g) => g.id === x.id)?.my_result;
+    return { date: x.end_date || x.date, complete: hasResult && !!chronDone?.has?.(x.key) };
+  }).sort((a, b) => b.date.localeCompare(a.date));
+  let streak = 0;
+  for (const it of items) {
+    if (it.complete) { streak++; continue; }
+    if (diff(today, it.date) <= graceDays) continue;   // todavía está en plazo: no rompe la racha ni suma
+    break;
+  }
+  return { counts, total: counts.result + counts.cron + counts.pay, items: out, next, streak };
+}

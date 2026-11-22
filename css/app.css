@@ -2491,3 +2491,16 @@ details.rcard .rc-body .wc-acts { margin-top: .5rem; }
 .rc-body .complete-box { margin: .5rem 0 0; padding: .55rem .7rem; box-shadow: none; border-radius: var(--r-md); background: color-mix(in srgb, var(--warn) 7%, var(--card)); border: 1px dashed color-mix(in srgb, var(--warn) 55%, var(--line)); }
 .rc-body .complete-box h3 { margin: 0 0 .2rem; font-size: var(--fs-3); }
 .rc-body .complete-box .stack { gap: .5rem; }
+
+/* v239: panel «estar al día»: lo siguiente, racha de carreras al día y barra del mínimo */
+.sum-todo { margin-top: .6rem; display: grid; gap: .45rem; }
+.sum-next { display: flex; align-items: center; gap: .5rem; padding: .5rem .65rem; border-radius: var(--r-md); text-decoration: none; color: var(--text); font-size: var(--fs-3); line-height: 1.25; border: 1px solid var(--line); background: var(--bg); }
+.sum-next > span { flex: 1; min-width: 0; } .sum-next .ico { width: 18px; height: 18px; flex: none; } .sum-next .ico:last-child { color: var(--muted); width: 16px; height: 16px; }
+.sum-next.has { background: color-mix(in srgb, var(--bad-2) 8%, var(--card)); border-color: color-mix(in srgb, var(--bad-2) 40%, var(--line)); } .sum-next.has > .ico:first-child { color: var(--bad-2); }
+.sum-next.ok { background: color-mix(in srgb, var(--ok) 9%, var(--card)); border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); } .sum-next.ok > .ico:first-child { color: var(--ok); }
+.sum-meta { display: flex; align-items: center; justify-content: space-between; gap: .6rem; flex-wrap: wrap; font-size: var(--fs-2); }
+.sum-meta:empty { display: none; }
+.sum-streak { display: inline-flex; align-items: center; gap: .3rem; padding: .15rem .6rem; border-radius: 999px; font-weight: 700; background: color-mix(in srgb, var(--warn) 16%, var(--card)); border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line)); white-space: nowrap; }
+.sum-min { display: flex; align-items: center; gap: .45rem; flex: 1; min-width: 150px; color: var(--muted); text-decoration: none; justify-content: flex-end; } .sum-min b { color: var(--text); }
+.sum-min .mbar { flex: 1; max-width: 90px; height: 7px; border-radius: 99px; background: var(--line); overflow: hidden; } .sum-min .mbar i { display: block; height: 100%; background: var(--warn); border-radius: 99px; }
+.sum-min.ok .mbar i { background: var(--ok-2); }

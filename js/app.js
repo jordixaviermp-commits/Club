@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError, cleanWeb } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, disciplineKey, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   teamMoves, parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  directorBoard, raceImpact, tierRanges, nextTeamRace, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
+  directorBoard, raceImpact, alDia, tierRanges, nextTeamRace, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -1150,10 +1150,12 @@ function myRacesCard(d, afterSummary = () => '') {
   const pending = pastReg.filter((g) => !g.my_result);   // les falta poner el puesto
   const noPos = results.filter((r) => !r.position);          // carreras ya en resultados donde participó pero no consta su puesto: también le falta ponerlo
   const pendingN = pending.length + noPos.length;
-  // crónicas sin pasar (otra obligación del contrato): también cuentan como pendientes
-  const cronN = S.chron instanceof Set ? chronicleStatus(d, S.chron, today, S.myYear || new Date().getFullYear()).pending.length : 0;
-  const todoN = pendingN + cronN, pl = (n, a, b) => (n === 1 ? a : b);
-  const todoTxt = pendingN && cronN ? `${pendingN} resultado${pl(pendingN, '', 's')} y ${cronN} crónica${pl(cronN, '', 's')}` : pendingN ? (pendingN === 1 ? 'falta tu resultado' : `faltan ${pendingN} resultados`) : cronN ? `falta${pl(cronN, '', 'n')} ${cronN} crónica${pl(cronN, '', 's')}` : 'todo al día';
+  // «al día»: resultados sin poner, crónicas sin pasar y pagos que ya tocan (carrera dentro de una semana), lo siguiente y la racha
+  const ad = alDia(d, S.chron instanceof Set ? S.chron : null, today, S.myYear || new Date().getFullYear());
+  const todoN = ad.total, pl = (n, a, b) => (n === 1 ? a : b);
+  const parts = [ad.counts.result ? `${ad.counts.result} resultado${pl(ad.counts.result, '', 's')}` : '', ad.counts.cron ? `${ad.counts.cron} crónica${pl(ad.counts.cron, '', 's')}` : '', ad.counts.pay ? `${ad.counts.pay} pago${pl(ad.counts.pay, '', 's')}` : ''].filter(Boolean);
+  const todoTxt = !parts.length ? 'todo al día' : parts.length === 1 ? `falta${pl(ad.total, '', 'n')} ${parts[0]}` : `${parts.slice(0, -1).join(', ')} y ${parts[parts.length - 1]}`;
+  const todoTo = ad.counts.result || !ad.total ? 'sec-pend' : ad.counts.cron ? 'sec-chro' : 'sec-next';
   const sent = pastReg.filter((g) => g.my_result);        // ya puso su puesto: cuenta para el bono aunque la dirección aún no la haya pasado a resultados
   const upcoming = mineReg.filter((g) => g.date >= today && !g.suspended).sort((a, b) => a.date.localeCompare(b.date));
   const cancelled = mineReg.filter((g) => g.suspended).sort((a, b) => a.date.localeCompare(b.date));
@@ -1179,8 +1181,16 @@ function myRacesCard(d, afterSummary = () => '') {
     <div class="tiles">
       <a href="#" class="tile t-next" data-act="goto-sec" data-to="sec-next"><span class="t-n">${upcomingYear.length}</span><span class="t-l">Próximas</span>${ico('cal', 't-ico')}<small>inscrito</small></a>
       <a href="#" class="tile t-done" data-act="goto-sec" data-to="sec-done"><span class="t-n">${list.length + sent.filter((g) => yearOf(g.date) === S.myYear).length}</span><span class="t-l">Hechas</span>${ico('ok', 't-ico')}<small>${days !== list.length ? `${days} días de competición` : 'con resultado'}</small></a>
-      <a href="#" class="tile t-pend${todoN ? ' alert' : ''}" data-act="goto-sec" data-to="${pendingN || !cronN ? 'sec-pend' : 'sec-chro'}"><span class="t-n">${todoN}</span><span class="t-l">Pendientes</span>${ico('flag', 't-ico')}<small>${todoTxt}</small></a>
+      <a href="#" class="tile t-pend${todoN ? ' alert' : ''}" data-act="goto-sec" data-to="${todoTo}"><span class="t-n">${todoN}</span><span class="t-l">Pendientes</span>${ico('flag', 't-ico')}<small>${todoTxt}</small></a>
     </div>
+    ${(() => { const n = ad.next, ageTxt = (x) => (x.age <= 7 ? `te ${7 - x.age === 1 ? 'queda 1 día' : `quedan ${7 - x.age} días`}` : `hace ${x.age} días`);
+      const txt = !n ? (upcoming[0] ? `Estás al día. Lo próximo: <b>${esc(upcoming[0].name)}</b> · ${dleft(upcoming[0])}` : 'Estás al día.')
+        : n.type === 'result' ? `Pon tu puesto en <b>${esc(n.name)}</b> · ${ageTxt(n)}` : n.type === 'cron' ? `Pasa la crónica de <b>${esc(n.name)}</b> · ${ageTxt(n)}` : `Marca el pago de <b>${esc(n.name)}</b> · ${n.in === 0 ? 'es hoy' : n.in === 1 ? 'es mañana' : `en ${n.in} días`}`;
+      const to = !n ? (upcoming[0] ? 'sec-hero' : 'sec-pend') : n.type === 'result' ? 'sec-pend' : n.type === 'cron' ? 'sec-chro' : 'sec-next';
+      const bs = d.bonus ? (() => { const b = d.bonus, cfg = bonusConfigFor(b.config ? { [b.year]: b.config } : {}, b.year), st = bonusStatus(b.done, cfg, b.contract || (b.nuevo ? 'nuevo' : null), b.extra || 0, b.suspended || 0); return { n: st.count + st.suspended, min: st.minimum, ok: st.reachesMinimum }; })() : null;
+      return `<div class="sum-todo"><a href="#" class="sum-next${n ? ' has' : ' ok'}" data-act="goto-sec" data-to="${to}">${ico(n ? 'flag' : 'ok')}<span>${txt}</span>${ico('go')}</a>
+        <div class="sum-meta">${ad.streak ? `<span class="sum-streak" title="Carreras seguidas con tu resultado puesto y tu crónica pasada">🔥 <b>${ad.streak}</b> ${pl(ad.streak, 'carrera seguida', 'carreras seguidas')} al día</span>` : ''}
+          ${bs && bs.min ? `<a href="${runnerHref('contrato')}" class="sum-min${bs.ok ? ' ok' : ''}" title="Carreras para el mínimo del contrato"><span class="mbar"><i style="width:${Math.min(100, Math.round((bs.n / bs.min) * 100))}%"></i></span><span><b>${bs.n}</b> de ${bs.min} del mínimo</span></a>` : ''}</div></div>`; })()}
     ${cancelled.length ? `<a href="#" class="canc-line" data-act="goto-sec" data-to="sec-canc">${ico('ban')}<span><b>${cancelled.length}</b> ${cancelled.length === 1 ? 'carrera suspendida' : 'carreras suspendidas'}</span>${ico('go')}</a>` : ''}
     ${(() => { const sentYear = sent.filter((g) => yearOf(g.date) === S.myYear).map((g) => ({ position: g.my_result.position, time_seconds: g.my_result.time_seconds })), allMine = [...list, ...sentYear];   // los enviados también cuentan
       const pod = [1, 2, 3].map((k) => allMine.filter((x) => x.position === k).length), NAMES = [['Oro', 'Oros'], ['Plata', 'Platas'], ['Bronce', 'Bronces']];
