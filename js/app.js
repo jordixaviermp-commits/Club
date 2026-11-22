@@ -2437,8 +2437,11 @@ function movementsCard() {
   const l = S.movs;
   if (l === undefined) return '';
   if (l === null) return `<section class="card warn"><h2>Movimientos de la app</h2><p class="hint">Falta ejecutar en Supabase <code>supabase/cambios/2026-11-22-movimientos.sql</code>.</p></section>`;
-  return `<h2 class="sec-h">${ico('clock')} Movimientos</h2>
-    ${l.length ? `<ul class="mv-list">${l.slice(0, 6).map(movRow).join('')}</ul><p class="center"><a class="btn small" href="#/movimientos">Ver todos los movimientos${ico('go')}</a></p>` : '<p class="empty small">Todavía no hay movimientos.</p>'}`;
+  // plegado por defecto: una línea con lo último; al tocar se abren los 6 más recientes y el enlace a todos
+  const t = todayISO(), hoy = l.filter((m) => String(m.at).slice(0, 10) === t).length, first = l[0];
+  return `<details class="card mv-fold" data-open-key="mov"${S.open?.mov ? ' open' : ''}><summary><span class="mv-fold-t">${ico('clock')}<b>Movimientos</b>${hoy ? `<span class="mv-n">${hoy} hoy</span>` : ''}</span>
+      <span class="mv-fold-s">${first ? `<b>${esc(first.who)}</b> ${esc(first.text)} · ${esc(timeAgo(first.at))}` : 'Todavía no hay movimientos'}</span><span class="pulse-chev" aria-hidden="true">${ico('chevd')}</span></summary>
+    ${l.length ? `<ul class="mv-list">${l.slice(0, 6).map(movRow).join('')}</ul><p class="center"><a class="btn small" href="#/movimientos">Ver todos los movimientos${ico('go')}</a></p>` : ''}</details>`;
 }
 function viewMovements() {
   const l = S.movs, f = S.movFilter || 'all', shown = (l || []).filter((m) => f === 'all' || m.kind === f);
