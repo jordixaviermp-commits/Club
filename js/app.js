@@ -232,6 +232,7 @@ async function loadStories() {
     try { const r = await fetch(url, { cache: 'no-cache' }); if (r.ok) { log = parseStoryLog(await r.json()); break; } } catch { /* sin conexión o sin registro todavía */ }
   }
   S.stories = log || { desde: null, byKey: new Map(), none: true };
+  if (S.runnerData && !S.session?.isAdmin && ['', 'mi'].includes(parseRoute().view) && !S.draft && !searchActive()) render();
   if ((['inscripciones', 'carreras', 'publicaciones', 'avisos', 'redes', ''].includes(parseRoute().view) && S.session?.isAdmin && !S.draft) || (S.runnerData && S.chroTab === 'imp' && !S.draft)) render();
 }
 
@@ -290,6 +291,7 @@ async function onRoute() {
       if (sub === 'nueva' && !S.team) loadTeam();
       if (sub === 'carrera' && !S.team) loadTeam();
       if (sub === 'mi' && !S.team) loadTeam();
+      if ((sub === '' || sub === 'mi') && !S.preview) loadImpact();
     }
   }
   if (S.session?.isAdmin && view === 'historial') loadChanges();
@@ -314,6 +316,16 @@ async function loadChron() {
   S.chronBy = null;
   try { const keys = await api.runnerChronicles(code); S.chron = Array.isArray(keys) ? new Set(keys) : null; } catch { S.chron = null; }
 }
+/** Lo que el club ha publicado en redes sobre una carrera mía: historia previa (automática o marcada a mano) y post de resultados. */
+const myPub = (g) => {
+  if (!g || (Array.isArray(g.entries) && !g.entries.some((e) => e.runner_id === S.runnerData?.me?.id))) return null;
+  const hit = S.stories?.byKey?.get?.(postKeyOf(g)), manual = S.impact?.posted?.has?.(postKeyOf(g)), res = S.impact?.posted?.has?.(resKeyOf(g));
+  if (!hit && !manual && !res) return null;
+  return { story: !!(hit || manual), date: hit?.publicada || null, res: !!res };
+};
+const myPubChip = (g) => { const p = myPub(g); return p ? `<span class="rc-pub" title="${p.story ? 'Historia publicada' : ''}${p.story && p.res ? ' · ' : ''}${p.res ? 'Post de resultados publicado' : ''}" aria-label="Publicado en redes">${ico('camera')}${ico('check', 'rc-pub-ok')}</span>` : ''; };
+const myPubLine = (g) => { const p = myPub(g); if (!p) return '';
+  return `<div class="rc-pubs">${p.story ? `<p><span class="rc-pub">${ico('camera')}${ico('check', 'rc-pub-ok')}</span>Historia publicada${p.date ? ' el ' + esc(shortDate(p.date)) : ''}: sale gracias a tu inscripción.</p>` : ''}${p.res ? `<p><span class="rc-pub">${ico('image')}${ico('check', 'rc-pub-ok')}</span>Post de resultados publicado.</p>` : ''}</div>`; };
 /** «Impacto en redes» del corredor: publicaciones del club y cifras de Instagram de 30 días. null = falta el SQL; undefined = sin cargar. */
 async function loadImpact() {
   if (S.impact !== undefined && S.impact !== 'loading') return;
@@ -1098,8 +1110,8 @@ const mrow = (g, { below = '', end = '', hero = false, side = '' } = {}) => {
   if (g.entries) return `<li class="mrow-fold${hero ? ' hero' : ''}">${badge}${runnerRegCard(g, { cls: hero ? 'hero' : '', noPast: true, notes: true })}</li>`;
   // carrera ya disputada con mi resultado (la ficha de «resultados» + lo mío)
   const me = S.runnerData?.me?.id, race = S.team?.races?.find((x) => x.id === g.race_id), count = (race?.results || []).length;
-  const body = `${race ? doneRaceBody(race, { meId: me }) : typeTag(g)}${below ? `<div class="mrow-below">${below}</div>` : ''}${end ? `<div class="mrow-acts">${end}</div>` : ''}`;
-  return `<li class="mrow-fold">${raceFold(g, { key: `mr-r${g.race_id}`, side: side || (race ? `<span class="rc-n" title="Del club" aria-label="${count} del club">${ico('users')}${count}</span>` : ''), body, noPast: true, cls: 'done-race' })}</li>`;
+  const body = `${myPubLine({ ...g, entries: undefined })}${race ? doneRaceBody(race, { meId: me }) : typeTag(g)}${below ? `<div class="mrow-below">${below}</div>` : ''}${end ? `<div class="mrow-acts">${end}</div>` : ''}`;
+  return `<li class="mrow-fold">${raceFold(g, { key: `mr-r${g.race_id}`, side: `${myPubChip({ ...g, entries: undefined })}${side || (race ? `<span class="rc-n" title="Del club" aria-label="${count} del club">${ico('users')}${count}</span>` : '')}`, body, noPast: true, cls: 'done-race' })}</li>`;
 };
 
 /** «Mis carreras»: sus carreras con resultados por temporada y las apuntadas pendientes de resultado. */
@@ -1472,6 +1484,7 @@ function runnerRegCard(g, opts = {}) {
         ${!mine && g.date >= pastLimit() ? `<div class="row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">La hice: apuntarme</button></div>` : ''}`}
       ${g.notes ? `<p class="notes">${esc(g.notes)}</p>` : ''}
+      ${myPubLine(g)}
       ${webRow(g, open && !g.suspended)}
       ${opts.notes && mine && !S.preview ? noteBlock(g) : ''}
       ${S.preview || g.date < pastLimit() ? '' : g.suspended ? `<button type="button" class="btn ghost small susp-btn" data-act="r-suspend" data-id="${g.id}" data-v="0">${ico('check')}Se vuelve a celebrar</button>` : `<button type="button" class="btn ghost small susp-btn" data-act="r-suspend" data-id="${g.id}" data-v="1">${ico('ban')}Carrera suspendida</button>`}
@@ -1486,7 +1499,7 @@ function runnerRegCard(g, opts = {}) {
         : `<div class="row join-row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">Apuntarme</button></div>`}
     `;
-    return raceFold(g, { key, id: key, mine: !!(mine && !g.suspended), open: !!opts.open, cls: opts.cls || '', noPast: !!opts.noPast, side: `${state}<span class="rc-n" title="Inscritos del club" aria-label="${g.entries.length} del club inscrito${g.entries.length === 1 ? '' : 's'}">${ico('users')}${g.entries.length}</span>`, body, today });
+    return raceFold(g, { key, id: key, mine: !!(mine && !g.suspended), open: !!opts.open, cls: opts.cls || '', noPast: !!opts.noPast, side: `${myPubChip(g)}${state}<span class="rc-n" title="Inscritos del club" aria-label="${g.entries.length} del club inscrito${g.entries.length === 1 ? '' : 's'}">${ico('users')}${g.entries.length}</span>`, body, today });
   }
 
 /** Barra de «participaciones futuras» del equipo: cuántas inscripciones hay ya en las próximas carreras, por mes (para animar a apuntarse y a crear carreras). */

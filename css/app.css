@@ -2480,3 +2480,9 @@ details.rcard .rc-body .wc-acts { margin-top: .5rem; }
 .rc-note-h { display: flex; align-items: center; gap: .4rem; } .rc-note-h .ico { width: 15px; height: 15px; color: var(--warn-t); } .rc-note-h b { font-size: var(--fs-3); }
 .rc-note-h .btn { margin-left: auto; min-height: 30px; padding: .15rem .65rem; }
 .rc-note-t { margin: .3rem 0 0; font-size: var(--fs-3); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* v235: marca ✓ de «publicado en redes» en mis carreras (historia previa gracias a tu inscripción y post de resultados) */
+.rc-pub { display: inline-flex; align-items: center; gap: 1px; padding: .12rem .4rem; border-radius: 999px; background: color-mix(in srgb, var(--ok) 14%, var(--card)); color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 45%, var(--line)); flex: none; }
+.rc-pub .ico { width: 13px; height: 13px; } .rc-pub .rc-pub-ok { width: 11px; height: 11px; stroke-width: 3.2; }
+.rc-pubs p { display: flex; align-items: center; gap: .5rem; margin: .25rem 0; font-size: var(--fs-3); }
+.rc-side:has(.rc-pub) { flex-wrap: nowrap; }
