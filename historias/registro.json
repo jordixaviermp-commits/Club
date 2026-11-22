@@ -1,6 +1,19 @@
 {
   "desde": "2026-11-15",
   "historias": [
-    { "carrera": "Prova2", "fecha": "2026-11-17", "pagina": 1, "publicada": "2026-11-15", "media_id": "17913130587584477" }
+    {
+      "carrera": "Prova2",
+      "fecha": "2026-11-17",
+      "pagina": 1,
+      "publicada": "2026-11-15",
+      "media_id": "17913130587584477"
+    },
+    {
+      "carrera": "Prova 3",
+      "fecha": "2026-11-24",
+      "pagina": 1,
+      "publicada": "2026-11-22",
+      "media_id": "18119700139818170"
+    }
   ]
 }
