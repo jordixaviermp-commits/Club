@@ -1181,7 +1181,10 @@ function myRacesCard(d, afterSummary = () => '') {
   const cancelled = mineReg.filter((g) => g.suspended).sort((a, b) => a.date.localeCompare(b.date));
   const years = [...new Set([new Date().getFullYear(), ...results.map((r) => yearOf(r.date))])].sort((a, b) => b - a);
   if (!years.includes(S.myYear)) S.myYear = years[0];
-  const upcomingYear = upcoming.filter((g) => yearOf(g.date) === S.myYear);   // el recuadro es de UNA temporada: las de otros años no se cuentan ahí
+  const upcomingYear = upcoming.filter((g) => yearOf(g.date) === S.myYear);
+  // «Próximas» cuenta TODAS las carreras a las que estás inscrito (también las del año siguiente) y desglosa las de otras temporadas
+  const upOther = upcoming.filter((g) => yearOf(g.date) !== S.myYear), upOtherYears = [...new Set(upOther.map((g) => yearOf(g.date)))].sort();
+  const upSub = upOther.length ? `${upcomingYear.length} de ${S.myYear} + ${upOther.length} de ${upOtherYears.length === 1 ? upOtherYears[0] : 'más adelante'}` : 'inscrito';
   const list = results.filter((r) => yearOf(r.date) === S.myYear);
   const days = list.reduce((n, r) => n + numDays(r.date, r.end_date), 0);
   const row = (r) => {
@@ -1199,7 +1202,7 @@ function myRacesCard(d, afterSummary = () => '') {
   return `
   <section class="card sum-card"><div class="sum-head"><h2>Mis carreras ${S.myYear}</h2>${ico('trophy', 'sum-trophy')}</div>
     <div class="tiles">
-      <a href="#" class="tile t-next" data-act="goto-sec" data-to="sec-next"><span class="t-n">${upcomingYear.length}</span><span class="t-l">Próximas</span>${ico('cal', 't-ico')}<small>inscrito</small></a>
+      <a href="#" class="tile t-next" data-act="goto-sec" data-to="sec-next"><span class="t-n">${upcoming.length}</span><span class="t-l">Próximas</span>${ico('cal', 't-ico')}<small>${upSub}</small></a>
       <a href="#" class="tile t-done" data-act="goto-sec" data-to="sec-done"><span class="t-n">${list.length + sent.filter((g) => yearOf(g.date) === S.myYear).length}</span><span class="t-l">Hechas</span>${ico('ok', 't-ico')}<small>${days !== list.length ? `${days} días de competición` : 'con resultado'}</small></a>
       <a href="#" class="tile t-pend${todoN ? ' alert' : ''}" data-act="goto-sec" data-to="${todoTo}"><span class="t-n">${todoN}</span><span class="t-l">Pendientes</span>${ico('flag', 't-ico')}<small>${todoTxt}</small></a>
     </div>
