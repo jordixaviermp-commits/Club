@@ -2551,3 +2551,5 @@ a.sum-streak { text-decoration: none; color: var(--text); }
 .rc-tool.pay { color: color-mix(in srgb, var(--warn-t) 80%, var(--text)); border-style: dashed; border-color: var(--warn); background: color-mix(in srgb, var(--warn) 9%, var(--card)); }
 .rc-tool.pay.on { color: var(--ok); border-style: solid; border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); background: color-mix(in srgb, var(--ok) 12%, var(--card)); }
 .rc-tool.pay .pay-ok { width: 14px; height: 14px; stroke-width: 3; }
+/* botón de «marcar como suspendida» en rojo */
+.rc-tool.susp { color: var(--bad-2); border-color: color-mix(in srgb, var(--bad-2) 45%, var(--line)); background: color-mix(in srgb, var(--bad-2) 8%, var(--card)); }
