@@ -697,6 +697,81 @@ begin
         from registrations g), '[]'::jsonb));
 end $$;
 
+-- Movimientos de la app para la dirección (inscripciones, pagos, crónicas, carreras, resultados, bajas).
+create or replace function public.log_entry_leave()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare v_name text; v_reg text; v_date date; v_admin boolean := public.is_admin();
+begin
+  if current_setting('app.skip_log', true) = 'on' then return old; end if;
+  select g.name, g.date into v_reg, v_date from registrations g where g.id = old.registration_id;
+  if v_reg is null then return old; end if;            -- se ha borrado la carrera entera: ya queda anotado
+  select name into v_name from runners where id = old.runner_id;
+  if v_name is null then return old; end if;
+  if v_admin then
+    perform public.log_change('Dirección', 'registration', old.registration_id, 'baja', format('quitó a %s de %s (%s)', v_name, v_reg, v_date));
+  else
+    perform public.log_change(v_name, 'registration', old.registration_id, 'baja', format('se borró de %s (%s)', v_reg, v_date));
+  end if;
+  return old;
+end $$;
+drop trigger if exists entries_leave_log on public.registration_entries;
+create trigger entries_leave_log after delete on public.registration_entries for each row execute function public.log_entry_leave();
+
+create or replace function public.admin_movements(p_limit int default 300)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'solo_direccion' using errcode = '42501'; end if;
+  return coalesce((
+    select jsonb_agg(m.x order by m.at desc) from (
+      select e.created_at as at, jsonb_build_object('at', e.created_at, 'who', r.name, 'kind', 'inscripcion', 'text', format('se inscribió en %s (%s)', g.name, to_char(g.date, 'DD/MM/YYYY'))) as x
+        from registration_entries e join runners r on r.id = e.runner_id join registrations g on g.id = e.registration_id where e.created_at is not null
+      union all
+      select e.paid_at, jsonb_build_object('at', e.paid_at, 'who', r.name, 'kind', 'pago', 'text', format('marcó como pagada su inscripción en %s', g.name))
+        from registration_entries e join runners r on r.id = e.runner_id join registrations g on g.id = e.registration_id where e.paid_at is not null
+      union all
+      select c.done_at, jsonb_build_object('at', c.done_at, 'who', r.name, 'kind', 'cronica', 'text', format('pasó la crónica de %s (%s)', initcap(split_part(c.race_key, '|', 2)), split_part(c.race_key, '|', 1)))
+        from chronicles c join runners r on r.id = c.runner_id
+      union all
+      select l.at, jsonb_build_object('at', l.at, 'who', l.actor, 'kind',
+               case when l.action = 'baja' then 'baja' when l.entity = 'result' then 'resultado' when l.entity in ('race', 'registration') then 'carrera' else 'otro' end, 'text', l.summary)
+        from change_log l
+      order by at desc limit greatest(1, least(coalesce(p_limit, 300), 1000))
+    ) m), '[]'::jsonb);
+end $$;
+
+grant execute on function public.admin_movements(int) to authenticated;
+revoke execute on function public.admin_movements(int) from anon, public;
+
+-- Clasificación de la racha «al día» (carreras seguidas con resultado puesto y crónica pasada).
+create or replace function public.cron_name_key(t text)
+returns text language sql immutable as $$
+  select btrim(regexp_replace(translate(lower(coalesce(t, '')), 'áàäâãéèëêíìïîóòöôõúùüûñçÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑÇ', 'aaaaaeeeeiiiiooooouuuuncaaaaaeeeeiiiiooooouuuunc'), '\s+', ' ', 'g'))
+$$;
+
+create or replace function public.runner_streaks(p_code text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+begin
+  if not exists (select 1 from runners where code = p_code) then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  return coalesce((
+    with rws as (
+      select res.runner_id, rc.date, coalesce(rc.end_date, rc.date) as last_day,
+             (res.position is not null and exists (select 1 from chronicles c where c.race_key = to_char(rc.date, 'YYYY-MM-DD') || '|' || public.cron_name_key(rc.name))) as complete
+        from results res join races rc on rc.id = res.race_id where res.runner_id is not null
+      union all
+      select e.runner_id, g.date, coalesce(g.end_date, g.date),
+             (e.self_position is not null and exists (select 1 from chronicles c where c.race_key = to_char(g.date, 'YYYY-MM-DD') || '|' || public.cron_name_key(g.name)))
+        from registration_entries e join registrations g on g.id = e.registration_id
+       where g.date < current_date and not g.suspended
+    ), br as (
+      select runner_id, max(date) as d from rws where not complete and last_day < current_date - 7 group by runner_id
+    ), st as (
+      select r.id, r.name, (select count(*) from rws x where x.runner_id = r.id and x.complete
+                              and x.date > coalesce((select b.d from br b where b.runner_id = r.id), date '1900-01-01'))::int as n
+        from runners r
+    )
+    select jsonb_agg(jsonb_build_object('id', id, 'name', name, 'streak', n) order by n desc, name) from st where n > 0), '[]'::jsonb);
+end $$;
+
 -- Notas personales del corredor en cada carrera a la que está inscrito (solo las ve él).
 create table if not exists public.runner_entry_notes (
   runner_id       uuid not null,
@@ -1694,7 +1769,7 @@ grant execute on function public.runner_set_registration_url(text, uuid, text), 
                           public.runner_update_race(text, uuid, jsonb), public.runner_delete_race(text, uuid), public.runner_set_suspended(text, uuid, boolean),
                           public.runner_report_result(text, text, uuid, int, text, text, int),
                           public.runner_documents_list(text), public.runner_get_document(text, uuid), public.runner_contract_template(text), public.runner_get_contract_template(text),
-                          public.runner_team(text), public.runner_team_moves(text), public.runner_notes_list(text), public.runner_note_set(text, uuid, text), public.runner_chronicles(text), public.runner_chronicles_team(text), public.runner_social_impact(text), public.runner_chronicle_set(text, text, boolean),
+                          public.runner_team(text), public.runner_streaks(text), public.runner_team_moves(text), public.runner_notes_list(text), public.runner_note_set(text, uuid, text), public.runner_chronicles(text), public.runner_chronicles_team(text), public.runner_social_impact(text), public.runner_chronicle_set(text, text, boolean),
                           public.runner_leave(text, uuid), public.runner_set_paid(text, uuid, boolean, numeric, date), public.runner_join_race(text, uuid, text),
                           public.runner_set_race_type(text, uuid, text, text), public.runner_propose_circuit(text, text, int, int, text),
                           public.runner_cancel_circuit(text, uuid), public.runner_news(text), public.runner_set_race_details(text, uuid, text, numeric), public.runner_complete_race(text, text, uuid, jsonb), public.auto_promote_registrations(),

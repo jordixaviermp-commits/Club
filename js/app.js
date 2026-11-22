@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError, cleanWeb } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, disciplineKey, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   teamMoves, parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  directorBoard, raceImpact, tierRanges, nextTeamRace, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
+  directorBoard, raceImpact, alDia, tierRanges, nextTeamRace, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -292,9 +292,11 @@ async function onRoute() {
       if (sub === 'carrera' && !S.team) loadTeam();
       if (sub === 'mi' && !S.team) loadTeam();
       if ((sub === '' || sub === 'mi') && !S.preview) loadImpact();
+      if ((sub === 'mi' || sub === 'equipo') && !S.preview) loadStreaks();
     }
   }
   if (S.session?.isAdmin && view === 'historial') loadChanges();
+  if (S.session?.isAdmin && ['', 'hoy', 'movimientos'].includes(view)) loadMovements();
   if (S.session?.isAdmin && ['resumen', 'temporada', 'calidad', 'memoria'].includes(view)) geocodeMissing();
   if (S.session?.isAdmin && view === 'corredores' && id && RFILTERS.some(([f]) => f === id)) S.rfilter = id;
   if (S.session?.isAdmin) {
@@ -316,6 +318,23 @@ async function loadChron() {
   S.chronBy = null;
   try { const keys = await api.runnerChronicles(code); S.chron = Array.isArray(keys) ? new Set(keys) : null; } catch { S.chron = null; }
 }
+/** Clasificación de la racha «al día» de todo el club (null = falta el SQL). */
+async function loadStreaks() {
+  if (S.preview || !S.code) return;
+  let r = null; try { r = await api.runnerStreaks(S.code); } catch { r = null; }
+  S.streaks = Array.isArray(r) ? r : null;
+  if (S.runnerData && ['mi', 'equipo'].includes(parseRoute().view) && !S.draft) render();
+}
+/** Posición en la clasificación (los empates comparten puesto). */
+const streakRows = () => { let pos = 0, last = null; return (Array.isArray(S.streaks) ? S.streaks : []).map((x, i) => { if (x.streak !== last) { pos = i + 1; last = x.streak; } return { ...x, pos }; }); };
+function streakBoard(meId) {
+  const rows = streakRows(); if (!rows.length) return '';
+  const li = (x) => `<li class="${x.id === meId ? 'me' : ''}"><span class="sb-pos">${x.pos <= 3 ? medal(x.pos) : x.pos}</span><span class="sb-nm">${esc(x.name)}${x.id === meId ? ' <small>(tú)</small>' : ''}</span><b>🔥 ${x.streak}</b></li>`;
+  const top = rows.slice(0, 5), rest = rows.slice(5), mine = rows.find((x) => x.id === meId), mineOut = mine && mine.pos > top[top.length - 1].pos && !top.includes(mine);
+  return `<section class="card rs-card streak-board" id="sec-racha"><h2>🔥 Rachas al día</h2>
+    <p class="hint">Carreras seguidas, de la más reciente hacia atrás, con tu resultado puesto y la crónica pasada. Las de la última semana sin terminar no rompen la racha.</p>
+    <ol class="sb-list">${top.map(li).join('')}${mineOut ? `<li class="sb-gap" aria-hidden="true">···</li>${li(mine)}` : ''}</ol>
+    ${rest.length ? `<details class="sb-more" data-open-key="sbmore"${S.open?.sbmore ? ' open' : ''}><summary>Ver los ${rest.length} restantes</summary><ol class="sb-list" start="${top.length + 1}">${rest.map(li).join('')}</ol></details>` : ''}</section>`; }
 /** Lo que el club ha publicado en redes sobre una carrera mía: historia previa (automática o marcada a mano) y post de resultados. */
 const myPub = (g) => {
   if (!g || (Array.isArray(g.entries) && !g.entries.some((e) => e.runner_id === S.runnerData?.me?.id))) return null;
@@ -355,7 +374,7 @@ const ADMIN_TABS = [
   ['redes', 'Redes', 'M18 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM8.6 13.5l6.8 4M15.4 6.5l-6.8 4'],
 ];
 /** Pestaña de la dirección a la que pertenece cada pantalla (y su color). */
-const ADMIN_GROUP = { '': 'hoy', hoy: 'hoy', avisos: 'hoy', mensajes: 'hoy', calidad: 'hoy', actividad: 'hoy', noticias: 'hoy', historial: 'hoy',
+const ADMIN_GROUP = { '': 'hoy', hoy: 'hoy', movimientos: 'hoy', avisos: 'hoy', mensajes: 'hoy', calidad: 'hoy', actividad: 'hoy', noticias: 'hoy', historial: 'hoy',
   inscripciones: 'inscripciones', carreras: 'inscripciones', federaciones: 'inscripciones',
   corredores: 'corredores', contratos: 'corredores', computo: 'corredores', informe: 'corredores', bonos: 'corredores', corredor: 'corredores', docs: 'corredores',
   resumen: 'resumen', instagram: 'redes', datos: 'resumen', temporada: 'resumen', memoria: 'resumen', vista: 'corredores', equipo: 'resumen',
@@ -396,6 +415,7 @@ const adminScreens = () => [
   ['🔔', 'Avisos', '#/avisos', 'avisos pendientes campanita correcciones puestos'],
   ['📣', 'Noticias para los corredores', '#/noticias', 'noticias anuncios quedada comunicado'],
   ['🗂️', 'Datos: copias, versión y aspecto (en Resumen)', '#/resumen', 'datos copia seguridad backup restaurar importar csv version aspecto oscuro claro sesion cerrar'],
+  ['🕘', 'Movimientos de la app (quién hace qué)', '#/movimientos', 'movimientos historial inscripciones pagos cronicas quien se inscribio actividad control'],
   ['🕘', 'Historial de cambios', '#/historial', 'historial cambios quien modifico'],
   ['🏁', 'Federaciones y ligas', '#/federaciones', 'federaciones ligas calendario fcc fac catalana aragonesa'],
   ['⚕️', 'En caso de accidente', '#/accidente', 'accidente seguro poliza telefono gerosalud divina rc responsabilidad civil'],
@@ -542,7 +562,7 @@ function render() {
   else if (view === 'accidente' && (admin || S.code)) html = viewAccident();
   else if (admin) {
     html = ({
-      '': viewToday, hoy: viewToday, mensajes: viewMessages, calidad: viewQuality, actividad: viewActivity,
+      '': viewToday, hoy: viewToday, movimientos: viewMovements, mensajes: viewMessages, calidad: viewQuality, actividad: viewActivity,
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
       carreras: S.draft ? viewRaceEdit : viewRaces,
       resumen: viewSummary, temporada: viewSummary, memoria: viewMemoria, instagram: viewInstagram, redes: viewNetworks, corredores: viewRunners, contratos: viewContracts, computo: viewSeasonCount, informe: viewSeasonReport, publicaciones: viewPublications, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
@@ -1150,6 +1170,12 @@ function myRacesCard(d, afterSummary = () => '') {
   const pending = pastReg.filter((g) => !g.my_result);   // les falta poner el puesto
   const noPos = results.filter((r) => !r.position);          // carreras ya en resultados donde participó pero no consta su puesto: también le falta ponerlo
   const pendingN = pending.length + noPos.length;
+  // «al día»: resultados sin poner, crónicas sin pasar y pagos que ya tocan (carrera dentro de una semana), lo siguiente y la racha
+  const ad = alDia(d, S.chron instanceof Set ? S.chron : null, today, S.myYear || new Date().getFullYear());
+  const todoN = ad.total, pl = (n, a, b) => (n === 1 ? a : b);
+  const parts = [ad.counts.result ? `${ad.counts.result} resultado${pl(ad.counts.result, '', 's')}` : '', ad.counts.cron ? `${ad.counts.cron} crónica${pl(ad.counts.cron, '', 's')}` : '', ad.counts.pay ? `${ad.counts.pay} pago${pl(ad.counts.pay, '', 's')}` : ''].filter(Boolean);
+  const todoTxt = !parts.length ? 'todo al día' : parts.length === 1 ? `falta${pl(ad.total, '', 'n')} ${parts[0]}` : `${parts.slice(0, -1).join(', ')} y ${parts[parts.length - 1]}`;
+  const todoTo = ad.counts.result || !ad.total ? 'sec-pend' : ad.counts.cron ? 'sec-chro' : 'sec-next';
   const sent = pastReg.filter((g) => g.my_result);        // ya puso su puesto: cuenta para el bono aunque la dirección aún no la haya pasado a resultados
   const upcoming = mineReg.filter((g) => g.date >= today && !g.suspended).sort((a, b) => a.date.localeCompare(b.date));
   const cancelled = mineReg.filter((g) => g.suspended).sort((a, b) => a.date.localeCompare(b.date));
@@ -1175,8 +1201,14 @@ function myRacesCard(d, afterSummary = () => '') {
     <div class="tiles">
       <a href="#" class="tile t-next" data-act="goto-sec" data-to="sec-next"><span class="t-n">${upcomingYear.length}</span><span class="t-l">Próximas</span>${ico('cal', 't-ico')}<small>inscrito</small></a>
       <a href="#" class="tile t-done" data-act="goto-sec" data-to="sec-done"><span class="t-n">${list.length + sent.filter((g) => yearOf(g.date) === S.myYear).length}</span><span class="t-l">Hechas</span>${ico('ok', 't-ico')}<small>${days !== list.length ? `${days} días de competición` : 'con resultado'}</small></a>
-      <a href="#" class="tile t-pend${pendingN ? ' alert' : ''}" data-act="goto-sec" data-to="sec-pend"><span class="t-n">${pendingN}</span><span class="t-l">Pendientes</span>${ico('flag', 't-ico')}<small>${pendingN ? 'falta tu resultado' : 'todo al día'}</small></a>
+      <a href="#" class="tile t-pend${todoN ? ' alert' : ''}" data-act="goto-sec" data-to="${todoTo}"><span class="t-n">${todoN}</span><span class="t-l">Pendientes</span>${ico('flag', 't-ico')}<small>${todoTxt}</small></a>
     </div>
+    ${(() => { const n = ad.next, ageTxt = (x) => (x.age <= 7 ? `te ${7 - x.age === 1 ? 'queda 1 día' : `quedan ${7 - x.age} días`}` : `hace ${x.age} días`);
+      const txt = !n ? (upcoming[0] ? `Estás al día. Lo próximo: <b>${esc(upcoming[0].name)}</b> · ${dleft(upcoming[0])}` : 'Estás al día.')
+        : n.type === 'result' ? `Pon tu puesto en <b>${esc(n.name)}</b> · ${ageTxt(n)}` : n.type === 'cron' ? `Pasa la crónica de <b>${esc(n.name)}</b> · ${ageTxt(n)}` : `Marca el pago de <b>${esc(n.name)}</b> · ${n.in === 0 ? 'es hoy' : n.in === 1 ? 'es mañana' : `en ${n.in} días`}`;
+      const to = !n ? (upcoming[0] ? 'sec-hero' : 'sec-pend') : n.type === 'result' ? 'sec-pend' : n.type === 'cron' ? 'sec-chro' : 'sec-next';
+      return `<div class="sum-todo"><a href="#" class="sum-next${n ? ' has' : ' ok'}" data-act="goto-sec" data-to="${to}">${ico(n ? 'flag' : 'ok')}<span>${txt}</span>${ico('go')}</a>
+        <div class="sum-meta">${ad.streak ? (() => { const me = streakRows().find((x) => x.id === d.me.id); return `<a class="sum-streak" href="${runnerHref('equipo')}" title="Carreras seguidas con tu resultado puesto y tu crónica pasada. Toca para ver la clasificación del club.">🔥 <b>${ad.streak}</b> ${pl(ad.streak, 'carrera seguida', 'carreras seguidas')} al día${me ? ` · <b>${me.pos}º</b> del club` : ''}</a>`; })() : ''}</div></div>`; })()}
     ${cancelled.length ? `<a href="#" class="canc-line" data-act="goto-sec" data-to="sec-canc">${ico('ban')}<span><b>${cancelled.length}</b> ${cancelled.length === 1 ? 'carrera suspendida' : 'carreras suspendidas'}</span>${ico('go')}</a>` : ''}
     ${(() => { const sentYear = sent.filter((g) => yearOf(g.date) === S.myYear).map((g) => ({ position: g.my_result.position, time_seconds: g.my_result.time_seconds })), allMine = [...list, ...sentYear];   // los enviados también cuentan
       const pod = [1, 2, 3].map((k) => allMine.filter((x) => x.position === k).length), NAMES = [['Oro', 'Oros'], ['Plata', 'Platas'], ['Bronce', 'Bronces']];
@@ -1284,7 +1316,7 @@ function chronicleCard(d) {
       <details class="imp-races" data-open-key="imp-races"${S.open?.['imp-races'] ? ' open' : ''}><summary>Mis carreras (${imp.rows.length})${todo ? ` · <b>${todo}</b> con algo por hacer` : ' · todo al día 🎉'}</summary>
         <ul class="imp-list">${imp.rows.map(rowHtml).join('')}</ul></details>`;
   };
-  return `<section class="card chro-card${pend ? ' has-pend' : ''}"><details class="chro-det" data-open-key="chro"${S.open?.chro ? ' open' : ''}>
+  return `<section class="card chro-card${pend ? ' has-pend' : ''}" id="sec-chro"><details class="chro-det" data-open-key="chro"${S.open?.chro ? ' open' : ''}>
     <summary><span class="chro-ic">${ico('book')}</span><b class="chro-t">Crónicas${year === new Date().getFullYear() ? '' : ` <small class="muted">${year}</small>`}</b>
       <span class="chro-tag ${pend ? 'pend' : 'ok'}">${pend ? `${pend} ${plural(pend, 'pendiente', 'pendientes')}` : `${c.done.length} ${plural(c.done.length, 'pasada', 'pasadas')}`}${ico('go')}</span></summary>
     <div class="seg-sw chro-sw" role="tablist" aria-label="Crónicas o impacto en redes"><button type="button" role="tab" class="${tabImp ? '' : 'on'}" data-act="chro-tab" data-t="cro">Crónicas</button><button type="button" role="tab" class="${tabImp ? 'on' : ''}" data-act="chro-tab" data-t="imp">Impacto en redes</button></div>
@@ -2385,6 +2417,33 @@ const timeAgo = (iso) => {
   if (m < 1440) return `hace ${Math.round(m / 60)} h`;
   if (m < 2880) return 'ayer'; return formatDate(String(iso).slice(0, 10), false);
 };
+// ---------- Movimientos de la app (dirección): quién hace qué ----------
+const MOV = { inscripcion: ['calplus', 'Inscripciones'], baja: ['trash', 'Bajas'], pago: ['euro', 'Pagos'], cronica: ['pen', 'Crónicas'], carrera: ['flag', 'Carreras'], resultado: ['trophy', 'Resultados'], otro: ['info', 'Otros'] };
+async function loadMovements() {
+  try { S.movs = await api.adminMovements(300); } catch { S.movs = null; }
+  if (S.session?.isAdmin && ['', 'hoy', 'movimientos'].includes(parseRoute().view) && !S.draft) render();
+}
+const movRow = (m) => `<li class="mv-row mvk-${esc(m.kind)}"><span class="mv-ic">${ico(MOV[m.kind]?.[0] || 'info')}</span><span class="mv-t"><b>${esc(m.who)}</b> ${esc(m.text)}</span><time class="mv-when" title="${esc(new Date(m.at).toLocaleString('es-ES'))}">${esc(timeAgo(m.at))}</time></li>`;
+/** Tarjeta de Hoy con los últimos movimientos. */
+function movementsCard() {
+  const l = S.movs;
+  if (l === undefined) return '';
+  if (l === null) return `<section class="card warn"><h2>Movimientos de la app</h2><p class="hint">Falta ejecutar en Supabase <code>supabase/cambios/2026-11-22-movimientos.sql</code>.</p></section>`;
+  return `<h2 class="sec-h">${ico('clock')} Movimientos</h2>
+    ${l.length ? `<ul class="mv-list">${l.slice(0, 6).map(movRow).join('')}</ul><p class="center"><a class="btn small" href="#/movimientos">Ver todos los movimientos${ico('go')}</a></p>` : '<p class="empty small">Todavía no hay movimientos.</p>'}`;
+}
+function viewMovements() {
+  const l = S.movs, f = S.movFilter || 'all', shown = (l || []).filter((m) => f === 'all' || m.kind === f);
+  const day = (iso) => { const d = String(iso).slice(0, 10), t = todayISO(), y = new Date(Date.now() - 864e5).toISOString().slice(0, 10); return d === t ? 'Hoy' : d === y ? 'Ayer' : formatDate(d, true); };
+  let last = '';
+  const items = shown.map((m) => { const d = day(m.at); const h = d !== last ? `<li class="mv-day">${esc(d)}</li>` : ''; last = d; return h + movRow(m); }).join('');
+  const counts = Object.fromEntries(Object.keys(MOV).map((k) => [k, (l || []).filter((m) => m.kind === k).length]));
+  return frame('Movimientos', `
+    <p class="hint">Todo lo que hacen los corredores en la app, en orden: inscripciones, pagos, crónicas, carreras creadas o cambiadas, resultados y bajas. Para ver el detalle de los datos que se han cambiado, mira el <a href="#/historial">historial de cambios</a>.</p>
+    ${l === undefined ? '<p class="empty">Cargando…</p>' : l === null ? '<p class="card warn">Falta ejecutar en Supabase <code>supabase/cambios/2026-11-22-movimientos.sql</code>.</p>' : `
+    <div class="years">${[['all', 'Todo', (l || []).length], ...Object.entries(MOV).filter(([k]) => counts[k]).map(([k, [, n]]) => [k, n, counts[k]])].map(([k, n, c]) => `<button class="chip${f === k ? ' on' : ''}" data-act="mov-filter" data-f="${k}">${n} <small>${c}</small></button>`).join('')}</div>
+    ${shown.length ? `<ul class="mv-list">${items}</ul>` : '<p class="empty">No hay movimientos de este tipo.</p>'}`}`, { back: '#/' });
+}
 function viewHistory() {
   const list = S.changes;
   const f = S.histFilter || 'all';
@@ -2663,6 +2722,7 @@ function viewToday() {
     <h2 class="sec-h">${ico('cal')} Próximos 10 días</h2>
     ${up ? `<div class="up-list">${up}</div>` : '<p class="empty small">No hay carreras con gente del club en los próximos 10 días.</p>'}
     ${b.upcoming.length ? `<p class="center">${msgBtn('next', b.upcoming[0].reg.id, `Animar a apuntarse a ${esc(b.upcoming[0].reg.name)}`)}</p>` : ''}
+    ${movementsCard()}
     <h2 class="sec-h">${ico('layers')} Atajos</h2>
     <div class="qgrid">
       <a class="qtile q-cyan" href="#/noticias">${ico('msg')}<b>Noticia</b><small>a todo el equipo</small></a>
@@ -3018,7 +3078,7 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
       ${items.length > SHOWN ? `<details class="pod-more"><summary>Ver los ${items.length - SHOWN} anteriores</summary><ul class="pod-items">${items.slice(SHOWN).map(podItem).join('')}</ul></details>` : ''}`
       : '<p class="muted">Sin podios este año.</p>'}</section>`;
   const leadsBlock = leaders ? `<div class="eq-leads-wrap"><div class="leads eq-leads" role="list" aria-label="Líderes y récords del equipo">${leaders}</div><p class="leads-hint">Desliza para ver más récords ›</p></div>` : '';
-  const body = { pan: `${hero}${leadsBlock}${months}${byMod}`, pod: podRunner, eq: `${board}${idle.length ? `<p class="muted small">Sin carreras todavía${mod ? ` de ${esc(modLabel)}` : ''}: ${names(idle, 40)}.</p>` : ''}`, alc: reach }[tab];
+  const body = { pan: `${hero}${leadsBlock}${streakBoard(S.runnerData?.me?.id)}${months}${byMod}`, pod: podRunner, eq: `${board}${idle.length ? `<p class="muted small">Sin carreras todavía${mod ? ` de ${esc(modLabel)}` : ''}: ${names(idle, 40)}.</p>` : ''}`, alc: reach }[tab];
   return `<div class="eq">${filters}${body}</div>`;
 }
 
@@ -5305,6 +5365,7 @@ const actions = {
     render();
   },
   'goto-sec'(el) { const t = document.getElementById(el.dataset.to); if (t) { const dt = t.matches('details') ? t : t.querySelector('details'); if (dt) { dt.open = true; S.open = { ...(S.open || {}), [dt.dataset.openKey]: true }; } for (let a = t.parentElement; a; a = a.parentElement) if (a.tagName === 'DETAILS' && !a.open) { a.open = true; if (a.dataset.openKey) S.open = { ...(S.open || {}), [a.dataset.openKey]: true }; } t.scrollIntoView({ behavior: 'smooth', block: 'start' }); } else toast('No tienes carreras en este apartado.'); },
+  'mov-filter'(el) { S.movFilter = el.dataset.f; render(); },
   'hist-filter'(el) { S.histFilter = el.dataset.f; render(); },
   'week-view'(el) { S.weekView = el.dataset.v; render(); },
   'week-all'() { const set = postedSet(), list = weekRaces(S.weekDays || 14); setPostedKeys(list.map(postKey), !list.every((g) => set.has(postKey(g)))); },

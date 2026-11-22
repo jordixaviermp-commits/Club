@@ -805,3 +805,34 @@ test('resumen: la carrera que más horas costó (el MTB suma pocos km pero mucha
   assert.equal(s.longestTime.runner, 'Joan'); assert.equal(s.longestTime.seconds, 6 * 3600 + 600);
   assert.equal(yearSummary(2026, [{ ...races[2] }], []).longestTime, null);
 });
+
+test('al día: pendientes (resultados, crónicas, pagos a una semana), lo siguiente y la racha', async () => {
+  const { alDia, postKeyOf } = await import('../js/logic.js');
+  const today = '2026-11-20', me = 'r1';
+  const mk = (id, name, date, extra = {}) => ({ id, name, date, entries: [{ runner_id: me, paid: true }], suspended: false, ...extra });
+  const d = { me: { id: me }, my_results: [], registrations: [
+    mk('a', 'Carrera A', '2026-10-01', { my_result: { position: 5 } }),
+    mk('b', 'Carrera B', '2026-10-10', { my_result: { position: 7 } }),
+    mk('c', 'Carrera C', '2026-11-01', { my_result: { position: 9 } }),     // resultado sí, crónica no (hace 19 días)
+    mk('d', 'Carrera D', '2026-11-17', { my_result: { position: 3 } }),     // reciente: aún en plazo
+    mk('e', 'Carrera E', '2026-11-25', { entries: [{ runner_id: me, paid: false }] }),   // dentro de 5 días y sin pagar
+    mk('f', 'Carrera F', '2027-02-01', { entries: [{ runner_id: me, paid: false }] }),   // lejos: no cuenta
+  ] };
+  const done = new Set([postKeyOf(d.registrations[0]), postKeyOf(d.registrations[1])]);
+  const r = alDia(d, done, today, 2026);
+  assert.deepEqual(r.counts, { result: 0, cron: 2, pay: 1 });           // crónicas de C y D, pago de E
+  assert.equal(r.total, 3);
+  assert.equal(r.next.type, 'cron'); assert.equal(r.next.name, 'Carrera C');   // la más antigua primero
+  assert.equal(r.streak, 0);                                            // C (hace 19 días) rompe la racha; D en plazo no suma
+  // pasando la crónica de C, la racha cuenta A, B y C (D sigue en plazo y no la rompe)
+  done.add(postKeyOf(d.registrations[2]));
+  const r2 = alDia(d, done, today, 2026);
+  assert.equal(r2.streak, 3); assert.equal(r2.counts.cron, 1);
+  // sin crónicas cargadas no hay pendientes de crónica y no se rompe
+  assert.equal(alDia(d, null, today, 2026).counts.cron, 0);
+  // al día del todo
+  done.add(postKeyOf(d.registrations[3]));
+  d.registrations[4].entries[0].paid = true;
+  const r3 = alDia(d, done, today, 2026);
+  assert.equal(r3.total, 0); assert.equal(r3.next, null); assert.equal(r3.streak, 4);
+});
