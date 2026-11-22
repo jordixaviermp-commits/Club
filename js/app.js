@@ -292,6 +292,7 @@ async function onRoute() {
       if (sub === 'carrera' && !S.team) loadTeam();
       if (sub === 'mi' && !S.team) loadTeam();
       if ((sub === '' || sub === 'mi') && !S.preview) loadImpact();
+      if ((sub === 'mi' || sub === 'equipo') && !S.preview) loadStreaks();
     }
   }
   if (S.session?.isAdmin && view === 'historial') loadChanges();
@@ -316,6 +317,23 @@ async function loadChron() {
   S.chronBy = null;
   try { const keys = await api.runnerChronicles(code); S.chron = Array.isArray(keys) ? new Set(keys) : null; } catch { S.chron = null; }
 }
+/** Clasificación de la racha «al día» de todo el club (null = falta el SQL). */
+async function loadStreaks() {
+  if (S.preview || !S.code) return;
+  let r = null; try { r = await api.runnerStreaks(S.code); } catch { r = null; }
+  S.streaks = Array.isArray(r) ? r : null;
+  if (S.runnerData && ['mi', 'equipo'].includes(parseRoute().view) && !S.draft) render();
+}
+/** Posición en la clasificación (los empates comparten puesto). */
+const streakRows = () => { let pos = 0, last = null; return (Array.isArray(S.streaks) ? S.streaks : []).map((x, i) => { if (x.streak !== last) { pos = i + 1; last = x.streak; } return { ...x, pos }; }); };
+function streakBoard(meId) {
+  const rows = streakRows(); if (!rows.length) return '';
+  const li = (x) => `<li class="${x.id === meId ? 'me' : ''}"><span class="sb-pos">${x.pos <= 3 ? medal(x.pos) : x.pos}</span><span class="sb-nm">${esc(x.name)}${x.id === meId ? ' <small>(tú)</small>' : ''}</span><b>🔥 ${x.streak}</b></li>`;
+  const top = rows.slice(0, 5), rest = rows.slice(5), mine = rows.find((x) => x.id === meId), mineOut = mine && mine.pos > top[top.length - 1].pos && !top.includes(mine);
+  return `<section class="card rs-card streak-board" id="sec-racha"><h2>🔥 Rachas al día</h2>
+    <p class="hint">Carreras seguidas, de la más reciente hacia atrás, con tu resultado puesto y la crónica pasada. Las de la última semana sin terminar no rompen la racha.</p>
+    <ol class="sb-list">${top.map(li).join('')}${mineOut ? `<li class="sb-gap" aria-hidden="true">···</li>${li(mine)}` : ''}</ol>
+    ${rest.length ? `<details class="sb-more" data-open-key="sbmore"${S.open?.sbmore ? ' open' : ''}><summary>Ver los ${rest.length} restantes</summary><ol class="sb-list" start="${top.length + 1}">${rest.map(li).join('')}</ol></details>` : ''}</section>`; }
 /** Lo que el club ha publicado en redes sobre una carrera mía: historia previa (automática o marcada a mano) y post de resultados. */
 const myPub = (g) => {
   if (!g || (Array.isArray(g.entries) && !g.entries.some((e) => e.runner_id === S.runnerData?.me?.id))) return null;
@@ -1188,7 +1206,7 @@ function myRacesCard(d, afterSummary = () => '') {
         : n.type === 'result' ? `Pon tu puesto en <b>${esc(n.name)}</b> · ${ageTxt(n)}` : n.type === 'cron' ? `Pasa la crónica de <b>${esc(n.name)}</b> · ${ageTxt(n)}` : `Marca el pago de <b>${esc(n.name)}</b> · ${n.in === 0 ? 'es hoy' : n.in === 1 ? 'es mañana' : `en ${n.in} días`}`;
       const to = !n ? (upcoming[0] ? 'sec-hero' : 'sec-pend') : n.type === 'result' ? 'sec-pend' : n.type === 'cron' ? 'sec-chro' : 'sec-next';
       return `<div class="sum-todo"><a href="#" class="sum-next${n ? ' has' : ' ok'}" data-act="goto-sec" data-to="${to}">${ico(n ? 'flag' : 'ok')}<span>${txt}</span>${ico('go')}</a>
-        <div class="sum-meta">${ad.streak ? `<span class="sum-streak" title="Carreras seguidas con tu resultado puesto y tu crónica pasada">🔥 <b>${ad.streak}</b> ${pl(ad.streak, 'carrera seguida', 'carreras seguidas')} al día</span>` : ''}</div></div>`; })()}
+        <div class="sum-meta">${ad.streak ? (() => { const me = streakRows().find((x) => x.id === d.me.id); return `<a class="sum-streak" href="${runnerHref('equipo')}" title="Carreras seguidas con tu resultado puesto y tu crónica pasada. Toca para ver la clasificación del club.">🔥 <b>${ad.streak}</b> ${pl(ad.streak, 'carrera seguida', 'carreras seguidas')} al día${me ? ` · <b>${me.pos}º</b> del club` : ''}</a>`; })() : ''}</div></div>`; })()}
     ${cancelled.length ? `<a href="#" class="canc-line" data-act="goto-sec" data-to="sec-canc">${ico('ban')}<span><b>${cancelled.length}</b> ${cancelled.length === 1 ? 'carrera suspendida' : 'carreras suspendidas'}</span>${ico('go')}</a>` : ''}
     ${(() => { const sentYear = sent.filter((g) => yearOf(g.date) === S.myYear).map((g) => ({ position: g.my_result.position, time_seconds: g.my_result.time_seconds })), allMine = [...list, ...sentYear];   // los enviados también cuentan
       const pod = [1, 2, 3].map((k) => allMine.filter((x) => x.position === k).length), NAMES = [['Oro', 'Oros'], ['Plata', 'Platas'], ['Bronce', 'Bronces']];
@@ -3030,7 +3048,7 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
       ${items.length > SHOWN ? `<details class="pod-more"><summary>Ver los ${items.length - SHOWN} anteriores</summary><ul class="pod-items">${items.slice(SHOWN).map(podItem).join('')}</ul></details>` : ''}`
       : '<p class="muted">Sin podios este año.</p>'}</section>`;
   const leadsBlock = leaders ? `<div class="eq-leads-wrap"><div class="leads eq-leads" role="list" aria-label="Líderes y récords del equipo">${leaders}</div><p class="leads-hint">Desliza para ver más récords ›</p></div>` : '';
-  const body = { pan: `${hero}${leadsBlock}${months}${byMod}`, pod: podRunner, eq: `${board}${idle.length ? `<p class="muted small">Sin carreras todavía${mod ? ` de ${esc(modLabel)}` : ''}: ${names(idle, 40)}.</p>` : ''}`, alc: reach }[tab];
+  const body = { pan: `${hero}${leadsBlock}${streakBoard(S.runnerData?.me?.id)}${months}${byMod}`, pod: podRunner, eq: `${board}${idle.length ? `<p class="muted small">Sin carreras todavía${mod ? ` de ${esc(modLabel)}` : ''}: ${names(idle, 40)}.</p>` : ''}`, alc: reach }[tab];
   return `<div class="eq">${filters}${body}</div>`;
 }
 

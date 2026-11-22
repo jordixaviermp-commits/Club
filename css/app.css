@@ -2501,3 +2501,12 @@ details.rcard .rc-body .wc-acts { margin-top: .5rem; }
 .sum-meta { display: flex; align-items: center; justify-content: space-between; gap: .6rem; flex-wrap: wrap; font-size: var(--fs-2); }
 .sum-meta:empty { display: none; }
 .sum-streak { display: inline-flex; align-items: center; gap: .3rem; padding: .15rem .6rem; border-radius: 999px; font-weight: 700; background: color-mix(in srgb, var(--warn) 16%, var(--card)); border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line)); white-space: nowrap; }
+
+/* v240: clasificación de la racha «al día» */
+a.sum-streak { text-decoration: none; color: var(--text); }
+.sb-list { list-style: none; margin: .4rem 0 0; padding: 0; display: grid; gap: .3rem; }
+.sb-list li { display: flex; align-items: center; gap: .6rem; padding: .35rem .6rem; border-radius: var(--r-sm); background: var(--bg); }
+.sb-list li.me { background: color-mix(in srgb, var(--warn) 16%, var(--card)); border: 1px solid color-mix(in srgb, var(--warn) 50%, var(--line)); font-weight: 700; }
+.sb-pos { width: 1.6rem; text-align: center; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--muted); } .sb-nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .sb-nm small { color: var(--muted); font-weight: 600; }
+.sb-list b { font-variant-numeric: tabular-nums; } .sb-gap { justify-content: center; background: none !important; color: var(--muted); padding: 0 !important; line-height: .8; }
+.sb-more { margin-top: .4rem; } .sb-more > summary { cursor: pointer; font-size: var(--fs-3); color: var(--accent); font-weight: 600; padding: .2rem .1rem; }

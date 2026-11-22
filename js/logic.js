@@ -1494,11 +1494,18 @@ export function alDia(d, chronDone, today, year = null, { payDays = 7, graceDays
     const hasResult = x.kind === 'race' ? !!(d.my_results || []).find((r) => r.race_id === x.id)?.position : !!(d.registrations || []).find((g) => g.id === x.id)?.my_result;
     return { date: x.end_date || x.date, complete: hasResult && !!chronDone?.has?.(x.key) };
   }).sort((a, b) => b.date.localeCompare(a.date));
-  let streak = 0;
-  for (const it of items) {
-    if (it.complete) { streak++; continue; }
-    if (diff(today, it.date) <= graceDays) continue;   // todavía está en plazo: no rompe la racha ni suma
+  const streak = streakCount(items, today, graceDays);
+  return { counts, total: counts.result + counts.cron + counts.pay, items: out, next, streak };
+}
+
+/** Racha: de la carrera más reciente hacia atrás, cuántas seguidas están completas. `items`: [{ date (último día), complete }]. Las de los últimos `graceDays` días sin terminar no la rompen. */
+export function streakCount(items, today, graceDays = 7) {
+  const diff = (a, b) => Math.round((Date.parse(String(a).slice(0, 10) + 'T12:00:00Z') - Date.parse(String(b).slice(0, 10) + 'T12:00:00Z')) / 864e5);
+  let n = 0;
+  for (const it of [...items].sort((a, b) => b.date.localeCompare(a.date))) {
+    if (it.complete) { n++; continue; }
+    if (diff(today, it.date) <= graceDays) continue;
     break;
   }
-  return { counts, total: counts.result + counts.cron + counts.pay, items: out, next, streak };
+  return n;
 }

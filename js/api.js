@@ -1,7 +1,7 @@
 // Acceso a datos. Dos versiones con la misma interfaz:
 //  - Supabase (real), cuando config.js tiene URL y clave.
 //  - Demostración, guardada solo en este navegador, para probar la app sin montar nada.
-import { newCode, todayISO, pastLimit, numDays, yearOf, SUBTYPES, parseKm, normalize, parseElev, parsePrice } from './logic.js';
+import { streakCount, newCode, todayISO, pastLimit, numDays, yearOf, SUBTYPES, parseKm, normalize, parseElev, parsePrice } from './logic.js';
 
 const TABLES = ['runners', 'registrations', 'registration_entries', 'races', 'results', 'settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests', 'social_posts', 'chronicles'];
 const OPTIONAL = new Set(['settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests', 'social_posts', 'chronicles']); // tablas que pueden faltar si aún no se ha ejecutado su SQL
@@ -184,6 +184,7 @@ export function supabaseApi(url, key) {
     async runnerWatchList(code) { try { return ok(await sb.rpc('runner_watch_list', { p_code: code })); } catch (e) { if (/PGRST202|Could not find|runner_watch/.test(String(e?.message))) return null; throw e; } },
     async runnerWatchSave(code, id, data) { return ok(await sb.rpc('runner_watch_save', { p_code: code, p_id: id || null, p_data: data })); },
     async runnerWatchDelete(code, id) { ok(await sb.rpc('runner_watch_delete', { p_code: code, p_id: id })); },
+    async runnerStreaks(code) { try { return ok(await sb.rpc('runner_streaks', { p_code: code })); } catch (e) { if (/PGRST202|Could not find|runner_streaks/.test(String(e?.message))) return null; throw e; } },   // null = falta el SQL
     async runnerNotes(code) { try { return ok(await sb.rpc('runner_notes_list', { p_code: code })); } catch (e) { if (/PGRST202|Could not find|runner_notes_list/.test(String(e?.message))) return null; throw e; } },   // null = falta el SQL
     async runnerNoteSet(code, regId, note) { ok(await sb.rpc('runner_note_set', { p_code: code, p_registration: regId, p_note: note })); },
     async runnerPing(code) { try { await sb.rpc('runner_ping', { p_code: code }); } catch { /* sin el SQL de actividad */ } },
@@ -781,6 +782,16 @@ export function demoApi(storage = globalThis.localStorage) {
       }
       const w = d.runner_watch.find((x) => x.id === id && x.runner_id === me.id); if (!w) throw new Error('no_encontrada');
       Object.assign(w, row); publishWatch(d, row, me.id); cleanCandidates(d); save(); return w.id;
+    },
+    async runnerStreaks(code) {
+      byCode(code); const d = load(), today = todayISO(), key = (date, name) => `${date}|${normalize(name)}`, done = new Set((d.chronicles || []).map((c) => c.race_key));
+      return d.runners.map((r) => {
+        const items = [
+          ...d.results.filter((x) => x.runner_id === r.id).map((x) => { const rc = d.races.find((y) => y.id === x.race_id); return rc && { date: rc.end_date || rc.date, complete: !!x.position && done.has(key(rc.date, rc.name)) }; }),
+          ...d.registration_entries.filter((e) => e.runner_id === r.id).map((e) => { const g = d.registrations.find((y) => y.id === e.registration_id); return g && g.date < today && !g.suspended && { date: g.end_date || g.date, complete: !!e.self_position && done.has(key(g.date, g.name)) }; }),
+        ].filter(Boolean);
+        return { id: r.id, name: r.name, streak: streakCount(items, today) };
+      }).filter((x) => x.streak > 0).sort((a, b) => b.streak - a.streak || a.name.localeCompare(b.name, 'es'));
     },
     async runnerNotes(code) {
       const me = byCode(code), d = load(); d.runner_notes = d.runner_notes || [];
