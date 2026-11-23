@@ -1,7 +1,7 @@
 // Acceso a datos. Dos versiones con la misma interfaz:
 //  - Supabase (real), cuando config.js tiene URL y clave.
 //  - Demostración, guardada solo en este navegador, para probar la app sin montar nada.
-import { newCode, todayISO, pastLimit, numDays, yearOf, SUBTYPES, parseKm, normalize, parseElev, parsePrice } from './logic.js';
+import { streakCount, newCode, todayISO, pastLimit, numDays, yearOf, SUBTYPES, parseKm, normalize, parseElev, parsePrice } from './logic.js';
 
 const TABLES = ['runners', 'registrations', 'registration_entries', 'races', 'results', 'settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests', 'social_posts', 'chronicles'];
 const OPTIONAL = new Set(['settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests', 'social_posts', 'chronicles']); // tablas que pueden faltar si aún no se ha ejecutado su SQL
@@ -18,7 +18,7 @@ export function friendlyError(e) {
   if (/otros_apuntados/.test(msg)) return 'No puedes borrarla: hay más compañeros apuntados. Pídeselo a la dirección del club.';
   if (/plus_confirmado/.test(msg)) return 'La dirección ya ha confirmado este plus, así que no se puede retirar. Si hay un error, díselo a la dirección.';
   if (/PGRST202|Could not find/i.test(msg) && /runner_(update|delete)_race/.test(msg)) return 'Para editar carreras ya pasadas a resultados falta activarlo en la base de datos. Avisa a la dirección.';
-  if (/no_es_tuya/.test(msg)) return 'Solo puedes cambiar las carreras que has añadido tú.';
+  if (/no_es_tuya/.test(msg)) return 'Solo puedes borrar las carreras que has añadido tú.';
   if (/ya_existe/.test(msg)) return 'Ya existe: otra carrera con ese nombre ese día, un circuito ya comunicado o una petición tuya pendiente.';
   if (/sin_cambios/.test(msg)) return 'Eso es lo mismo que ya pusiste: cambia el puesto, la categoría o el tipo de podio.';
   if (/nombre_no_valido/.test(msg)) return 'Pon un nombre de carrera de al menos 3 letras.';
@@ -184,6 +184,7 @@ export function supabaseApi(url, key) {
     async runnerWatchList(code) { try { return ok(await sb.rpc('runner_watch_list', { p_code: code })); } catch (e) { if (/PGRST202|Could not find|runner_watch/.test(String(e?.message))) return null; throw e; } },
     async runnerWatchSave(code, id, data) { return ok(await sb.rpc('runner_watch_save', { p_code: code, p_id: id || null, p_data: data })); },
     async runnerWatchDelete(code, id) { ok(await sb.rpc('runner_watch_delete', { p_code: code, p_id: id })); },
+    async runnerStreaks(code) { try { return ok(await sb.rpc('runner_streaks', { p_code: code })); } catch (e) { if (/PGRST202|Could not find|runner_streaks/.test(String(e?.message))) return null; throw e; } },   // null = falta el SQL
     async runnerNotes(code) { try { return ok(await sb.rpc('runner_notes_list', { p_code: code })); } catch (e) { if (/PGRST202|Could not find|runner_notes_list/.test(String(e?.message))) return null; throw e; } },   // null = falta el SQL
     async runnerNoteSet(code, regId, note) { ok(await sb.rpc('runner_note_set', { p_code: code, p_registration: regId, p_note: note })); },
     async runnerPing(code) { try { await sb.rpc('runner_ping', { p_code: code }); } catch { /* sin el SQL de actividad */ } },
@@ -217,6 +218,8 @@ export function supabaseApi(url, key) {
     async runnerJoinRace(code, raceId, category) { ok(await sb.rpc('runner_join_race', { p_code: code, p_race: raceId, p_category: category || null })); },
     async autoPromote() { try { return ok(await sb.rpc('auto_promote_registrations')); } catch { return 0; } },
     async runnerComplete(code, kind, id, data) { ok(await sb.rpc('runner_complete_race', { p_code: code, p_kind: kind, p_id: id, p_data: data })); },
+    /** Movimientos para la dirección (inscripciones, pagos, crónicas, carreras, resultados, bajas). null = falta ejecutar el SQL. */
+    async adminMovements(limit = 300) { try { return ok(await sb.rpc('admin_movements', { p_limit: limit })); } catch (e) { if (/PGRST202|Could not find|admin_movements/.test(String(e?.message))) return null; throw e; } },
     async listChanges() { try { return ok(await sb.from('change_log').select('*').order('at', { ascending: false }).limit(300)); } catch { return null; } },
     async socialView(code) { return ok(await sb.rpc('social_view', { p_code: code })); },
     async socialMark(code, key, posted) { ok(await sb.rpc('social_mark', { p_code: code, p_key: key, p_posted: !!posted })); },
@@ -401,6 +404,16 @@ export function demoApi(storage = globalThis.localStorage) {
 
     async loadAll() { requireAdmin(); autoPromote(); const { runner_watch, ...d } = load(); return clone(nest({ circuit_podiums: [], announcements: [], announcement_replies: [], correction_requests: [], social_posts: [], chronicles: [], ...d })); },
     async autoPromote() { requireAdmin(); return autoPromote(); },
+    async adminMovements(limit = 300) {
+      requireAdmin(); const d = load(), nm = Object.fromEntries(d.runners.map((r) => [r.id, r.name])), out = [];
+      const fd = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+      for (const e of d.registration_entries) { const g = d.registrations.find((x) => x.id === e.registration_id); if (!g || !nm[e.runner_id]) continue;
+        if (e.created_at) out.push({ at: e.created_at, who: nm[e.runner_id], kind: 'inscripcion', text: `se inscribió en ${g.name} (${fd(g.date)})` });
+        if (e.paid_at) out.push({ at: e.paid_at, who: nm[e.runner_id], kind: 'pago', text: `marcó como pagada su inscripción en ${g.name}` }); }
+      for (const c of d.chronicles || []) if (c.done_at && nm[c.runner_id]) out.push({ at: c.done_at, who: nm[c.runner_id], kind: 'cronica', text: `pasó la crónica de ${c.race_key.split('|')[1].replace(/\b\w/g, (m) => m.toUpperCase())} (${c.race_key.split('|')[0]})` });
+      for (const l of d.change_log || []) out.push({ at: l.at, who: l.actor, kind: l.action === 'baja' ? 'baja' : l.entity === 'result' ? 'resultado' : ['race', 'registration'].includes(l.entity) ? 'carrera' : 'otro', text: l.summary });
+      return clone(out.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit));
+    },
     async listChanges() { requireAdmin(); return clone([...(load().change_log || [])].sort((a, b) => b.at.localeCompare(a.at))); },
     async runnerComplete(code, kind, id, data) {
       const me = byCode(code); const d = load();
@@ -710,13 +723,13 @@ export function demoApi(storage = globalThis.localStorage) {
     },
     async runnerUpdate(code, id, reg) {
       const me = byCode(code); const d = load();
-      const g = d.registrations.find((x) => x.id === id && x.created_by === me.id);
-      if (!g) throw new Error('no_es_tuya');
+      const g = d.registrations.find((x) => x.id === id);
+      if (!g) throw new Error('no_existe');
       const name = String(reg.name || '').replace(/\s+/g, ' ').trim();
       if (name.length < 3) throw new Error('nombre_no_valido');
       if (!reg.date) throw new Error('fecha_no_valida');
       if (d.registrations.some((x) => x.id !== id && x.date === reg.date && x.name.toLowerCase() === name.toLowerCase())) throw new Error('ya_existe');
-      Object.assign(g, fields({ ...reg, name })); save();
+      Object.assign(g, fields({ ...reg, name })); logc(me.name, 'update', `cambió la inscripción ${name}`); save();
     },
     async runnerDelete(code, id) {
       const me = byCode(code); const d = load();
@@ -727,8 +740,8 @@ export function demoApi(storage = globalThis.localStorage) {
     },
     async runnerUpdateRace(code, id, race) {
       const me = byCode(code); const d = load();
-      const r = d.races.find((x) => x.id === id && x.created_by === me.id);
-      if (!r) throw new Error('no_es_tuya');
+      const r = d.races.find((x) => x.id === id);
+      if (!r) throw new Error('no_existe');
       const name = String(race.name || '').replace(/\s+/g, ' ').trim();
       if (name.length < 3 || name.length > 120) throw new Error('nombre_no_valido');
       if (!race.date || race.date < pastLimit() || race.date > todayISO()) throw new Error('fecha_no_valida');
@@ -782,6 +795,16 @@ export function demoApi(storage = globalThis.localStorage) {
       const w = d.runner_watch.find((x) => x.id === id && x.runner_id === me.id); if (!w) throw new Error('no_encontrada');
       Object.assign(w, row); publishWatch(d, row, me.id); cleanCandidates(d); save(); return w.id;
     },
+    async runnerStreaks(code) {
+      byCode(code); const d = load(), today = todayISO(), key = (date, name) => `${date}|${normalize(name)}`, done = new Set((d.chronicles || []).map((c) => c.race_key));
+      return d.runners.map((r) => {
+        const items = [
+          ...d.results.filter((x) => x.runner_id === r.id).map((x) => { const rc = d.races.find((y) => y.id === x.race_id); return rc && { date: rc.end_date || rc.date, complete: !!x.position && done.has(key(rc.date, rc.name)) }; }),
+          ...d.registration_entries.filter((e) => e.runner_id === r.id).map((e) => { const g = d.registrations.find((y) => y.id === e.registration_id); return g && g.date < today && !g.suspended && { date: g.end_date || g.date, complete: !!e.self_position && done.has(key(g.date, g.name)) }; }),
+        ].filter(Boolean);
+        return { id: r.id, name: r.name, streak: streakCount(items, today) };
+      }).filter((x) => x.streak > 0).sort((a, b) => b.streak - a.streak || a.name.localeCompare(b.name, 'es'));
+    },
     async runnerNotes(code) {
       const me = byCode(code), d = load(); d.runner_notes = d.runner_notes || [];
       return Object.fromEntries(d.runner_notes.filter((n) => n.runner_id === me.id).map((n) => [n.registration_id, n.note]));
@@ -813,7 +836,7 @@ export function demoApi(storage = globalThis.localStorage) {
       return clone([...by.values()]);
     },
     async runnerSetChronicle(code, key, done) {
-      const me = byCode(code), d = load(); d.chronicles = (d.chronicles || []).filter((x) => !(x.runner_id === me.id && x.race_key === key));
+      const me = byCode(code), d = load(); d.chronicles = (d.chronicles || []).filter((x) => (done ? !(x.runner_id === me.id && x.race_key === key) : x.race_key !== key));   // deshacer = pendiente para todos
       if (done) d.chronicles.push({ runner_id: me.id, race_key: key, done_at: new Date().toISOString() });
       save();
     },
@@ -885,13 +908,13 @@ export function demoApi(storage = globalThis.localStorage) {
       save();
     },
     async runnerSetDetails(code, id, subtype, km) {
-      const me = byCode(code); const g = load().registrations.find((x) => x.id === id && x.created_by === me.id);
-      if (!g) throw new Error('no_es_tuya');
+      byCode(code); const g = load().registrations.find((x) => x.id === id);
+      if (!g) throw new Error('no_existe');
       Object.assign(g, detailFields({ modality: g.modality, subtype, km })); save();
     },
     async runnerSetType(code, id, type, circuit) {
-      const me = byCode(code); const g = load().registrations.find((x) => x.id === id && x.created_by === me.id);
-      if (!g) throw new Error('no_es_tuya');
+      byCode(code); const g = load().registrations.find((x) => x.id === id);
+      if (!g) throw new Error('no_existe');
       Object.assign(g, typeFields({ race_type: type, circuit })); save();
     },
     async runnerProposeCircuit(code, circuit, year, position, scope) {

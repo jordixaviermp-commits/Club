@@ -1,167 +1,11 @@
 {
- "updated_at": "2026-11-19T05:24:33.878Z",
+ "updated_at": "2026-11-23T05:36:47.353Z",
  "sources": {
   "FCC": "https://www.ciclisme.cat/calendari/tot",
   "FAC": "https://aragonciclismo.com/es/smartweb/seccion/seccion/aragon/CALENDARIO_GLOBAL"
  },
  "errors": [],
  "races": [
-  {
-   "source": "FCC",
-   "date": "2026-11-21",
-   "name": "BMX Santi Moreno Race Weekend-Sant Andreu de la Barca",
-   "place": "Sant Andreu de la Barca",
-   "province": "Barcelona",
-   "country": "España",
-   "modality": "Otra",
-   "discipline": "BMX · Circuit",
-   "kind": "Competición",
-   "info": "Copa Catalana BMX",
-   "url": "https://www.ciclisme.cat/cursa/bmx/bmx-santi-moreno-race-weekend-sant-andreu-de-la-barca"
-  },
-  {
-   "source": "FCC",
-   "date": "2026-11-21",
-   "name": "Dirt-btt Santi Moreno Race Weekend-Sant Andreu de la Barca",
-   "place": "Sant Andreu de la Barca",
-   "province": "Barcelona",
-   "country": "España",
-   "modality": "Otra",
-   "discipline": "BMX · Circuit",
-   "kind": "Competición",
-   "info": "",
-   "url": "https://www.ciclisme.cat/cursa/bmx/dirt-btt-santi-moreno-race-weekend-sant-andreu-de-la-barca"
-  },
-  {
-   "source": "FCC",
-   "date": "2026-11-21",
-   "name": "Fem Ports #1 Mare de Déu del Mont",
-   "place": "Cabanelles",
-   "province": "Girona",
-   "country": "España",
-   "modality": "Otra",
-   "discipline": "Trobades · Trobades Carretera",
-   "kind": "Ocio",
-   "info": "FEM PORTS #",
-   "url": "https://www.ciclisme.cat/cursa/trobades/fem-ports-1-mare-de-deu-del-mont"
-  },
-  {
-   "source": "FCC",
-   "date": "2026-11-21",
-   "name": "Open Escolar BTT ALTAFULLA",
-   "place": "Altafulla",
-   "province": "Tarragona",
-   "country": "España",
-   "modality": "BTT",
-   "discipline": "BTT · Promoció",
-   "kind": "Ocio",
-   "info": "",
-   "url": "https://www.ciclisme.cat/cursa/btt/open-escolar-btt-altafulla"
-  },
-  {
-   "source": "FAC",
-   "date": "2026-11-21",
-   "name": "V Trofeo CX Margudgued-Boltaña Zona Zero",
-   "place": "Boltaña",
-   "province": "Huesca",
-   "country": "España",
-   "modality": "Ciclocross",
-   "discipline": "CicloCross",
-   "kind": "Competición",
-   "info": "COPA ARAGONESA CX · ZONA ZERO C. BTT · Cadete, Cadete fem., Elit...",
-   "url": "https://aragonciclismo.com/index.php/smartweb/inscripciones/prueba/35703-V-TROFEO-CX-MARGUDGUED-BOLTANA-ZONA-ZERO"
-  },
-  {
-   "source": "FCC",
-   "date": "2026-11-21",
-   "name": "VI Ciclocross de Gurb Memorial Lluis Vila I Codina",
-   "place": "Gurb",
-   "province": "Barcelona",
-   "country": "España",
-   "modality": "Ciclocross",
-   "discipline": "Ciclocròs · CX",
-   "kind": "Competición",
-   "info": "Copa Catalana Ciclocròs",
-   "url": "https://www.ciclisme.cat/cursa/ciclocros/vi-ciclocross-de-gurb-memorial-lluis-vila-i-codina"
-  },
-  {
-   "source": "FCC",
-   "date": "2026-11-22",
-   "name": "Ciclocròs Ciutat de Vic",
-   "place": "Vic",
-   "province": "Barcelona",
-   "country": "España",
-   "modality": "Ciclocross",
-   "discipline": "Ciclocròs · CX",
-   "kind": "Competición",
-   "info": "Copa Catalana Ciclocròs",
-   "url": "https://www.ciclisme.cat/cursa/ciclocros/ciclocros-ciutat-de-vic"
-  },
-  {
-   "source": "FCC",
-   "date": "2026-11-22",
-   "name": "CICLOCRÒS CIUTAT DE VIC - Promoció",
-   "place": "Vic",
-   "province": "Barcelona",
-   "country": "España",
-   "modality": "Ciclocross",
-   "discipline": "Ciclocròs · CX",
-   "kind": "Competición",
-   "info": "Copa Catalana Ciclocròs",
-   "url": "https://www.ciclisme.cat/cursa/ciclocros/ciclocros-ciutat-de-vic-promocio"
-  },
-  {
-   "source": "FCC",
-   "date": "2026-11-22",
-   "name": "Corriols de L’àvia",
-   "place": "Lloret",
-   "province": "Girona",
-   "country": "España",
-   "modality": "Otra",
-   "discipline": "Pedalades · Marxes BTT",
-   "kind": "Ocio",
-   "info": "",
-   "url": "https://www.ciclisme.cat/cursa/pedalades/corriols-de-lavia-1"
-  },
-  {
-   "source": "FCC",
-   "date": "2026-11-22",
-   "name": "Mini Dh Santi Moreno Race Weekend-Sant Andreu de la Barca",
-   "place": "Sant Andreu de la Barca",
-   "province": "Barcelona",
-   "country": "España",
-   "modality": "Otra",
-   "discipline": "DHi · MiniDH",
-   "kind": "Competición",
-   "info": "Copa Catalana MiniDH",
-   "url": "https://www.ciclisme.cat/cursa/dhi/mini-dh-santi-moreno-race-weekend-sant-andreu-de-la-barca"
-  },
-  {
-   "source": "FCC",
-   "date": "2026-11-22",
-   "name": "Old School downhill Santi Moreno Race Weekend - Sant Andreu de la Barca",
-   "place": "Sant Andreu de la Barca",
-   "province": "Barcelona",
-   "country": "España",
-   "modality": "Otra",
-   "discipline": "DHi · DH",
-   "kind": "Competición",
-   "info": "",
-   "url": "https://www.ciclisme.cat/cursa/dhi/old-school-downhill-santi-moreno-race-weekend-sant-andreu-de-la-barca"
-  },
-  {
-   "source": "FCC",
-   "date": "2026-11-22",
-   "name": "Open Maxxis Sant Vicenç dels Horts",
-   "place": "Sant Vicenç dels Horts",
-   "province": "Barcelona",
-   "country": "España",
-   "modality": "BTT",
-   "discipline": "BTT · Marató",
-   "kind": "Competición",
-   "info": "",
-   "url": "https://www.ciclisme.cat/cursa/btt/open-maxxis-sant-vicenc-dels-horts"
-  },
   {
    "source": "FAC",
    "date": "2026-11-22",
@@ -525,6 +369,19 @@
    "kind": "Competición",
    "info": "",
    "url": "https://www.ciclisme.cat/cursa/brevet/ruta-volta-ciclorandonneur-catalunya"
+  },
+  {
+   "source": "FCC",
+   "date": "2027-01-31",
+   "name": "Fem Ports #2 el Farell",
+   "place": "Caldes de Montbui",
+   "province": "Barcelona",
+   "country": "España",
+   "modality": "Otra",
+   "discipline": "Trobades · Trobades Carretera",
+   "kind": "Ocio",
+   "info": "FEM PORTS #",
+   "url": "https://www.ciclisme.cat/cursa/trobades/fem-ports-2-el-farell"
   }
  ]
 }

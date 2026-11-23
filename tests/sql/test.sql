@@ -24,6 +24,7 @@ insert into runners (id, name, category, code) values
 select save_registration('{"name":"Volta Futura","date":"2099-06-14","province":"Girona","country":"España","modality":"BTT"}',
                          '[{"runner_id":"10000000-0000-0000-0000-000000000001","category":"M40"}]') as reg \gset
 select pg_temp.check((select count(*) from registration_entries) = 1, 'inscripción con 1 inscrito');
+select pg_temp.check(jsonb_array_length(admin_movements()) >= 1 and admin_movements()::text like '%se inscribió en Volta Futura%', 'movimientos: la dirección ve las inscripciones');
 select save_registration(jsonb_build_object('id', :'reg', 'name','Volta Futura','date','2099-06-14','modality','BTT'), '[]');
 select pg_temp.check((select count(*) from registration_entries) = 0, 'quitar inscritos al guardar lista vacía');
 select save_registration(jsonb_build_object('id', :'reg', 'name','Volta Futura','date','2099-06-14','modality','BTT'),
@@ -143,7 +144,9 @@ set role anon;
 select pg_temp.check((select bool_or((g->>'mine_created')::boolean) from jsonb_array_elements(runner_view('BBBBBBBBBB')->'registrations') g), 'sabe cuáles creó');
 select runner_update_registration('BBBBBBBBBB', :'nueva', jsonb_build_object('name','Marxa Nova Editada','date', current_date + 11, 'modality','Gravel'));
 select pg_temp.check(runner_view('BBBBBBBBBB')::text like '%Marxa Nova Editada%', 'edita la suya');
-select pg_temp.expect_fail($q$select runner_update_registration('CCCCCCCCCC', '$q$ || :'nueva' || $q$', '{"name":"Hack","date":"2099-01-01"}')$q$, 'no edita la de otro');
+select runner_update_registration('CCCCCCCCCC', :'nueva', jsonb_build_object('name','Marxa Nova Editada','date', current_date + 11, 'modality','Gravel', 'place','Corregido por otro'));
+select pg_temp.check(runner_view('BBBBBBBBBB')::text like '%Corregido por otro%', 'cualquier corredor puede corregir los datos de una carrera');
+select pg_temp.expect_fail($q$select runner_update_registration('CCCCCCCCCC', '00000000-0000-0000-0000-0000000000ff', '{"name":"Hack","date":"2099-01-01"}')$q$, 'no edita una carrera que no existe');
 select pg_temp.expect_fail($q$select runner_delete_registration('CCCCCCCCCC', '$q$ || :'nueva' || $q$')$q$, 'no borra la de otro');
 select runner_join('CCCCCCCCCC', :'nueva', null);
 select pg_temp.expect_fail($q$select runner_delete_registration('BBBBBBBBBB', '$q$ || :'nueva' || $q$')$q$, 'no borra si hay otros apuntados');
@@ -184,6 +187,36 @@ select pg_temp.expect_fail($q$select runner_team('XXXXXXXXXXXX')$q$, 'resumen eq
 select pg_temp.check(jsonb_typeof(runner_team_moves('BBBBBBBBBB')) = 'array', 'movimientos del equipo: devuelve una lista');
 select pg_temp.check(runner_team_moves('BBBBBBBBBB')::text !~ '(BBBBBBBBBB|AAAAAAAAAA|contract)', 'movimientos del equipo: sin enlaces ni contratos');
 select pg_temp.expect_fail($q$select runner_team_moves('XXXXXXXXXXXX')$q$, 'movimientos del equipo: sin enlace no');
+-- clasificación de la racha «al día»
+reset role;
+insert into runners (id, name, code) values ('10000000-0000-0000-0000-0000000000a1', 'Racha Uno', 'RRRRRRRRR1'), ('10000000-0000-0000-0000-0000000000a2', 'Racha Dos', 'RRRRRRRRR2');
+insert into races (id, name, date) values
+  ('30000000-0000-0000-0000-0000000000a1', 'Marxa Ñandú', current_date - 60), ('30000000-0000-0000-0000-0000000000a2', 'Cursa Dos', current_date - 40),
+  ('30000000-0000-0000-0000-0000000000a3', 'Cursa Tres', current_date - 20), ('30000000-0000-0000-0000-0000000000a4', 'Cursa Reciente', current_date - 3);
+insert into results (race_id, runner_id, runner_name, position) values
+  ('30000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-0000000000a1', 'Racha Uno', 5), ('30000000-0000-0000-0000-0000000000a2', '10000000-0000-0000-0000-0000000000a1', 'Racha Uno', 4),
+  ('30000000-0000-0000-0000-0000000000a3', '10000000-0000-0000-0000-0000000000a1', 'Racha Uno', 3), ('30000000-0000-0000-0000-0000000000a4', '10000000-0000-0000-0000-0000000000a1', 'Racha Uno', 9),
+  ('30000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-0000000000a2', 'Racha Dos', 8), ('30000000-0000-0000-0000-0000000000a2', '10000000-0000-0000-0000-0000000000a2', 'Racha Dos', 6),
+  ('30000000-0000-0000-0000-0000000000a3', '10000000-0000-0000-0000-0000000000a2', 'Racha Dos', 7);
+-- crónicas pasadas por alguien: la 1ª (con ñ y mayúsculas), la 2ª y la 3ª; la reciente aún no (está en plazo)
+insert into chronicles (runner_id, race_key) values
+  ('10000000-0000-0000-0000-0000000000a1', to_char(current_date - 60, 'YYYY-MM-DD') || '|marxa nandu'), ('10000000-0000-0000-0000-0000000000a1', to_char(current_date - 20, 'YYYY-MM-DD') || '|cursa tres'),
+  ('10000000-0000-0000-0000-0000000000a2', to_char(current_date - 40, 'YYYY-MM-DD') || '|cursa dos');
+set role anon;
+select pg_temp.check((select (e->>'streak')::int from jsonb_array_elements(runner_streaks('RRRRRRRRR1')) e where e->>'name' = 'Racha Uno') = 3, 'racha: tres seguidas al día y la reciente (en plazo) no la rompe');
+select pg_temp.check((select (e->>'streak')::int from jsonb_array_elements(runner_streaks('RRRRRRRRR1')) e where e->>'name' = 'Racha Dos') = 3, 'racha: la crónica la pasó otro y vale para todos');
+select pg_temp.check(runner_streaks('RRRRRRRRR1')::text !~ '(RRRRRRRRR|code)', 'racha: sin enlaces');
+select pg_temp.expect_fail($q$select runner_streaks('XXXXXXXXXXXX')$q$, 'racha: sin enlace no');
+select pg_temp.expect_fail($q$select admin_movements()$q$, 'movimientos: un corredor no los lee');
+reset role;
+select pg_temp.check(exists (select 1 from change_log where action = 'baja' and summary like 'se borró de %'), 'movimientos: se anota cuando alguien se borra de una carrera');
+set role anon;
+reset role;
+delete from chronicles where runner_id in ('10000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-0000000000a2');
+delete from races where id::text like '30000000-0000-0000-0000-0000000000a%';
+delete from runners where id in ('10000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-0000000000a2');
+set role anon;
+
 -- notas personales de inscripción (con una carrera en la que Anna está inscrita)
 select set_config('t.reg', (select r->>'id' from jsonb_array_elements(runner_view('BBBBBBBBBB')->'registrations') r where r->'entries' @> '[{"runner_id":"10000000-0000-0000-0000-000000000002"}]'::jsonb limit 1), false);
 reset role;
@@ -234,7 +267,7 @@ select pg_temp.expect_fail($q$select runner_join_race('DDDDDDDDDD', '30000000-00
 select runner_create_registration('DDDDDDDDDD', jsonb_build_object('name','Copa Prueba 1','date', current_date + 20), null) as cop \gset
 select runner_set_race_type('DDDDDDDDDD', :'cop', 'circuito', ' Copa Aragón XCM ');
 select pg_temp.check((select g->>'circuit' from jsonb_array_elements(runner_view('DDDDDDDDDD')->'registrations') g where g->>'id' = :'cop') = 'Copa Aragón XCM', 'tipo: el corredor marca su carrera como puntuable de un circuito');
-select pg_temp.expect_fail($q$select runner_set_race_type('CCCCCCCCCC', '$q$ || :'cop' || $q$', 'campeonato', null)$q$, 'tipo: no cambia la de otro');
+select runner_set_race_type('CCCCCCCCCC', :'cop', 'circuito', ' Copa Aragón XCM ');
 select pg_temp.expect_fail($q$select runner_set_race_type('DDDDDDDDDD', '$q$ || :'cop' || $q$', 'inventado', null)$q$, 'tipo: valor inválido');
 select runner_propose_circuit('DDDDDDDDDD', 'Copa Aragón XCM', extract(year from current_date)::int, 2, 'categoria') as cp \gset
 select pg_temp.check((runner_view('DDDDDDDDDD')->'bonus'->>'extra')::int = 0, 'circuito: pendiente no suma');
@@ -323,7 +356,7 @@ select pg_temp.check((select (g->>'km')::numeric from jsonb_array_elements(runne
 select runner_set_race_details('DDDDDDDDDD', :'fmt', '', -5);
 select pg_temp.check((select g->>'km' from jsonb_array_elements(runner_view('DDDDDDDDDD')->'registrations') g where g->>'id' = :'fmt') is null, 'formato: km inválidos se dejan vacíos');
 select runner_set_race_details('DDDDDDDDDD', :'fmt', 'XCO', 42);
-select pg_temp.expect_fail($q$select runner_set_race_details('CCCCCCCCCC', '$q$ || :'fmt' || $q$', 'XCO', 10)$q$, 'formato: no cambia el de otro');
+select runner_set_race_details('CCCCCCCCCC', :'fmt', 'XCO', 42);
 reset role;
 set role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
@@ -607,7 +640,11 @@ reset role;
 select pg_temp.check((select name = 'Cursa Creador Editada' and modality = 'Gravel' and km = 72.5 and circuit = 'Open Test' from races where id = :'rcreada'), 'edita su carrera ya en resultados');
 select pg_temp.check(exists (select 1 from change_log where entity_id = :'rcreada' and actor = 'Anna Puig'), 'el historial dice quién la editó');
 set role anon;
-select pg_temp.expect_fail($q$select runner_update_race('CCCCCCCCCC', '$q$ || :'rcreada' || $q$', '{"name":"Hack","date":"2000-01-01"}')$q$, 'no edita la carrera de otro');
+select runner_update_race('CCCCCCCCCC', :'rcreada', jsonb_build_object('name','Cursa Creador Editada','date', current_date - 3, 'modality','Gravel', 'km', '72.5', 'race_type', 'circuito', 'circuit', 'Open Test', 'place', 'Corregido por otro'));
+reset role;
+select pg_temp.check((select place = 'Corregido por otro' from races where id = :'rcreada'), 'cualquier corredor puede corregir una carrera en resultados');
+select pg_temp.check(exists (select 1 from change_log where entity_id = :'rcreada' and actor = (select name from runners where code = 'CCCCCCCCCC')), 'el historial dice quién la corrigió');
+set role anon;
 select pg_temp.expect_fail($q$select runner_update_race('BBBBBBBBBB', '$q$ || :'rcreada' || $q$', jsonb_build_object('name','Futura','date', current_date + 5))$q$, 'una carrera en resultados no puede ir a fecha futura');
 select pg_temp.expect_fail($q$select runner_delete_race('CCCCCCCCCC', '$q$ || :'rcreada' || $q$')$q$, 'no borra la carrera de otro');
 select runner_join_race('CCCCCCCCCC', :'rcreada', null);
@@ -634,6 +671,10 @@ select pg_temp.check(jsonb_array_length(runner_chronicles(:'crcode')) = 2, 'cró
 select pg_temp.check(runner_chronicles(:'crcode2') = '[]'::jsonb, 'crónicas: cada corredor ve solo las suyas');
 select runner_chronicle_set(:'crcode', '2026-10-25|salida', false);
 select pg_temp.check(runner_chronicles(:'crcode') = '["2026-11-08|vii btt"]'::jsonb, 'crónicas: se puede desmarcar');
+select runner_chronicle_set(:'crcode2', '2026-11-08|vii btt', true);
+select runner_chronicle_set(:'crcode2', '2026-11-08|vii btt', false);
+select pg_temp.check(runner_chronicles(:'crcode') = '[]'::jsonb and runner_chronicles(:'crcode2') = '[]'::jsonb, 'crónicas: deshacer la deja pendiente para todos');
+select runner_chronicle_set(:'crcode', '2026-11-08|vii btt', true);
 select pg_temp.expect_fail($q$select runner_chronicles('codigo-falso')$q$, 'crónicas: enlace falso no lee');
 select pg_temp.expect_fail($q$select runner_chronicle_set('codigo-falso', 'abc|def', true)$q$, 'crónicas: enlace falso no marca');
 select pg_temp.expect_fail($q$select runner_chronicle_set('$$ || :'crcode' || $$', 'x', true)$q$, 'crónicas: clave demasiado corta');

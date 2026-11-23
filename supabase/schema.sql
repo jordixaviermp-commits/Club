@@ -697,6 +697,81 @@ begin
         from registrations g), '[]'::jsonb));
 end $$;
 
+-- Movimientos de la app para la dirección (inscripciones, pagos, crónicas, carreras, resultados, bajas).
+create or replace function public.log_entry_leave()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare v_name text; v_reg text; v_date date; v_admin boolean := public.is_admin();
+begin
+  if current_setting('app.skip_log', true) = 'on' then return old; end if;
+  select g.name, g.date into v_reg, v_date from registrations g where g.id = old.registration_id;
+  if v_reg is null then return old; end if;            -- se ha borrado la carrera entera: ya queda anotado
+  select name into v_name from runners where id = old.runner_id;
+  if v_name is null then return old; end if;
+  if v_admin then
+    perform public.log_change('Dirección', 'registration', old.registration_id, 'baja', format('quitó a %s de %s (%s)', v_name, v_reg, v_date));
+  else
+    perform public.log_change(v_name, 'registration', old.registration_id, 'baja', format('se borró de %s (%s)', v_reg, v_date));
+  end if;
+  return old;
+end $$;
+drop trigger if exists entries_leave_log on public.registration_entries;
+create trigger entries_leave_log after delete on public.registration_entries for each row execute function public.log_entry_leave();
+
+create or replace function public.admin_movements(p_limit int default 300)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'solo_direccion' using errcode = '42501'; end if;
+  return coalesce((
+    select jsonb_agg(m.x order by m.at desc) from (
+      select e.created_at as at, jsonb_build_object('at', e.created_at, 'who', r.name, 'kind', 'inscripcion', 'text', format('se inscribió en %s (%s)', g.name, to_char(g.date, 'DD/MM/YYYY'))) as x
+        from registration_entries e join runners r on r.id = e.runner_id join registrations g on g.id = e.registration_id where e.created_at is not null
+      union all
+      select e.paid_at, jsonb_build_object('at', e.paid_at, 'who', r.name, 'kind', 'pago', 'text', format('marcó como pagada su inscripción en %s', g.name))
+        from registration_entries e join runners r on r.id = e.runner_id join registrations g on g.id = e.registration_id where e.paid_at is not null
+      union all
+      select c.done_at, jsonb_build_object('at', c.done_at, 'who', r.name, 'kind', 'cronica', 'text', format('pasó la crónica de %s (%s)', initcap(split_part(c.race_key, '|', 2)), split_part(c.race_key, '|', 1)))
+        from chronicles c join runners r on r.id = c.runner_id
+      union all
+      select l.at, jsonb_build_object('at', l.at, 'who', l.actor, 'kind',
+               case when l.action = 'baja' then 'baja' when l.entity = 'result' then 'resultado' when l.entity in ('race', 'registration') then 'carrera' else 'otro' end, 'text', l.summary)
+        from change_log l
+      order by at desc limit greatest(1, least(coalesce(p_limit, 300), 1000))
+    ) m), '[]'::jsonb);
+end $$;
+
+grant execute on function public.admin_movements(int) to authenticated;
+revoke execute on function public.admin_movements(int) from anon, public;
+
+-- Clasificación de la racha «al día» (carreras seguidas con resultado puesto y crónica pasada).
+create or replace function public.cron_name_key(t text)
+returns text language sql immutable as $$
+  select btrim(regexp_replace(translate(lower(coalesce(t, '')), 'áàäâãéèëêíìïîóòöôõúùüûñçÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑÇ', 'aaaaaeeeeiiiiooooouuuuncaaaaaeeeeiiiiooooouuuunc'), '\s+', ' ', 'g'))
+$$;
+
+create or replace function public.runner_streaks(p_code text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+begin
+  if not exists (select 1 from runners where code = p_code) then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  return coalesce((
+    with rws as (
+      select res.runner_id, rc.date, coalesce(rc.end_date, rc.date) as last_day,
+             (res.position is not null and exists (select 1 from chronicles c where c.race_key = to_char(rc.date, 'YYYY-MM-DD') || '|' || public.cron_name_key(rc.name))) as complete
+        from results res join races rc on rc.id = res.race_id where res.runner_id is not null
+      union all
+      select e.runner_id, g.date, coalesce(g.end_date, g.date),
+             (e.self_position is not null and exists (select 1 from chronicles c where c.race_key = to_char(g.date, 'YYYY-MM-DD') || '|' || public.cron_name_key(g.name)))
+        from registration_entries e join registrations g on g.id = e.registration_id
+       where g.date < current_date and not g.suspended
+    ), br as (
+      select runner_id, max(date) as d from rws where not complete and last_day < current_date - 7 group by runner_id
+    ), st as (
+      select r.id, r.name, (select count(*) from rws x where x.runner_id = r.id and x.complete
+                              and x.date > coalesce((select b.d from br b where b.runner_id = r.id), date '1900-01-01'))::int as n
+        from runners r
+    )
+    select jsonb_agg(jsonb_build_object('id', id, 'name', name, 'streak', n) order by n desc, name) from st where n > 0), '[]'::jsonb);
+end $$;
+
 -- Notas personales del corredor en cada carrera a la que está inscrito (solo las ve él).
 create table if not exists public.runner_entry_notes (
   runner_id       uuid not null,
@@ -844,24 +919,23 @@ end $$;
 create or replace function public.runner_update_registration(p_code text, p_id uuid, p_reg jsonb)
 returns void language plpgsql security definer set search_path = public as $$
 declare
-  v_runner uuid;
+  v_runner uuid; v_who text;
   v_name text := btrim(regexp_replace(coalesce(p_reg->>'name',''), '\s+', ' ', 'g'));
   v_date date := nullif(p_reg->>'date','')::date;
   v_end  date := nullif(nullif(p_reg->>'end_date',''), p_reg->>'date')::date;
   v_elev int := case when coalesce(p_reg->>'elevation','') ~ '^[0-9]{1,5}$' and (p_reg->>'elevation')::int between 1 and 10000 then (p_reg->>'elevation')::int end;
   v_price numeric := case when coalesce(p_reg->>'price','') ~ '^[0-9]{1,5}([.][0-9]{1,2})?$' and (p_reg->>'price')::numeric <= 10000 then (p_reg->>'price')::numeric end;
 begin
-  select id into v_runner from runners where code = p_code;
+  select id, name into v_runner, v_who from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
-  if not exists (select 1 from registrations where id = p_id and created_by = v_runner) then
-    raise exception 'no_es_tuya' using errcode = '42501';
-  end if;
+  if not exists (select 1 from registrations where id = p_id) then raise exception 'no_existe'; end if;
   if length(v_name) < 3 or length(v_name) > 120 then raise exception 'nombre_no_valido'; end if;
   if v_date is null or v_date < make_date(extract(year from current_date)::int - 1, 1, 1) or v_date > current_date + 730 then raise exception 'fecha_no_valida'; end if;
   if v_end is not null and (v_end < v_date or v_end > v_date + 30) then raise exception 'fecha_no_valida'; end if;
   if exists (select 1 from registrations where id <> p_id and date = v_date and lower(name) = lower(v_name)) then
     raise exception 'ya_existe';
   end if;
+  perform set_config('app.actor', v_who, true);   -- el historial dice quién lo cambió
   update registrations set name = v_name, date = v_date, end_date = v_end,
     place = nullif(left(btrim(coalesce(p_reg->>'place','')), 120), ''),
     province = nullif(left(btrim(coalesce(p_reg->>'province','')), 60), ''),
@@ -871,6 +945,7 @@ begin
   where id = p_id;
   if p_reg ? 'elevation' then update registrations set elevation = v_elev where id = p_id; end if;
   if p_reg ? 'price' then update registrations set price = v_price where id = p_id; end if;
+  perform set_config('app.actor', '', true);
 end $$;
 
 -- Cualquier corredor puede marcar (o reabrir) una carrera como suspendida por la organización: cuenta para el mínimo, no para el bono.
@@ -916,9 +991,7 @@ declare
 begin
   select id, name into v_runner, v_who from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
-  if not exists (select 1 from races where id = p_id and created_by = v_runner) then
-    raise exception 'no_es_tuya' using errcode = '42501';
-  end if;
+  if not exists (select 1 from races where id = p_id) then raise exception 'no_existe'; end if;
   if length(v_name) < 3 or length(v_name) > 120 then raise exception 'nombre_no_valido'; end if;
   if v_date is null or v_date < make_date(extract(year from current_date)::int - 1, 1, 1) or v_date > current_date then raise exception 'fecha_no_valida'; end if;
   if v_end is not null and (v_end < v_date or v_end > v_date + 30) then raise exception 'fecha_no_valida'; end if;
@@ -1116,27 +1189,31 @@ end $$;
 -- El corredor indica el tipo de una carrera que creó él (campeonato o puntuable de un circuito).
 create or replace function public.runner_set_race_type(p_code text, p_id uuid, p_type text, p_circuit text)
 returns void language plpgsql security definer set search_path = public as $$
-declare v_runner uuid; v_type text := coalesce(nullif(p_type, ''), 'suelta');
+declare v_runner uuid; v_who text; v_type text := coalesce(nullif(p_type, ''), 'suelta');
 begin
-  select id into v_runner from runners where code = p_code;
+  select id, name into v_runner, v_who from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  perform set_config('app.actor', v_who, true);
   update registrations set race_type = v_type,
          circuit = case when v_type = 'circuito' then nullif(left(btrim(coalesce(p_circuit, '')), 120), '') end
-   where id = p_id and created_by = v_runner;
-  if not found then raise exception 'no_es_tuya' using errcode = '42501'; end if;
+   where id = p_id;
+  if not found then raise exception 'no_existe'; end if;
+  perform set_config('app.actor', '', true);
 end $$;
 
 -- El corredor indica el formato y los km de una carrera que creó él.
 create or replace function public.runner_set_race_details(p_code text, p_id uuid, p_subtype text, p_km numeric)
 returns void language plpgsql security definer set search_path = public as $$
-declare v_runner uuid;
+declare v_runner uuid; v_who text;
 begin
-  select id into v_runner from runners where code = p_code;
+  select id, name into v_runner, v_who from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  perform set_config('app.actor', v_who, true);
   update registrations set subtype = nullif(left(btrim(coalesce(p_subtype, '')), 30), ''),
          km = case when p_km > 0 and p_km <= 1000 then round(p_km, 1) end
-   where id = p_id and created_by = v_runner;
-  if not found then raise exception 'no_es_tuya' using errcode = '42501'; end if;
+   where id = p_id;
+  if not found then raise exception 'no_existe'; end if;
+  perform set_config('app.actor', '', true);
 end $$;
 
 -- El corredor comunica un podio en la general final de un circuito: queda pendiente hasta que la dirección lo confirme.
@@ -1416,7 +1493,7 @@ begin
   if coalesce(p_done, true) then
     insert into chronicles (runner_id, race_key) values (v_runner, p_key) on conflict do nothing;
   else
-    delete from chronicles where runner_id = v_runner and race_key = p_key;
+    delete from chronicles where race_key = p_key;
   end if;
 end $$;
 
@@ -1692,7 +1769,7 @@ grant execute on function public.runner_set_registration_url(text, uuid, text), 
                           public.runner_update_race(text, uuid, jsonb), public.runner_delete_race(text, uuid), public.runner_set_suspended(text, uuid, boolean),
                           public.runner_report_result(text, text, uuid, int, text, text, int),
                           public.runner_documents_list(text), public.runner_get_document(text, uuid), public.runner_contract_template(text), public.runner_get_contract_template(text),
-                          public.runner_team(text), public.runner_team_moves(text), public.runner_notes_list(text), public.runner_note_set(text, uuid, text), public.runner_chronicles(text), public.runner_chronicles_team(text), public.runner_social_impact(text), public.runner_chronicle_set(text, text, boolean),
+                          public.runner_team(text), public.runner_streaks(text), public.runner_team_moves(text), public.runner_notes_list(text), public.runner_note_set(text, uuid, text), public.runner_chronicles(text), public.runner_chronicles_team(text), public.runner_social_impact(text), public.runner_chronicle_set(text, text, boolean),
                           public.runner_leave(text, uuid), public.runner_set_paid(text, uuid, boolean, numeric, date), public.runner_join_race(text, uuid, text),
                           public.runner_set_race_type(text, uuid, text, text), public.runner_propose_circuit(text, text, int, int, text),
                           public.runner_cancel_circuit(text, uuid), public.runner_news(text), public.runner_set_race_details(text, uuid, text, numeric), public.runner_complete_race(text, text, uuid, jsonb), public.auto_promote_registrations(),
