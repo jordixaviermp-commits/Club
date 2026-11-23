@@ -28,7 +28,7 @@ test('cada liga usa un solo nombre de circuito', () => {
   const por = new Map();
   for (const r of data.races) if (r.circuit) (por.get(r.league) || por.set(r.league, new Set()).get(r.league)).add(r.circuit);
   for (const [liga, nombres] of por) assert.equal(nombres.size, 1, liga);
-  assert.ok(por.has("Xallenger BTT Terres de l'Ebre 2027") && por.has('Open Maxxis Marathon by Bryton 2027') && por.has('Copa Catalana Internacional BTT 2027') && por.has('Marathon Cup BTT 2027'));
+  assert.ok(por.has("Xallenger BTT Terres de l'Ebre 2027") && por.has('Open Maxxis Marathon by Bryton 2027 · Copa Catalana de Marathon') && por.has('Copa Catalana Internacional BTT 2027') && por.has('Marathon Cup BTT 2027'));
 });
 
 test('las carreras de la liga salen al buscar por liga, pueblo o nombre', () => {
@@ -54,7 +54,7 @@ test('Hivernal de Resistència BTT: las 3 pruebas salen al buscar por liga, pueb
 
 test('Copa Catalana Internacional BTT 2027: 6 pruebas de XCO que se encuentran por liga, pueblo y nombre', () => {
   const names = (q) => searchRaces(q, data.races).map((r) => r.name);
-  assert.equal(names('copa catalana').length, 6);
+  assert.equal(names('copa catalana').filter((n) => /^Copa Catalana Internacional/.test(n)).length, 6);
   assert.ok(names('banyoles').includes('Copa Catalana Internacional BTT – Banyoles'));
   assert.ok(names('naturland').filter((n) => /Copa Catalana/.test(n)).length === 1 && names('molina').length >= 1 && names('santa susanna').length === 1);
   const cc = data.races.filter((r) => r.league === 'Copa Catalana Internacional BTT 2027');
@@ -119,4 +119,19 @@ test('Bike Marathon Pulmón de Acero 2027: sale al buscar por nombre o pueblo', 
   assert.ok(names('pulmon de acero').includes('Bike Marathon Pulmón de Acero') && names('barakaldo').includes('Bike Marathon Pulmón de Acero'));
   const r = data.races.find((x) => x.name === 'Bike Marathon Pulmón de Acero');
   assert.deepEqual([r.date, r.subtype, r.province], ['2027-09-25', 'XCM', 'Bizkaia']);
+});
+
+test('Valencia Epic Race 2027: sale al buscar por nombre o pueblo', () => {
+  const names = (q) => searchRaces(q, data.races).map((r) => r.name);
+  assert.ok(names('epic race').includes('Valencia Epic Race') && names('bunol').includes('Valencia Epic Race'));
+  assert.equal(data.races.find((r) => r.name === 'Valencia Epic Race').date, '2027-05-14');
+});
+
+test('Open Maxxis Marathon 2027 es la Copa Catalana de Marathon: 9 pruebas que salen buscando «copa catalana marathon»', () => {
+  const names = (q) => searchRaces(q, data.races).map((r) => r.name);
+  const mx = data.races.filter((r) => /Open Maxxis Marathon/.test(r.name));
+  assert.equal(mx.length, 9);
+  assert.ok(mx.every((r) => /Copa Catalana de Marathon/.test(r.league) && /Pack Especial Copa Catalana de Marathon/.test(r.info) && r.circuit === 'Open Maxxis Marathon'));
+  assert.ok(names('copa catalana marathon').slice(0, 9).every((n) => /Open Maxxis Marathon/.test(n)));
+  assert.equal(mx.find((r) => r.place === "Castell d'Aro").date, '2027-09-26');   // el cartel pone 26 de septiembre (domingo)
 });

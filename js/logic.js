@@ -1407,6 +1407,30 @@ export function nextYearWatch(w) {
     modality: w.modality, subtype: w.subtype || '', km: w.km ?? '', elevation: w.elevation ?? '', price: w.price ?? '', url: w.url || '', deadline: '',
     notes: (old ? `${head}\n${old}` : head).slice(0, 500) };
 }
+/**
+ * Las carreras de ligas (data/ligas.json) se conservan de un año a otro: si la última edición de una carrera ya pasó y todavía no se ha
+ * escrito la siguiente, se proyecta a la edición que viene con 52 semanas más (mismo día de la semana) y la marca `tbc` (fecha por confirmar).
+ * En cuanto se escribe la edición nueva en el archivo, deja de proyectarse. Devuelve solo las proyecciones (no toca la lista original).
+ */
+export function projectLeagueRaces(races, today) {
+  const key = (r) => normalize(r.name).replace(/\b20\d\d\b/g, '').replace(/\s+/g, ' ').trim();
+  const last = new Map();
+  for (const r of races) {
+    if (r.source !== 'LIGA' || !r.date || !r.name) continue;
+    const k = key(r), cur = last.get(k);
+    if (!cur || r.date > cur.date) last.set(k, r);
+  }
+  const out = [];
+  for (const r of last.values()) {
+    if ((r.end_date || r.date) >= today) continue;
+    const k = Math.ceil(daysBetween(r.date, today) / 364) || 1;
+    const date = shiftDay(r.date, 364 * k), year = date.slice(0, 4);
+    const newYear = (t) => String(t || '').replace(/\b20\d\d\b/g, year);
+    out.push({ ...r, date, end_date: r.end_date ? shiftDay(r.end_date, 364 * k) : undefined, name: newYear(r.name), league: newYear(r.league), tbc: true,
+      info: `📅 Fecha por confirmar: la de la edición anterior (${r.date.split('-').reverse().join('/')}) + ${52 * k} semanas${r.info ? ' · ' + r.info : ''}` });
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name, 'es'));
+}
 /** Orden: primero las que aún no han pasado (por fecha, o por plazo de inscripción si se pide), luego las que ya pasaron. */
 export function sortWatch(list, mode, today) {
   const rows = list.map((w) => ({ w, i: watchInfo(w, today) }));
