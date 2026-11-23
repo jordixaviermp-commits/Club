@@ -1,6 +1,6 @@
 {
  "_nota": "Ligas y circuitos que se corren cada año y a los que suele ir gente del club. Se escribe a mano (no lo toca el lector de las federaciones). El campo «subtype» (opcional) rellena el formato. «url» es opcional. Para añadir otra liga, copia un bloque de carrera y cambia source/league/fechas. Comprobar siempre las fechas en la web de la liga. El campo «circuit» (opcional) marca la carrera como puntuable de un circuito con ese nombre: se usa para el podio en la general final (cláusula 9). Escríbelo igual en todas las pruebas de la liga.",
- "updated_at": "2026-11-21",
+ "updated_at": "2026-11-23",
  "races": [
   {
    "source": "LIGA",
@@ -88,7 +88,7 @@
   },
   {
    "source": "LIGA",
-   "league": "Open Maxxis Marathon by Bryton 2027",
+   "league": "Open Maxxis Marathon by Bryton 2027 · Copa Catalana de Marathon",
    "circuit": "Open Maxxis Marathon",
    "date": "2027-02-28",
    "name": "Open Maxxis Marathon – El Vendrell",
@@ -99,7 +99,7 @@
    "subtype": "XCM",
    "discipline": "BTT",
    "kind": "Competición",
-   "info": "Open Maxxis Marathon by Bryton 2027 · Race, Popular y E-bike",
+   "info": "Pack Especial Copa Catalana de Marathon · Open Maxxis Marathon by Bryton 2027 · Race, Popular y E-bike",
    "url": "https://clubbtt-opennatura.com/"
   },
   {
@@ -134,7 +134,7 @@
   },
   {
    "source": "LIGA",
-   "league": "Open Maxxis Marathon by Bryton 2027",
+   "league": "Open Maxxis Marathon by Bryton 2027 · Copa Catalana de Marathon",
    "circuit": "Open Maxxis Marathon",
    "date": "2027-03-21",
    "name": "Open Maxxis Marathon – Torrelles de Foix",
@@ -145,7 +145,7 @@
    "subtype": "XCM",
    "discipline": "BTT",
    "kind": "Competición",
-   "info": "Open Maxxis Marathon by Bryton 2027 · Race, Popular y E-bike",
+   "info": "Pack Especial Copa Catalana de Marathon · Open Maxxis Marathon by Bryton 2027 · Race, Popular y E-bike",
    "url": "https://clubbtt-opennatura.com/"
   },
   {
@@ -181,7 +181,7 @@
   },
   {
    "source": "LIGA",
-   "league": "Open Maxxis Marathon by Bryton 2027",
+   "league": "Open Maxxis Marathon by Bryton 2027 · Copa Catalana de Marathon",
    "circuit": "Open Maxxis Marathon",
    "date": "2027-04-11",
    "name": "Open Maxxis Marathon – Castelldans",
@@ -192,7 +192,7 @@
    "subtype": "XCM",
    "discipline": "BTT",
    "kind": "Competición",
-   "info": "Open Maxxis Marathon by Bryton 2027 · Race, Popular y E-bike",
+   "info": "Pack Especial Copa Catalana de Marathon · Open Maxxis Marathon by Bryton 2027 · Race, Popular y E-bike",
    "url": "https://clubbtt-opennatura.com/"
   },
   {
@@ -213,7 +213,7 @@
   },
   {
    "source": "LIGA",
-   "league": "Open Maxxis Marathon by Bryton 2027",
+   "league": "Open Maxxis Marathon by Bryton 2027 · Copa Catalana de Marathon",
    "circuit": "Open Maxxis Marathon",
    "date": "2027-05-02",
    "name": "Open Maxxis Marathon – El Catllar",
@@ -224,7 +224,7 @@
    "subtype": "XCM",
    "discipline": "BTT",
    "kind": "Competición",
-   "info": "Open Maxxis Marathon by Bryton 2027 · Race, Popular y E-bike",
+   "info": "Pack Especial Copa Catalana de Marathon · Open Maxxis Marathon by Bryton 2027 · Race, Popular y E-bike",
    "url": "https://clubbtt-opennatura.com/"
   },
   {
@@ -354,7 +354,7 @@
   },
   {
    "source": "LIGA",
-   "league": "Open Maxxis Marathon by Bryton 2027",
+   "league": "Open Maxxis Marathon by Bryton 2027 · Copa Catalana de Marathon",
    "circuit": "Open Maxxis Marathon",
    "date": "2027-06-06",
    "name": "Open Maxxis Marathon – Monistrol de Calders",
@@ -365,12 +365,12 @@
    "subtype": "XCM",
    "discipline": "BTT",
    "kind": "Competición",
-   "info": "Open Maxxis Marathon by Bryton 2027 · Race, Popular y E-bike",
+   "info": "Pack Especial Copa Catalana de Marathon · Open Maxxis Marathon by Bryton 2027 · Race, Popular y E-bike",
    "url": "https://clubbtt-opennatura.com/"
   },
   {
    "source": "LIGA",
-   "league": "Open Maxxis Marathon by Bryton 2027",
+   "league": "Open Maxxis Marathon by Bryton 2027 · Copa Catalana de Marathon",
    "circuit": "Open Maxxis Marathon",
    "date": "2027-06-20",
    "name": "Open Maxxis Marathon – Castellgalí",
@@ -381,7 +381,7 @@
    "subtype": "XCM",
    "discipline": "BTT",
    "kind": "Competición",
-   "info": "Open Maxxis Marathon by Bryton 2027 · Race, Popular y E-bike",
+   "info": "Pack Especial Copa Catalana de Marathon · Open Maxxis Marathon by Bryton 2027 · Race, Popular y E-bike",
    "url": "https://clubbtt-opennatura.com/"
   },
   {
@@ -537,9 +537,9 @@
   },
   {
    "source": "LIGA",
-   "league": "Open Maxxis Marathon by Bryton 2027",
+   "league": "Open Maxxis Marathon by Bryton 2027 · Copa Catalana de Marathon",
    "circuit": "Open Maxxis Marathon",
-   "date": "2027-09-27",
+   "date": "2027-09-26",
    "name": "Open Maxxis Marathon – Castell d'Aro",
    "place": "Castell d'Aro",
    "province": "Girona",
@@ -548,12 +548,12 @@
    "subtype": "XCM",
    "discipline": "BTT",
    "kind": "Competición",
-   "info": "Open Maxxis Marathon by Bryton 2027 · Race, Popular y E-bike",
+   "info": "Pack Especial Copa Catalana de Marathon · Open Maxxis Marathon by Bryton 2027 · Race, Popular y E-bike",
    "url": "https://clubbtt-opennatura.com/"
   },
   {
    "source": "LIGA",
-   "league": "Open Maxxis Marathon by Bryton 2027",
+   "league": "Open Maxxis Marathon by Bryton 2027 · Copa Catalana de Marathon",
    "circuit": "Open Maxxis Marathon",
    "date": "2027-10-24",
    "name": "Open Maxxis Marathon – Sant Sadurní d'Anoia",
@@ -564,12 +564,12 @@
    "subtype": "XCM",
    "discipline": "BTT",
    "kind": "Competición",
-   "info": "Open Maxxis Marathon by Bryton 2027 · Race, Popular y E-bike",
+   "info": "Pack Especial Copa Catalana de Marathon · Open Maxxis Marathon by Bryton 2027 · Race, Popular y E-bike",
    "url": "https://clubbtt-opennatura.com/"
   },
   {
    "source": "LIGA",
-   "league": "Open Maxxis Marathon by Bryton 2027",
+   "league": "Open Maxxis Marathon by Bryton 2027 · Copa Catalana de Marathon",
    "circuit": "Open Maxxis Marathon",
    "date": "2027-11-21",
    "name": "Open Maxxis Marathon – Sant Vicenç dels Horts",
@@ -580,7 +580,7 @@
    "subtype": "XCM",
    "discipline": "BTT",
    "kind": "Competición",
-   "info": "Open Maxxis Marathon by Bryton 2027 · Race, Popular y E-bike",
+   "info": "Pack Especial Copa Catalana de Marathon · Open Maxxis Marathon by Bryton 2027 · Race, Popular y E-bike",
    "url": "https://clubbtt-opennatura.com/"
   }
  ]
