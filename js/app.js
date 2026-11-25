@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError, cleanWeb } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, disciplineKey, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   teamMoves, parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  directorBoard, raceImpact, alDia, tierRanges, nextTeamRace, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, projectLeagueRaces, WATCH_TBC, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
+  directorBoard, raceImpact, alDia, tierRanges, nextTeamRace, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, projectLeagueRaces, WATCH_TBC, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, igHeadline, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -351,7 +351,7 @@ async function loadImpact() {
   S.impact = 'loading';
   if (S.stories === undefined) loadStories();
   let r = null; try { r = await api.runnerSocialImpact(S.code || S.previewCode); } catch { r = null; }
-  S.impact = r && Array.isArray(r.posted) ? { posted: new Set(r.posted), ig: r.ig || null } : null;
+  S.impact = r && Array.isArray(r.posted) ? { posted: new Set(r.posted), ig: r.ig_rows ? igHeadline(r.ig_rows) : null } : null;
   if (S.runnerData) render();
 }
 async function loadRunner() {
@@ -1309,7 +1309,7 @@ function chronicleCard(d) {
     if (S.impact === null) return '<p class="hint">Todavía no está activado: la dirección tiene que ejecutar un SQL en Supabase (<code>2026-11-20-impacto-redes.sql</code>).</p>';
     const mineKeys = new Set([...(d.my_results || []).filter((r) => r.position).map(postKeyOf), ...(d.registrations || []).filter((g) => g.my_result).map(postKeyOf)]);   // carreras donde ya puso su puesto
     const imp = raceImpact([...c.pending, ...c.done].sort((a, b) => b.date.localeCompare(a.date)), { posted: S.impact.posted, story: S.stories || null, chron: S.chron, mine: mineKeys });
-    const t = imp.totals, ig = S.impact.ig, nf = (n) => Number(n || 0).toLocaleString('de-DE');
+    const t = imp.totals, H = S.impact.ig, nf = (n) => Number(n || 0).toLocaleString('de-DE');
     const okI = '<span class="imp-ok" aria-label="hecho">✓</span>', noI = '<span class="imp-no" aria-label="aún no">—</span>';
     const rowHtml = (r) => {
       const act = [!r.mine && !S.preview ? `<a class="btn small primary" href="${resultHref(r.id)}">Poner mi resultado</a>` : '', !r.cro && !S.preview ? `<button type="button" class="btn small" data-act="chro-toggle" data-key="${esc(r.key)}" data-done="1">✓ Crónica pasada</button>` : ''].filter(Boolean).join('');
@@ -1317,10 +1317,10 @@ function chronicleCard(d) {
         <span class="imp-st"><span>📸 Historia ${r.story ? okI : noI}</span><span>🏁 Resultado ${r.mine ? okI : noI}</span><span>✍️ Crónica ${r.cro ? okI : noI}</span>${r.published ? '<span class="imp-pub">🖼️ publicado</span>' : ''}</span>${act ? `<span class="imp-act">${act}</span>` : ''}</li>`;
     };
     const todo = imp.rows.filter((r) => !r.mine || !r.cro).length;
-    const per = ig?.source === 'period';
-    return `${ig && ig.days ? `<h3>El club en Instagram <small class="muted">· ${per ? `${esc(formatRange(ig.from, ig.to, false))}` : 'últimos 30 días'}</small></h3>
-        <div class="imp-tiles ig"><div><b>${nf(ig.views)}</b><span>visualizaciones</span></div>${per ? (ig.viewers != null ? `<div><b>${nf(ig.viewers)}</b><span>personas alcanzadas</span></div>` : '') : `<div><b>${nf(ig.reach_avg)}</b><span>alcance al día</span></div>`}<div><b>${nf(ig.interactions)}</b><span>interacciones</span></div><div><b>${ig.follows > 0 ? '+' : ''}${nf(ig.follows)}</b><span>seguidores nuevos</span></div></div>
-        ${ig.followers ? `<p class="imp-f">${ico('users')}<span><b>${nf(ig.followers)}</b> seguidores en total</span></p>` : ''}`
+
+    return `${H && H.source ? `<h3>El club en Instagram <small class="muted">· ${esc(formatRange(H.from, H.to, false))}</small></h3>
+        <div class="imp-tiles ig"><div><b>${nf(H.views)}</b><span>visualizaciones</span></div>${H.viewers ? `<div><b>${nf(H.viewers)}</b><span>${H.viewersKind === 'unique' ? 'personas alcanzadas' : 'alcance al día'}</span></div>` : ''}<div><b>${nf(H.interactions)}</b><span>interacciones</span></div>${H.follows != null ? `<div><b>${H.follows > 0 ? '+' : ''}${nf(H.follows)}</b><span>${H.source === 'period' ? 'seguidores netos' : 'seguidores nuevos'}</span></div>` : ''}</div>
+        ${H.followers ? `<p class="imp-f">${ico('users')}<span><b>${nf(H.followers)}</b> seguidores en total</span></p>` : ''}`
         : '<p class="muted small">Todavía no hay cifras de Instagram guardadas.</p>'}
       <p class="hint">Son cifras de <b>todo el club</b>, no de cada persona: Instagram no dice qué publicación viene de qué carrera.</p>
       <h3>Lo que han generado tus carreras</h3>
@@ -3379,9 +3379,10 @@ function viewInstagram() {
     const d = Math.floor(u.hours / 24), ago = u.hours < 1 ? 'hace menos de 1 hora' : u.hours < 24 ? `hace ${Math.round(u.hours)} h` : `hace ${d} ${d === 1 ? 'día' : 'días'}`;
     return `<div class="ig-upd ${u.level}" role="status">${ico(u.level === 'ok' ? 'check' : 'alert')}<span><b>Última actualización: ${esc(when)}</b> · ${ago}${u.lastDay ? `<small>Datos hasta el ${esc(formatDate(u.lastDay, false))}</small>` : ''}${u.level === 'ok' ? '' : `<small class="ig-upd-w">${u.level === 'late' ? 'Lleva unos días sin actualizarse.' : 'Lleva más de 4 días sin actualizarse: revisa la tarea automática.'}</small>`}</span></div>`;
   };
-  const igHero = g.nDays ? `<section class="rs-hero ig-hero no-print"><p class="rs-hero-t">Instagram · ${esc(periodName)}</p>
-      <div class="rs-bigs">${big(nf(t.views), 'visualiz.')}${big(t.reachAvg ? nf(t.reachAvg) : '—', 'alcance/día')}${big(nf(t.interactions), 'interacc.')}${big(nf(t.follows), 'nuevos seg.')}</div>
-      <p class="rs-hero-s">${esc(label)}${acc?.media != null ? ` · ${nf(acc.media)} publicaciones` : ''}${t.pctNonFollowers != null ? ` · ${t.pctNonFollowers} % de no seguidores` : ''}</p></section>` : '';
+  const H = igHeadline(S.ig.rows, from, to);
+  const igHero = H.source ? `<section class="rs-hero ig-hero no-print"><p class="rs-hero-t">Instagram · ${esc(periodName)}</p>
+      <div class="rs-bigs">${big(nf(H.views), 'visualiz.')}${big(H.viewers ? nf(H.viewers) : '—', H.viewersKind === 'unique' ? 'personas' : 'alcance/día')}${big(nf(H.interactions), 'interacc.')}${big(H.follows != null ? (H.follows > 0 ? '+' : '') + nf(H.follows) : '—', H.source === 'period' ? 'seg. netos' : 'nuevos seg.')}</div>
+      <p class="rs-hero-s">${esc(`${dateEs(H.from)} – ${dateEs(H.to)}`)}${H.source === 'period' ? ` · ${H.periods} periodo${H.periods === 1 ? '' : 's'} de Insights` : ''}${acc?.media != null ? ` · ${nf(acc.media)} publicaciones` : ''}${H.nonF != null ? ` · ${H.nonF} % de no seguidores` : ''}</p></section>` : '';
   return head(`
     <div class="no-print">${igHero}${igUpdLine()}
       <div class="eq-bar"><nav class="rs-tabs" role="tablist" aria-label="Apartados de Instagram">${tabs.map(([k, l, ic]) => `<button type="button" class="${k === tab ? 'on' : ''}" data-act="ig-tab" data-t="${k}" role="tab" aria-selected="${k === tab}">${ico(ic)}<span>${l}</span></button>`).join('')}</nav>
@@ -3403,15 +3404,10 @@ function viewIgDossier() {
   if (!S.ig.rows) return frame('Dossier de Instagram', `<p class="card warn">${esc(S.ig.failed || 'Instagram aún no está activado.')}</p>`, { back: '#/instagram' });
   const [from, to] = igRange(S.igPeriod || 'all');
   const g = igSummary(S.ig.rows, from, to), P = igPeriods(S.ig.rows, from, to), pl = P.list, pt = P.totals, gt = g.totals;
-  const usePer = pl.length > 0;
-  const first = usePer ? pl[0].from : g.first, last = usePer ? pl[pl.length - 1].to : g.last;
-  const days = usePer ? pt.days : g.nDays;
-  if (!days && !g.account) return frame('Dossier de Instagram', '<p class="empty">Todavía no hay cifras de Instagram guardadas para este periodo.</p>', { back: '#/instagram' });
-  const views = usePer ? pt.views : gt.views, inter = usePer ? pt.interactions : gt.interactions;
-  const viewers = usePer ? pt.viewersMax : gt.reachAvg, follows = usePer ? pt.net_follows : gt.follows;
-  const followers = g.account?.followers ?? [...pl].reverse().find((x) => x.followers)?.followers ?? null;
-  const fPctList = pl.filter((x) => typeof x.views_f_pct === 'number' && x.views);
-  const nonF = usePer ? (fPctList.length ? Math.round(100 - fPctList.reduce((n, x) => n + x.views_f_pct * x.views, 0) / fPctList.reduce((n, x) => n + x.views, 0)) : null) : gt.pctNonFollowers;
+  const usePer = pl.length > 0, H = igHeadline(S.ig.rows, from, to);
+  const first = H.from, last = H.to, days = H.days;
+  if (!H.source && !H.followers) return frame('Dossier de Instagram', '<p class="empty">Todavía no hay cifras de Instagram guardadas para este periodo.</p>', { back: '#/instagram' });
+  const views = H.views, inter = H.interactions, viewers = H.viewers, follows = H.follows, followers = H.followers, nonF = H.nonF;
   const perDay = days && views ? Math.round(views / days) : null;
   const er = views && inter ? Math.round((inter / views) * 1000) / 10 : null;
   const value = views ? Math.round((views / 1000) * IG_CPM) : null;

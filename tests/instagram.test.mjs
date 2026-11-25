@@ -81,3 +81,23 @@ test('periodos de Insights: totales sumables, solapes y audiencia más reciente'
   assert.equal(igPeriods(rows, '2026-12-20', '').list.length, 1);
   assert.equal(igPeriods([], '', '').list.length, 0);
 });
+
+test('igHeadline: mismas cifras para la dirección y el corredor (periodos mandan sobre los días)', async () => {
+  const { igHeadline } = await import('../js/logic.js');
+  const per = [
+    { kind: 'period', key: '2026-09-15_2026-10-14', data: { views: 8400, viewers: 2100, interactions: 210, net_follows: 5, views_f_pct: 60 } },
+    { kind: 'period', key: '2026-10-15_2026-11-13', data: { views: 11736, viewers: 2666, interactions: 294, net_follows: 3, views_f_pct: 50 } },
+  ];
+  const days = [{ kind: 'day', key: '2026-10-20', data: { views: 100, reach: 40, interactions: 7, follows: 2 } }];
+  const acc = [{ kind: 'account', key: '2026-11-13', data: { followers: 951, media: 340 } }];
+  const full = igHeadline([...per, ...days, ...acc]);
+  assert.equal(full.source, 'period'); assert.equal(full.views, 20136); assert.equal(full.viewers, 2666); assert.equal(full.interactions, 504);
+  assert.equal(full.follows, 8); assert.equal(full.followers, 951); assert.equal(full.periods, 2); assert.equal(full.days, 60);
+  // lo que recibe el corredor (solo periodos + seguidores, sin días) da exactamente lo mismo
+  const runner = igHeadline([...per, { kind: 'account', key: '2026-11-13', data: { followers: 951 } }]);
+  assert.deepEqual(runner, full);
+  // sin periodos: datos diarios
+  const d = igHeadline([...days, ...acc]);
+  assert.equal(d.source, 'day'); assert.equal(d.views, 100); assert.equal(d.viewersKind, 'daily');
+  assert.equal(igHeadline([]).source, null);
+});
