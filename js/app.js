@@ -327,6 +327,9 @@ async function loadStreaks() {
 }
 /** Posición en la clasificación (los empates comparten puesto). */
 const streakRows = () => { let pos = 0, last = null; return (Array.isArray(S.streaks) ? S.streaks : []).map((x, i) => { if (x.streak !== last) { pos = i + 1; last = x.streak; } return { ...x, pos }; }); };
+/** Club de Strava: la clasificación de entrenos vive en Strava (sus normas no dejan enseñar los entrenos de un corredor a otros desde otra app). */
+const STRAVA_CLUB = 'https://strava.app.link/vu8gVxX7l8b';
+const stravaCard = () => `<a class="card strava-card" href="${STRAVA_CLUB}" target="_blank" rel="noopener"><span class="sv-logo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M15.4 17.9 13.3 13.7h-3.1l5.2 10.3 5.2-10.3h-3.1zM10.3 2 3.4 15.6h4.1l2.8-5.4 2.7 5.4h4.1z" fill="currentColor"/></svg></span><span class="sv-t"><b>Club en Strava</b><small>Clasificación semanal de entrenos: km, desnivel y tiempo</small></span>${ico('go')}</a>`;
 function streakBoard(meId) {
   const rows = streakRows(); if (!rows.length) return '';
   const li = (x) => `<li class="${x.id === meId ? 'me' : ''}"><span class="sb-pos">${x.pos <= 3 ? medal(x.pos) : x.pos}</span><span class="sb-nm">${esc(x.name)}${x.id === meId ? ' <small>(tú)</small>' : ''}</span><b>🔥 ${x.streak}</b></li>`;
@@ -3097,7 +3100,7 @@ function summaryRunner({ years, all, s, mod, cls, me, people, names, cats, pods,
       ${items.length > SHOWN ? `<details class="pod-more"><summary>Ver los ${items.length - SHOWN} anteriores</summary><ul class="pod-items">${items.slice(SHOWN).map(podItem).join('')}</ul></details>` : ''}`
       : '<p class="muted">Sin podios este año.</p>'}</section>`;
   const leadsBlock = leaders ? `<div class="eq-leads-wrap"><div class="leads eq-leads" role="list" aria-label="Líderes y récords del equipo">${leaders}</div><p class="leads-hint">Desliza para ver más récords ›</p></div>` : '';
-  const body = { pan: `${hero}${leadsBlock}${streakBoard(S.runnerData?.me?.id)}${months}${byMod}`, pod: podRunner, eq: `${board}${idle.length ? `<p class="muted small">Sin carreras todavía${mod ? ` de ${esc(modLabel)}` : ''}: ${names(idle, 40)}.</p>` : ''}`, alc: reach }[tab];
+  const body = { pan: `${hero}${stravaCard()}${leadsBlock}${streakBoard(S.runnerData?.me?.id)}${months}${byMod}`, pod: podRunner, eq: `${board}${idle.length ? `<p class="muted small">Sin carreras todavía${mod ? ` de ${esc(modLabel)}` : ''}: ${names(idle, 40)}.</p>` : ''}`, alc: reach }[tab];
   return `<div class="eq">${filters}${body}</div>`;
 }
 

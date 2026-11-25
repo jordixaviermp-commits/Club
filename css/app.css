@@ -2639,3 +2639,9 @@ a.sum-streak { text-decoration: none; color: var(--text); }
 .dossier .ig-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mem-cover-n div { min-width: 0; } @media (max-width: 359px) { .mem-cover-n { gap: .25rem; } .mem-cover-n b { font-size: var(--fs-5); } .mem-cover-n span { font-size: .62rem; } }
 @media print { body, #app { padding: 0 !important; margin: 0 !important; min-height: 0 !important; } .memoria .rs-tile, .memoria .rp-kpi, .mem-best li, .dos-leg li { break-inside: avoid; } .memoria .rs-tiles { break-inside: auto; } }
+
+/* ---- v254 · Club en Strava ---- */
+.strava-card { display: flex; align-items: center; gap: .7rem; padding: .7rem .8rem; text-decoration: none; color: var(--text); border-left: 5px solid #fc4c02; }
+.sv-logo { width: 38px; height: 38px; border-radius: 10px; background: #fc4c02; color: #fff; display: grid; place-items: center; flex: none; } .sv-logo svg { width: 22px; height: 22px; }
+.sv-t { flex: 1; min-width: 0; display: flex; flex-direction: column; } .sv-t b { font-size: var(--fs-4); } .sv-t small { color: var(--muted); font-size: var(--fs-2); line-height: 1.3; }
+.strava-card > .ico { color: #fc4c02; width: 20px; height: 20px; flex: none; }
