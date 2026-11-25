@@ -377,7 +377,7 @@ const ADMIN_TABS = [
 const ADMIN_GROUP = { '': 'hoy', hoy: 'hoy', movimientos: 'hoy', avisos: 'hoy', mensajes: 'hoy', calidad: 'hoy', actividad: 'hoy', noticias: 'hoy', historial: 'hoy',
   inscripciones: 'inscripciones', carreras: 'inscripciones', federaciones: 'inscripciones',
   corredores: 'corredores', contratos: 'corredores', computo: 'corredores', informe: 'corredores', bonos: 'corredores', corredor: 'corredores', docs: 'corredores',
-  resumen: 'resumen', instagram: 'redes', datos: 'resumen', temporada: 'resumen', memoria: 'resumen', vista: 'corredores', equipo: 'resumen',
+  resumen: 'resumen', instagram: 'redes', dossier: 'redes', datos: 'resumen', temporada: 'resumen', memoria: 'resumen', vista: 'corredores', equipo: 'resumen',
   redes: 'redes', semana: 'redes', publicaciones: 'redes' };
 const SEC_OF = { hoy: 'hoy', inscripciones: 'car', corredores: 'eq', resumen: 'res', redes: 'red', '': 'car', federaciones: 'fed', mi: 'hoy', contrato: 'eq', equipo: 'res', noticias: 'hoy', carrera: 'car', nueva: 'car' };
 const icon = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
@@ -405,6 +405,7 @@ const adminScreens = () => [
   ['📄', 'Contratos por tipo', '#/contratos', 'contratos contrato nuevo renovacion licencia pdf subir antiguos'],
   ['📈', 'Resumen: panorama, podios, equipo y alcance', '#/resumen', 'temporada fin de ano disciplinas podios records corredores comparar anterior exportar excel panorama alcance bonos'],
   ['📘', 'Memoria para sponsors', '#/memoria', 'memoria sponsors patrocinadores informe imprimir pdf temporada resumen'],
+  ['📸', 'Dossier de Instagram', '#/dossier', 'dossier instagram sponsors patrocinadores colaboradores redes pdf estadisticas'],
   ['📊', 'Cómputo de la temporada', '#/computo', 'computo fin temporada descargar csv excel control cerrar'],
   ['🖨️', 'Informe de temporada', '#/informe', 'informe imprimir pdf bono saldo penalizacion cierre hojas corredor'],
   ['💶', 'Bonos', '#/bonos', 'bonos bonificacion minimo penalizacion tramos plus circuito condiciones'],
@@ -565,7 +566,7 @@ function render() {
       '': viewToday, hoy: viewToday, movimientos: viewMovements, mensajes: viewMessages, calidad: viewQuality, actividad: viewActivity,
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
       carreras: S.draft ? viewRaceEdit : viewRaces,
-      resumen: viewSummary, temporada: viewSummary, memoria: viewMemoria, instagram: viewInstagram, redes: viewNetworks, corredores: viewRunners, contratos: viewContracts, computo: viewSeasonCount, informe: viewSeasonReport, publicaciones: viewPublications, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
+      resumen: viewSummary, temporada: viewSummary, memoria: viewMemoria, dossier: viewIgDossier, instagram: viewInstagram, redes: viewNetworks, corredores: viewRunners, contratos: viewContracts, computo: viewSeasonCount, informe: viewSeasonReport, publicaciones: viewPublications, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
       vista: () => (S.preview && S.runnerData ? runnerScreen(parseRoute().id || '') : viewRunners()),
       equipo: () => (S.preview ? viewTeam() : viewSummary()),
     }[view] || viewToday)();
@@ -1130,7 +1131,8 @@ const medalBadge = (p) => `<i class="medal m${p}" aria-label="Puesto ${p}">${p}<
 const mrow = (g, { below = '', end = '', hero = false, side = '' } = {}) => {
   // Mi temporada usa la misma ficha desplegable que Carreras: al abrirla sale ya toda la información, sin otro menú
   const badge = hero ? '<span class="hero-badge">Próxima cita</span>' : '';
-  if (g.entries) return `<li class="mrow-fold${hero ? ' hero' : ''}">${badge}${runnerRegCard(g, { cls: hero ? 'hero' : '', noPast: true, notes: true })}</li>`;
+  const due = g.entries && S.payDue?.has(g.id);   // pago que ya toca (la carrera es dentro de una semana): en rojo, como la casilla de Pendientes
+  if (g.entries) return `<li class="mrow-fold${hero ? ' hero' : ''}${due ? ' pay-due' : ''}">${badge}${due ? `<span class="due-badge">${ico('euro')}Pagar</span>` : ''}${runnerRegCard(g, { cls: hero ? 'hero' : '', noPast: true, notes: true })}</li>`;
   // carrera ya disputada con mi resultado (la ficha de «resultados» + lo mío)
   const me = S.runnerData?.me?.id, race = S.team?.races?.find((x) => x.id === g.race_id), count = (race?.results || []).length;
   const body = `${myPubLine({ ...g, entries: undefined })}${race ? doneRaceBody(race, { meId: me }) : typeTag(g)}${completeBox({ ...(race || {}), ...g }, 'race', g.race_id)}${below ? `<div class="mrow-below">${below}</div>` : ''}${end ? `<div class="mrow-acts">${end}</div>` : ''}`;
@@ -1174,10 +1176,12 @@ function myRacesCard(d, afterSummary = () => '') {
   const pendingN = pending.length + noPos.length;
   // «al día»: resultados sin poner, crónicas sin pasar y pagos que ya tocan (carrera dentro de una semana), lo siguiente y la racha
   const ad = alDia(d, S.chron instanceof Set ? S.chron : null, today, S.myYear || new Date().getFullYear());
+  S.payDue = new Set(ad.items.filter((x) => x.type === 'pay').map((x) => x.id));
   const todoN = ad.total, pl = (n, a, b) => (n === 1 ? a : b);
   const parts = [ad.counts.result ? `${ad.counts.result} resultado${pl(ad.counts.result, '', 's')}` : '', ad.counts.cron ? `${ad.counts.cron} crónica${pl(ad.counts.cron, '', 's')}` : '', ad.counts.pay ? `${ad.counts.pay} pago${pl(ad.counts.pay, '', 's')}` : ''].filter(Boolean);
   const todoTxt = !parts.length ? 'todo al día' : parts.length === 1 ? `falta${pl(ad.total, '', 'n')} ${parts[0]}` : `${parts.slice(0, -1).join(', ')} y ${parts[parts.length - 1]}`;
-  const todoTo = ad.counts.result || !ad.total ? 'sec-pend' : ad.counts.cron ? 'sec-chro' : 'sec-next';
+  const heroId = mineReg.filter((g) => g.date >= today && !g.suspended).sort((a, b) => a.date.localeCompare(b.date))[0]?.id;
+  const todoTo = ad.counts.result || !ad.total ? 'sec-pend' : ad.counts.cron ? 'sec-chro' : S.payDue.has(heroId) ? 'sec-hero' : 'sec-next';
   const sent = pastReg.filter((g) => g.my_result);        // ya puso su puesto: cuenta para el bono aunque la dirección aún no la haya pasado a resultados
   const upcoming = mineReg.filter((g) => g.date >= today && !g.suspended).sort((a, b) => a.date.localeCompare(b.date));
   const cancelled = mineReg.filter((g) => g.suspended).sort((a, b) => a.date.localeCompare(b.date));
@@ -1249,9 +1253,9 @@ function myRacesCard(d, afterSummary = () => '') {
 
   ${upcoming.length ? `<ul class="mini-list next-hero" id="sec-hero">${mrow(upcoming[0], { href: `${runnerHref('carrera')}/${upcoming[0].id}`, hero: true, pill: `${dleft(upcoming[0])}${myCat(upcoming[0]) ? ` · ${esc(myCat(upcoming[0]))}` : ''}`, edit: editMine(upcoming[0]), below: payChips(upcoming[0]) })}</ul>` : ''}
 
-  <details class="card season-block next-block desp" id="sec-next" data-open-key="next"${S.open?.next ? ' open' : ''}>
+  <details class="card season-block next-block desp${upcoming.slice(1).some((g) => S.payDue.has(g.id)) ? ' has-pend' : ''}" id="sec-next" data-open-key="next"${S.open?.next ? ' open' : ''}>
     <summary><span class="desp-t">Mis próximas inscripciones <small>(${(() => { const by = new Map(); for (const g of upcoming) by.set(yearOf(g.date), (by.get(yearOf(g.date)) || 0) + 1); return by.size > 1 || (by.size === 1 && !by.has(S.myYear)) ? [...by].sort((x, y) => x[0] - y[0]).map(([y, n]) => `${n} de ${y}`).join(' + ') : upcoming.length; })()})</small></span>${ico('chevd', 'desp-chev')}
-      ${upcoming.length ? `<span class="desp-sub">${payLineInline(upcoming)}</span>` : ''}</summary>
+      ${upcoming.length ? `<span class="desp-sub">${payLineInline(upcoming)}${upcoming.slice(1).some((g) => S.payDue.has(g.id)) ? `<span class="due">${upcoming.slice(1).filter((g) => S.payDue.has(g.id)).length} por pagar ya</span>` : ''}</span>` : ''}</summary>
     <p class="hint">Carreras a las que estás apuntado y que aún no se han corrido. <b>Toca una</b> para abrirla: ves quién va, puedes borrarte y, si la añadiste tú, editarla.</p>
     ${upcoming.length > 1 ? `<ul class="mini-list">${upcoming.slice(1).map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, pill: `${dleft(g)}${myCat(g) ? ` · ${esc(myCat(g))}` : ''}`, edit: editMine(g), below: payChips(g) })).join('')}</ul>`
       : upcoming.length ? '<p class="empty small">No tienes más carreras apuntadas: la próxima cita está arriba.</p>'
@@ -1305,7 +1309,7 @@ function chronicleCard(d) {
     if (S.impact === null) return '<p class="hint">Todavía no está activado: la dirección tiene que ejecutar un SQL en Supabase (<code>2026-11-20-impacto-redes.sql</code>).</p>';
     const mineKeys = new Set([...(d.my_results || []).filter((r) => r.position).map(postKeyOf), ...(d.registrations || []).filter((g) => g.my_result).map(postKeyOf)]);   // carreras donde ya puso su puesto
     const imp = raceImpact([...c.pending, ...c.done].sort((a, b) => b.date.localeCompare(a.date)), { posted: S.impact.posted, story: S.stories || null, chron: S.chron, mine: mineKeys });
-    const t = imp.totals, ig = S.impact.ig, nf = (n) => Number(n || 0).toLocaleString('es-ES');
+    const t = imp.totals, ig = S.impact.ig, nf = (n) => Number(n || 0).toLocaleString('de-DE');
     const okI = '<span class="imp-ok" aria-label="hecho">✓</span>', noI = '<span class="imp-no" aria-label="aún no">—</span>';
     const rowHtml = (r) => {
       const act = [!r.mine && !S.preview ? `<a class="btn small primary" href="${resultHref(r.id)}">Poner mi resultado</a>` : '', !r.cro && !S.preview ? `<button type="button" class="btn small" data-act="chro-toggle" data-key="${esc(r.key)}" data-done="1">✓ Crónica pasada</button>` : ''].filter(Boolean).join('');
@@ -1313,8 +1317,9 @@ function chronicleCard(d) {
         <span class="imp-st"><span>📸 Historia ${r.story ? okI : noI}</span><span>🏁 Resultado ${r.mine ? okI : noI}</span><span>✍️ Crónica ${r.cro ? okI : noI}</span>${r.published ? '<span class="imp-pub">🖼️ publicado</span>' : ''}</span>${act ? `<span class="imp-act">${act}</span>` : ''}</li>`;
     };
     const todo = imp.rows.filter((r) => !r.mine || !r.cro).length;
-    return `${ig && ig.days ? `<h3>El club en Instagram <small class="muted">· últimos 30 días</small></h3>
-        <div class="imp-tiles ig"><div><b>${nf(ig.views)}</b><span>visualizaciones</span></div><div><b>${nf(ig.reach_avg)}</b><span>alcance al día</span></div><div><b>${nf(ig.interactions)}</b><span>interacciones</span></div><div><b>${ig.follows > 0 ? '+' : ''}${nf(ig.follows)}</b><span>seguidores nuevos</span></div></div>
+    const per = ig?.source === 'period';
+    return `${ig && ig.days ? `<h3>El club en Instagram <small class="muted">· ${per ? `${esc(formatRange(ig.from, ig.to, false))}` : 'últimos 30 días'}</small></h3>
+        <div class="imp-tiles ig"><div><b>${nf(ig.views)}</b><span>visualizaciones</span></div>${per ? (ig.viewers != null ? `<div><b>${nf(ig.viewers)}</b><span>personas alcanzadas</span></div>` : '') : `<div><b>${nf(ig.reach_avg)}</b><span>alcance al día</span></div>`}<div><b>${nf(ig.interactions)}</b><span>interacciones</span></div><div><b>${ig.follows > 0 ? '+' : ''}${nf(ig.follows)}</b><span>seguidores nuevos</span></div></div>
         ${ig.followers ? `<p class="imp-f">${ico('users')}<span><b>${nf(ig.followers)}</b> seguidores en total</span></p>` : ''}`
         : '<p class="muted small">Todavía no hay cifras de Instagram guardadas.</p>'}
       <p class="hint">Son cifras de <b>todo el club</b>, no de cada persona: Instagram no dice qué publicación viene de qué carrera.</p>
@@ -3236,7 +3241,7 @@ async function loadIg(force = false) {
   S.ig = { loading: true };
   try { const rows = await api.listIg(); S.ig = rows ? { rows } : { missing: true }; }
   catch (e) { S.ig = { failed: friendlyError(e) }; }
-  if (['instagram', 'memoria'].includes(parseRoute().view)) render();
+  if (['instagram', 'memoria', 'dossier'].includes(parseRoute().view)) render();
 }
 
 function viewInstagram() {
@@ -3382,11 +3387,111 @@ function viewInstagram() {
       <div class="eq-bar"><nav class="rs-tabs" role="tablist" aria-label="Apartados de Instagram">${tabs.map(([k, l, ic]) => `<button type="button" class="${k === tab ? 'on' : ''}" data-act="ig-tab" data-t="${k}" role="tab" aria-selected="${k === tab}">${ico(ic)}<span>${l}</span></button>`).join('')}</nav>
         <button type="button" class="eq-fbtn${filterOn ? ' on' : ''}" data-act="ig-filters" aria-label="Periodo${filterOn ? ' (filtrado)' : ''}" title="Periodo">${icon(ICON_FILTER)}${filterOn ? '<i class="fdot"></i>' : ''}</button></div>
       ${filterOn ? `<div class="eq-active"><span>${esc(periodName)}</span><button type="button" class="link" data-act="ig-period" data-p="all">Quitar filtro ✕</button></div>` : ''}
-      <div class="ig-tools"><button class="btn" data-act="print-report">${ico('file')} PDF</button><button class="btn" data-act="ig-csv">${ico('db')} Excel</button></div>
-      <details class="ig-help"><summary>${ico('info')} Cómo se añaden datos</summary><p class="hint">Mándale a Claude la captura de Instagram → Insights y él los vuelca aquí: se suman y salen en gráficos. El PDF incluye todas las partes (Periodos, Diario, Contenido y Audiencia), listo para el dossier de memorias o para enseñar a un patrocinador: en el cuadro de imprimir elige «Guardar como PDF».</p></details></div>
+      <div class="ig-tools"><a class="btn primary" href="#/dossier">${ico('file')} Dossier PDF</a><button class="btn" data-act="print-report">${ico('printer')} Todo</button><button class="btn" data-act="ig-csv">${ico('db')} Excel</button></div>
+      <details class="ig-help"><summary>${ico('info')} Cómo se añaden datos</summary><p class="hint">Mándale a Claude la captura de Instagram → Insights y él los vuelca aquí: se suman y salen en gráficos. «Dossier PDF» es el documento para colaboradores (portada, resumen, alcance, contenido, audiencia y el club); «Todo» imprime las cuatro pestañas tal cual. En el cuadro de imprimir elige «Guardar como PDF».</p></details></div>
     <div class="print-only ig-title"><b>Club Ciclista Monzón · Estadísticas de Instagram</b><span>${esc(label)}</span></div>
     ${tabs.map(([k, l]) => `<div class="ig-panel${k === tab ? '' : ' off'}"><h2 class="print-only ig-part">${l}</h2>${panels[k]}</div>`).join('')}
     <p class="rp-note">Fuente: Instagram (estadísticas de la cuenta profesional del club). Alcance = personas distintas que vieron el contenido; las visualizaciones cuentan también las repeticiones.</p>`);
+}
+
+/** € por cada 1.000 visualizaciones: solo para estimar cuánto costaría comprar ese alcance en publicidad (orientativo, se dice en el dossier). */
+const IG_CPM = 6;
+/** Dossier de Instagram para colaboradores: un documento propio (portada, resumen, alcance, contenido, audiencia y el club detrás), listo para PDF. */
+function viewIgDossier() {
+  if (!S.ig) loadIg();
+  if (!S.ig || S.ig.loading) return frame('Dossier de Instagram', '<p class="empty">Cargando…</p>', { back: '#/instagram' });
+  if (!S.ig.rows) return frame('Dossier de Instagram', `<p class="card warn">${esc(S.ig.failed || 'Instagram aún no está activado.')}</p>`, { back: '#/instagram' });
+  const [from, to] = igRange(S.igPeriod || 'all');
+  const g = igSummary(S.ig.rows, from, to), P = igPeriods(S.ig.rows, from, to), pl = P.list, pt = P.totals, gt = g.totals;
+  const usePer = pl.length > 0;
+  const first = usePer ? pl[0].from : g.first, last = usePer ? pl[pl.length - 1].to : g.last;
+  const days = usePer ? pt.days : g.nDays;
+  if (!days && !g.account) return frame('Dossier de Instagram', '<p class="empty">Todavía no hay cifras de Instagram guardadas para este periodo.</p>', { back: '#/instagram' });
+  const views = usePer ? pt.views : gt.views, inter = usePer ? pt.interactions : gt.interactions;
+  const viewers = usePer ? pt.viewersMax : gt.reachAvg, follows = usePer ? pt.net_follows : gt.follows;
+  const followers = g.account?.followers ?? [...pl].reverse().find((x) => x.followers)?.followers ?? null;
+  const fPctList = pl.filter((x) => typeof x.views_f_pct === 'number' && x.views);
+  const nonF = usePer ? (fPctList.length ? Math.round(100 - fPctList.reduce((n, x) => n + x.views_f_pct * x.views, 0) / fPctList.reduce((n, x) => n + x.views, 0)) : null) : gt.pctNonFollowers;
+  const perDay = days && views ? Math.round(views / days) : null;
+  const er = views && inter ? Math.round((inter / views) * 1000) / 10 : null;
+  const value = views ? Math.round((views / 1000) * IG_CPM) : null;
+  const range = first && last ? `${dateEs(first)} – ${dateEs(last)}` : '';
+  const plabel = (x) => `${Number(x.from.slice(8))} ${IG_MES[Number(x.from.slice(5, 7)) - 1]} – ${igShort(x.to)}`;
+  const signed = (n) => (n >= 0 ? '+' : '−') + nf(Math.abs(n));
+  const box = (title, html) => (html ? `<div class="mem-box">${title ? `<h3>${title}</h3>` : ''}${html}</div>` : '');
+  const tile = (ic, label, val, sub = '') => `<div class="rs-tile">${ico(ic)}<small>${label}</small><b>${val}</b>${sub ? `<em>${sub}</em>` : ''}</div>`;
+  const hbars = (rows, suffix = '') => { const mx = Math.max(1, ...rows.map(([, v]) => v)); return `<ul class="ig-list tight">${rows.map(([n, v]) => `<li class="ig-row"><span class="ig-name">${esc(n)}</span><span class="ig-track"><i style="width:${Math.max(2, (v / mx) * 100)}%"></i></span><b>${nf(v)}${suffix}</b></li>`).join('')}</ul>`; };
+  const CH = [];
+  const ch = (id, ic, title, lead, body) => { if (body) CH.push({ id, ic, title, lead, body }); };
+
+  // 01 · Resumen
+  const facts = [
+    views ? `📈 El contenido del club se ha reproducido <b>${nf(views)} veces</b>${perDay ? ` (≈ ${nf(perDay)} al día)` : ''}.` : '',
+    viewers ? `👥 Ha llegado a <b>${nf(viewers)} personas distintas</b>${usePer && pl.length > 1 ? ' en un solo periodo' : usePer ? '' : ' de media cada día'}.` : '',
+    nonF != null ? `🌍 El <b>${nonF} %</b> de las reproducciones son de gente que <b>no sigue</b> al club: llegamos más allá de nuestro círculo.` : '',
+    er != null ? `💬 <b>${String(er).replace('.', ',')} interacciones</b> por cada 100 reproducciones (me gusta, comentarios, compartidos y guardados).` : '',
+    follows != null ? `➕ <b>${signed(follows)}</b> seguidores netos${followers ? `, hasta <b>${nf(followers)}</b>` : ''}.` : '',
+    value ? `💶 Comprar ese alcance en publicidad costaría unos <b>${esc(euros(value))}</b> <small class="muted">(a ${IG_CPM} € por cada 1.000 visualizaciones)</small>.` : '',
+  ].filter(Boolean);
+  ch('resumen', 'star', 'Resumen', range ? `Instagram del club del ${esc(range)} (${nf(days)} días).` : '', `<div class="rs-tiles">
+      ${views ? tile('act', 'Reproducciones', nf(views), perDay ? `${nf(perDay)} al día` : '') : ''}
+      ${viewers ? tile('users', usePer ? 'Personas alcanzadas' : 'Alcance diario', nf(viewers), usePer ? 'cuentas distintas' : 'de media') : ''}
+      ${inter ? tile('msg', 'Interacciones', nf(inter), er != null ? `${String(er).replace('.', ',')} por 100 reprod.` : '') : ''}
+      ${followers ? tile('users', 'Seguidores', nf(followers), follows != null ? `${signed(follows)} en el periodo` : '') : follows != null ? tile('users', 'Seguidores netos', signed(follows)) : ''}
+      ${nonF != null ? tile('compass', 'Fuera de nuestro círculo', `${nonF} %`, 'de no seguidores') : ''}
+      ${value ? tile('money', 'Valor publicitario', esc(euros(value)), 'estimado') : ''}</div>
+    ${facts.length ? `<ul class="mem-best">${facts.map((x) => `<li>${x}</li>`).join('')}</ul>` : ''}`);
+
+  // 02 · Alcance y crecimiento
+  const perBars = pl.length > 1 && pl.length <= 6 && pl.some((x) => x.views) ? hbars(pl.map((x) => [plabel(x), x.views || 0])) : pl.length > 6 ? (() => { const mx = Math.max(1, ...pl.map((x) => x.views || 0));
+    return `<div class="rs-wk rs-elev dos-bars" role="img" aria-label="Reproducciones por periodo">${pl.map((x) => `<div><em>${x.views ? kmShort(x.views) : ''}</em><span style="height:${((x.views || 0) / mx) * 100}%"></span><b>${esc(IG_MES[Number(x.to.slice(5, 7)) - 1])}</b></div>`).join('')}</div>`; })() : '';
+  const daySeries = !usePer && g.byMonth.length > 1 ? (() => { const mx = Math.max(1, ...g.byMonth.map((m) => m.views));
+    return `<div class="rs-wk rs-elev dos-bars" role="img" aria-label="Visualizaciones por mes">${g.byMonth.map((m) => `<div><em>${kmShort(m.views)}</em><span style="height:${(m.views / mx) * 100}%"></span><b>${esc(igMonthName(m.ym).slice(0, 3))}</b></div>`).join('')}</div>`; })() : '';
+  const perTbl = pl.length ? `<div class="tp-scroll"><table class="tp-table"><thead><tr><th class="l">Periodo</th><th class="num">Días</th><th class="num">Reprod.</th><th class="num">Personas</th><th class="num">Interacc.</th><th class="num">Seg. netos</th></tr></thead><tbody>${pl.map((x) => `<tr><td class="l nw">${esc(plabel(x))}</td><td class="num">${x.days}</td><td class="num">${x.views != null ? nf(x.views) : '—'}</td><td class="num">${x.viewers != null ? nf(x.viewers) : '—'}</td><td class="num">${x.interactions != null ? nf(x.interactions) : '—'}</td><td class="num">${x.net_follows != null ? signed(x.net_follows) : '—'}</td></tr>`).join('')}</tbody></table></div>` : '';
+  const split = nonF != null ? `<div class="ig-split"><i style="width:${100 - nonF}%"></i><i class="nf" style="width:${nonF}%"></i></div><p class="ig-legend"><span><i class="dot a"></i>Seguidores ${100 - nonF} %</span><span><i class="dot b"></i>No seguidores ${nonF} %</span></p>` : '';
+  ch('alcance', 'act', 'Alcance y crecimiento', views ? `<b>${nf(views)}</b> reproducciones${follows != null ? ` y <b>${signed(follows)}</b> seguidores` : ''}.` : '',
+    `${box('Reproducciones', perBars || daySeries)}${box('¿Quién nos ve?', split)}${box('Periodo a periodo', perTbl)}`);
+
+  // 03 · Contenido
+  const TYPES = [['v_story', 'Historias'], ['v_feed', 'Publicaciones'], ['v_reel', 'Reels']];
+  const mix = TYPES.map(([k, l]) => ({ name: l, races: pl.reduce((n, x) => n + (x[k] || 0), 0) })).filter((x) => x.races);
+  const top = P.posts.length ? P.posts.slice(0, 8).map((x) => ({ t: x.t || 'Publicación', d: x.d, v: x.v, l: x.l, c: x.c, s: x.s }))
+    : g.posts.slice(0, 8).map((p) => ({ t: p.title || 'Publicación', d: p.date, v: p.views, l: p.likes, c: p.comments, s: p.shares }));
+  const topHtml = top.length ? `<ol class="dos-top">${top.map((x, i) => `<li><span class="pos">${i + 1}</span><div><b>${esc(x.t)}</b><small class="muted">${x.d ? esc(dateEs(x.d)) : ''}</small></div><span class="dos-v"><b>${nf(x.v)}</b><small>reprod.</small></span><small class="dos-m">${[x.l != null ? `♥ ${nf(x.l)}` : '', x.c != null ? `💬 ${nf(x.c)}` : '', x.s != null ? `↗ ${nf(x.s)}` : ''].filter(Boolean).join(' · ')}</small></li>`).join('')}</ol>` : '';
+  ch('contenido', 'image', 'Contenido', mix.length ? `Las historias, las publicaciones y los reels del club, y lo que mejor ha funcionado.` : '',
+    `${mix.length ? box('Reproducciones por formato', (() => { const tot = mix.reduce((n, x) => n + x.races, 0) || 1, C = ['m', 'f', 'u'];
+      return `<div class="ig-hstack dos-mix">${mix.map((x, i) => `<i class="${C[i]}" style="width:${(x.races / tot) * 100}%"></i>`).join('')}</div><ul class="dos-leg">${mix.map((x, i) => `<li><i class="dot ${C[i]}"></i><span>${esc(x.name)}</span><b>${nf(x.races)}</b><em>${Math.round((x.races / tot) * 100)} %</em></li>`).join('')}</ul>`; })()) : ''}${box('Lo más visto', topHtml)}${g.byKind.length ? box('Por tipo de publicación', hbars(g.byKind.map((k) => [`${k.kind} (${k.n})`, Math.round(k.views / k.n)]), ' de media')) : ''}`);
+
+  // 04 · Audiencia
+  const A = P.audience, a = g.audience;
+  const pctRows = (o, n = 8) => Object.entries(o || {}).sort((x, y) => y[1] - x[1]).slice(0, n);
+  const genderTxt = A?.gender ? Object.entries(A.gender).map(([k, v]) => [k === 'M' ? 'Hombres' : k === 'F' ? 'Mujeres' : 'Sin indicar', v]) : a ? [['Hombres', a.pctMen], ['Mujeres', a.pctWomen]] : null;
+  const ages = A?.ages ? Object.entries(A.ages) : a ? IG_AGES_UI.map((ag) => { const x = a.genderAge[ag]; return [ag, Math.round(((x.F + x.M + x.U) / Math.max(1, a.total)) * 100)]; }) : null;
+  const cities = A?.cities ? pctRows(A.cities).map(([k, v]) => [k.split(',')[0], v]) : a ? a.cities.slice(0, 8).map((x) => [x.name.split(',')[0], Math.round((x.v / Math.max(1, a.total)) * 100)]) : null;
+  const countries = A?.countries ? pctRows(A.countries, 5).map(([k, v]) => [IG_COUNTRY[k] || k, v]) : a ? a.countries.slice(0, 5).map((x) => [IG_COUNTRY[x.name] || x.name, Math.round((x.v / Math.max(1, a.total)) * 100)]) : null;
+  const topAge = ages?.length ? [...ages].sort((x, y) => y[1] - x[1])[0] : null, topCity = cities?.[0];
+  ch('audiencia', 'users', 'Nuestra audiencia', [topAge ? `La franja más numerosa es la de <b>${esc(topAge[0])} años</b> (${topAge[1]} %)` : '', topCity ? `la ciudad con más seguidores, <b>${esc(topCity[0])}</b> (${topCity[1]} %)` : ''].filter(Boolean).join(' y ') + (topAge || topCity ? '.' : ''),
+    `<div class="mem-two">${genderTxt ? box('Género', hbars(genderTxt, ' %')) : ''}${ages ? box('Edad', hbars(ages, ' %')) : ''}${cities ? box('Ciudades', hbars(cities, ' %')) : ''}${countries ? box('Países', hbars(countries, ' %')) : ''}</div>
+    ${P.topHours ? box('Cuándo están conectados', `<ul class="mem-best">${P.topHours.list.map((h) => `<li>🕘 ${esc(h)}</li>`).join('')}</ul>`) : ''}`);
+
+  // 05 · El club detrás de la cuenta
+  const yr = Number((last || todayISO()).slice(0, 4)), pk = resPack(yr, null), t = pk.s.totals;
+  const posted = [...postedSet()].filter((k) => k.replace(/^res\|/, '').startsWith(String(yr)));
+  const nStory = posted.filter((k) => !k.startsWith('res|')).length, nRes = posted.filter((k) => k.startsWith('res|')).length;
+  ch('club', 'flag', 'El club detrás de la cuenta', `Cada carrera del equipo se convierte en contenido: una historia antes de la salida y los resultados después.`,
+    `<div class="rs-tiles">${tile('flag', `Carreras ${yr}`, nf(t.races), `${nf(t.participations)} participaciones`)}${tile('users', 'Corredores', nf(t.runners), 'en competición')}${tile('trophy', 'Podios', nf(t.podiums), t.wins ? `${nf(t.wins)} victorias` : '')}${tile('pin', 'Provincias', nf(pk.s.provinces.length), pk.s.countries.length > 1 ? `${pk.s.countries.length} países` : '')}${nStory ? tile('camera', 'Historias de carrera', nf(nStory), 'publicadas') : ''}${nRes ? tile('image', 'Posts de resultados', nf(nRes), 'publicados') : ''}</div>
+    <p class="rp-note">Un colaborador del club aparece en todo este contenido: en el maillot de cada carrera y en las publicaciones que genera.</p>`);
+
+  const num = (k) => String(k + 1).padStart(2, '0');
+  return frame('Dossier de Instagram', `
+    <div class="no-print"><div class="row-btns rp-actions"><button class="btn primary" data-act="print-report">🖨️ Imprimir o guardar PDF</button><a class="btn" href="#/instagram">‹ Instagram</a></div>
+      <p class="hint">Usa el periodo elegido en Instagram (${esc((IG_PERIODS(S.year).find(([k]) => k === (S.igPeriod || 'all')) || [, 'Todo lo guardado'])[1])}). Sin nombres de usuarios: solo cifras del club.</p></div>
+    <article class="report memoria dossier" data-nofold>
+      <header class="mem-cover dos-cover"><img src="icons/logo.png" alt=""><p class="mem-kick">Club Ciclista Monzón · dossier para colaboradores</p><h2>Instagram</h2><p class="dos-handle">@hinacoclubciclistamonzon</p>${range ? `<p class="mem-span">${esc(range)}</p>` : ''}
+        <div class="mem-cover-n">${views ? `<div><b>${kmShort(views)}</b><span>reproducciones</span></div>` : ''}${viewers ? `<div><b>${kmShort(viewers)}</b><span>personas</span></div>` : ''}${inter ? `<div><b>${kmShort(inter)}</b><span>interacciones</span></div>` : ''}${followers ? `<div><b>${kmShort(followers)}</b><span>seguidores</span></div>` : ''}</div></header>
+      ${CH.map((c, k) => `<section class="mem-ch" id="dos-${c.id}"><header class="mem-ch-h"><span class="mem-n">${num(k)}</span>${ico(c.ic)}<h2>${esc(c.title)}</h2></header>${c.lead ? `<p class="mem-lead">${c.lead}</p>` : ''}${c.body}</section>`).join('')}
+      <footer class="mem-foot"><img src="icons/logo.png" alt=""><p><b>Club Ciclista Monzón</b> · @hinacoclubciclistamonzon<br>Fuente: estadísticas de Instagram de la cuenta del club, a ${dateEs(todayISO())}. El valor publicitario es una estimación (${IG_CPM} € por cada 1.000 visualizaciones).</p></footer>
+    </article>`, { back: '#/instagram' });
 }
 
 // ======================================================================
@@ -3509,7 +3614,7 @@ function seasonRunnerRows(pk) {
 const TP_COLS = [['name', 'Corredor', 'text'], ['races', 'Carr.'], ['km', 'Km'], ['elev', 'Desn.'], ['trip', 'Viaje'], ['cost', '€ insc.'], ['time', 'Tiempo'], ['nd', 'Disc.'], ['p1', '🥇'], ['p2', '🥈'], ['p3', '🥉'], ['nm', 'Meses']];
 /** €/km del kilometraje exento en España: solo para estimar lo que cuesta ir a las carreras. */
 const KM_EUR = 0.26;
-const nfEs = (n) => Number(n || 0).toLocaleString('es-ES');
+const nfEs = (n) => Number(n || 0).toLocaleString('de-DE');   // 2.552 (el «es-ES» no pone el punto en 4 cifras)
 /** Memoria para sponsors: un informe único, capítulo tras capítulo, con todas las cifras de la temporada (sin bonos, contratos ni datos personales). */
 function viewMemoria() {
   const years = availableYears(S.data.races);

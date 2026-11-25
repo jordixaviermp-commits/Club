@@ -825,6 +825,9 @@ export function demoApi(storage = globalThis.localStorage) {
     async runnerChronicles(code) { const me = byCode(code); return clone((load().chronicles || []).filter((x) => x.runner_id === me.id).map((x) => x.race_key)); },
     async runnerSocialImpact(code) {
       byCode(code); const d = load(); const from = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+      const per = (d.ig_snapshots || []).filter((x) => x.kind === 'period' && /^\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2}$/.test(x.key)).sort((a, b) => b.key.split('_')[1].localeCompare(a.key.split('_')[1]))[0];
+      if (per) { const [a, b] = per.key.split('_'), p = per.data || {}, acc0 = (d.ig_snapshots || []).filter((x) => x.kind === 'account').sort((x, y) => y.key.localeCompare(x.key))[0];
+        return { posted: (d.social_posts || []).map((x) => x.key), from, ig: { source: 'period', from: a, to: b, days: Math.round((Date.parse(b) - Date.parse(a)) / 864e5) + 1, views: p.views, interactions: p.interactions, viewers: p.viewers ?? p.reach, follows: p.net_follows ?? p.follows, followers: p.followers ?? acc0?.data?.followers ?? null } }; }
       const days = (d.ig_snapshots || []).filter((x) => x.kind === 'day' && x.key >= from);
       const sum = (k) => days.reduce((n, x) => n + (Number(x.data?.[k]) || 0), 0);
       const acc = (d.ig_snapshots || []).filter((x) => x.kind === 'account').sort((a, b) => b.key.localeCompare(a.key))[0];

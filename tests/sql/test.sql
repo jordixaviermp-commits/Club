@@ -890,6 +890,7 @@ select pg_temp.check((select (r->>'lat')::numeric = 42.01234 from jsonb_array_el
 
 -- impacto en redes: el corredor ve las publicaciones del club y las cifras agregadas de 30 días
 reset role;
+delete from ig_snapshots where kind = 'period';   -- sin periodos, usa los días de los últimos 30
 insert into social_posts (key, posted_by) values ('2026-11-01|impacto prueba', 'Redes'), ('res|2026-11-01|impacto prueba', 'Redes') on conflict do nothing;
 insert into ig_snapshots (kind, key, data) values
   ('day', to_char(current_date - 2, 'YYYY-MM-DD'), '{"views": 100, "reach": 40, "interactions": 7, "follows": 2}'),
@@ -901,6 +902,16 @@ select pg_temp.check((select (runner_social_impact('codigo-valorador-dos-02')->'
 select pg_temp.check(runner_social_impact('codigo-valorador-dos-02')->'posted' @> '["2026-11-01|impacto prueba"]'::jsonb, 'impacto: ve lo publicado');
 select pg_temp.expect_fail($q$select runner_social_impact('codigo-falso')$q$, 'impacto: enlace falso no lee');
 select pg_temp.expect_fail('select * from social_posts', 'impacto: anon sigue sin leer la tabla de publicaciones');
+-- con periodos (capturas de Insights) manda el último periodo, no los días
+reset role;
+insert into ig_snapshots (kind, key, data) values
+  ('period', '2026-09-01_2026-09-30', '{"views": 1000, "interactions": 10, "viewers": 300, "net_follows": 3}'),
+  ('period', '2026-10-01_2026-10-31', '{"views": 4200, "interactions": 85, "viewers": 900, "net_follows": 12}') on conflict (kind, key) do update set data = excluded.data;
+set role anon;
+select pg_temp.check((select x->>'source' = 'period' and (x->>'views')::int = 4200 and x->>'to' = '2026-10-31' and (x->>'days')::int = 31 and (x->>'follows')::int = 12 and (x->>'followers')::int = 951 from (select runner_social_impact('codigo-valorador-dos-02')->'ig' x) q), 'impacto: usa el último periodo de Instagram');
+reset role;
+delete from ig_snapshots where kind = 'period' and key in ('2026-09-01_2026-09-30', '2026-10-01_2026-10-31');
+set role anon;
 
 -- cualquier corredor marca (y reabre) una carrera como suspendida
 reset role;
