@@ -1129,6 +1129,26 @@ export function igPeriods(rows, from = '', to = '') {
   return { list, totals, overlaps, posts, audience: audP ? { period: audP.key, from: audP.from, to: audP.to, gender: audP.gender || null, ages: audP.ages || null, cities: audP.cities || null, countries: audP.countries || null } : null, topHours: hoursP ? { from: hoursP.from, to: hoursP.to, list: hoursP.top_hours } : null };
 }
 
+/**
+ * LAS cifras de cabecera de Instagram, calculadas igual en todas partes (Redes, Dossier y app de los corredores).
+ * Si hay periodos de Insights en el rango, mandan ellos (suma de periodos; las personas alcanzadas son el máximo de un periodo, no se suman);
+ * si no, los datos diarios. `source`: 'period' | 'day' | null (sin datos).
+ */
+export function igHeadline(rows, from = '', to = '') {
+  const P = igPeriods(rows, from, to), g = igSummary(rows, from, to), pl = P.list, pt = P.totals, gt = g.totals;
+  const accAll = (rows || []).filter((r) => r.kind === 'account' && r.data?.followers != null).sort((a, b) => a.key.localeCompare(b.key)).pop();
+  const followers = g.account?.followers ?? accAll?.data?.followers ?? [...pl].reverse().find((x) => typeof x.followers === 'number')?.followers ?? null;
+  if (pl.length) {
+    const wl = pl.filter((x) => typeof x.views_f_pct === 'number' && x.views);
+    const nonF = wl.length ? Math.round(100 - wl.reduce((n, x) => n + x.views_f_pct * x.views, 0) / wl.reduce((n, x) => n + x.views, 0)) : null;
+    return { source: 'period', from: pl[0].from, to: pl[pl.length - 1].to, days: pt.days, periods: pl.length, views: pt.views ?? null, viewers: pt.viewersMax ?? null, viewersKind: 'unique',
+      interactions: pt.interactions ?? null, follows: pt.net_follows ?? null, followers, nonF };
+  }
+  if (g.nDays) return { source: 'day', from: g.first, to: g.last, days: g.nDays, periods: 0, views: gt.views, viewers: gt.reachAvg || null, viewersKind: 'daily',
+    interactions: gt.interactions, follows: gt.follows, followers, nonF: gt.pctNonFollowers };
+  return { source: null, from: '', to: '', days: 0, periods: 0, views: null, viewers: null, viewersKind: null, interactions: null, follows: null, followers, nonF: null };
+}
+
 // ======================================================================
 //  Panel de redes (dirección): estado de las 3 publicaciones de cada carrera
 // ======================================================================
