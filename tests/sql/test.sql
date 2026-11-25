@@ -898,7 +898,7 @@ insert into ig_snapshots (kind, key, data) values
   ('day', to_char(current_date - 90, 'YYYY-MM-DD'), '{"views": 9999, "reach": 1, "interactions": 1, "follows": 1}'),
   ('account', to_char(current_date - 1, 'YYYY-MM-DD'), '{"followers": 951}') on conflict (kind, key) do update set data = excluded.data;
 set role anon;
-select pg_temp.check((select count(*) filter (where r->>'kind' = 'day') >= 3 and count(*) filter (where r->>'kind' = 'period') = 0 and count(*) filter (where r->>'kind' = 'account' and (r->'data'->>'followers')::int = 951) = 1 from jsonb_array_elements(runner_social_impact('codigo-valorador-dos-02')->'ig_rows') r), 'impacto: sin periodos entrega los días y el último nº de seguidores');
+select pg_temp.check((select count(*) filter (where r->>'kind' = 'day') >= 3 and count(*) filter (where r->>'kind' = 'period') = 0 and count(*) filter (where r->>'kind' = 'account' and (r->'data'->>'followers')::int = 951) = 1 from jsonb_array_elements(runner_social_impact('codigo-valorador-dos-02')->'ig_rows') r), 'impacto: entrega los días y el último nº de seguidores');
 select pg_temp.check(runner_social_impact('codigo-valorador-dos-02')->'posted' @> '["2026-11-01|impacto prueba"]'::jsonb, 'impacto: ve lo publicado');
 select pg_temp.expect_fail($q$select runner_social_impact('codigo-falso')$q$, 'impacto: enlace falso no lee');
 select pg_temp.expect_fail('select * from social_posts', 'impacto: anon sigue sin leer la tabla de publicaciones');
@@ -908,7 +908,7 @@ insert into ig_snapshots (kind, key, data) values
   ('period', '2026-09-01_2026-09-30', '{"views": 1000, "interactions": 10, "viewers": 300, "net_follows": 3, "ages": {"35-44": 30}, "posts": [{"t": "x"}]}'),
   ('period', '2026-10-01_2026-10-31', '{"views": 4200, "interactions": 85, "viewers": 900, "net_follows": 12}') on conflict (kind, key) do update set data = excluded.data;
 set role anon;
-select pg_temp.check((select count(*) filter (where r->>'kind' = 'period') = 2 and count(*) filter (where r->>'kind' = 'day') = 0 and count(*) filter (where r->>'kind' = 'account') = 1 and bool_and(not (r->'data' ? 'ages') and not (r->'data' ? 'posts')) from jsonb_array_elements(runner_social_impact('codigo-valorador-dos-02')->'ig_rows') r), 'impacto: con periodos entrega solo los periodos (sin audiencia ni publicaciones) y los seguidores');
+select pg_temp.check((select count(*) filter (where r->>'kind' = 'period') = 2 and count(*) filter (where r->>'kind' = 'day') >= 3 and count(*) filter (where r->>'kind' = 'account') = 1 and bool_and(not (r->'data' ? 'ages') and not (r->'data' ? 'posts')) from jsonb_array_elements(runner_social_impact('codigo-valorador-dos-02')->'ig_rows') r), 'impacto: entrega días y periodos (sin audiencia ni publicaciones) y los seguidores');
 reset role;
 delete from ig_snapshots where kind = 'period' and key in ('2026-09-01_2026-09-30', '2026-10-01_2026-10-31');
 set role anon;

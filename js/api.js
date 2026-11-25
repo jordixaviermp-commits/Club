@@ -829,7 +829,7 @@ export function demoApi(storage = globalThis.localStorage) {
       const strip = (o) => { const c = { ...(o || {}) }; for (const k of ['posts', 'gender', 'ages', 'cities', 'countries', 'top_hours', 'note', 'approx']) delete c[k]; return c; };
       const acc = snaps.filter((x) => x.kind === 'account' && x.data?.followers != null).sort((a, b) => b.key.localeCompare(a.key))[0];
       const ig_rows = [...periods.map((x) => ({ kind: 'period', key: x.key, data: strip(x.data) })), ...(acc ? [{ kind: 'account', key: acc.key, data: { followers: acc.data.followers } }] : []),
-        ...(periods.length ? [] : snaps.filter((x) => x.kind === 'day').map((x) => ({ kind: 'day', key: x.key, data: { views: x.data?.views, reach: x.data?.reach, interactions: x.data?.interactions, follows: x.data?.follows, views_f: x.data?.views_f, views_nf: x.data?.views_nf } })))];
+        ...(snaps.filter((x) => x.kind === 'day').map((x) => ({ kind: 'day', key: x.key, data: { views: x.data?.views, reach: x.data?.reach, interactions: x.data?.interactions, follows: x.data?.follows, views_f: x.data?.views_f, views_nf: x.data?.views_nf } })))];
       return { posted: (d.social_posts || []).map((x) => x.key), ig_rows };
     },
     async runnerChroniclesTeam(code) {

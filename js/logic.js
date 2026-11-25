@@ -1131,22 +1131,27 @@ export function igPeriods(rows, from = '', to = '') {
 
 /**
  * LAS cifras de cabecera de Instagram, calculadas igual en todas partes (Redes, Dossier y app de los corredores).
- * Si hay periodos de Insights en el rango, mandan ellos (suma de periodos; las personas alcanzadas son el máximo de un periodo, no se suman);
- * si no, los datos diarios. `source`: 'period' | 'day' | null (sin datos).
+ * La base son los datos DIARIOS (los que guarda cada día la tarea automática). Los periodos de Insights (capturas a mano) solo
+ * rellenan los días que no tienen datos diarios (por ejemplo, antes de que existiera la captura automática), sin contarlos dos veces.
+ * `source`: 'day' | 'mixed' (días + periodos que rellenan huecos) | 'period' (solo periodos) | null (sin datos).
  */
 export function igHeadline(rows, from = '', to = '') {
-  const P = igPeriods(rows, from, to), g = igSummary(rows, from, to), pl = P.list, pt = P.totals, gt = g.totals;
+  const g = igSummary(rows, from, to), P = igPeriods(rows, from, to), gt = g.totals;
+  const dayKeys = new Set(g.days.map((d) => d.date));
+  const covered = (p) => { for (let t = Date.parse(p.from + 'T12:00:00Z'); t <= Date.parse(p.to + 'T12:00:00Z'); t += 864e5) if (dayKeys.has(new Date(t).toISOString().slice(0, 10))) return true; return false; };
+  const extra = P.list.filter((p) => !covered(p));          // periodos sin ningún día guardado: los únicos que se suman a los diarios
+  const sumX = (k) => { const have = extra.filter((p) => typeof p[k] === 'number'); return have.length ? have.reduce((n, p) => n + p[k], 0) : null; };
   const accAll = (rows || []).filter((r) => r.kind === 'account' && r.data?.followers != null).sort((a, b) => a.key.localeCompare(b.key)).pop();
-  const followers = g.account?.followers ?? accAll?.data?.followers ?? [...pl].reverse().find((x) => typeof x.followers === 'number')?.followers ?? null;
-  if (pl.length) {
-    const wl = pl.filter((x) => typeof x.views_f_pct === 'number' && x.views);
-    const nonF = wl.length ? Math.round(100 - wl.reduce((n, x) => n + x.views_f_pct * x.views, 0) / wl.reduce((n, x) => n + x.views, 0)) : null;
-    return { source: 'period', from: pl[0].from, to: pl[pl.length - 1].to, days: pt.days, periods: pl.length, views: pt.views ?? null, viewers: pt.viewersMax ?? null, viewersKind: 'unique',
-      interactions: pt.interactions ?? null, follows: pt.net_follows ?? null, followers, nonF };
-  }
-  if (g.nDays) return { source: 'day', from: g.first, to: g.last, days: g.nDays, periods: 0, views: gt.views, viewers: gt.reachAvg || null, viewersKind: 'daily',
-    interactions: gt.interactions, follows: gt.follows, followers, nonF: gt.pctNonFollowers };
-  return { source: null, from: '', to: '', days: 0, periods: 0, views: null, viewers: null, viewersKind: null, interactions: null, follows: null, followers, nonF: null };
+  const followers = g.account?.followers ?? accAll?.data?.followers ?? [...P.list].reverse().find((x) => typeof x.followers === 'number')?.followers ?? null;
+  const days = g.nDays + extra.reduce((n, p) => n + p.days, 0);
+  if (!days) return { source: null, from: '', to: '', days: 0, periods: 0, views: null, viewers: null, viewersKind: null, interactions: null, follows: null, followers, nonF: null };
+  const starts = [g.first, ...extra.map((p) => p.from)].filter(Boolean).sort(), ends = [g.last, ...extra.map((p) => p.to)].filter(Boolean).sort();
+  const add = (a, b) => (a == null && b == null ? null : (a || 0) + (b || 0));
+  let nonF = gt.pctNonFollowers, viewers = g.nDays ? gt.reachAvg || null : P.totals.viewersMax ?? null;
+  if (!g.nDays) { const wl = extra.filter((x) => typeof x.views_f_pct === 'number' && x.views); nonF = wl.length ? Math.round(100 - wl.reduce((n, x) => n + x.views_f_pct * x.views, 0) / wl.reduce((n, x) => n + x.views, 0)) : null; }
+  return { source: g.nDays ? (extra.length ? 'mixed' : 'day') : 'period', from: starts[0], to: ends[ends.length - 1], days, periods: extra.length,
+    views: add(g.nDays ? gt.views : null, sumX('views')), viewers, viewersKind: g.nDays ? 'daily' : 'unique',
+    interactions: add(g.nDays ? gt.interactions : null, sumX('interactions')), follows: add(g.nDays ? gt.follows : null, sumX('net_follows')), followers, nonF };
 }
 
 // ======================================================================
