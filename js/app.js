@@ -36,17 +36,30 @@ function applyTheme(t) {
   if (meta) meta.content = t === 'dark' || (t === 'auto' && window.matchMedia?.('(prefers-color-scheme: dark)').matches) ? '#0e151a' : '#284556';
 }
 applyTheme(getTheme());
-/** Menú de perfil (toca el logo de arriba a la izquierda): aspecto, turnos (si la dirección lo habilitó) y «No soy…». */
-const themeButtons = () => [['auto', '🌓 Automático'], ['light', '☀️ Claro'], ['dark', '🌙 Oscuro']].map(([v, l]) => `<button type="button" class="chip${getTheme() === v ? ' on' : ''}" data-prof="theme" data-t="${v}" aria-pressed="${getTheme() === v}">${l}</button>`).join('');
+/** Menú de perfil (toca el logo de arriba a la izquierda): tarjeta con mis cifras, aspecto, turnos (si la dirección lo habilitó), copiar mi enlace y «No soy…». */
+const THEMES = [['auto', 'Auto', 'auto'], ['light', 'Claro', 'sun'], ['dark', 'Oscuro', 'moon']];
+const themeSeg = () => `<div class="prof-seg" role="group" aria-label="Aspecto de la app">${THEMES.map(([v, l, ic]) => `<button type="button" class="${getTheme() === v ? 'on' : ''}" data-prof="theme" data-t="${v}" aria-pressed="${getTheme() === v}">${ico(ic)}<span>${l}</span></button>`).join('')}</div>`;
+/** Cifras de la temporada del corredor para la tarjeta del menú: carreras hechas, podios y racha. */
+function profileStats() {
+  const d = S.runnerData; if (!d) return [];
+  const y = new Date().getFullYear(), mine = (d.my_results || []).filter((r) => yearOf(r.date) === y), sent = (d.registrations || []).filter((g) => g.my_result && yearOf(g.date) === y);
+  const all = [...mine, ...sent.map((g) => ({ position: g.my_result.position }))], pods = all.filter((r) => isPodium(r.position)).length;
+  let streak = 0; try { if (S.chron instanceof Set) streak = alDia(d, S.chron, d.today || todayISO(), y).streak || 0; } catch { streak = 0; }
+  const next = (d.registrations || []).filter((g) => !g.suspended && g.date >= (d.today || todayISO()) && (g.entries || []).some((e) => e.runner_id === d.me.id)).length;
+  return [['flag', all.length, 'carreras'], ['trophy', pods, 'podios'], ['cal', next, 'próximas'], ...(streak ? [['act', streak, 'racha']] : [])];
+}
 function profileHtml() {
-  const me = S.runnerData?.me;
-  return `<form method="dialog" class="dlg profile"><h2>${avatar(me?.name || '')}<span>${esc(me?.name || 'Mi perfil')}</span></h2>
-    <h3>Aspecto de la app</h3><div class="years">${themeButtons()}</div>
-    ${S.shiftOn ? `<h3>Mis turnos de trabajo <small class="muted">(opcional)</small></h3>
-      <label class="sp-row">Mi escamot<select data-prof="shift" aria-label="Mi escamot"><option value="">Sin turnos</option>${USPAC_GROUPS.map((g) => `<option value="${g}"${S.myShift === g ? ' selected' : ''}>Escamot ${g.slice(1)}</option>`).join('')}</select></label>
-      <p class="hint" data-nofold>Verás tus turnos (M, T, N, F…) en el calendario de Carreras. Solo los ves tú.</p>` : ''}
-    <p class="muted center small">Versión de la app: <b>${esc(VERSION)}</b></p>
-    <div class="dlg-actions"><button type="button" class="btn danger" data-prof="forget">No soy ${esc(me?.name || 'esta persona')}</button><button value="" class="btn primary">Cerrar</button></div></form>`;
+  const me = S.runnerData?.me, st = profileStats();
+  const row = (ic, title, ctrl, sub = '') => `<li class="prof-row"><span class="pi">${ico(ic)}</span><span class="pt"><b>${title}</b>${sub ? `<small>${sub}</small>` : ''}</span>${ctrl}</li>`;
+  return `<form method="dialog" class="dlg profile"><button value="" class="prof-x" aria-label="Cerrar">${icon('M18 6L6 18M6 6l12 12')}</button>
+    <header class="prof-head">${avatar(me?.name || '', 'lg')}<div><h2>${esc(me?.name || 'Mi perfil')}</h2>${me?.category ? `<span class="prof-cat">${esc(me.category)}</span>` : ''}</div></header>
+    ${st.length ? `<div class="prof-stats">${st.map(([ic, n, l]) => `<span title="${l}">${ico(ic)}<b>${n}</b><small>${l}</small></span>`).join('')}</div>` : ''}
+    <ul class="prof-list">
+      ${row('sun', 'Aspecto', '')}<li class="prof-seg-row">${themeSeg()}</li>
+      ${S.shiftOn ? row('clock', 'Mis turnos', `<select data-prof="shift" aria-label="Mi escamot"><option value="">Sin turnos</option>${USPAC_GROUPS.map((g) => `<option value="${g}"${S.myShift === g ? ' selected' : ''}>Escamot ${g.slice(1)}</option>`).join('')}</select>`, 'en tu calendario') : ''}
+      <li class="prof-row tap"><button type="button" data-prof="link"><span class="pi">${ico('link')}</span><span class="pt"><b>Copiar mi enlace</b><small>para entrar desde otro móvil</small></span>${ico('go', 'pg')}</button></li>
+    </ul>
+    <footer class="prof-foot"><small class="muted">v${esc(VERSION.slice(1))}</small><button type="button" class="prof-out" data-prof="forget">${ico('logout')}No soy ${esc((me?.name || 'esta persona').split(' ')[0])}</button></footer></form>`;
 }
 function openProfile() { const dlg = document.getElementById('dialog'); dlg.innerHTML = profileHtml(); if (!dlg.open) dlg.showModal(); }
 {
@@ -54,6 +67,7 @@ function openProfile() { const dlg = document.getElementById('dialog'); dlg.inne
   dlg.addEventListener('click', async (ev) => {
     const b = ev.target.closest('.profile [data-prof]'); if (!b) return;
     if (b.dataset.prof === 'theme') { ev.preventDefault(); store.set(THEME_KEY, b.dataset.t); applyTheme(b.dataset.t); dlg.innerHTML = profileHtml(); render(); }
+    else if (b.dataset.prof === 'link') { ev.preventDefault(); const link = linkFor(S.code); try { await navigator.clipboard.writeText(link); toast('🔗 Enlace copiado: es solo tuyo, no lo compartas'); } catch { download('mi-enlace.txt', link, 'text/plain;charset=utf-8'); } }
     else if (b.dataset.prof === 'forget') { ev.preventDefault(); dlg.close(); await actions['r-forget'](); }
   });
   dlg.addEventListener('change', async (ev) => {
@@ -1129,6 +1143,10 @@ const ICO = {
   clock: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2',
   link: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71',
   ruler: 'M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0zM14.5 12.5l2-2M11.5 9.5l2-2M8.5 6.5l2-2M17.5 15.5l2-2',
+  sun: 'M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4',
+  moon: 'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z',
+  auto: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 2v20M12 7h0M12 12h0M12 17h0',
+  logout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9',
   car: 'M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2M9 17h6M5 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M15 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0',
   users: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
   calplus: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM12 14v4M10 16h4',
