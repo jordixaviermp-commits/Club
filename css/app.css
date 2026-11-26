@@ -2800,3 +2800,5 @@ label.tip-host > .tip-btn { position: absolute; top: 0; right: 0; margin: 0; }
 .kit-edit .kit-t{grid-column:1/-1;display:flex;align-items:center;gap:6px;font-weight:700}
 .kit-edit .kit-t svg{width:20px;height:20px;flex:none}
 .kit-edit label{font-size:12px;margin:0}.kit-edit select{min-width:0;width:100%}
+.kit-strip{display:flex;align-items:center;gap:8px;margin:12px 0;padding:8px 12px;border-radius:14px;background:var(--bg-soft,rgba(127,127,127,.1))}
+.kit-strip>svg{width:20px;height:20px;flex:none}

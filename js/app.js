@@ -55,6 +55,11 @@ function kitRow() {
   const k = S.myKit; if (!k || !KIT_FIELDS.some(([f]) => k[f])) return '';
   return `<li class="prof-row"><span class="pi">${ico('shirt')}</span><span class="pt"><b>Mi ropa</b></span><span class="kit-chips">${KIT_FIELDS.filter(([f]) => k[f]).map(([f, , l]) => `<span class="kit-chip" title="${l}"><small>${l}</small><b>${esc(k[f])}</b></span>`).join('')}</span></li>`;
 }
+/** Línea compacta «Mi ropa» para Mi temporada (mismas pastillas que el menú del escudo). */
+function kitStrip() {
+  const k = S.myKit; if (S.preview || !k || !KIT_FIELDS.some(([f]) => k[f])) return '';
+  return `<div class="kit-strip">${ico('shirt')}<b>Mi ropa</b><span class="kit-chips">${KIT_FIELDS.filter(([f]) => k[f]).map(([f, , l]) => `<span class="kit-chip" title="${l}"><small>${l}</small><b>${esc(k[f])}</b></span>`).join('')}</span></div>`;
+}
 function profileHtml() {
   const me = S.runnerData?.me, st = profileStats();
   const row = (ic, title, ctrl, sub = '') => `<li class="prof-row"><span class="pi">${ico(ic)}</span><span class="pt"><b>${title}</b>${sub ? `<small>${sub}</small>` : ''}</span>${ctrl}</li>`;
@@ -1855,6 +1860,7 @@ function viewRunnerMine() {
     ${previewBanner()}
     ${S.preview ? '' : miTabs('mi')}
     ${myRacesCard(d, () => chronicleCard(d))}
+    ${kitStrip()}
     ${installHint()}
     ${S.preview ? `<p class="center"></p>` : ''}${themeLineIfPreview()}${versionLine()}`,
   { rtab: 'mi' });
