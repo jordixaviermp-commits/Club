@@ -2774,3 +2774,16 @@ section.card.purge-card > h2 { color: var(--bad); }
 .bk-card .pi { width: 36px; height: 36px; border-radius: 12px; background: var(--accent-2); color: var(--accent); display: grid; place-items: center; flex: none; } .bk-card .pi .ico { width: 19px; height: 19px; }
 .bk-card .pt { display: flex; flex-direction: column; min-width: 0; flex: 1; } .bk-card .pt b { font-size: var(--fs-4); } .bk-card .pt small { color: var(--muted); font-size: var(--fs-2); }
 .bk-card .btn { display: inline-flex; align-items: center; gap: .3rem; flex: none; } .bk-card .btn .ico { width: 16px; height: 16px; }
+
+/* ---- v264 · Las «i» van siempre pegadas a lo que explican ---- */
+.tip-body { margin: .3rem 0 .6rem; padding: .55rem .75rem; border-radius: var(--r-sm); background: var(--accent-2); color: var(--text); font-size: var(--fs-3); line-height: 1.4; text-align: left; }
+.tip-body[hidden] { display: none !important; }
+label.tip-host, .flabel-l.tip-host { position: relative; }
+label.tip-host > .tip-btn { position: absolute; top: 0; right: 0; margin: 0; }
+.flabel .tip-btn { margin-left: .45rem; vertical-align: middle; }
+.btn-tip { display: flex; align-items: center; gap: .4rem; } .btn-tip > :first-child { flex: 1; min-width: 0; } .btn-tip > .tip-btn { margin-left: 0; }
+.tip-btn:has(span) { width: auto; height: 28px; padding: 0 .65rem 0 .45rem; gap: .3rem; border-radius: 999px; font-size: var(--fs-2); font-weight: 700; }
+.tip-btn.inl { margin-left: .45rem; } h1.has-tip:has(.inl), h2.has-tip:has(.inl), h3.has-tip:has(.inl), h4.has-tip:has(.inl) { display: inline-flex; }
+.tip-btn.line { margin: .35rem 0 .1rem; justify-self: start; align-self: flex-start; }
+/* Web de la carrera: siempre el mismo cuadradito con el clip (abre la web si la hay; si no, permite añadirla) */
+.rc-tool.has-url { color: var(--accent); }

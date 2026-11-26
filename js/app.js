@@ -1074,12 +1074,12 @@ function viewRunnerReport(key) {
         <label>Tu puesto<input type="number" name="position" inputmode="numeric" min="1" max="999" required autofocus value="${esc(cur?.position ?? '')}"></label>
         <label>Categoría${catSelect('name="category"', cat || d.me.category || '', 'Categoría')}</label>
       </div>
-      <label>Puesto en la general <small class="muted">(opcional · de todos, no solo de tu categoría)</small><input type="number" name="general" inputmode="numeric" min="1" max="9999" placeholder="—" value="${esc(cur?.general_position ?? '')}"></label>
-      <div class="tf-row"><span class="flabel">⏱️ Tu tiempo <small class="muted">(opcional)</small></span>${timeFields(cur?.time_seconds, 'name="time"')}</div>
+      <label>Puesto en la general<input type="number" name="general" inputmode="numeric" min="1" max="9999" required placeholder="—" value="${esc(cur?.general_position ?? '')}"></label>
+      <div class="tf-row"><span class="flabel">⏱️ Tu tiempo</span>${timeFields(cur?.time_seconds, 'name="time"')}</div>
       <p class="hint">Escribe solo números en cada casilla, tal como sale en la clasificación: para <b>2 h 05 min</b> pon 2 · 05; si fue menos de una hora, deja las horas vacías (45 min). Sirve para ver cuántas horas acumula cada uno en Equipo.</p>
       <input type="hidden" name="podium" value="${podiumKind(race, cur?.podium_type)}">
       ${race.race_type === 'circuito' ? `<p class="hint">🏆 Esta carrera es puntuable de <b>${esc(race.circuit || 'un circuito')}</b>. Aquí pones solo tu puesto en <b>esta prueba</b>. Si acabas en el podio de la <b>general final</b>, se pide aparte, al terminar la liga, en <b>Contrato → Plus de bonificación</b>.</p>` : ''}
-      <p class="hint">${cur ? `Ahora tienes <b>${isPodium(cur.position) ? medal(cur.position) + ' ' : ''}${cur.position}º</b>. ` : ''}Puedes cambiarlo tú cuando quieras. El puesto <b>no cambia tu bono</b> (cuenta participar); los podios en la general final de una liga (plus) se piden aparte y los confirma la dirección.</p>
+      <p class="hint" data-nofold>Puedes cambiarlo cuando quieras. No cambia tu bono.</p>
       ${S.preview ? '' : `<button class="btn primary">${cur ? 'Guardar el cambio' : 'Enviar mi resultado'}</button>`}
     </form>`, { back });
 }
@@ -1610,12 +1610,6 @@ function doneRaceCard(r, { admin = false, meId = null } = {}) {
 }
 
 
-/** Web de la carrera: botón para ir directo si alguien la puso; si no, invita a ponerla para todos. */
-function webRow(g, canAdd) {
-  if (g.url) return `<div class="web-row"><a class="btn small web-btn" href="${esc(g.url)}" target="_blank" rel="noopener noreferrer">${ico('ext')}Web de la carrera</a>${!S.preview ? `<button type="button" class="btn small ghost" data-act="r-web" data-id="${g.id}" aria-label="Cambiar la web de la carrera" title="Cambiar la web">${ico('pen')}</button>` : ''}</div>`;
-  if (!canAdd || S.preview) return '';
-  return `<div class="web-row"><button type="button" class="btn small ghost web-add" data-act="r-web" data-id="${g.id}">${ico('link')}¿Conoces su web? Ponla para todos</button></div>`;
-}
 /** Ventana para poner (o cambiar) la web de una carrera. Devuelve la dirección, '' para quitarla, o null si cancela. */
 function askWeb(name, current) {
   return new Promise((resolve) => {
@@ -1638,7 +1632,7 @@ function runnerRegCard(g, opts = {}) {
     const open = g.date >= today;
     // una sola fila de herramientas con iconos: valorar, web, editar datos y suspender (antes eran cuatro filas con frases)
     const canSusp = !S.preview && g.date >= pastLimit();
-    const tools = `<div class="rc-tools">${open && !mine && !g.suspended && !S.preview ? starBtn(g, 'w-add-reg', ['id', g.id]) : ''}${g.url ? `<a class="rc-tool lab" href="${esc(g.url)}" target="_blank" rel="noopener noreferrer" title="Web de la carrera">${ico('ext')}<span>Web</span></a>`
+    const tools = `<div class="rc-tools">${open && !mine && !g.suspended && !S.preview ? starBtn(g, 'w-add-reg', ['id', g.id]) : ''}${g.url ? `<a class="rc-tool has-url" href="${esc(g.url)}" target="_blank" rel="noopener noreferrer" aria-label="Abrir la web de la carrera" title="Web de la carrera">${ico('link')}</a>`
       : open && !g.suspended && !S.preview ? `<button type="button" class="rc-tool" data-act="r-web" data-id="${g.id}" aria-label="Añadir la web de la carrera" title="Añadir la web (para todos)">${ico('link')}</button>` : ''}
       ${mine && !S.preview && !g.suspended && (open || !g.my_result) ? `<button type="button" class="rc-tool lab pay${mine.paid ? ' on' : ''}" data-act="r-paid" data-id="${g.id}" aria-label="${mine.paid ? 'Pagada: cambiar o quitar el pago' : 'Marcar como pagada'}" title="${mine.paid ? 'Pagada' : 'Marcar como pagada'}">${ico('euro')}<span>${mine.paid ? `${mine.paid_amount != null ? euros(mine.paid_amount) : 'Pagada'}` : 'Pagar'}</span>${mine.paid ? ico('check', 'pay-ok') : ''}</button>` : ''}
       ${carTool(g, !!mine)}
@@ -1906,7 +1900,7 @@ function watchCard(w, i) {
     ${mine ? `<p class="wc-club ok">${ico('check')}<span>Ya estás apuntado. Puedes quitarla de aquí.</span></p>` : g ? `<p class="wc-club">${ico('users')}<span>${others.length ? `Ya está en Carreras: <b>${others.length}</b> apuntado${others.length === 1 ? '' : 's'} (${esc(others.map((e) => e.name).slice(0, 4).join(', '))}${others.length > 4 ? '…' : ''})` : 'Está en Carreras: nadie se ha apuntado todavía'}</span></p>` : ''}
     ${w.notes ? `<p class="notes">${esc(w.notes)}</p>` : ''}
     <div class="wc-acts">${i.past ? `<button class="btn primary small" data-act="w-repeat" data-id="${w.id}">${ico('star')}Repetir el año que viene</button>` : mine ? '' : `<button class="btn primary small" data-act="w-sign" data-id="${w.id}">${g ? 'Apuntarme' : 'Inscribirme'}</button>`}
-      ${w.url ? `<a class="btn small" href="${esc(w.url)}" target="_blank" rel="noopener noreferrer">${ico('ext')}Web</a>` : ''}
+      ${w.url ? `<a class="btn small ghost wc-edit" href="${esc(w.url)}" target="_blank" rel="noopener noreferrer" aria-label="Abrir la web de la carrera" title="Web de la carrera">${ico('link')}</a>` : ''}
       <a class="btn small ghost wc-edit" href="#/valorar/${w.id}" aria-label="Editar" title="Editar">${ico('pen')}</a>
       <button class="btn small ghost wc-edit" data-act="w-del" data-id="${w.id}" aria-label="${i.past || mine ? 'Quitar' : 'Descartar'}" title="${i.past || mine ? 'Quitar' : 'Descartar'}">${ico('trash')}</button></div>`;
   return raceFold(w, { key: `wv-${w.id}`, today: watchToday(), mine: !!mine, side, body, cls: `wcard${i.urgent ? ' urgent' : ''}` });
@@ -6025,10 +6019,12 @@ const forms = {
     if (!Number.isInteger(position) || position < 1) return toast('Pon un puesto válido (1, 2, 3…).', true);
     const cat = f.category.value || null, pod = f.podium.value;
     const rawTime = f.time.value.trim(), time = rawTime ? parseTime(rawTime) : null;
-    if (rawTime && !time) return toast('Revisa el tiempo: minutos y segundos van de 0 a 59. Déjalo vacío si no lo sabes.', true);
+    if (!rawTime) return toast('Pon tu tiempo (horas y minutos): es obligatorio.', true);
+    if (!time) return toast('Revisa el tiempo: los minutos van de 0 a 59.', true);
     const general = f.general.value.trim() ? Number(f.general.value) : null;
-    if (general != null && (!Number.isInteger(general) || general < 1 || general > 9999)) return toast('Revisa el puesto en la general (1, 2, 3…) o déjalo vacío.', true);
-    if (general != null && general < position) return toast('En la general no puedes ir por delante que en tu categoría: revisa los dos puestos.', true);
+    if (general == null) return toast('Pon tu puesto en la general: es obligatorio.', true);
+    if (!Number.isInteger(general) || general < 1 || general > 9999) return toast('Revisa el puesto en la general (1, 2, 3…).', true);
+    if (general < position) return toast('En la general no puedes ir por delante que en tu categoría: revisa los dos puestos.', true);
     const txt = `${position}º${cat ? ' en ' + cat : ''}${general ? ` · Gral. ${general}º` : ''}${time ? ' · ⏱️ ' + formatTime(time) : ''}${position <= 3 && pod === 'campeonato' ? ` · ${podiumLabel(pod)}` : ''}`;
     if (!await confirmAction('Guardar resultado', `Vas a guardar: <b>${esc(txt)}</b>.<br>Si te equivocas, lo puedes cambiar después.`, 'Guardar', 'primary')) return;
     const ok = await run(async () => { await api.runnerReport(S.code, f.dataset.kind, f.dataset.id, position, cat, pod, time, general); await loadRunner(); return true; },
@@ -6381,32 +6377,56 @@ function iconize(root) {
   });
 }
 const TIP_MIN = 60;
+/**
+ * Las explicaciones largas (p.hint de 60+ letras) se pliegan detrás de una «i» que SIEMPRE queda pegada a lo que explica:
+ *  1. detrás de un título → en la línea del título;
+ *  2. detrás de un campo (etiqueta, «Tu tiempo»…) → en la línea de esa etiqueta;
+ *  3. detrás de un botón o fila de botones → a su derecha, en la misma línea;
+ *  4. si no, en el título más cercano de arriba (el texto se abre justo debajo de ese título);
+ *  5. si no hay a qué pegarla, el texto se queda visible tal cual (nunca una «i» flotando sola).
+ */
+let tipUid = 0;
 function foldHints(root) {
   if (!root?.querySelectorAll) return;
   root.querySelectorAll('p.hint:not(.tip-body)').forEach((p) => {
     if (p.id || p.className.replace(/\b(hint|center)\b/g, '').trim()) return;                 // los que tienen otra función (estado, contador…) se dejan
-    if (p.closest('details.tip, summary, label, .print-only, .rform-help, .ig-help, [data-nofold]')) return;
+    if (p.closest('summary, label, .print-only, .rform-help, .ig-help, [data-nofold]')) return;
     const text = p.textContent.replace(/\s+/g, ' ').trim();
     if (text.length < TIP_MIN) return;                                                            // una frase corta se lee de un vistazo
     let h = 0; for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) | 0;
-    const key = `tip:${(h >>> 0).toString(36)}`;
-    const prev = p.previousElementSibling, head = prev && /^H[1-4]$/.test(prev.tagName) && !prev.querySelector('.tip-btn') ? prev : null;
-    p.classList.add('tip-body');
-    if (head) {   // detrás de un título: la «i» va al final de la propia línea del título y el texto cae justo debajo
-      const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'tip-btn'; bt.dataset.tip = key; bt.title = 'Más información'; bt.setAttribute('aria-label', 'Más información'); bt.innerHTML = ico('info');
-      head.classList.add('has-tip'); head.append(bt); p.dataset.tipKey = key; p.hidden = !S.open?.[key]; bt.setAttribute('aria-expanded', String(!p.hidden)); bt.classList.toggle('on', !p.hidden);
-    } else {      // suelta: la «i» queda siempre en el borde derecho, en la misma vertical que las demás
-      const d = document.createElement('details'); d.className = 'tip'; d.dataset.openKey = key; if (S.open?.[key]) d.open = true;
-      const lab = p.closest('.chro-card');   // en Sin resultado y Crónicas la «i» lleva su etiqueta, a la izquierda, para que se entienda qué explica
-      if (lab) d.classList.add('tip-lab');
-      const sm = document.createElement('summary'); sm.setAttribute('aria-label', 'Más información'); sm.title = 'Más información'; sm.innerHTML = lab ? `${ico('info')}<span>Cómo funciona</span>` : ico('info');
-      p.replaceWith(d); d.append(sm, p);
+    const key = `tip:${(h >>> 0).toString(36)}`, uid = String(++tipUid);
+    const isHead = (e) => e && /^H[1-4]$/.test(e.tagName) && !e.querySelector('.tip-btn');
+    const mk = (label = '') => { const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'tip-btn'; bt.dataset.tip = key; bt.dataset.tipUid = uid; bt.title = 'Más información';
+      bt.setAttribute('aria-label', label || 'Más información'); bt.innerHTML = label ? `${ico('info')}<span>${label}</span>` : ico('info'); return bt; };
+    const done = (bt) => { p.classList.add('tip-body'); p.dataset.tipKey = key; p.dataset.tipUid = uid; p.hidden = !S.open?.[key]; bt.setAttribute('aria-expanded', String(!p.hidden)); bt.classList.toggle('on', !p.hidden); };
+    const prev = p.previousElementSibling, lab = p.closest('.chro-card') ? 'Cómo funciona' : '';
+    // 1 · título justo encima
+    if (isHead(prev)) { const bt = mk(); prev.classList.add('has-tip'); prev.append(bt); done(bt); return; }
+    // 2 · campo (etiqueta) justo encima
+    const field = prev && (prev.matches('.tf-row') ? prev.querySelector('.flabel') : prev.matches('label:not(.btn), .flabel, .flabel-l') ? prev : null);
+    if (field && !field.querySelector('.tip-btn')) { const bt = mk(); if (field.tagName === 'LABEL' || field.matches('.flabel-l')) field.classList.add('tip-host'); field.append(bt); done(bt); return; }
+    // 2b · fila con su título dentro («Etapas − Sin etapas +»): la «i» va detrás del título
+    if (prev && prev.matches('.row') && isHead(prev.firstElementChild)) { const bt = mk(); bt.classList.add('inl'); prev.firstElementChild.classList.add('has-tip'); prev.firstElementChild.append(bt); done(bt); return; }
+    // 3 · botón o fila de botones justo encima
+    const onlyBtns = (e) => [...e.children].length > 0 && [...e.children].every((c) => c.matches('.btn, button, a.btn, label.btn'));
+    if (prev && (prev.matches('.btn, button, .row-btns, .years, .seg-sw, .subtabs, .rp-actions') || (prev.matches('.row') && onlyBtns(prev))) && !prev.closest('.btn-tip')) {
+      const w = document.createElement('div'); w.className = 'btn-tip'; prev.replaceWith(w); const bt = mk(lab); w.append(prev, bt); done(bt); return;
     }
+    // 4 · el título más cercano de arriba (el texto se abre justo debajo de él)
+    let q = prev, hops = 0; while (q && hops < 8 && !isHead(q)) { q = q.previousElementSibling; hops++; }
+    let head = isHead(q) ? q : null;
+    if (!head) { const card = p.closest('section.card, form.card, .card'); const c = card && [...card.children].find((e) => isHead(e)); head = c || null; }
+    if (head && !head.closest('summary')) { const bt = mk(lab); head.classList.add('has-tip'); head.append(bt); head.after(p); done(bt); return; }
+    // 5 · nada a lo que pegarla. Si es la primera línea de su bloque (la introducción de una pantalla o de un plegable), el texto se queda visible;
+    //     si no, queda en UNA línea con su etiqueta («Plus de bonificación», «Más información»), nunca una «i» suelta.
+    if (!prev) return;
+    const lead = text.replace(/^[^\p{L}\p{N}]+/u, ''), cut = lead.search(/[:—.]/), name = cut > 3 && cut <= 34 ? lead.slice(0, cut).trim() : '';
+    const bt = mk(name || 'Más información'); bt.classList.add('line'); p.before(bt); done(bt);
   });
 }
 document.addEventListener('click', (ev) => {
   const bt = ev.target.closest?.('.tip-btn'); if (!bt) return;
-  const body = bt.closest('h1,h2,h3,h4')?.nextElementSibling; if (!body?.classList.contains('tip-body')) return;
+  const body = bt.dataset.tipUid ? document.querySelector(`.tip-body[data-tip-uid="${bt.dataset.tipUid}"]`) : null; if (!body) return;
   ev.preventDefault(); body.hidden = !body.hidden; bt.setAttribute('aria-expanded', String(!body.hidden)); bt.classList.toggle('on', !body.hidden); (S.open ||= {})[bt.dataset.tip] = !body.hidden;
 });
 {

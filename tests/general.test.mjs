@@ -80,3 +80,15 @@ test('API de Supabase: mezcla los puestos generales en runner_view y runner_team
   const v2 = await api.runnerView('c'); assert.equal(v2.my_results[0].general_position, undefined); assert.equal(v2.me.id, 'me');
   delete globalThis.window;
 });
+
+test('datos incompletos: desde la fecha de corte, un resultado sin tiempo o sin puesto general deja la carrera incompleta', async () => {
+  const { raceGaps, FULL_RESULTS_FROM, SOFT_GAPS } = await import('../js/logic.js');
+  const base = { province: 'Lleida', modality: 'Carretera', subtype: 'Ciclodeportiva', km: 90, elevation: 1000, price: 20, lat: 41.6, lon: 0.6 };
+  const full = { runner_name: 'A', position: 3, general_position: 12, time_seconds: 9000 };
+  const after = { ...base, date: FULL_RESULTS_FROM, results: [full, { runner_name: 'B', position: 5, general_position: null, time_seconds: null }, { runner_name: 'C', position: 7, general_position: 20, time_seconds: 0 }] };
+  const gaps = raceGaps(after).filter((g) => !SOFT_GAPS.has(g));
+  assert.ok(gaps.includes('2 sin tiempo')); assert.ok(gaps.includes('1 sin puesto general'));
+  assert.deepEqual(raceGaps({ ...after, results: [full] }).filter((g) => !SOFT_GAPS.has(g)), []);        // completa: nada que pedir
+  const before = { ...after, date: '2026-11-26' };                                                        // anteriores a la regla: no se marcan por eso
+  assert.ok(!raceGaps(before).some((g) => /sin tiempo|sin puesto general/.test(g)));
+});
