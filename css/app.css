@@ -2647,11 +2647,6 @@ a.sum-streak { text-decoration: none; color: var(--text); }
 .cal-cell.shc.has { box-shadow: inset 0 3px 0 var(--shb); }
 .cal-cell .sh { position: absolute; top: 2px; left: 4px; font-style: normal; font-weight: 800; font-size: .62rem; line-height: 1; letter-spacing: .01em; color: color-mix(in srgb, var(--shb) 78%, var(--text)); }
 .cal-cell.has.mine .sh { color: #fff; text-shadow: 0 1px 1px rgba(0, 0, 0, .35); }
-.sh-legend { align-items: center; }
-.sh-legend .sh-who { font-weight: 700; display: inline-flex; align-items: center; gap: .25rem; }
-.sh-legend .sh { position: static; display: inline-grid; place-items: center; min-width: 22px; height: 18px; padding: 0 3px; margin-right: .3rem; border-radius: 5px; font-size: .68rem; background: color-mix(in srgb, var(--shb) 22%, var(--card)); }
-.sh-legend { flex-wrap: wrap; gap: .3rem .6rem; overflow: visible; } .sh-legend > span { white-space: nowrap; flex: none; }
-.sh-legend .sh { font-style: normal; }
 .shift-pick { padding: .55rem .8rem; } .shift-pick > summary { display: flex; align-items: center; gap: .5rem; cursor: pointer; list-style: none; min-height: 36px; font-weight: 700; }
 .shift-pick > summary::-webkit-details-marker { display: none; } .shift-pick > summary small { color: var(--muted); font-weight: 500; }
 .shift-pick .sp-cur { margin-left: auto; font-size: var(--fs-3); color: var(--muted); font-weight: 600; } .shift-pick .desp-chev { flex: none; transition: transform .15s; } .shift-pick[open] .desp-chev { transform: rotate(180deg); }
@@ -2749,3 +2744,26 @@ section.card.purge-card > h2 { color: var(--bad); }
 .rc-tool.car .car-n.ok { background: var(--ok); } .rc-tool.car .car-n.full { background: var(--muted); }
 .cars-dlg .car-list { list-style: none; margin: .4rem 0; padding: 0; display: grid; gap: .45rem; } .cars-dlg h2 { display: flex; align-items: center; gap: .45rem; } .cars-dlg h2 .ico { width: 22px; height: 22px; }
 .cars-dlg .car-add { margin-top: .5rem; }
+
+/* ---- v262 · Menú de perfil rehecho: tarjeta con cifras, filas con icono ---- */
+.dlg.profile { position: relative; }
+.prof-x { position: absolute; top: .3rem; right: .3rem; width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--bg); display: grid; place-items: center; color: var(--muted); cursor: pointer; }
+.prof-x svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.prof-head { display: flex; align-items: center; gap: .8rem; padding-right: 2.8rem; margin-bottom: .6rem; } .prof-head .av.lg { width: 56px; height: 56px; font-size: 1.2rem; flex: none; }
+.prof-head h2 { margin: 0; font-size: var(--fs-5); line-height: 1.15; overflow-wrap: anywhere; }
+.prof-cat { display: inline-block; margin-top: .25rem; padding: .05rem .6rem; border-radius: 999px; background: var(--accent-2); color: var(--accent); font-weight: 700; font-size: var(--fs-2); }
+.prof-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); gap: .4rem; margin: .4rem 0 .9rem; }
+.prof-stats span { display: flex; flex-direction: column; align-items: center; padding: .45rem .2rem; border-radius: var(--r-md); background: var(--bg); } .prof-stats .ico { width: 16px; height: 16px; color: var(--accent); } .prof-stats b { font-size: var(--fs-5); line-height: 1.15; font-variant-numeric: tabular-nums; } .prof-stats small { font-size: var(--fs-1); color: var(--muted); }
+.prof-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .15rem; }
+.prof-row { display: flex; align-items: center; gap: .7rem; min-height: 48px; }
+.prof-row .pi { width: 36px; height: 36px; border-radius: 12px; background: var(--accent-2); color: var(--accent); display: grid; place-items: center; flex: none; } .prof-row .pi .ico { width: 19px; height: 19px; }
+.prof-row .pt { display: flex; flex-direction: column; min-width: 0; flex: 1; text-align: left; } .prof-row .pt b { font-size: var(--fs-4); } .prof-row .pt small { color: var(--muted); font-size: var(--fs-2); }
+.prof-row select { flex: none; max-width: 46%; }
+.prof-row.tap button { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: .7rem; width: 100%; min-height: 48px; cursor: pointer; -webkit-tap-highlight-color: transparent; } .prof-row.tap .pg { width: 18px; height: 18px; color: var(--muted); flex: none; }
+.prof-seg-row { padding: 0 0 .6rem; }
+.prof-seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; }
+.prof-seg button { display: flex; flex-direction: column; align-items: center; gap: .2rem; padding: .5rem .2rem; min-height: 58px; border-radius: var(--r-md); border: 1.5px solid var(--line); background: var(--card); color: var(--text); font: inherit; font-size: var(--fs-2); cursor: pointer; }
+.prof-seg button .ico { width: 22px; height: 22px; } .prof-seg button.on { border-color: var(--accent); background: var(--accent-2); color: var(--accent); font-weight: 700; }
+.prof-foot { display: flex; align-items: center; justify-content: space-between; margin-top: .8rem; padding-top: .6rem; border-top: 1px solid var(--line); }
+.prof-out { display: inline-flex; align-items: center; gap: .4rem; min-height: 44px; padding: 0 .95rem; border-radius: 999px; border: 1.5px solid color-mix(in srgb, var(--bad) 55%, var(--line)); background: none; color: var(--bad); font: inherit; font-weight: 700; cursor: pointer; } .prof-out .ico { width: 18px; height: 18px; }
+.prof-row select { max-width: 52%; } @media (max-width: 340px) { .prof-row select { max-width: 56%; font-size: var(--fs-3); } .prof-row .pt small { font-size: var(--fs-1); } }
