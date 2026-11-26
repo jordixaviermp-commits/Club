@@ -939,12 +939,21 @@ reset role;
 select pg_temp.expect_fail($q$update runners set shift_group = 'E9' where code = 'codigo-valorador-dos-02'$q$, 'turnos: escamot inválido rechazado');
 update runners set shift_group = null where code = 'codigo-valorador-dos-02';
 set role anon;
--- turnos: cada corredor elige su escamot (solo el suyo)
+-- turnos: solo los habilitados por la dirección eligen su escamot (y solo el suyo)
+select pg_temp.expect_fail($q$select runner_set_my_shift('codigo-valorador-dos-02', 'E2')$q$, 'turnos propios: sin habilitar no puede elegir');
+select pg_temp.check((runner_shift_info('codigo-valorador-dos-02')->>'enabled')::boolean = false, 'turnos propios: por defecto no está habilitado');
+reset role;
+update runners set shift_enabled = true where code = 'codigo-valorador-dos-02';
+set role anon;
 select runner_set_my_shift('codigo-valorador-dos-02', 'E2');
-select pg_temp.check(runner_my_shift('codigo-valorador-dos-02') = 'E2', 'turnos propios: el corredor elige su escamot');
+select pg_temp.check(runner_my_shift('codigo-valorador-dos-02') = 'E2' and runner_shift_info('codigo-valorador-dos-02') = '{"enabled": true, "group": "E2"}'::jsonb, 'turnos propios: el habilitado elige su escamot');
 select pg_temp.check(runner_my_shift('codigo-valorador-uno-01') is null, 'turnos propios: no toca el de otro corredor');
 select runner_set_my_shift('codigo-valorador-dos-02', '');
 select pg_temp.check(runner_my_shift('codigo-valorador-dos-02') is null, 'turnos propios: se puede quitar');
 select pg_temp.expect_fail($q$select runner_set_my_shift('codigo-valorador-dos-02', 'E7')$q$, 'turnos propios: escamot inválido rechazado');
 select pg_temp.expect_fail($q$select runner_set_my_shift('codigo-falso', 'E1')$q$, 'turnos propios: enlace falso no escribe');
+select pg_temp.expect_fail($q$select runner_shift_info('codigo-falso')$q$, 'turnos propios: enlace falso no lee');
+reset role;
+update runners set shift_enabled = false where code = 'codigo-valorador-dos-02';
+set role anon;
 \echo TODAS LAS PRUEBAS SQL OK

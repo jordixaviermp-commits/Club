@@ -16,6 +16,7 @@ create table if not exists public.runners (
 );
 alter table public.runners add column if not exists last_seen timestamptz;   -- última vez que abrió la app
 alter table public.runners add column if not exists shift_group text;
+alter table public.runners add column if not exists shift_enabled boolean not null default false;
 alter table public.runners drop constraint if exists runners_shift_group_check;
 alter table public.runners add constraint runners_shift_group_check check (shift_group is null or shift_group in ('E1','E2','E3','E4','E5'));
 
@@ -1511,17 +1512,29 @@ begin
 end $$;
 grant execute on function public.runner_my_shift(text) to anon, authenticated;
 
+create or replace function public.runner_shift_info(p_code text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare r runners;
+begin
+  select * into r from runners where code = p_code;
+  if not found then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  return jsonb_build_object('enabled', r.shift_enabled, 'group', r.shift_group);
+end $$;
+grant execute on function public.runner_shift_info(text) to anon, authenticated;
+
 create or replace function public.runner_set_my_shift(p_code text, p_group text)
 returns void language plpgsql security definer set search_path = public as $$
-declare v_id uuid; v_name text; g text := nullif(btrim(coalesce(p_group, '')), '');
+declare v_id uuid; v_name text; v_on boolean; g text := nullif(btrim(coalesce(p_group, '')), '');
 begin
-  select id, name into v_id, v_name from runners where code = p_code;
+  select id, name, shift_enabled into v_id, v_name, v_on from runners where code = p_code;
   if v_id is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  if not v_on then raise exception 'no_permitido'; end if;
   if g is not null and g not in ('E1','E2','E3','E4','E5') then raise exception 'datos_no_validos'; end if;
   perform set_config('app.actor', v_name, true);
   update runners set shift_group = g where id = v_id;
   perform set_config('app.actor', '', true);
 end $$;
+grant execute on function public.runner_set_my_shift(text, text) to anon, authenticated;
 grant execute on function public.runner_set_my_shift(text, text) to anon, authenticated;
 
 create or replace function public.runner_social_impact(p_code text)
@@ -1801,7 +1814,7 @@ grant execute on function public.runner_set_registration_url(text, uuid, text), 
                           public.runner_update_race(text, uuid, jsonb), public.runner_delete_race(text, uuid), public.runner_set_suspended(text, uuid, boolean),
                           public.runner_report_result(text, text, uuid, int, text, text, int),
                           public.runner_documents_list(text), public.runner_get_document(text, uuid), public.runner_contract_template(text), public.runner_get_contract_template(text),
-                          public.runner_team(text), public.runner_streaks(text), public.runner_team_moves(text), public.runner_notes_list(text), public.runner_note_set(text, uuid, text), public.runner_chronicles(text), public.runner_chronicles_team(text), public.runner_social_impact(text), public.runner_my_shift(text), public.runner_set_my_shift(text, text), public.runner_chronicle_set(text, text, boolean),
+                          public.runner_team(text), public.runner_streaks(text), public.runner_team_moves(text), public.runner_notes_list(text), public.runner_note_set(text, uuid, text), public.runner_chronicles(text), public.runner_chronicles_team(text), public.runner_social_impact(text), public.runner_my_shift(text), public.runner_set_my_shift(text, text), public.runner_shift_info(text), public.runner_chronicle_set(text, text, boolean),
                           public.runner_leave(text, uuid), public.runner_set_paid(text, uuid, boolean, numeric, date), public.runner_join_race(text, uuid, text),
                           public.runner_set_race_type(text, uuid, text, text), public.runner_propose_circuit(text, text, int, int, text),
                           public.runner_cancel_circuit(text, uuid), public.runner_news(text), public.runner_set_race_details(text, uuid, text, numeric), public.runner_complete_race(text, text, uuid, jsonb), public.auto_promote_registrations(),

@@ -37,7 +37,7 @@ function applyTheme(t) {
 }
 applyTheme(getTheme());
 /** «Mis turnos»: cada corredor elige su escamot (opcional) y ve sus turnos en el calendario. Plegado: solo interesa a quien trabaja a turnos. */
-const shiftPicker = () => (S.preview ? '' : `<details class="card shift-pick" data-open-key="shift"${S.open?.shift ? ' open' : ''}>
+const shiftPicker = () => (S.preview || !S.shiftOn ? '' : `<details class="card shift-pick" data-open-key="shift"${S.open?.shift ? ' open' : ''}>
   <summary>${ico('clock')}<span>Mis turnos de trabajo <small>(opcional)</small></span><b class="sp-cur">${S.myShift ? `Escamot ${esc(S.myShift.slice(1))}` : 'Sin turnos'}</b>${ico('chevd', 'desp-chev')}</summary>
   <label class="sp-row">Mi escamot<select data-my-shift aria-label="Mi escamot"><option value="">Sin turnos</option>${USPAC_GROUPS.map((g) => `<option value="${g}"${S.myShift === g ? ' selected' : ''}>Escamot ${g.slice(1)}</option>`).join('')}</select></label>
   <p class="hint">Si trabajas por escamots, elígelo y verás tus turnos (M, T, N, F…) en el calendario de Carreras. Solo lo ves tú.</p></details>`);
@@ -360,7 +360,13 @@ async function loadImpact() {
   if (S.runnerData) render();
 }
 /** Escamot (E1–E5) del corredor para pintar sus turnos en el calendario; null si no tiene. */
-async function loadShift() { let g = null; try { g = await api.runnerMyShift(S.code || S.previewCode); } catch { g = null; } S.myShift = g || null; }
+async function loadShift() {
+  const code = S.code || S.previewCode; let info = null;
+  try { info = await api.runnerShiftInfo(code); } catch { info = null; }
+  if (info) { S.myShift = info.group || null; S.shiftOn = !!info.enabled; return; }
+  let g = null; try { g = await api.runnerMyShift(code); } catch { g = null; }   // sin el SQL de «turnos propios»: solo se ve el escamot que haya puesto la dirección
+  S.myShift = g || null; S.shiftOn = false;
+}
 async function loadRunner() {
   if (!S.session?.isAdmin) api.runnerPing?.(S.code).catch(() => {});   // actividad: última vez que abrió la app
   try { S.moves = undefined; S.runnerData = await api.runnerView(S.code); await loadNews(); await loadCorrections(); await loadChron(); await loadWatch(); await loadNotes(); await loadShift(); }
@@ -4575,7 +4581,7 @@ function viewRunnerCard(id) {
     <section class="card stack">
       <label>Categoría${catSelect(`data-runner-cat="${r.id}"`, r.category || '')}</label>
       <label>Contrato${contractSelect(`data-runner-contract="${r.id}"`, r.contract || '')}</label>
-      <label>Turnos (escamot)<select data-runner-shift="${r.id}" aria-label="Escamot de ${esc(r.name)}"><option value="">Sin turnos</option>${USPAC_GROUPS.map((g) => `<option value="${g}"${r.shift_group === g ? ' selected' : ''}>Escamot ${g.slice(1)}</option>`).join('')}</select></label>
+      <label>Turnos (escamot)<select data-runner-shift="${r.id}" aria-label="Turnos de ${esc(r.name)}"><option value="">No lo usa</option><option value="on"${r.shift_enabled && !r.shift_group ? ' selected' : ''}>Lo elige él en su perfil</option>${USPAC_GROUPS.map((g) => `<option value="${g}"${r.shift_group === g ? ' selected' : ''}>Escamot ${g.slice(1)}</option>`).join('')}</select></label>
       <p class="muted small">${tot} carrera${tot === 1 ? '' : 's'} en total${r.created_at ? ` · en el club desde ${formatDate(String(r.created_at).slice(0, 10), false)}` : ''}</p>
       <div class="row"><button class="btn primary" data-act="runner-menu" data-id="${r.id}">${ico('share')} Enlace</button>
         <button class="btn" data-act="runner-do" data-a="preview" data-id="${r.id}">Ver su pantalla</button></div>
@@ -6107,7 +6113,8 @@ $app.addEventListener('change', async (ev) => {
     await run(async () => { await api.runnerSetMyShift(S.code, t.value); S.myShift = t.value || null; }, t.value ? 'Escamot guardado' : 'Turnos quitados'); render();
   } else if (t.dataset.runnerShift) {
     const id = t.dataset.runnerShift;
-    await run(async () => { await api.updateRunner(id, { shift_group: t.value || null }); runnerById(id).shift_group = t.value || null; }, t.value ? 'Escamot guardado' : 'Turnos quitados');
+    const patch = t.value === '' ? { shift_enabled: false, shift_group: null } : t.value === 'on' ? { shift_enabled: true, shift_group: null } : { shift_enabled: true, shift_group: t.value };
+    await run(async () => { await api.updateRunner(id, patch); Object.assign(runnerById(id), patch); }, t.value === '' ? 'Turnos quitados' : t.value === 'on' ? 'Podrá elegir su escamot' : 'Escamot guardado');
   } else if (t.dataset.runnerCat) {
     const id = t.dataset.runnerCat;
     await run(async () => { await api.updateRunner(id, { category: t.value || null }); runnerById(id).category = t.value || null; }, 'Categoría guardada');
