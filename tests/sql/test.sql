@@ -1111,4 +1111,28 @@ select pg_temp.check((select (body #>> '{messages,0,content}') like '%Lugar: Lle
 select pg_temp.check((select (body #>> '{messages,0,content}') like '%Otros del club en la carrera (1): % (M40, 1º)%' and (body #>> '{messages,0,content}') like '%Lo pase fatal%' from net.calls order by id desc limit 1), 'ia: lleva a los compañeros del club y lo que cuenta el corredor');
 delete from vault.decrypted_secrets;
 set role anon;
+reset role;
+-- ===== Crónica con los resultados del grupo =====
+insert into runners (id, name, code) values ('10000000-0000-0000-0000-0000000000a3', 'Grupo Tres', 'codigo-grupo-tres-03');
+insert into registrations (id, name, date) values ('20000000-0000-0000-0000-0000000000a1', 'Carrera Grupo', current_date - 3);
+insert into registration_entries (registration_id, runner_id, category)
+  select '20000000-0000-0000-0000-0000000000a1', id, 'M40' from runners where code in ('codigo-valorador-uno-01', 'codigo-valorador-dos-02');
+update registration_entries set self_position = 5, self_general_position = 20, self_time_seconds = 7000
+ where registration_id = '20000000-0000-0000-0000-0000000000a1' and runner_id = (select id from runners where code = 'codigo-valorador-dos-02');
+set role anon;
+select pg_temp.check(jsonb_array_length(runner_race_group('codigo-valorador-dos-02', 'reg', '20000000-0000-0000-0000-0000000000a1')) = 2 and (runner_race_group('codigo-valorador-dos-02', 'reg', '20000000-0000-0000-0000-0000000000a1')->0->>'me')::boolean, 'grupo: ve a los del club en la carrera, el primero soy yo');
+select pg_temp.expect_fail($q$select runner_race_group('codigo-grupo-tres-03', 'reg', '20000000-0000-0000-0000-0000000000a1')$q$, 'grupo: quien no corrió no ve el grupo');
+select pg_temp.expect_fail($q$select runner_chronicle_send('codigo-grupo-tres-03', '2026-01-01|carrera grupo', 'Carrera Grupo', null, 'texto de prueba', null, null, 'reg', '20000000-0000-0000-0000-0000000000a1', '[]')$q$, 'grupo: quien no corrió no manda resultados');
+select pg_temp.expect_fail($q$select runner_chronicle_send('codigo-valorador-dos-02', '2026-01-01|carrera grupo', 'Carrera Grupo', null, 'texto de prueba', null, null, 'reg', '20000000-0000-0000-0000-0000000000a1', jsonb_build_array(jsonb_build_object('runner_id', '10000000-0000-0000-0000-0000000000a3', 'position', 9, 'general', 3, 'time', 7000)))$q$, 'grupo: la general no puede ser mejor que el puesto');
+reset role;
+select id as uno_id from runners where code = 'codigo-valorador-uno-01' \gset
+select id as dos_id from runners where code = 'codigo-valorador-dos-02' \gset
+set role anon;
+select runner_chronicle_send('codigo-valorador-dos-02', '2026-01-01|carrera grupo', 'Carrera Grupo', null, 'La crónica de todos', null, null, 'reg', '20000000-0000-0000-0000-0000000000a1',
+  jsonb_build_array(jsonb_build_object('runner_id', :'uno_id'::text, 'position', 1, 'general', 4, 'time', 6500), jsonb_build_object('runner_id', :'dos_id'::text, 'position', 1, 'general', 4, 'time', 6500)));
+reset role;
+select pg_temp.check((select self_position = 1 and self_general_position = 4 and self_time_seconds = 6500 from registration_entries where registration_id = '20000000-0000-0000-0000-0000000000a1' and runner_id = (select id from runners where code = 'codigo-valorador-uno-01')), 'grupo: al enviar la crónica queda puesto el resultado del compañero');
+select pg_temp.check((select self_position = 5 and self_time_seconds = 7000 from registration_entries where registration_id = '20000000-0000-0000-0000-0000000000a1' and runner_id = (select id from runners where code = 'codigo-valorador-dos-02')), 'grupo: nunca pisa un resultado ya puesto ni el del propio autor');
+select pg_temp.check(exists (select 1 from change_log where summary like 'puso el resultado de Valorador Uno: 1º en Carrera Grupo'), 'grupo: queda anotado en el historial quién lo puso');
+set role anon;
 \echo TODAS LAS PRUEBAS SQL OK

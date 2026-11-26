@@ -237,7 +237,12 @@ export function supabaseApi(url, key) {
     async runnerSetMyShift(code, group) { ok(await sb.rpc('runner_set_my_shift', { p_code: code, p_group: group || null })); },
     async runnerShiftInfo(code) { try { return ok(await sb.rpc('runner_shift_info', { p_code: code })) || null; } catch { return null; } },
     async runnerSetChronicle(code, key, done) { ok(await sb.rpc('runner_chronicle_set', { p_code: code, p_key: key, p_done: !!done })); },
-    async runnerChronicleSend(code, c) { ok(await sb.rpc('runner_chronicle_send', { p_code: code, p_key: c.key, p_name: c.name, p_date: c.date || null, p_body: c.body, p_p1: c.p1 || null, p_p2: c.p2 || null })); },
+    async runnerChronicleSend(code, c) {
+      const args = { p_code: code, p_key: c.key, p_name: c.name, p_date: c.date || null, p_body: c.body, p_p1: c.p1 || null, p_p2: c.p2 || null };
+      if (c.results?.length) Object.assign(args, { p_kind: c.kind, p_id: c.id, p_results: c.results.map((r) => ({ runner_id: r.runner_id, position: r.position, general: r.general, time: r.time })) });
+      ok(await sb.rpc('runner_chronicle_send', args));
+    },
+    async runnerRaceGroup(code, kind, id) { try { return ok(await sb.rpc('runner_race_group', { p_code: code, p_kind: kind, p_id: id })); } catch { return null; } },   // null = falta el SQL
     async runnerChroPosts(code) { try { return ok(await sb.rpc('runner_chronicle_posts', { p_code: code })); } catch { return null; } },   // null = falta el SQL
     async listChroPosts() { const { data, error } = await sb.from('chronicle_posts').select('*').order('created_at', { ascending: false }); return error ? null : data; },
     async getChroPhotos(id) { return ok(await sb.from('chronicle_photos').select('ord,data').eq('post_id', id).order('ord')); },
@@ -965,6 +970,12 @@ export function demoApi(storage = globalThis.localStorage) {
     async runnerChronicleSend(code, c) {
       const me = byCode(code), d = load(); d.chronicle_posts = d.chronicle_posts || []; d.chronicle_photos = d.chronicle_photos || [];
       if (!String(c.body || '').trim()) throw new Error('datos_no_validos');
+      for (const r of c.results || []) {   // resultados de los compañeros (solo los que aún no tienen el suyo)
+        if (r.runner_id === me.id) continue;
+        if (!(r.position >= 1 && r.general >= r.position && r.time >= 1)) throw new Error('datos_no_validos');
+        if (c.kind === 'reg') { const e = (d.registration_entries || []).find((x) => x.registration_id === c.id && x.runner_id === r.runner_id); if (e && !e.self_position) Object.assign(e, { self_position: r.position, self_general_position: r.general, self_time_seconds: r.time, self_podium_type: r.position <= 3 ? 'suelta' : null, self_reported_at: new Date().toISOString() }); }
+        else { const x = (d.results || []).find((y) => y.race_id === c.id && y.runner_id === r.runner_id); if (x && !x.position) Object.assign(x, { position: r.position, general_position: r.general, time_seconds: r.time, self_reported: true }); }
+      }
       let p = d.chronicle_posts.find((x) => x.runner_id === me.id && x.race_key === c.key);
       if (p && p.status !== 'enviada') throw new Error('ya_en_proceso');
       if (!p) { p = { id: 'cp-' + Math.random().toString(36).slice(2, 10), runner_id: me.id, race_key: c.key, race_name: c.name || 'Carrera', race_date: c.date || null, status: 'enviada', final_text: null, photos: 0, created_at: new Date().toISOString() }; d.chronicle_posts.push(p); }
@@ -974,6 +985,11 @@ export function demoApi(storage = globalThis.localStorage) {
       if (!p.final_text) { p.final_text = demoPolish(p.body); p.ai_state = 'hecho'; }   // en la demo la «corrección» es solo ordenar el texto
       d.chronicles = d.chronicles || []; if (!d.chronicles.some((x) => x.runner_id === me.id && x.race_key === c.key)) d.chronicles.push({ runner_id: me.id, race_key: c.key, done_at: new Date().toISOString() });
       save();
+    },
+    async runnerRaceGroup(code, kind, id) {
+      const me = byCode(code), d = load(), name = (rid) => (d.runners.find((r) => r.id === rid) || {}).name || 'Corredor';
+      if (kind === 'reg') return (d.registration_entries || []).filter((e) => e.registration_id === id).map((e) => ({ runner_id: e.runner_id, name: name(e.runner_id), category: e.category || null, position: e.self_position || null, general: e.self_general_position || null, time: e.self_time_seconds || null, me: e.runner_id === me.id })).sort((a, b) => (b.me - a.me) || a.name.localeCompare(b.name));
+      return (d.results || []).filter((x) => x.race_id === id && x.runner_id).map((x) => ({ runner_id: x.runner_id, name: x.runner_name || name(x.runner_id), category: x.category || null, position: x.position || null, general: x.general_position || null, time: x.time_seconds || null, me: x.runner_id === me.id })).sort((a, b) => (b.me - a.me) || a.name.localeCompare(b.name));
     },
     async runnerChroPosts(code) { const me = byCode(code); return (load().chronicle_posts || []).filter((x) => x.runner_id === me.id).map((x) => ({ key: x.race_key, name: x.race_name, body: x.body, status: x.status, photos: x.photos })); },
     async listChroPosts() { requireAdmin(); return clone((load().chronicle_posts || []).slice().sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))); },

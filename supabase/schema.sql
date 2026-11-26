@@ -1540,15 +1540,60 @@ begin
 end $$;
 
 -- Crónica con fotos: el corredor la envía y ve el estado de las suyas.
-create or replace function public.runner_chronicle_send(p_code text, p_key text, p_name text, p_date date, p_body text, p_p1 text, p_p2 text)
-returns void language plpgsql security definer set search_path = public as $$
-declare v_runner uuid; v_post uuid; v_st text; v_n int;
+create or replace function public.runner_race_group(p_code text, p_kind text, p_id uuid)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare v_runner uuid;
 begin
   select id into v_runner from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  if p_kind = 'reg' then
+    if not exists (select 1 from registration_entries where registration_id = p_id and runner_id = v_runner) then raise exception 'no_es_tuya' using errcode = '42501'; end if;
+    return coalesce((select jsonb_agg(jsonb_build_object('runner_id', e.runner_id, 'name', r.name, 'category', e.category, 'position', e.self_position,
+                      'general', e.self_general_position, 'time', e.self_time_seconds, 'me', e.runner_id = v_runner) order by (e.runner_id = v_runner) desc, r.name)
+                      from registration_entries e join runners r on r.id = e.runner_id where e.registration_id = p_id), '[]'::jsonb);
+  elsif p_kind = 'race' then
+    if not exists (select 1 from results where race_id = p_id and runner_id = v_runner) then raise exception 'no_es_tuya' using errcode = '42501'; end if;
+    return coalesce((select jsonb_agg(jsonb_build_object('runner_id', x.runner_id, 'name', x.runner_name, 'category', x.category, 'position', x.position,
+                      'general', x.general_position, 'time', x.time_seconds, 'me', x.runner_id = v_runner) order by (x.runner_id = v_runner) desc, x.runner_name)
+                      from results x where x.race_id = p_id and x.runner_id is not null), '[]'::jsonb);
+  end if;
+  raise exception 'tipo_no_valido';
+end $$;
+grant execute on function public.runner_race_group(text, text, uuid) to anon, authenticated;
+
+
+create or replace function public.runner_chronicle_send(p_code text, p_key text, p_name text, p_date date, p_body text, p_p1 text, p_p2 text,
+                                                         p_kind text default null, p_id uuid default null, p_results jsonb default null)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_runner uuid; v_who text; v_post uuid; v_st text; v_n int; it jsonb; v_rid uuid; v_pos int; v_gen int; v_time int;
+begin
+  select id, name into v_runner, v_who from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
   if p_key is null or length(p_key) not between 3 and 200 or length(trim(coalesce(p_body, ''))) not between 1 and 4000 or length(coalesce(p_name, '')) > 200 then raise exception 'datos_no_validos'; end if;
   select id, status into v_post, v_st from chronicle_posts where runner_id = v_runner and race_key = p_key;
   if v_st is not null and v_st <> 'enviada' then raise exception 'ya_en_proceso'; end if;
+  -- resultados de los compañeros: solo se rellenan los que aún no tienen el suyo (nunca se pisa uno puesto)
+  if jsonb_typeof(p_results) = 'array' and p_kind in ('reg', 'race') and p_id is not null then
+    if not (case when p_kind = 'reg' then exists (select 1 from registration_entries where registration_id = p_id and runner_id = v_runner)
+                 else exists (select 1 from results where race_id = p_id and runner_id = v_runner) end) then raise exception 'no_es_tuya' using errcode = '42501'; end if;
+    for it in select * from jsonb_array_elements(p_results) loop
+      v_rid := (it->>'runner_id')::uuid; v_pos := (it->>'position')::int; v_gen := (it->>'general')::int; v_time := (it->>'time')::int;
+      if v_rid = v_runner then continue; end if;
+      if v_pos is null or v_pos < 1 or v_pos > 999 or v_gen is null or v_gen < v_pos or v_gen > 9999 or v_time is null or v_time < 1 or v_time > 3600000 then raise exception 'datos_no_validos'; end if;
+      if p_kind = 'reg' then
+        update registration_entries set self_position = v_pos, self_general_position = v_gen, self_time_seconds = v_time, self_reported_at = now(),
+               self_podium_type = case when v_pos between 1 and 3 then coalesce(self_podium_type, 'suelta') else null end
+         where registration_id = p_id and runner_id = v_rid and self_position is null;
+      else
+        update results set position = v_pos, general_position = v_gen, time_seconds = v_time, self_reported = true
+         where race_id = p_id and runner_id = v_rid and position is null;
+      end if;
+      get diagnostics v_n = row_count;
+      if v_n > 0 then
+        perform public.log_change(v_who, 'result', p_id, 'resultado', format('puso el resultado de %s: %sº en %s', (select name from runners where id = v_rid), v_pos, p_name));
+      end if;
+    end loop;
+  end if;
   if v_post is null then
     insert into chronicle_posts (runner_id, race_key, race_name, race_date, body) values (v_runner, p_key, coalesce(nullif(trim(p_name), ''), 'Carrera'), p_date, trim(p_body)) returning id into v_post;
   else
@@ -1563,7 +1608,7 @@ begin
   update chronicle_posts set photos = v_n where id = v_post;
   insert into chronicles (runner_id, race_key) values (v_runner, p_key) on conflict do nothing;
 end $$;
-grant execute on function public.runner_chronicle_send(text, text, text, date, text, text, text) to anon, authenticated;
+grant execute on function public.runner_chronicle_send(text, text, text, date, text, text, text, text, uuid, jsonb) to anon, authenticated;
 
 
 create or replace function public.runner_chronicle_posts(p_code text)
@@ -2209,7 +2254,7 @@ grant execute on function public.runner_set_registration_url(text, uuid, text), 
                           public.runner_update_race(text, uuid, jsonb), public.runner_delete_race(text, uuid), public.runner_set_suspended(text, uuid, boolean),
                           public.runner_report_result(text, text, uuid, int, text, text, int),
                           public.runner_documents_list(text), public.runner_get_document(text, uuid), public.runner_contract_template(text), public.runner_get_contract_template(text),
-                          public.runner_team(text), public.runner_streaks(text), public.runner_team_moves(text), public.runner_notes_list(text), public.runner_note_set(text, uuid, text), public.runner_chronicles(text), public.runner_chronicles_team(text), public.runner_social_impact(text), public.runner_cars(text), public.runner_car_save(text, uuid, int, text, text, text), public.runner_car_delete(text, uuid), public.runner_car_join(text, uuid), public.runner_car_leave(text, uuid), public.runner_set_general(text, text, uuid, int), public.runner_generals(text), public.runner_my_kit(text), public.runner_my_shift(text), public.runner_set_my_shift(text, text), public.runner_shift_info(text), public.runner_chronicle_set(text, text, boolean), public.runner_chronicle_send(text, text, text, date, text, text, text), public.runner_chronicle_posts(text),
+                          public.runner_team(text), public.runner_streaks(text), public.runner_team_moves(text), public.runner_notes_list(text), public.runner_note_set(text, uuid, text), public.runner_chronicles(text), public.runner_chronicles_team(text), public.runner_social_impact(text), public.runner_cars(text), public.runner_car_save(text, uuid, int, text, text, text), public.runner_car_delete(text, uuid), public.runner_car_join(text, uuid), public.runner_car_leave(text, uuid), public.runner_set_general(text, text, uuid, int), public.runner_generals(text), public.runner_my_kit(text), public.runner_my_shift(text), public.runner_set_my_shift(text, text), public.runner_shift_info(text), public.runner_chronicle_set(text, text, boolean), public.runner_chronicle_send(text, text, text, date, text, text, text, text, uuid, jsonb), public.runner_race_group(text, text, uuid), public.runner_chronicle_posts(text),
                           public.runner_leave(text, uuid), public.runner_set_paid(text, uuid, boolean, numeric, date), public.runner_join_race(text, uuid, text),
                           public.runner_set_race_type(text, uuid, text, text), public.runner_propose_circuit(text, text, int, int, text),
                           public.runner_cancel_circuit(text, uuid), public.runner_news(text), public.runner_set_race_details(text, uuid, text, numeric), public.runner_complete_race(text, text, uuid, jsonb), public.auto_promote_registrations(),

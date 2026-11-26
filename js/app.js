@@ -5020,9 +5020,14 @@ function chroDataOf(x) {
     raceHref: `${runnerHref('carrera')}/${x.kind === 'race' ? 'race_' + x.id : x.id}`, resHref: resultHref(x.id || '') };
 }
 /** Diálogo de «Mi crónica»: texto + hasta 2 fotos. Devuelve {body, p1, p2} o null. */
-function askChronicle(x, post) {
+function askChronicle(x, post, group = null) {
   return new Promise((resolve) => {
     const dlg = document.getElementById('dialog'), locked = !!post && post.status !== 'enviada', photos = [null, null], data = chroDataOf(x);
+    const others = locked ? [] : (group || []).filter((g) => !g.me), grpDone = (g) => !!(g.position && g.general && g.time);
+    const grpRow = (g) => grpDone(g)
+      ? `<div class="grp-row ok"><span class="grp-n"><b>${esc(g.name)}</b><small>${esc(g.category || '')}</small></span><span class="grp-v">${g.position}º · ${g.general}º gral · ${esc(formatTime(g.time))}</span>${ico('check')}</div>`
+      : `<div class="grp-row" data-rid="${esc(g.runner_id)}"><span class="grp-n"><b>${esc(g.name)}</b><small>${esc(g.category || '')} · falta su resultado</small></span><span class="grp-in"><input inputmode="numeric" data-grp="pos" placeholder="Puesto" aria-label="Puesto de ${esc(g.name)}" value="${g.position || ''}"><input inputmode="numeric" data-grp="gen" placeholder="General" aria-label="Puesto en la general de ${esc(g.name)}" value="${g.general || ''}"><input data-grp="time" placeholder="h:mm:ss" aria-label="Tiempo de ${esc(g.name)}" value="${g.time ? esc(formatTime(g.time)) : ''}"></span></div>`;
+    const groupHtml = others.length ? `<fieldset class="chro-group"><legend>Resultados de los del club</legend><p class="muted small">Si falta el de alguno, ponlo tú: así cuenta para todos y el post sale completo.</p>${others.some((g) => !grpDone(g)) ? '<div class="grp-head"><span>Puesto</span><span>General</span><span>Tiempo</span></div>' : ''}${others.map(grpRow).join('')}</fieldset>` : '';
     const slot = (i) => `<label class="chro-ph" data-slot="${i}">${ico('camera')}<span>Foto ${i + 1}${i ? ' (opcional)' : ''}</span><img alt="" hidden><input type="file" accept="image/*" data-chro-photo="${i}" hidden></label>`;
     const blocked = !locked && data && !data.complete;
     const todo = blocked ? `<div class="chro-need"><p><b>Antes de escribirla falta completar:</b></p><ul>
@@ -5034,10 +5039,16 @@ function askChronicle(x, post) {
         : `<p class="muted small">Cuenta <b>cómo lo has vivido</b>: sensaciones, el momento clave, a quién das las gracias. Esto lo añade la app solo:</p>
         ${data?.chips.length ? `<p class="chro-data">${data.chips.map(([ic, t]) => `<span>${ico(ic)}${esc(t)}</span>`).join('')}</p>` : ''}`}
       ${blocked ? '' : `<label>Tu crónica<textarea name="body" rows="9" minlength="${locked ? 0 : 20}" maxlength="3000" ${locked ? 'readonly' : 'required'} placeholder="Cómo te sentiste, qué tal las piernas, quién iba contigo, qué momento recordarás…">${esc(post?.body || '')}</textarea></label>`}
+      ${blocked ? '' : groupHtml}
       ${locked || blocked ? '' : `<div class="chro-photos">${slot(0)}${slot(1)}</div>${post?.photos ? `<p class="muted small">Ya tienes ${post.photos} foto${post.photos === 1 ? '' : 's'} enviada${post.photos === 1 ? '' : 's'}; si eliges nuevas, las sustituyen.</p>` : '<p class="muted small">Sube al menos 1 foto.</p>'}`}
       <div class="dlg-actions">${locked || blocked ? '' : '<button value="ok" class="btn primary" disabled>Enviar a dirección</button>'}<button value="" class="btn ghost" formnovalidate>${locked || blocked ? 'Cerrar' : 'Cancelar'}</button></div></form>`;
     const okBtn = dlg.querySelector('button[value="ok"]');
-    const refresh = () => { if (okBtn) okBtn.disabled = !(dlg.querySelector('textarea[name="body"]').value.trim().length >= 20 && (photos.some(Boolean) || post?.photos)); };
+    const grpValues = () => [...dlg.querySelectorAll('.grp-row[data-rid]')].map((row) => {
+      const v = (k) => row.querySelector(`[data-grp="${k}"]`).value.trim(), pos = Number(v('pos')), gen = Number(v('gen')), time = parseTime(v('time'));
+      const okRow = Number.isInteger(pos) && pos >= 1 && pos <= 999 && Number.isInteger(gen) && gen >= pos && gen <= 9999 && time != null;
+      return { runner_id: row.dataset.rid, position: pos, general: gen, time, ok: okRow };
+    });
+    const refresh = () => { if (okBtn) okBtn.disabled = !(dlg.querySelector('textarea[name="body"]').value.trim().length >= 20 && (photos.some(Boolean) || post?.photos) && grpValues().every((g) => g.ok)); };
     dlg.oninput = refresh;
     dlg.onclick = (ev) => { if (ev.target.closest('[data-chro-close]')) dlg.close(); };
     dlg.onchange = async (ev) => {
@@ -5049,7 +5060,7 @@ function askChronicle(x, post) {
     dlg.querySelector('form').addEventListener('submit', (ev) => {
       if (ev.submitter?.value === 'ok' && !photos.some(Boolean) && !post?.photos) { ev.preventDefault(); toast('Sube al menos 1 foto'); }
     });
-    dlg.onclose = () => { dlg.onchange = null; dlg.onclick = null; dlg.oninput = null; resolve(dlg.returnValue === 'ok' ? { body: dlg.querySelector('textarea[name="body"]').value.trim(), p1: photos[0], p2: photos[1] } : null); };
+    dlg.onclose = () => { dlg.onchange = null; dlg.onclick = null; dlg.oninput = null; resolve(dlg.returnValue === 'ok' ? { body: dlg.querySelector('textarea[name="body"]').value.trim(), p1: photos[0], p2: photos[1], results: grpValues().filter((g) => g.ok) } : null); };
     dlg.returnValue = '';
     dlg.showModal();
     refresh();
@@ -5669,8 +5680,9 @@ const actions = {
   async 'chro-write'(el) {
     const c = chronicleStatus(S.runnerData, S.chron, S.runnerData.today || todayISO(), S.myYear || new Date().getFullYear());
     const x = [...c.pending, ...c.done].find((y) => y.key === el.dataset.key); if (!x) return;
-    const v = await askChronicle(x, S.myPosts?.get(x.key)); if (!v) return;
-    await run(async () => { await api.runnerChronicleSend(S.code, { key: x.key, name: x.name, date: x.date, body: v.body, p1: v.p1, p2: v.p2 }); await loadChron(); }, '✓ Crónica enviada a dirección');
+    let group = null; try { group = await api.runnerRaceGroup(S.code, x.kind, x.id); } catch { group = null; }   // null = sin el SQL de grupo: solo el autor
+    const v = await askChronicle(x, S.myPosts?.get(x.key), Array.isArray(group) ? group : null); if (!v) return;
+    await run(async () => { await api.runnerChronicleSend(S.code, { key: x.key, name: x.name, date: x.date, body: v.body, p1: v.p1, p2: v.p2, kind: x.kind, id: x.id, results: v.results }); await loadRunner(); }, '✓ Crónica enviada a dirección');
     render();
   },
   'cro-filter'(el) { S.chroF = el.dataset.f; render(); },
