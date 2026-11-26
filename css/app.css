@@ -2791,3 +2791,12 @@ label.tip-host > .tip-btn { position: absolute; top: 0; right: 0; margin: 0; }
 /* «✓ Inscrito ▾»: se ve que es un botón que abre un menú (cambiar categoría / borrarme) */
 .joined-acts .joined-btn { justify-content: space-between; padding-inline: .6rem .45rem; gap: .25rem; }
 .joined-acts .joined-btn .jb-more { width: 18px; height: 18px; margin-left: auto; flex: none; opacity: .85; padding: 1px; border-radius: 50%; background: color-mix(in srgb, var(--ok) 22%, transparent); }
+
+/* v267 · tallas de ropa */
+.kit-chips{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;margin-left:auto}
+.kit-chip{display:inline-flex;flex-direction:column;align-items:center;min-width:44px;padding:3px 8px;border-radius:10px;background:var(--bg-soft,rgba(127,127,127,.12));line-height:1.15}
+.kit-chip small{font-size:10px;opacity:.7}.kit-chip b{font-size:14px}
+.kit-edit{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:end}
+.kit-edit .kit-t{grid-column:1/-1;display:flex;align-items:center;gap:6px;font-weight:700}
+.kit-edit .kit-t svg{width:20px;height:20px;flex:none}
+.kit-edit label{font-size:12px;margin:0}.kit-edit select{min-width:0;width:100%}

@@ -1043,5 +1043,10 @@ select pg_temp.check((select count(*) from car_offers where registration_id = '2
 select pg_temp.check(not exists (select 1 from circuit_podiums where circuit = 'Circuito Purga' and year = 2024) and exists (select 1 from circuit_podiums where circuit = 'Circuito Purga' and year = 2025), 'limpieza: podios de circuito hasta 2024');
 select pg_temp.check(not exists (select 1 from change_log where summary = 'purga vieja') and exists (select 1 from change_log where summary = 'purga reciente') and exists (select 1 from change_log where entity = 'purga' and summary like 'borró datos hasta 2024%'), 'limpieza: historial antiguo fuera, el reciente y el aviso de la propia limpieza se quedan');
 reset role;
+update runners set kit_jersey = 'M', kit_bibs = 'L' where code = 'codigo-valorador-dos-02';
 set role anon;
+select pg_temp.check(runner_my_kit('codigo-valorador-dos-02') = '{"jersey": "M", "bibs": "L", "socks": null}'::jsonb, 'ropa: el corredor ve sus tallas');
+select pg_temp.check(runner_my_kit('codigo-valorador-uno-01') = '{"jersey": null, "bibs": null, "socks": null}'::jsonb, 'ropa: sin tallas devuelve vacío');
+select pg_temp.expect_fail($q$select runner_my_kit('codigo-falso')$q$, 'ropa: enlace falso no lee');
+select pg_temp.expect_fail($q$select kit_jersey from runners$q$, 'ropa: anónimo no lee la tabla');
 \echo TODAS LAS PRUEBAS SQL OK
