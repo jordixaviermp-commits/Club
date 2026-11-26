@@ -3253,7 +3253,7 @@ function viewInstagram() {
   const period = S.igPeriod || 'all', sort = S.igSort || 'views';
   const [from, to] = igRange(period);
   const g = igSummary(S.ig.rows, from, to), t = g.totals, prev = igPrevTotals(S.ig.rows, from, to), P = igPeriods(S.ig.rows, from, to);
-  const tab = S.igTab || (P.list.length ? 'per' : 'res');
+  const tab = S.igTab || (g.nDays || !P.list.length ? 'res' : 'per');   // por defecto el Diario (la captura automática); Periodos solo si aún no hay datos diarios
   const periods = [['all', 'Todo lo guardado'], ['30', 'Últimos 30 días'], ['month', 'Este mes'], ['year', `Año ${S.year}`]];
   const label = g.nDays ? `${dateEs(g.first)} – ${dateEs(g.last)}` : 'sin datos en este periodo';
   const periodName = (periods.find(([k]) => k === period) || periods[0])[1];
@@ -3382,7 +3382,7 @@ function viewInstagram() {
   const H = igHeadline(S.ig.rows, from, to);
   const igHero = H.source ? `<section class="rs-hero ig-hero no-print"><p class="rs-hero-t">Instagram · ${esc(periodName)}</p>
       <div class="rs-bigs">${big(nf(H.views), 'visualiz.')}${big(H.viewers ? nf(H.viewers) : '—', H.viewersKind === 'unique' ? 'personas' : 'alcance/día')}${big(nf(H.interactions), 'interacc.')}${big(H.follows != null ? (H.follows > 0 ? '+' : '') + nf(H.follows) : '—', H.source === 'period' ? 'seg. netos' : 'nuevos seg.')}</div>
-      <p class="rs-hero-s">${esc(`${dateEs(H.from)} – ${dateEs(H.to)}`)}${H.source === 'period' ? ` · ${H.periods} periodo${H.periods === 1 ? '' : 's'} de Insights` : ''}${acc?.media != null ? ` · ${nf(acc.media)} publicaciones` : ''}${H.nonF != null ? ` · ${H.nonF} % de no seguidores` : ''}</p></section>` : '';
+      <p class="rs-hero-s">${esc(`${dateEs(H.from)} – ${dateEs(H.to)}`)}${H.periods ? ` · incluye ${H.periods} periodo${H.periods === 1 ? '' : 's'} de Insights para los días sin captura diaria` : ''}${acc?.media != null ? ` · ${nf(acc.media)} publicaciones` : ''}${H.nonF != null ? ` · ${H.nonF} % de no seguidores` : ''}</p></section>` : '';
   return head(`
     <div class="no-print">${igHero}${igUpdLine()}
       <div class="eq-bar"><nav class="rs-tabs" role="tablist" aria-label="Apartados de Instagram">${tabs.map(([k, l, ic]) => `<button type="button" class="${k === tab ? 'on' : ''}" data-act="ig-tab" data-t="${k}" role="tab" aria-selected="${k === tab}">${ico(ic)}<span>${l}</span></button>`).join('')}</nav>
@@ -3404,7 +3404,7 @@ function viewIgDossier() {
   if (!S.ig.rows) return frame('Dossier de Instagram', `<p class="card warn">${esc(S.ig.failed || 'Instagram aún no está activado.')}</p>`, { back: '#/instagram' });
   const [from, to] = igRange(S.igPeriod || 'all');
   const g = igSummary(S.ig.rows, from, to), P = igPeriods(S.ig.rows, from, to), pl = P.list, pt = P.totals, gt = g.totals;
-  const usePer = pl.length > 0, H = igHeadline(S.ig.rows, from, to);
+  const H = igHeadline(S.ig.rows, from, to);
   const first = H.from, last = H.to, days = H.days;
   if (!H.source && !H.followers) return frame('Dossier de Instagram', '<p class="empty">Todavía no hay cifras de Instagram guardadas para este periodo.</p>', { back: '#/instagram' });
   const views = H.views, inter = H.interactions, viewers = H.viewers, follows = H.follows, followers = H.followers, nonF = H.nonF;
@@ -3423,7 +3423,7 @@ function viewIgDossier() {
   // 01 · Resumen
   const facts = [
     views ? `📈 El contenido del club se ha reproducido <b>${nf(views)} veces</b>${perDay ? ` (≈ ${nf(perDay)} al día)` : ''}.` : '',
-    viewers ? `👥 Ha llegado a <b>${nf(viewers)} personas distintas</b>${usePer && pl.length > 1 ? ' en un solo periodo' : usePer ? '' : ' de media cada día'}.` : '',
+    viewers ? (H.viewersKind === 'unique' ? `👥 Ha llegado a <b>${nf(viewers)} personas distintas</b>${pl.length > 1 ? ' en un solo periodo' : ''}.` : `👥 Cada día llega de media a <b>${nf(viewers)} personas distintas</b>.`) : '',
     nonF != null ? `🌍 El <b>${nonF} %</b> de las reproducciones son de gente que <b>no sigue</b> al club: llegamos más allá de nuestro círculo.` : '',
     er != null ? `💬 <b>${String(er).replace('.', ',')} interacciones</b> por cada 100 reproducciones (me gusta, comentarios, compartidos y guardados).` : '',
     follows != null ? `➕ <b>${signed(follows)}</b> seguidores netos${followers ? `, hasta <b>${nf(followers)}</b>` : ''}.` : '',
@@ -3431,7 +3431,7 @@ function viewIgDossier() {
   ].filter(Boolean);
   ch('resumen', 'star', 'Resumen', range ? `Instagram del club del ${esc(range)} (${nf(days)} días).` : '', `<div class="rs-tiles">
       ${views ? tile('act', 'Reproducciones', nf(views), perDay ? `${nf(perDay)} al día` : '') : ''}
-      ${viewers ? tile('users', usePer ? 'Personas alcanzadas' : 'Alcance diario', nf(viewers), usePer ? 'cuentas distintas' : 'de media') : ''}
+      ${viewers ? tile('users', H.viewersKind === 'unique' ? 'Personas alcanzadas' : 'Alcance diario', nf(viewers), H.viewersKind === 'unique' ? 'cuentas distintas' : 'personas al día, de media') : ''}
       ${inter ? tile('msg', 'Interacciones', nf(inter), er != null ? `${String(er).replace('.', ',')} por 100 reprod.` : '') : ''}
       ${followers ? tile('users', 'Seguidores', nf(followers), follows != null ? `${signed(follows)} en el periodo` : '') : follows != null ? tile('users', 'Seguidores netos', signed(follows)) : ''}
       ${nonF != null ? tile('compass', 'Fuera de nuestro círculo', `${nonF} %`, 'de no seguidores') : ''}
@@ -3439,18 +3439,22 @@ function viewIgDossier() {
     ${facts.length ? `<ul class="mem-best">${facts.map((x) => `<li>${x}</li>`).join('')}</ul>` : ''}`);
 
   // 02 · Alcance y crecimiento
-  const perBars = pl.length > 1 && pl.length <= 6 && pl.some((x) => x.views) ? hbars(pl.map((x) => [plabel(x), x.views || 0])) : pl.length > 6 ? (() => { const mx = Math.max(1, ...pl.map((x) => x.views || 0));
-    return `<div class="rs-wk rs-elev dos-bars" role="img" aria-label="Reproducciones por periodo">${pl.map((x) => `<div><em>${x.views ? kmShort(x.views) : ''}</em><span style="height:${((x.views || 0) / mx) * 100}%"></span><b>${esc(IG_MES[Number(x.to.slice(5, 7)) - 1])}</b></div>`).join('')}</div>`; })() : '';
-  const daySeries = !usePer && g.byMonth.length > 1 ? (() => { const mx = Math.max(1, ...g.byMonth.map((m) => m.views));
+  const hasDays = g.nDays > 0;
+  const perBars = !hasDays && pl.length > 1 && pl.some((x) => x.views) ? hbars(pl.map((x) => [plabel(x), x.views || 0])) : '';
+  const daySeries = hasDays && g.byMonth.length > 1 ? (() => { const mx = Math.max(1, ...g.byMonth.map((m) => m.views));
     return `<div class="rs-wk rs-elev dos-bars" role="img" aria-label="Visualizaciones por mes">${g.byMonth.map((m) => `<div><em>${kmShort(m.views)}</em><span style="height:${(m.views / mx) * 100}%"></span><b>${esc(igMonthName(m.ym).slice(0, 3))}</b></div>`).join('')}</div>`; })() : '';
-  const perTbl = pl.length ? `<div class="tp-scroll"><table class="tp-table"><thead><tr><th class="l">Periodo</th><th class="num">Días</th><th class="num">Reprod.</th><th class="num">Personas</th><th class="num">Interacc.</th><th class="num">Seg. netos</th></tr></thead><tbody>${pl.map((x) => `<tr><td class="l nw">${esc(plabel(x))}</td><td class="num">${x.days}</td><td class="num">${x.views != null ? nf(x.views) : '—'}</td><td class="num">${x.viewers != null ? nf(x.viewers) : '—'}</td><td class="num">${x.interactions != null ? nf(x.interactions) : '—'}</td><td class="num">${x.net_follows != null ? signed(x.net_follows) : '—'}</td></tr>`).join('')}</tbody></table></div>` : '';
+  const monthTbl = hasDays && g.byMonth.length ? `<div class="tp-scroll"><table class="tp-table"><thead><tr><th class="l">Mes</th><th class="num">Días</th><th class="num">Reprod.</th><th class="num">Interacc.</th></tr></thead><tbody>${g.byMonth.map((m) => `<tr><td class="l nw">${esc(igMonthName(m.ym))}</td><td class="num">${m.days}</td><td class="num">${nf(m.views)}</td><td class="num">${nf(m.interactions)}</td></tr>`).join('')}</tbody></table></div>` : '';
+  const perTbl = !hasDays && pl.length ? `<div class="tp-scroll"><table class="tp-table"><thead><tr><th class="l">Periodo</th><th class="num">Días</th><th class="num">Reprod.</th><th class="num">Personas</th><th class="num">Interacc.</th><th class="num">Seg. netos</th></tr></thead><tbody>${pl.map((x) => `<tr><td class="l nw">${esc(plabel(x))}</td><td class="num">${x.days}</td><td class="num">${x.views != null ? nf(x.views) : '—'}</td><td class="num">${x.viewers != null ? nf(x.viewers) : '—'}</td><td class="num">${x.interactions != null ? nf(x.interactions) : '—'}</td><td class="num">${x.net_follows != null ? signed(x.net_follows) : '—'}</td></tr>`).join('')}</tbody></table></div>` : '';
   const split = nonF != null ? `<div class="ig-split"><i style="width:${100 - nonF}%"></i><i class="nf" style="width:${nonF}%"></i></div><p class="ig-legend"><span><i class="dot a"></i>Seguidores ${100 - nonF} %</span><span><i class="dot b"></i>No seguidores ${nonF} %</span></p>` : '';
   ch('alcance', 'act', 'Alcance y crecimiento', views ? `<b>${nf(views)}</b> reproducciones${follows != null ? ` y <b>${signed(follows)}</b> seguidores` : ''}.` : '',
-    `${box('Reproducciones', perBars || daySeries)}${box('¿Quién nos ve?', split)}${box('Periodo a periodo', perTbl)}`);
+    `${box('Reproducciones', perBars || daySeries)}${box('¿Quién nos ve?', split)}${box(hasDays ? 'Mes a mes' : 'Periodo a periodo', monthTbl || perTbl)}`);
 
   // 03 · Contenido
   const TYPES = [['v_story', 'Historias'], ['v_feed', 'Publicaciones'], ['v_reel', 'Reels']];
-  const mix = TYPES.map(([k, l]) => ({ name: l, races: pl.reduce((n, x) => n + (x[k] || 0), 0) })).filter((x) => x.races);
+  const pv0 = g.posts.reduce((n, p) => n + (p.views || 0), 0), sv0 = g.stories.views;
+  const mixD = [{ name: 'Publicaciones', races: pv0 }, { name: 'Historias', races: sv0 }].filter((x) => x.races);
+  const mixP = TYPES.map(([k, l]) => ({ name: l, races: pl.reduce((n, x) => n + (x[k] || 0), 0) })).filter((x) => x.races);
+  const mix = mixD.length ? mixD : mixP;
   const top = P.posts.length ? P.posts.slice(0, 8).map((x) => ({ t: x.t || 'Publicación', d: x.d, v: x.v, l: x.l, c: x.c, s: x.s }))
     : g.posts.slice(0, 8).map((p) => ({ t: p.title || 'Publicación', d: p.date, v: p.views, l: p.likes, c: p.comments, s: p.shares }));
   const topHtml = top.length ? `<ol class="dos-top">${top.map((x, i) => `<li><span class="pos">${i + 1}</span><div><b>${esc(x.t)}</b><small class="muted">${x.d ? esc(dateEs(x.d)) : ''}</small></div><span class="dos-v"><b>${nf(x.v)}</b><small>reprod.</small></span><small class="dos-m">${[x.l != null ? `♥ ${nf(x.l)}` : '', x.c != null ? `💬 ${nf(x.c)}` : '', x.s != null ? `↗ ${nf(x.s)}` : ''].filter(Boolean).join(' · ')}</small></li>`).join('')}</ol>` : '';
@@ -3484,7 +3488,7 @@ function viewIgDossier() {
       <p class="hint">Usa el periodo elegido en Instagram (${esc((IG_PERIODS(S.year).find(([k]) => k === (S.igPeriod || 'all')) || [, 'Todo lo guardado'])[1])}). Sin nombres de usuarios: solo cifras del club.</p></div>
     <article class="report memoria dossier" data-nofold>
       <header class="mem-cover dos-cover"><img src="icons/logo.png" alt=""><p class="mem-kick">Club Ciclista Monzón · dossier para colaboradores</p><h2>Instagram</h2><p class="dos-handle">@hinacoclubciclistamonzon</p>${range ? `<p class="mem-span">${esc(range)}</p>` : ''}
-        <div class="mem-cover-n">${views ? `<div><b>${kmShort(views)}</b><span>reproducciones</span></div>` : ''}${viewers ? `<div><b>${kmShort(viewers)}</b><span>personas</span></div>` : ''}${inter ? `<div><b>${kmShort(inter)}</b><span>interacciones</span></div>` : ''}${followers ? `<div><b>${kmShort(followers)}</b><span>seguidores</span></div>` : ''}</div></header>
+        <div class="mem-cover-n">${views ? `<div><b>${kmShort(views)}</b><span>reproducciones</span></div>` : ''}${viewers ? `<div><b>${kmShort(viewers)}</b><span>${H.viewersKind === 'unique' ? 'personas' : 'alcance/día'}</span></div>` : ''}${inter ? `<div><b>${kmShort(inter)}</b><span>interacciones</span></div>` : ''}${followers ? `<div><b>${kmShort(followers)}</b><span>seguidores</span></div>` : ''}</div></header>
       ${CH.map((c, k) => `<section class="mem-ch" id="dos-${c.id}"><header class="mem-ch-h"><span class="mem-n">${num(k)}</span>${ico(c.ic)}<h2>${esc(c.title)}</h2></header>${c.lead ? `<p class="mem-lead">${c.lead}</p>` : ''}${c.body}</section>`).join('')}
       <footer class="mem-foot"><img src="icons/logo.png" alt=""><p><b>Club Ciclista Monzón</b> · @hinacoclubciclistamonzon<br>Fuente: estadísticas de Instagram de la cuenta del club, a ${dateEs(todayISO())}. El valor publicitario es una estimación (${IG_CPM} € por cada 1.000 visualizaciones).</p></footer>
     </article>`, { back: '#/instagram' });
