@@ -1049,4 +1049,66 @@ select pg_temp.check(runner_my_kit('codigo-valorador-dos-02') = '{"jersey": "M",
 select pg_temp.check(runner_my_kit('codigo-valorador-uno-01') = '{"jersey": null, "bibs": null, "socks": null}'::jsonb, 'ropa: sin tallas devuelve vacío');
 select pg_temp.expect_fail($q$select runner_my_kit('codigo-falso')$q$, 'ropa: enlace falso no lee');
 select pg_temp.expect_fail($q$select kit_jersey from runners$q$, 'ropa: anónimo no lee la tabla');
+select runner_chronicle_send('codigo-valorador-dos-02', '2026-03-01|cronica test', 'Cronica Test', '2026-03-01', 'Una cronica de prueba', 'AAAA', 'BBBB');
+select pg_temp.check((select (j->0->>'body') = 'Una cronica de prueba' and (j->0->>'status') = 'enviada' and (j->0->>'photos')::int = 2 from (select runner_chronicle_posts('codigo-valorador-dos-02') j) q), 'cronicas: el corredor ve la suya con 2 fotos');
+select pg_temp.check(runner_chronicle_posts('codigo-valorador-uno-01') = '[]'::jsonb, 'cronicas: no ve las de otro');
+select pg_temp.check(runner_chronicles('codigo-valorador-dos-02') ? '2026-03-01|cronica test', 'cronicas: al enviarla queda como pasada');
+select runner_chronicle_send('codigo-valorador-dos-02', '2026-03-01|cronica test', 'Cronica Test', '2026-03-01', 'Texto corregido', null, null);
+select pg_temp.check((select (j->0->>'body') = 'Texto corregido' and (j->0->>'photos')::int = 2 from (select runner_chronicle_posts('codigo-valorador-dos-02') j) q), 'cronicas: editar el texto conserva las fotos');
+select pg_temp.expect_fail($q$select runner_chronicle_send('codigo-falso', 'k-123', 'x', null, 'texto', null, null)$q$, 'cronicas: enlace falso no envia');
+select pg_temp.expect_fail($q$select runner_chronicle_send('codigo-valorador-dos-02', 'k-123', 'x', null, '   ', null, null)$q$, 'cronicas: texto vacio no vale');
+select pg_temp.expect_fail($q$select count(*) from chronicle_photos$q$, 'cronicas: el anonimo no lee las fotos');
+select pg_temp.expect_fail($q$select count(*) from chronicle_posts$q$, 'cronicas: el anonimo no lee la tabla');
+reset role;
+update chronicle_posts set status = 'lista' where race_key = '2026-03-01|cronica test';
+set role anon;
+select pg_temp.expect_fail($q$select runner_chronicle_send('codigo-valorador-dos-02', '2026-03-01|cronica test', 'x', null, 'cambio tardio', null, null)$q$, 'cronicas: ya revisada, el corredor no la cambia');
+reset role;
+-- ===== Corrección automática de crónicas =====
+insert into settings (key, value) values ('sponsors', '{"handles": ["@patro_uno", "@patro_dos"]}') on conflict (key) do update set value = excluded.value;
+set role anon;
+select runner_chronicle_send('codigo-valorador-dos-02', '2026-04-01|ia sin clave', 'Carrera IA', '2026-04-01', 'Sin clave no se manda nada', 'AAAA', null);
+reset role;
+select pg_temp.check((select ai_state is null and ai_req is null from chronicle_posts where race_key = '2026-04-01|ia sin clave'), 'ia: sin clave en Vault no se manda nada');
+insert into vault.decrypted_secrets values ('anthropic_key', 'sk-test-123');
+set role anon;
+select runner_chronicle_send('codigo-valorador-dos-02', '2026-04-02|ia con clave', 'Carrera IA 2', '2026-04-02', 'Mi cronica con faltas de ortografia', 'AAAA', null);
+reset role;
+select pg_temp.check((select ai_state = 'pendiente' and ai_req is not null and ai_tries = 1 from chronicle_posts where race_key = '2026-04-02|ia con clave'), 'ia: al enviar la crónica se manda a Claude');
+select pg_temp.check((select headers->>'x-api-key' = 'sk-test-123' and url = 'https://api.anthropic.com/v1/messages' and body->>'model' = 'claude-sonnet-5-5' and body::text like '%@patro_uno%' and body::text like '%Mi cronica con faltas%' from net.calls order by id desc limit 1), 'ia: petición con clave, modelo, texto y etiquetas');
+select pg_temp.check((select body::text not like '%Valorador Dos%' from net.calls order by id desc limit 1), 'ia: solo se manda el nombre de pila');
+insert into net._http_response select ai_req, 200, '{"content":[{"type":"text","text":"Mi crónica corregida.\n\n@patro_uno @patro_dos"}]}', null from chronicle_posts where race_key = '2026-04-02|ia con clave';
+set role anon;
+select pg_temp.expect_fail($q$select admin_chronicle_ai_collect()$q$, 'ia: el anónimo no recoge respuestas');
+select pg_temp.expect_fail($q$select chronicle_ai_queue('00000000-0000-0000-0000-000000000000')$q$, 'ia: el anónimo no manda peticiones');
+reset role;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+select pg_temp.check(admin_chronicle_ai_collect() = 1, 'ia: dirección recoge la respuesta');
+select pg_temp.check((select ai_state = 'hecho' and final_text like 'Mi crónica corregida.%' from chronicle_posts where race_key = '2026-04-02|ia con clave'), 'ia: el texto corregido queda como texto final');
+select set_config('request.jwt.claim.sub', '', false);
+reset role;
+update chronicle_posts set final_text = 'Texto de dirección' where race_key = '2026-04-02|ia con clave';
+set role anon;
+select runner_chronicle_send('codigo-valorador-dos-02', '2026-04-02|ia con clave', 'Carrera IA 2', '2026-04-02', 'Cronica editada otra vez', null, null);
+select runner_chronicle_send('codigo-valorador-dos-02', '2026-04-02|ia con clave', 'Carrera IA 2', '2026-04-02', 'Cronica editada tres', null, null);
+select runner_chronicle_send('codigo-valorador-dos-02', '2026-04-02|ia con clave', 'Carrera IA 2', '2026-04-02', 'Cronica editada cuatro', null, null);
+reset role;
+select pg_temp.check((select ai_tries = 3 from chronicle_posts where race_key = '2026-04-02|ia con clave'), 'ia: máximo 3 peticiones por crónica');
+select pg_temp.check((select final_text = 'Texto de dirección' from chronicle_posts where race_key = '2026-04-02|ia con clave'), 'ia: nunca pisa el texto que dirección ya puso');
+update chronicle_posts set status = 'lista' where race_key = '2026-04-02|ia con clave';
+select pg_temp.check((select count(*) from net.calls) = 3, 'ia: ya revisada no se vuelve a mandar');
+-- los datos de la carrera y del resultado viajan con la crónica
+insert into vault.decrypted_secrets values ('anthropic_key', 'sk-test-123');
+insert into races (id, name, date, place, province, modality, km, elevation) values ('00000000-0000-0000-0000-0000000000d1', 'Carrera Datos', '2026-05-01', 'Lleida', 'Lleida', 'BTT', 70, 1200);
+insert into results (race_id, runner_id, runner_name, category, position, general_position, time_seconds)
+  select '00000000-0000-0000-0000-0000000000d1', id, name, 'M40', case when code = 'codigo-valorador-dos-02' then 3 else 1 end, case when code = 'codigo-valorador-dos-02' then 12 else null end, case when code = 'codigo-valorador-dos-02' then 9005 else 8000 end
+  from runners where code in ('codigo-valorador-dos-02', 'codigo-valorador-uno-01');
+set role anon;
+select runner_chronicle_send('codigo-valorador-dos-02', '2026-05-01|carrera datos', 'Carrera Datos', '2026-05-01', 'Lo pase fatal en la subida pero acabe feliz', null, null);
+reset role;
+select pg_temp.check((select (body #>> '{messages,0,content}') like '%Lugar: Lleida, Lleida%' and (body #>> '{messages,0,content}') like '%Distancia: 70.0 km%' and (body #>> '{messages,0,content}') like '%Puesto en su categoría: 3º%' and (body #>> '{messages,0,content}') like '%Puesto en la general: 12º%' and (body #>> '{messages,0,content}') like '%Tiempo: 2:30:05%' from net.calls order by id desc limit 1), 'ia: la petición lleva lugar, distancia, puestos y tiempo');
+select pg_temp.check((select (body #>> '{messages,0,content}') like '%Otros del club en la carrera (1): % (M40, 1º)%' and (body #>> '{messages,0,content}') like '%Lo pase fatal%' from net.calls order by id desc limit 1), 'ia: lleva a los compañeros del club y lo que cuenta el corredor');
+delete from vault.decrypted_secrets;
+set role anon;
 \echo TODAS LAS PRUEBAS SQL OK
