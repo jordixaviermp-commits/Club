@@ -2639,3 +2639,22 @@ a.sum-streak { text-decoration: none; color: var(--text); }
 .dossier .ig-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mem-cover-n div { min-width: 0; } @media (max-width: 359px) { .mem-cover-n { gap: .25rem; } .mem-cover-n b { font-size: var(--fs-5); } .mem-cover-n span { font-size: .62rem; } }
 @media print { body, #app { padding: 0 !important; margin: 0 !important; min-height: 0 !important; } .memoria .rs-tile, .memoria .rp-kpi, .mem-best li, .dos-leg li { break-inside: avoid; } .memoria .rs-tiles { break-inside: auto; } }
+
+/* ---- v256 · Turnos por escamots en el calendario (solo el propio corredor) ---- */
+.shc-M, .sh-M { --shb: #f2b705; } .shc-T, .sh-T { --shb: #f08a5d; } .shc-N, .sh-N { --shb: #6c63e0; }
+.shc-D, .sh-D { --shb: #1fa88f; } .shc-TN, .sh-TN { --shb: #3a7bd5; } .shc-F, .sh-F { --shb: #9aa7b0; }
+.cal-cell.shc:not(.has):not(.empty) { background: color-mix(in srgb, var(--shb) 20%, var(--card)); }
+.cal-cell.shc.has { box-shadow: inset 0 3px 0 var(--shb); }
+.cal-cell .sh { position: absolute; top: 2px; left: 4px; font-style: normal; font-weight: 800; font-size: .62rem; line-height: 1; letter-spacing: .01em; color: color-mix(in srgb, var(--shb) 78%, var(--text)); }
+.cal-cell.has.mine .sh { color: #fff; text-shadow: 0 1px 1px rgba(0, 0, 0, .35); }
+.sh-legend { align-items: center; }
+.sh-legend .sh-who { font-weight: 700; display: inline-flex; align-items: center; gap: .25rem; }
+.sh-legend .sh { position: static; display: inline-grid; place-items: center; min-width: 22px; height: 18px; padding: 0 3px; margin-right: .3rem; border-radius: 5px; font-size: .68rem; background: color-mix(in srgb, var(--shb) 22%, var(--card)); }
+.sh-legend { flex-wrap: wrap; gap: .3rem .6rem; overflow: visible; } .sh-legend > span { white-space: nowrap; flex: none; }
+.sh-legend .sh { font-style: normal; }
+.shift-pick { padding: .55rem .8rem; } .shift-pick > summary { display: flex; align-items: center; gap: .5rem; cursor: pointer; list-style: none; min-height: 36px; font-weight: 700; }
+.shift-pick > summary::-webkit-details-marker { display: none; } .shift-pick > summary small { color: var(--muted); font-weight: 500; }
+.shift-pick .sp-cur { margin-left: auto; font-size: var(--fs-3); color: var(--muted); font-weight: 600; } .shift-pick .desp-chev { flex: none; transition: transform .15s; } .shift-pick[open] .desp-chev { transform: rotate(180deg); }
+.shift-pick .sp-row { display: flex; align-items: center; gap: .6rem; margin-top: .4rem; } .shift-pick select { flex: 1; }
+.shift-pick > summary > .ico:first-child { width: 20px; height: 20px; flex: none; color: var(--muted); }
+.shift-pick .sp-cur { white-space: nowrap; } .shift-pick .sp-row { justify-content: space-between; text-align: left; } .shift-pick .sp-row select { max-width: 60%; }
