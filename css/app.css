@@ -2658,3 +2658,47 @@ a.sum-streak { text-decoration: none; color: var(--text); }
 .shift-pick .sp-row { display: flex; align-items: center; gap: .6rem; margin-top: .4rem; } .shift-pick select { flex: 1; }
 .shift-pick > summary > .ico:first-child { width: 20px; height: 20px; flex: none; color: var(--muted); }
 .shift-pick .sp-cur { white-space: nowrap; } .shift-pick .sp-row { justify-content: space-between; text-align: left; } .shift-pick .sp-row select { max-width: 60%; }
+
+/* ---- v257 · Pulido de interfaz ---- */
+/* Una palabra muy larga (MEGATAMPANADA) no se parte: el resultado y la cuenta atrás bajan a su propia línea y el nombre usa todo el ancho */
+.rc-name, .race-head h3 { overflow-wrap: break-word; hyphens: auto; }
+.rc-sum:has(.rc-name.long, .rc-name.xlong) { grid-template-columns: auto minmax(0, 1fr) 20px; align-items: start; }
+.rc-sum:has(.rc-name.long, .rc-name.xlong) > .rc-date { grid-row: 1 / span 2; align-self: center; }
+.rc-sum:has(.rc-name.long, .rc-name.xlong) > .rc-main { grid-column: 2; grid-row: 1; }
+.rc-sum:has(.rc-name.long, .rc-name.xlong) > .rc-chev { grid-column: 3; grid-row: 1; align-self: center; }
+.rc-sum:has(.rc-name.long, .rc-name.xlong) > .rc-side { grid-column: 2 / 4; grid-row: 2; flex-direction: row; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: .2rem .6rem; text-align: left; }
+.rc-name.xlong { font-size: .8rem; letter-spacing: -.01em; }
+/* chips de compañeros: se ajustan en varias líneas en vez de cortarse */
+.club-row { align-items: flex-start; } .club-row .people { flex-wrap: wrap; overflow: visible; } .club-row .people li { white-space: normal; flex: 0 1 auto; }
+.joined-acts .joined-btn span { white-space: nowrap; }
+/* estado de pago en cada fila */
+.rc-pay { display: inline-flex; align-items: center; gap: .2rem; font-size: var(--fs-1); font-weight: 800; padding: .08rem .45rem; border-radius: 999px; white-space: nowrap; }
+.rc-pay .ico { width: 11px; height: 11px; }
+.rc-pay.on { background: color-mix(in srgb, var(--ok) 16%, var(--card)); color: var(--ok-2, var(--ok)); }
+.rc-pay.due { background: color-mix(in srgb, var(--warn) 24%, var(--card)); color: var(--warn-t); }
+.club-row { flex-direction: column; align-items: flex-start; gap: .35rem; }
+.rcard .club-row .people li { display: inline-flex; align-items: center; gap: .3rem; width: auto; max-width: 100%; margin: 0; padding: .15rem .6rem; border: 1px solid var(--line); border-radius: 999px; box-shadow: none; background: var(--bg); min-height: 0; line-height: 1.25; }
+.rcard .club-row .people li.me { background: var(--accent-2); border-color: var(--brand-cyan); }
+.rcard .club-row .people li small { margin-left: .1rem; }
+/* menú de perfil: el logo de arriba a la izquierda */
+.logo-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; margin: -4px 0 -4px -6px; padding: 0; background: none; border: 0; border-radius: 50%; cursor: pointer; flex: none; -webkit-tap-highlight-color: transparent; }
+.logo-btn:active .logo { transform: scale(.94); }
+.logo-btn::after { content: ""; position: absolute; right: 1px; bottom: 3px; width: 15px; height: 15px; border-radius: 50%; background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23244' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") center / 9px no-repeat; box-shadow: 0 0 0 1.5px rgba(0, 0, 0, .25); }
+.profile h2 { display: flex; align-items: center; gap: .6rem; font-size: var(--fs-5); } .profile h2 span { min-width: 0; overflow-wrap: anywhere; }
+.profile h3 { margin: .9rem 0 .4rem; font-size: var(--fs-3); color: var(--muted); font-weight: 700; }
+.profile .sp-row { display: flex; align-items: center; justify-content: space-between; gap: .6rem; } .profile .sp-row select { flex: 1; max-width: 60%; }
+.profile .dlg-actions { margin-top: 1rem; justify-content: space-between; }
+.profile .years { flex-wrap: wrap; overflow: visible; margin-bottom: .2rem; }
+.profile label.sp-row { text-align: left; font-weight: 600; }
+.logo-btn .logo { flex: none; }
+@media (max-width: 340px) { header.top .logo-btn .logo { display: block; width: 26px; height: 26px; margin: 0; } .logo-btn { min-width: 38px; margin-left: -4px; } .logo-btn::after { right: 3px; bottom: 5px; } }
+.dlg.profile label.sp-row { flex-direction: row; align-items: center; }
+/* la «i» con etiqueta (Sin resultado, Crónicas): a la izquierda y con texto */
+details.tip.tip-lab { align-items: flex-start; }
+details.tip.tip-lab > summary { width: auto; height: 28px; padding: 0 .65rem 0 .4rem; gap: .3rem; border-radius: 999px; font-size: var(--fs-2); font-weight: 700; }
+/* áreas táctiles de 44 px y más aire entre iconos secundarios */
+.rc-tools { gap: .55rem; }
+.rc-tool { min-width: 44px; height: 44px; } .rc-tools .star-btn { min-height: 44px; height: 44px; }
+.toolbar { gap: .55rem; } .toolbar .fbtn, .toolbar .icon-btn { min-width: 44px; min-height: 44px; }
+header.top .icon-btn { min-width: 44px; min-height: 44px; }
+header.top .icon-btn.sos { position: relative; } header.top .icon-btn.sos::before { content: ""; position: absolute; inset: -3px; }
