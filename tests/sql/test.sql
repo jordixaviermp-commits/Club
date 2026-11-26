@@ -1049,4 +1049,18 @@ select pg_temp.check(runner_my_kit('codigo-valorador-dos-02') = '{"jersey": "M",
 select pg_temp.check(runner_my_kit('codigo-valorador-uno-01') = '{"jersey": null, "bibs": null, "socks": null}'::jsonb, 'ropa: sin tallas devuelve vacío');
 select pg_temp.expect_fail($q$select runner_my_kit('codigo-falso')$q$, 'ropa: enlace falso no lee');
 select pg_temp.expect_fail($q$select kit_jersey from runners$q$, 'ropa: anónimo no lee la tabla');
+select runner_chronicle_send('codigo-valorador-dos-02', '2026-03-01|cronica test', 'Cronica Test', '2026-03-01', 'Una cronica de prueba', 'AAAA', 'BBBB');
+select pg_temp.check((select (j->0->>'body') = 'Una cronica de prueba' and (j->0->>'status') = 'enviada' and (j->0->>'photos')::int = 2 from (select runner_chronicle_posts('codigo-valorador-dos-02') j) q), 'cronicas: el corredor ve la suya con 2 fotos');
+select pg_temp.check(runner_chronicle_posts('codigo-valorador-uno-01') = '[]'::jsonb, 'cronicas: no ve las de otro');
+select pg_temp.check(runner_chronicles('codigo-valorador-dos-02') ? '2026-03-01|cronica test', 'cronicas: al enviarla queda como pasada');
+select runner_chronicle_send('codigo-valorador-dos-02', '2026-03-01|cronica test', 'Cronica Test', '2026-03-01', 'Texto corregido', null, null);
+select pg_temp.check((select (j->0->>'body') = 'Texto corregido' and (j->0->>'photos')::int = 2 from (select runner_chronicle_posts('codigo-valorador-dos-02') j) q), 'cronicas: editar el texto conserva las fotos');
+select pg_temp.expect_fail($q$select runner_chronicle_send('codigo-falso', 'k-123', 'x', null, 'texto', null, null)$q$, 'cronicas: enlace falso no envia');
+select pg_temp.expect_fail($q$select runner_chronicle_send('codigo-valorador-dos-02', 'k-123', 'x', null, '   ', null, null)$q$, 'cronicas: texto vacio no vale');
+select pg_temp.expect_fail($q$select count(*) from chronicle_photos$q$, 'cronicas: el anonimo no lee las fotos');
+select pg_temp.expect_fail($q$select count(*) from chronicle_posts$q$, 'cronicas: el anonimo no lee la tabla');
+reset role;
+update chronicle_posts set status = 'lista' where race_key = '2026-03-01|cronica test';
+set role anon;
+select pg_temp.expect_fail($q$select runner_chronicle_send('codigo-valorador-dos-02', '2026-03-01|cronica test', 'x', null, 'cambio tardio', null, null)$q$, 'cronicas: ya revisada, el corredor no la cambia');
 \echo TODAS LAS PRUEBAS SQL OK

@@ -367,6 +367,7 @@ async function onRoute() {
 /** Crónicas que el corredor ya pasó (Set de claves). null = falta el SQL; undefined = aún sin cargar. */
 async function loadChron() {
   const code = S.code || S.previewCode;
+  try { const l = await api.runnerChroPosts(code); S.myPosts = Array.isArray(l) ? new Map(l.map((p) => [p.key, p])) : null; } catch { S.myPosts = null; }   // null = falta el SQL de crónicas con fotos
   try {
     const team = await api.runnerChroniclesTeam(code);   // las pasadas por cualquiera: basta con que la pase uno
     if (Array.isArray(team)) { S.chron = new Set(team.map((x) => x.key)); S.chronBy = new Map(team.map((x) => [x.key, x])); return; }
@@ -446,7 +447,7 @@ const ADMIN_GROUP = { '': 'hoy', hoy: 'hoy', movimientos: 'hoy', avisos: 'hoy', 
   inscripciones: 'inscripciones', carreras: 'inscripciones', federaciones: 'inscripciones',
   corredores: 'corredores', contratos: 'corredores', computo: 'corredores', informe: 'corredores', bonos: 'corredores', corredor: 'corredores', docs: 'corredores',
   resumen: 'resumen', instagram: 'redes', dossier: 'redes', datos: 'hoy', temporada: 'resumen', memoria: 'hoy', vista: 'corredores', equipo: 'resumen',
-  redes: 'redes', semana: 'redes', publicaciones: 'redes' };
+  redes: 'redes', semana: 'redes', publicaciones: 'redes', cronicas: 'redes' };
 const SEC_OF = { hoy: 'hoy', inscripciones: 'car', corredores: 'eq', resumen: 'res', redes: 'red', '': 'car', federaciones: 'fed', mi: 'hoy', contrato: 'eq', equipo: 'res', noticias: 'hoy', carrera: 'car', nueva: 'car' };
 const icon = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
 // Menú de pie de página de los corredores (y de la vista previa de la dirección).
@@ -634,7 +635,7 @@ function render() {
       '': viewToday, hoy: viewToday, movimientos: viewMovements, mensajes: viewMessages, calidad: viewQuality, actividad: viewActivity,
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
       carreras: S.draft ? viewRaceEdit : viewRaces,
-      resumen: viewSummary, temporada: viewSummary, memoria: viewMemoria, dossier: viewIgDossier, instagram: viewInstagram, redes: viewNetworks, corredores: viewRunners, contratos: viewContracts, computo: viewSeasonCount, informe: viewSeasonReport, publicaciones: viewPublications, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
+      resumen: viewSummary, temporada: viewSummary, memoria: viewMemoria, dossier: viewIgDossier, instagram: viewInstagram, redes: viewNetworks, cronicas: viewChronicles, corredores: viewRunners, contratos: viewContracts, computo: viewSeasonCount, informe: viewSeasonReport, publicaciones: viewPublications, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
       vista: () => (S.preview && S.runnerData ? runnerScreen(parseRoute().id || '') : viewRunners()),
       equipo: () => (S.preview ? viewTeam() : viewSummary()),
     }[view] || viewToday)();
@@ -1190,6 +1191,7 @@ const ICO = {
   mountain: 'm8 3 4 8 5-5 5 15H2L8 3z',
   map: 'M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14',
   user: 'M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+  down: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
   camera: 'M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
   image: 'M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM21 15l-5-5L5 21',
   printer: 'M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z',
@@ -1437,6 +1439,16 @@ const CHRONICLE_RULE = 'Según el contrato, de cada carrera hay que hacer la <b>
 const chronicleReminder = (name) => choose('✍️ Recuerda tu crónica', `${name ? `<b>${esc(name)}</b><br>` : ''}${CHRONICLE_RULE}<br>Cuando lo hayas enviado, márcala como pasada en <b>Mi temporada</b>.`, [{ label: 'Entendido', value: true, kind: 'primary' }]);
 
 /** Crónicas del corredor: pendientes y pasadas, pequeña y con un desplegable para marcarlas. */
+/** Estado de una crónica enviada con fotos: texto corto y color. */
+const CHRO_ST = { enviada: ['En revisión', 'warn'], lista: ['Lista para publicar', 'ok'], publicada: ['Publicada', 'ok'] };
+/** Botones de una crónica en la lista del corredor: escribirla en la app (texto + 2 fotos), marcarla como pasada o ver cómo va. */
+function chroActs(x, isDone) {
+  const post = S.myPosts && S.myPosts.get(x.key), st = post && CHRO_ST[post.status];
+  const write = S.myPosts ? `<button class="btn small${post || isDone ? '' : ' primary'}" data-act="chro-write" data-key="${esc(x.key)}">${ico('pen')}${post ? (post.status === 'enviada' ? 'Editar' : 'Ver') : 'Escribirla'}</button>` : '';
+  const state = st ? `<span class="chro-st ${st[1]}">${esc(st[0])}</span>` : '';
+  const mark = post ? '' : `<button class="btn small ghost" data-act="chro-toggle" data-key="${esc(x.key)}" data-done="${isDone ? 0 : 1}">${isDone ? 'Deshacer' : '✓ Ya la pasé'}</button>`;
+  return `<span class="chro-acts">${state}${write}${mark}</span>`;
+}
 function chronicleCard(d) {
   if (!(S.chron instanceof Set)) return '';
   const year = S.myYear || new Date().getFullYear();
@@ -1444,7 +1456,7 @@ function chronicleCard(d) {
   if (!c.total) return '';
   const plural = (n, a, b) => (n === 1 ? a : b);
   const li = (x, isDone) => { const by = S.chronBy?.get(x.key), other = isDone && by && !by.mine;   // cualquiera puede deshacer una crónica (corregir): queda pendiente para todos
-    return `<li class="chro-row"><span class="chro-name"><b>${esc(x.name)}</b><small class="muted">${esc(formatDate(x.date, false))}${x.place ? ' · ' + esc(x.place) : ''}${other ? ` · la pasó ${esc(by.by)}` : ''}</small></span>${S.preview ? '' : `<button class="btn small${isDone ? ' ghost' : ' primary'}" data-act="chro-toggle" data-key="${esc(x.key)}" data-done="${isDone ? 0 : 1}">${isDone ? 'Deshacer' : '✓ Ya la pasé'}</button>`}</li>`; };
+    return `<li class="chro-row"><span class="chro-name"><b>${esc(x.name)}</b><small class="muted">${esc(formatDate(x.date, false))}${x.place ? ' · ' + esc(x.place) : ''}${other ? ` · la pasó ${esc(by.by)}` : ''}</small></span>${S.preview ? '' : chroActs(x, isDone)}</li>`; };
   const pend = c.pending.length;
   const tabImp = S.chroTab === 'imp';
   if (tabImp) loadImpact();
@@ -2356,9 +2368,109 @@ function socialAdminCard() {
 }
 
 /** Pestañas de la zona de redes (se repiten arriba en Panel, Calendario y Publicaciones). */
+// ======================================================================
+//  Crónicas con fotos (dirección): llegan de los corredores, se revisan y se copian listas para publicar
+// ======================================================================
+
+const CHRO_FILTERS = [['enviada', 'Por revisar'], ['lista', 'Listas'], ['publicada', 'Publicadas']];
+async function loadChroPosts(force = false) {
+  if (S.chroPosts && !force) return;
+  S.chroPosts = { loading: true };
+  try { const rows = await api.listChroPosts(); S.chroPosts = rows ? { rows } : { missing: true }; } catch (e) { S.chroPosts = { failed: friendlyError(e) }; }
+  if (parseRoute().view === 'cronicas') render();
+}
+const chroPending = () => (S.chroPosts?.rows || []).filter((p) => p.status === 'enviada').length;
+const sponsorHandles = () => (S.data?.settings?.sponsors?.handles || []).filter(Boolean);
+const normHandle = (h) => { const t = String(h || '').trim().replace(/^@+/, '').replace(/[^\w.]/g, ''); return t ? '@' + t : ''; };
+
+function viewChronicles() {
+  const head = (inner) => frame('Redes', `${netTabs('cro')}${inner}`, { actions: '<button class="icon-btn" data-act="cro-refresh" aria-label="Actualizar">↻</button>' });
+  const cp = S.chroPosts;
+  if (!cp || cp.loading) { loadChroPosts(); return head('<p class="empty">Cargando…</p>'); }
+  if (cp.missing) return head('<p class="card warn">Aún no está activado: falta ejecutar en Supabase <code>supabase/cambios/2026-11-30-cronicas.sql</code> (3 trozos cortos).</p>');
+  if (cp.failed) return head(`<p class="card warn">${esc(cp.failed)}</p>`);
+  const f = S.chroF || 'enviada', rows = cp.rows, list = rows.filter((p) => p.status === f);
+  const sp = sponsorHandles();
+  const card = (p) => `<button type="button" class="card chro-post" data-act="cro-open" data-id="${esc(p.id)}">
+    <span class="cp-h"><b>${esc(p.race_name)}</b><span class="chro-st ${CHRO_ST[p.status][1]}">${esc(CHRO_ST[p.status][0])}</span></span>
+    <small class="muted">${esc(runnerById(p.runner_id)?.name || 'Corredor')}${p.race_date ? ' · ' + esc(formatDate(p.race_date, false)) : ''}${p.photos ? ` · ${ico('camera')}${p.photos}` : ' · sin fotos'}</small>
+    <span class="cp-x">${esc(String(p.final_text || p.body).slice(0, 140))}${String(p.final_text || p.body).length > 140 ? '…' : ''}</span>${ico('go', 'pg')}</button>`;
+  return head(`
+    <div class="years cro-f">${CHRO_FILTERS.map(([k, l]) => { const n = rows.filter((p) => p.status === k).length; return `<button class="chip${f === k ? ' on' : ''}" data-act="cro-filter" data-f="${k}">${l}${n ? ` (${n})` : ''}</button>`; }).join('')}</div>
+    ${list.length ? list.map(card).join('') : `<p class="empty">${f === 'enviada' ? 'No hay crónicas por revisar. 🎉' : 'Nada aquí todavía.'}</p>`}
+    <button type="button" class="card chro-sponsors" data-act="cro-sponsors">${ico('users')}<span><b>Patrocinadores a etiquetar</b><small class="muted">${sp.length ? esc(sp.join(' ')) : 'Aún no hay ninguno: toca para añadirlos'}</small></span>${ico('pen')}</button>
+    <p class="muted small">Cómo va: el corredor escribe su crónica y sube 2 fotos desde la app. Tú abres la crónica, copias la petición para Claude, pegas su versión corregida, copias el texto con las etiquetas y lo publicas. Al marcarla publicada se borran las fotos del servidor.</p>`);
+}
+
+function chroPrompt(p, handles) {
+  return `Eres el community manager del Club Ciclista Monzón. Corrige esta crónica de carrera para publicarla en Instagram:
+- Mantén el idioma original (castellano o catalán) y la primera persona. No inventes datos, cifras ni nombres.
+- Corrige ortografía, puntuación y formato. Tono cercano, deportivo y positivo. Párrafos cortos. Máximo 1.800 caracteres.
+- Quita insultos o críticas a personas, organizadores o rivales.
+${handles.length ? `- Termina con una última línea con estas etiquetas: ${handles.join(' ')}\n` : ''}- Devuélveme solo el texto final, sin explicaciones.
+
+Carrera: ${p.race_name}${p.race_date ? ' (' + formatDate(p.race_date, false) + ')' : ''}
+Autor: ${runnerById(p.runner_id)?.name || 'un corredor del club'}
+Crónica:
+"""
+${p.body}
+"""`;
+}
+
+async function openChroPost(id) {
+  const p = S.chroPosts?.rows?.find((x) => x.id === id); if (!p) return;
+  const dlg = document.getElementById('dialog'), sp = sponsorHandles();
+  let photos = [];
+  if (p.photos) { try { photos = await api.getChroPhotos(id); } catch { photos = []; } }
+  const done = p.status === 'publicada';
+  dlg.innerHTML = `<form method="dialog" class="dlg chro-dlg"><h2>${esc(p.race_name)}</h2>
+    <p class="muted small">${esc(runnerById(p.runner_id)?.name || 'Corredor')}${p.race_date ? ' · ' + esc(formatDate(p.race_date, false)) : ''} · <span class="chro-st ${CHRO_ST[p.status][1]}">${esc(CHRO_ST[p.status][0])}</span></p>
+    ${photos.length ? `<div class="chro-photos">${photos.map((x) => `<figure><img src="${esc(x.data)}" alt="Foto ${x.ord}"><a class="btn small" href="${esc(x.data)}" download="cronica-${esc(p.race_key.slice(0, 10))}-${x.ord}.jpg">${ico('down')} Descargar</a></figure>`).join('')}</div>` : `<p class="muted small">${done ? 'Fotos ya borradas del servidor.' : 'Esta crónica no trae fotos.'}</p>`}
+    <details class="chro-orig"><summary>Texto original</summary><p>${esc(p.body).replace(/\n/g, '<br>')}</p></details>
+    ${done ? '' : `<button type="button" class="btn block" data-cro="ai">${ico('share')} Copiar petición para Claude</button>
+    <p class="muted small">Pégasela a Claude (en el chat) y pega aquí su respuesta.</p>`}
+    <label>Texto final<textarea name="final" rows="9" maxlength="4000" ${done ? 'readonly' : ''}>${esc(p.final_text || '')}</textarea></label>
+    ${sp.length ? `<fieldset class="chro-tags"><legend>Etiquetas</legend>${sp.map((h) => `<label class="check"><input type="checkbox" name="tag" value="${esc(h)}" checked> ${esc(h)}</label>`).join('')}</fieldset>` : '<p class="muted small">Sin patrocinadores guardados: añádelos en la lista de Crónicas.</p>'}
+    <div class="dlg-actions"><button type="button" class="btn primary" data-cro="copy">${ico('clip')} Copiar texto + etiquetas</button>
+      ${done ? '' : `<button type="button" class="btn" data-cro="save">Guardar como lista</button><button type="button" class="btn" data-cro="pub">✅ Ya publicada</button>`}<button value="" class="btn ghost" formnovalidate>Cerrar</button></div></form>`;
+  const final = () => dlg.querySelector('textarea[name="final"]').value.trim();
+  const tags = () => [...dlg.querySelectorAll('input[name="tag"]:checked')].map((i) => i.value);
+  const withTags = () => { const t = final() || p.body, hs = tags().filter((h) => !t.includes(h)); return hs.length ? `${t}\n\n${hs.join(' ')}` : t; };
+  dlg.onclick = async (ev) => {
+    const b = ev.target.closest('[data-cro]'); if (!b) return;
+    ev.preventDefault();
+    if (b.dataset.cro === 'ai') await copyText(chroPrompt(p, tags()), 'Petición copiada: pégala en Claude');
+    else if (b.dataset.cro === 'copy') await copyText(withTags(), 'Texto copiado');
+    else if (b.dataset.cro === 'save') { dlg.onclick = null; dlg.close(); await run(async () => { await api.updateChroPost(id, { final_text: final() || null, status: 'lista' }); await loadChroPosts(true); }, 'Guardada como lista'); render(); }
+    else if (b.dataset.cro === 'pub') {
+      const txt = final() || null; dlg.onclick = null;
+      if (!await confirmAction('Marcar como publicada', `Se <b>borrarán las fotos</b> del servidor para no gastar espacio. ¿Ya las has descargado y publicado?`, 'Sí, publicada', 'primary')) { openChroPost(id); return; }
+      await run(async () => { await api.updateChroPost(id, { final_text: txt, status: 'publicada' }); await api.deleteChroPhotos(id); await loadChroPosts(true); }, '✅ Publicada; fotos borradas');
+      render();
+    }
+  };
+  dlg.onclose = () => { dlg.onclick = null; };
+  dlg.returnValue = '';
+  if (!dlg.open) dlg.showModal();
+}
+
+function askSponsors(current) {
+  return new Promise((resolve) => {
+    const dlg = document.getElementById('dialog');
+    dlg.innerHTML = `<form method="dialog" class="dlg"><h2>Patrocinadores a etiquetar</h2>
+      <p class="muted small">Una cuenta de Instagram por línea (con o sin @). Se añaden al final de cada crónica.</p>
+      <label>Cuentas<textarea name="h" rows="7" placeholder="@patrocinador1&#10;@patrocinador2">${esc(current.join('\n'))}</textarea></label>
+      <div class="dlg-actions"><button value="ok" class="btn primary">Guardar</button><button value="" class="btn ghost" formnovalidate>Cancelar</button></div></form>`;
+    dlg.onclose = () => resolve(dlg.returnValue === 'ok' ? [...new Set(dlg.querySelector('textarea[name="h"]').value.split(/[\n,;\s]+/).map(normHandle).filter(Boolean))] : null);
+    dlg.returnValue = '';
+    dlg.showModal(); dlg.querySelector('textarea')?.focus();
+  });
+}
+
 function netTabs(on) {
+  if (S.session?.isAdmin && !S.chroPosts) loadChroPosts();
   let pend = 0, due = 0; try { pend = socialPending(); due = pubDue(); } catch { /* sin datos aún */ }
-  return `<nav class="net-tabs no-print" aria-label="Redes">${[['panel', '📋', 'Panel', '#/redes', pend], ['cal', '📅', 'Calendario', '#/semana', 0], ['pub', '📸', 'Publicar', '#/publicaciones', due], ['ig', '📈', 'Instagram', '#/instagram', 0]]
+  return `<nav class="net-tabs no-print" aria-label="Redes">${[['panel', '📋', 'Panel', '#/redes', pend], ['cal', '📅', 'Calendario', '#/semana', 0], ['pub', '📸', 'Publicar', '#/publicaciones', due], ['cro', '✍️', 'Crónicas', '#/cronicas', chroPending()], ['ig', '📈', 'Instagram', '#/instagram', 0]]
     .map(([k, i, l, h, n]) => `<a class="net-tab${on === k ? ' on' : ''}" href="${h}"><span aria-hidden="true">${i}</span><b>${l}</b>${n ? `<em>${n}</em>` : ''}</a>`).join('')}</nav>`;
 }
 
@@ -4859,6 +4971,45 @@ function askNote(name, current = '') {
   });
 }
 
+/** Foto a JPEG reducido (máx. 1280 px) como data-URL: unos 150–250 KB, para no gastar espacio. */
+async function photoToJpeg(file, max = 1280) {
+  const img = await createImageBitmap(file);
+  let k = Math.min(1, max / Math.max(img.width, img.height)), q = 0.8, out = '';
+  for (let i = 0; i < 4; i++) {
+    const c = Object.assign(document.createElement('canvas'), { width: Math.round(img.width * k), height: Math.round(img.height * k) });
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    out = c.toDataURL('image/jpeg', q);
+    if (out.length <= 800000) return out;
+    k *= 0.8; q = Math.max(0.6, q - 0.05);
+  }
+  throw new Error('La foto es demasiado grande: prueba con otra.');
+}
+/** Diálogo de «Mi crónica»: texto + hasta 2 fotos. Devuelve {body, p1, p2} o null. */
+function askChronicle(x, post) {
+  return new Promise((resolve) => {
+    const dlg = document.getElementById('dialog'), locked = !!post && post.status !== 'enviada', photos = [null, null];
+    const slot = (i) => `<label class="chro-ph" data-slot="${i}">${ico('camera')}<span>Foto ${i + 1}${i ? ' (opcional)' : ''}</span><img alt="" hidden><input type="file" accept="image/*" data-chro-photo="${i}" hidden></label>`;
+    dlg.innerHTML = `<form method="dialog" class="dlg chro-dlg"><h2>${ico('pen')} Mi crónica</h2><p><b>${esc(x.name)}</b> · ${esc(formatDate(x.date, false))}</p>
+      ${locked ? `<p class="muted small">Ya la tiene la dirección (${esc((CHRO_ST[post.status] || [''])[0].toLowerCase())}): no se puede cambiar.</p>`
+        : '<p class="muted small">Cuéntalo como quieras: la dirección la revisa, la corrige y la publica en redes con tus fotos y las etiquetas de los patrocinadores.</p>'}
+      <label>Tu crónica<textarea name="body" rows="9" minlength="${locked ? 0 : 20}" maxlength="3000" ${locked ? 'readonly' : 'required'} placeholder="Cómo fue la carrera, cómo te sentiste, quién iba contigo…">${esc(post?.body || '')}</textarea></label>
+      ${locked ? '' : `<div class="chro-photos">${slot(0)}${slot(1)}</div>${post?.photos ? `<p class="muted small">Ya tienes ${post.photos} foto${post.photos === 1 ? '' : 's'} enviada${post.photos === 1 ? '' : 's'}; si eliges nuevas, las sustituyen.</p>` : '<p class="muted small">Sube al menos 1 foto.</p>'}`}
+      <div class="dlg-actions">${locked ? '' : '<button value="ok" class="btn primary">Enviar a dirección</button>'}<button value="" class="btn ghost" formnovalidate>${locked ? 'Cerrar' : 'Cancelar'}</button></div></form>`;
+    dlg.onchange = async (ev) => {
+      const inp = ev.target.closest('[data-chro-photo]'); if (!inp || !inp.files?.[0]) return;
+      const i = Number(inp.dataset.chroPhoto), lab = inp.closest('.chro-ph'), img = lab.querySelector('img');
+      try { photos[i] = await photoToJpeg(inp.files[0]); img.src = photos[i]; img.hidden = false; lab.classList.add('has'); }
+      catch (e) { photos[i] = null; toast(e?.message || 'No se pudo leer la foto'); }
+    };
+    dlg.querySelector('form').addEventListener('submit', (ev) => {
+      if (ev.submitter?.value === 'ok' && !photos.some(Boolean) && !post?.photos) { ev.preventDefault(); toast('Sube al menos 1 foto'); }
+    });
+    dlg.onclose = () => { dlg.onchange = null; resolve(dlg.returnValue === 'ok' ? { body: dlg.querySelector('textarea[name="body"]').value.trim(), p1: photos[0], p2: photos[1] } : null); };
+    dlg.returnValue = '';
+    dlg.showModal();
+  });
+}
+
 function askCategory(name, okLabel = 'Apuntarme', current = '') {
   return new Promise((resolve) => {
     const dlg = document.getElementById('dialog');
@@ -5472,6 +5623,21 @@ const actions = {
   async 'chro-toggle'(el) {
     const done = el.dataset.done === '1';
     await run(async () => { await api.runnerSetChronicle(S.code, el.dataset.key, done); await loadChron(); }, done ? '✓ Crónica pasada' : 'Crónica pendiente otra vez (para todos)');
+    render();
+  },
+  async 'chro-write'(el) {
+    const c = chronicleStatus(S.runnerData, S.chron, S.runnerData.today || todayISO(), S.myYear || new Date().getFullYear());
+    const x = [...c.pending, ...c.done].find((y) => y.key === el.dataset.key); if (!x) return;
+    const v = await askChronicle(x, S.myPosts?.get(x.key)); if (!v) return;
+    await run(async () => { await api.runnerChronicleSend(S.code, { key: x.key, name: x.name, date: x.date, body: v.body, p1: v.p1, p2: v.p2 }); await loadChron(); }, '✓ Crónica enviada a dirección');
+    render();
+  },
+  'cro-filter'(el) { S.chroF = el.dataset.f; render(); },
+  async 'cro-refresh'() { await loadChroPosts(true); render(); },
+  async 'cro-open'(el) { await openChroPost(el.dataset.id); },
+  async 'cro-sponsors'() {
+    const h = await askSponsors(sponsorHandles()); if (h === null) return;
+    await run(async () => { await api.saveSetting('sponsors', { handles: h }); await reload(); }, h.length ? 'Patrocinadores guardados' : 'Lista vaciada');
     render();
   },
   async 'chro-all'() {
@@ -6217,7 +6383,7 @@ document.addEventListener('visibilitychange', async () => {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['r-web', 'note-edit', 'car-open', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'chro-toggle', 'chro-all', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
+const RUNNER_ACTIONS = new Set(['chro-write', 'r-web', 'note-edit', 'car-open', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'chro-toggle', 'chro-all', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
 // los enlaces de la ventana emergente (p. ej. las carreras de un compañero) cierran la ventana al navegar
 document.getElementById('dialog').addEventListener('click', (ev) => { if (ev.target.closest('a[href^="#/"]')) ev.currentTarget.close(); });
 $app.addEventListener('click', (ev) => {
