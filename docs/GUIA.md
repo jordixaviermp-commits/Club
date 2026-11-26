@@ -399,3 +399,4 @@ Si algún día te paso una versión nueva de este archivo, se repite este mismo 
 - **Tallas de ropa:** dirección anota en la ficha de cada corredor su talla de maillot, culot y calcetines (para pedidos de próximas temporadas); el corredor las ve, solo lectura, en «Mi ropa» del menú del escudo.
 - **«Mi ropa» también en Mi temporada (versión 268)**: bajo tus carreras sale una línea con tus tallas de maillot, culot y calcetines (si dirección las ha anotado).
 - **Engranaje de «Datos y copias» (versión 269)**: salía gigante en Hoy; vuelve a su tamaño normal.
+- **Podios importantes con detalle (versión 270)**: en Mi temporada, «⭐ N podios importantes ⌄» se despliega y dice cuáles son: carrera, tipo (campeonato, circuito, general o absoluto) y fecha.

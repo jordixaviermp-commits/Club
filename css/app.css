@@ -2805,3 +2805,9 @@ label.tip-host > .tip-btn { position: absolute; top: 0; right: 0; margin: 0; }
 
 /* v269 · el engranaje de «Datos y copias» salía gigante */
 .data-det > summary .ico { width: 18px; height: 18px; vertical-align: -3px; margin-right: .2rem; }
+
+/* v270 · detalle de «podios importantes» */
+.imp-det{margin:6px 0}.imp-det>summary{list-style:none;cursor:pointer;display:inline-block}.imp-det>summary::-webkit-details-marker{display:none}
+.imp-det>summary .pod-pill{display:inline-flex;align-items:center;gap:4px}.imp-det>summary .ico:last-child{width:14px;height:14px;transition:transform .15s}.imp-det[open]>summary .ico:last-child{transform:rotate(180deg)}
+.imp-list{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:6px}.imp-list li{display:flex;align-items:center;gap:10px}
+.imp-list span{display:flex;flex-direction:column;min-width:0}.imp-list b{overflow-wrap:anywhere}.imp-list small{opacity:.7}
