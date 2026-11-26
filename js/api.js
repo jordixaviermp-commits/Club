@@ -148,13 +148,18 @@ export function supabaseApi(url, key) {
     /** La dirección pone o corrige el puesto (y el tiempo) de un corredor en una inscripción ('reg') o una carrera ('race'). position null = borrarlo. */
     async adminSetResult(kind, id, runnerId, position, podiumType, timeSeconds, generalPosition) {
       const pod = position && position <= 3 ? (podiumType || 'suelta') : null, gen = position ? (generalPosition || null) : null;
-      // el puesto general solo se envía si hay (o si se borra): así sigue funcionando antes de activar el cambio en la base
-      if (kind === 'reg') ok(await sb.from('registration_entries').update({ self_position: position || null, self_podium_type: pod, self_time_seconds: position ? (timeSeconds || null) : null, self_reported_at: position ? new Date().toISOString() : null, ...(generalPosition !== undefined && (gen || generalPosition === null) ? { self_general_position: gen } : {}) }).eq('registration_id', id).eq('runner_id', runnerId));
-      else ok(await sb.from('results').update({ position: position || null, podium_type: pod || 'suelta', time_seconds: position ? (timeSeconds || null) : null, ...(generalPosition !== undefined && (gen || generalPosition === null) ? { general_position: gen } : {}) }).eq('race_id', id).eq('runner_id', runnerId));
+      // el puesto general solo se envía si la dirección lo ha cambiado (undefined = no tocarlo): así sigue funcionando antes de activar el cambio en la base
+      const touchGen = generalPosition !== undefined || !position;
+      if (kind === 'reg') ok(await sb.from('registration_entries').update({ self_position: position || null, self_podium_type: pod, self_time_seconds: position ? (timeSeconds || null) : null, self_reported_at: position ? new Date().toISOString() : null, ...(touchGen ? { self_general_position: gen } : {}) }).eq('registration_id', id).eq('runner_id', runnerId));
+      else ok(await sb.from('results').update({ position: position || null, podium_type: pod || 'suelta', time_seconds: position ? (timeSeconds || null) : null, ...(touchGen ? { general_position: gen } : {}) }).eq('race_id', id).eq('runner_id', runnerId));
     },
 
     async saveRace(race, results) {
       const id = ok(await sb.rpc('save_race', { p_race: race, p_results: results }));
+      for (const x of results.filter((r) => r.general_position)) {   // save_race vuelve a crear los resultados: se reponen los puestos generales
+        const q = sb.from('results').update({ general_position: x.general_position }).eq('race_id', id);
+        ok(await (x.runner_id ? q.eq('runner_id', x.runner_id) : q.eq('runner_name', x.runner_name)));
+      }
       await sb.from('races').update(typeFields(race)).eq('id', id);
       await sb.from('races').update(detailFields(race)).eq('id', id);
       if (race.elevation !== undefined || race.price !== undefined) await sb.from('races').update({ elevation: parseElev(race.elevation), price: parsePrice(race.price) }).eq('id', id);
@@ -174,8 +179,25 @@ export function supabaseApi(url, key) {
     async exportAll() { return { app: 'cc-monzon', version: 1, exported_at: new Date().toISOString(), ...(await rawAll()) }; },
     async importAll(data) { ok(await sb.rpc('import_backup', { p: data })); },
 
-    async runnerView(code) { return ok(await sb.rpc('runner_view', { p_code: code })); },
-    async runnerTeam(code) { return ok(await sb.rpc('runner_team', { p_code: code })); },
+    /** Puestos en la clasificación general (todas las categorías). null = falta el SQL «posicion-general»: sin ellos todo sigue igual. */
+    async runnerGenerals(code) { try { return ok(await sb.rpc('runner_generals', { p_code: code })) || null; } catch { return null; } },
+    async runnerView(code) {
+      const [d, g] = await Promise.all([sb.rpc('runner_view', { p_code: code }).then(ok), this.runnerGenerals(code)]);
+      if (g && d) {
+        const me = d.me?.id, by = new Map((g.results || []).filter((x) => x[1] === me).map((x) => [x[0], x[2]]));
+        for (const r of d.my_results || []) if (by.has(r.race_id)) r.general_position = by.get(r.race_id);
+        for (const reg of d.registrations || []) if (reg.my_result && g.regs?.[reg.id]) reg.my_result.general_position = g.regs[reg.id];
+      }
+      return d;
+    },
+    async runnerTeam(code) {
+      const [d, g] = await Promise.all([sb.rpc('runner_team', { p_code: code }).then(ok), this.runnerGenerals(code)]);
+      if (g && d) {
+        const by = new Map((g.results || []).map((x) => [`${x[0]}|${x[1]}`, x[2]]));
+        for (const r of d.races || []) for (const x of r.results || []) { const v = by.get(`${r.id}|${x.runner_id}`); if (v) x.general_position = v; }
+      }
+      return d;
+    },
     async runnerTeamMoves(code) { try { return ok(await sb.rpc('runner_team_moves', { p_code: code })); } catch (e) { if (/PGRST202|Could not find|runner_team_moves/.test(String(e?.message))) return null; throw e; } },
     /** Crónicas ya pasadas por el corredor (claves «AAAA-MM-DD|nombre»). null = falta el SQL. */
     async runnerChronicles(code) { try { return ok(await sb.rpc('runner_chronicles', { p_code: code })); } catch { return null; } },
@@ -208,8 +230,10 @@ export function supabaseApi(url, key) {
     async runnerReport(code, kind, id, position, category, podiumType, timeSeconds, generalPosition) {
       const args = { p_code: code, p_kind: kind, p_id: id, p_position: position, p_category: category || null, p_podium_type: podiumType || null };
       if (timeSeconds) args.p_time = timeSeconds; // solo se envía si hay tiempo: así sigue funcionando antes de activar el cambio en la base
-      if (generalPosition) args.p_general = generalPosition;   // igual con el puesto en la general
       ok(await sb.rpc('runner_report_result', args));
+      // puesto en la general: llamada aparte (si no hay, se limpia el que hubiera; sin el SQL esa limpieza se ignora)
+      if (generalPosition) ok(await sb.rpc('runner_set_general', { p_code: code, p_kind: kind, p_id: id, p_general: generalPosition }));
+      else { try { ok(await sb.rpc('runner_set_general', { p_code: code, p_kind: kind, p_id: id, p_general: null })); } catch { /* sin el SQL */ } }
     },
     async runnerUpdate(code, id, reg) { ok(await sb.rpc('runner_update_registration', { p_code: code, p_id: id, p_reg: reg })); },
     async runnerDelete(code, id) { ok(await sb.rpc('runner_delete_registration', { p_code: code, p_id: id })); },

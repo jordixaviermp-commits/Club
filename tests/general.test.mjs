@@ -61,3 +61,22 @@ test('CSV: el puesto general viaja en la exportación y se lee al importar (y no
   const bad = importResultsCsv('Fecha;Carrera;Corredor;Puesto;Puesto general\n2026-03-01;Open;Anna;5;2\n');
   assert.equal(bad.races[0].results[0].general_position, undefined); assert.equal(bad.errors.length, 1);
 });
+
+test('API de Supabase: mezcla los puestos generales en runner_view y runner_team (y sigue valiendo sin el SQL)', async () => {
+  const { supabaseApi } = await import('../js/api.js');
+  const calls = [];
+  const view = { me: { id: 'me' }, my_results: [{ race_id: 'r1' }, { race_id: 'r2' }], registrations: [{ id: 'g1', my_result: { position: 3 } }, { id: 'g2', my_result: null }] };
+  const team = { races: [{ id: 'r1', results: [{ runner_id: 'me' }, { runner_id: 'otro' }] }, { id: 'r2', results: [{ runner_id: 'otro' }] }] };
+  let generals = { regs: { g1: 9 }, results: [['r1', 'me', 12], ['r1', 'otro', 4], ['r2', 'me', 30]] };
+  globalThis.window = { supabase: { createClient: () => ({ auth: {}, rpc: async (name, args) => { calls.push(name); if (name === 'runner_generals') { if (!generals) return { data: null, error: { message: 'Could not find the function public.runner_generals' } }; return { data: generals, error: null }; }
+    return { data: name === 'runner_view' ? JSON.parse(JSON.stringify(view)) : JSON.parse(JSON.stringify(team)), error: null }; } }) } };
+  const api = supabaseApi('https://x.supabase.co', 'k');
+  const v = await api.runnerView('c');
+  assert.deepEqual(v.my_results.map((r) => r.general_position), [12, 30]);               // solo los suyos
+  assert.equal(v.registrations[0].my_result.general_position, 9); assert.equal(v.registrations[1].my_result, null);
+  const t = await api.runnerTeam('c');
+  assert.deepEqual(t.races[0].results.map((x) => x.general_position), [12, 4]); assert.equal(t.races[1].results[0].general_position, undefined);
+  generals = null;                                                                        // sin el SQL: todo igual que antes
+  const v2 = await api.runnerView('c'); assert.equal(v2.my_results[0].general_position, undefined); assert.equal(v2.me.id, 'me');
+  delete globalThis.window;
+});

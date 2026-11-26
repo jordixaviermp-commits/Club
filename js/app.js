@@ -5576,7 +5576,8 @@ const actions = {
       if (posTxt && !(Number.isInteger(position) && position >= 1 && position <= 999)) return toast(`Puesto no válido: ${row.querySelector('.rs-who b').textContent}.`, true);
       if (genTxt && !(Number.isInteger(general) && general >= 1 && general <= 9999 && (!position || general >= position))) return toast(`Puesto en la general no válido para ${row.querySelector('.rs-who b').textContent} (no puede ser menor que su puesto de categoría).`, true);
       if (timeTxt && !time) return toast(`Revisa el tiempo de ${row.querySelector('.rs-who b').textContent}: los minutos van de 0 a 59.`, true);
-      if (`${position || ''}|${time || ''}|${general || ''}` !== row.dataset.orig) changes.push({ id: row.dataset.runner, position, time, general, podium: row.dataset.podium });
+      const origGen = row.dataset.orig.split('|')[2] || '', genChanged = String(general || '') !== origGen;   // el general solo se toca si la dirección lo cambia
+      if (`${position || ''}|${time || ''}|${general || ''}` !== row.dataset.orig) changes.push({ id: row.dataset.runner, position, time, general: genChanged ? general : undefined, podium: row.dataset.podium });
     }
     if (!changes.length) return toast('No has cambiado nada.');
     const ok = await run(async () => { for (const c of changes) await api.adminSetResult(el.dataset.kind, el.dataset.id, c.id, c.position, c.podium, c.time, c.general); await reload(); return true; },
