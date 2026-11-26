@@ -2834,3 +2834,7 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .month-head { display: flex; align-items: center; gap: .5rem; width: 100%; margin: 20px 0 10px; padding: .5rem .75rem; border: 0; border-left: 5px solid var(--sec); border-radius: 10px; background: var(--sec-soft); }
 .month-head .mh-name { font-size: var(--fs-4); font-weight: 800; letter-spacing: .03em; text-transform: uppercase; color: var(--text); }
 .month-head .mh-meta { margin-left: auto; color: var(--muted); }
+
+/* v273 · enlace a la web: verde si hay, gris discontinuo si falta ponerlo */
+.rc-tool.has-url { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); background: color-mix(in srgb, var(--ok) 12%, var(--card)); }
+.rc-tool.no-url { color: var(--muted); border-style: dashed; background: color-mix(in srgb, var(--muted) 8%, var(--card)); opacity: .85; }
