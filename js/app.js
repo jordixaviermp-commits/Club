@@ -3253,7 +3253,7 @@ function viewInstagram() {
   const period = S.igPeriod || 'all', sort = S.igSort || 'views';
   const [from, to] = igRange(period);
   const g = igSummary(S.ig.rows, from, to), t = g.totals, prev = igPrevTotals(S.ig.rows, from, to), P = igPeriods(S.ig.rows, from, to);
-  const tab = S.igTab || (P.list.length ? 'per' : 'res');
+  const tab = S.igTab || (g.nDays || !P.list.length ? 'res' : 'per');   // por defecto el Diario (la captura automática); Periodos solo si aún no hay datos diarios
   const periods = [['all', 'Todo lo guardado'], ['30', 'Últimos 30 días'], ['month', 'Este mes'], ['year', `Año ${S.year}`]];
   const label = g.nDays ? `${dateEs(g.first)} – ${dateEs(g.last)}` : 'sin datos en este periodo';
   const periodName = (periods.find(([k]) => k === period) || periods[0])[1];
