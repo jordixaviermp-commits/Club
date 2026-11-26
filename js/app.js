@@ -216,9 +216,9 @@ const raceTile = (x, { mine = false } = {}) => { const dt = new Date(`${x.date}T
 const raceSub = (x) => { const wd = new Date(`${x.date}T12:00:00Z`).toLocaleDateString('es-ES', { weekday: 'short', timeZone: 'UTC' }).replace('.', '');
   return `${raceDays(x) ? when(x) : wd}${place(x) ? ' · ' + place(x) : ''}`; };
 /** Disciplina (en su color), km, desnivel y precio: lo que falte se omite. */
-const raceMeta = (x) => [`<span class="rc-dis">${esc(x.modality === 'Otra' ? 'Carrera' : x.modality)}${x.subtype && x.subtype !== 'Otra' ? ' · ' + esc(x.subtype) : ''}</span>`, x.km ? esc(kmText(x.km)) : '', x.elevation ? esc(elevText(x.elevation)) : '',
-  x.price !== null && x.price !== undefined && x.price !== '' ? (Number(x.price) === 0 ? 'Gratis' : esc(euros(x.price))) : ''].filter(Boolean).map((y) => `<span class="rc-mi">${y}</span>`).join(' ');
-/** Cuenta atrás con color: rojo hasta 7 días, ámbar hasta 30. Solo para carreras que aún no se han corrido. */
+const raceMeta = (x) => [`<span class="rc-dis">${esc(x.modality === 'Otra' ? 'Carrera' : x.modality)}${x.subtype && x.subtype !== 'Otra' ? ' · ' + esc(x.subtype) : ''}</span>`,
+  x.km ? `${ico('ruler')}${esc(kmText(x.km))}` : '', x.elevation ? `${ico('mountain')}${esc(elevText(x.elevation))}` : '',
+  x.price !== null && x.price !== undefined && x.price !== '' ? (Number(x.price) === 0 ? 'Gratis' : esc(euros(x.price))) : ''].filter(Boolean).map((y) => `<span class="rc-mi">${y}</span>`).join(' ');/** Cuenta atrás con color: rojo hasta 7 días, ámbar hasta 30. Solo para carreras que aún no se han corrido. */
 const raceCd = (x, today = todayISO()) => { if (x.suspended || x.date < today) return ''; const n = daysTo(x.date);
   return `<span class="rc-cd${n <= 7 ? ' now' : n <= 30 ? ' soon' : ''}">${n <= 0 ? 'hoy' : n === 1 ? 'mañana' : n < 100 ? `en ${n} d` : `en ${Math.round(n / 30)} m`}</span>`; };
 /** Cabecera de una casilla de carrera (se usa en todas las listas). */

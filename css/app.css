@@ -2811,3 +2811,17 @@ label.tip-host > .tip-btn { position: absolute; top: 0; right: 0; margin: 0; }
 .imp-det>summary .pod-pill{display:inline-flex;align-items:center;gap:4px}.imp-det>summary .ico:last-child{width:14px;height:14px;transition:transform .15s}.imp-det[open]>summary .ico:last-child{transform:rotate(180deg)}
 .imp-list{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:6px}.imp-list li{display:flex;align-items:center;gap:10px}
 .imp-list span{display:flex;flex-direction:column;min-width:0}.imp-list b{overflow-wrap:anywhere}.imp-list small{opacity:.7}
+
+/* v271 · ficha de carrera por líneas: nombre / fecha y lugar / disciplina / km · desnivel · precio / estado */
+.rc-mi:not(:last-child)::after { content: none; }
+.rc-meta { gap: .1rem .7rem; }
+.rc-meta .rc-dis { flex-basis: 100%; }
+.rc-mi { display: inline-flex; align-items: center; gap: .25rem; }
+.rc-mi .ico { width: 14px; height: 14px; flex: none; opacity: .65; }
+.rc-sum, .rc-sum:has(.rc-name.long, .rc-name.xlong) { grid-template-columns: auto minmax(0, 1fr) 20px; align-items: start; }
+.rc-sum > .rc-date { grid-row: 1 / span 2; align-self: center; }
+.rc-sum > .rc-main, .rc-sum:has(.rc-name.long, .rc-name.xlong) > .rc-main { grid-column: 2; grid-row: 1; }
+.rc-sum > .rc-chev, .rc-sum:has(.rc-name.long, .rc-name.xlong) > .rc-chev { grid-column: 3; grid-row: 1; align-self: center; }
+.rc-sum > .rc-side, .rc-sum:has(.rc-name.long, .rc-name.xlong) > .rc-side { grid-column: 2 / 4; grid-row: 2; flex-direction: row; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: .25rem .6rem; text-align: left; }
+.rc-sum > .rc-side:empty { display: none; }
+.rc-meta .rc-mi:first-child { flex-basis: 100%; }
