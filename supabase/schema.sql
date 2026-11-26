@@ -1634,7 +1634,7 @@ begin
   update chronicle_posts set ai_state = 'pendiente', ai_at = now(), ai_tries = ai_tries + 1,
     ai_req = net.http_post(url => 'https://api.anthropic.com/v1/messages',
       headers => jsonb_build_object('x-api-key', k, 'anthropic-version', '2023-06-01', 'content-type', 'application/json'),
-      body => jsonb_build_object('model', 'claude-sonnet-5-5', 'max_tokens', 1500, 'system', sys, 'messages', jsonb_build_array(jsonb_build_object('role', 'user', 'content', msg))),
+      body => jsonb_build_object('model', 'claude-sonnet-5-5', 'max_tokens', 2000, 'thinking', jsonb_build_object('type', 'between_tools'), 'output_config', jsonb_build_object('effort', 'low'), 'system', sys, 'messages', jsonb_build_array(jsonb_build_object('role', 'user', 'content', msg))),
       timeout_milliseconds => 60000)
   where id = p_id;
 exception when others then
