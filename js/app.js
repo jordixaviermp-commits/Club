@@ -5129,6 +5129,30 @@ function viewRunners() {
 // ======================================================================
 
 /** Contenido de «Datos»: copias, restaurar, historial, privacidad, aspecto, versión y cerrar sesión. */
+// ---------- limpieza de datos antiguos (dirección, a mano, cuando haga falta) ----------
+const PURGE_WHAT = [['races', 'Carreras y resultados', 'con los podios de circuito'], ['regs', 'Inscripciones', 'con sus notas y coches'], ['marks', 'Marcas de crónicas y publicaciones', 'y peticiones de corrección'], ['log', 'Historial de cambios', '']];
+const purgeState = () => (S.purge ||= { upto: '', what: { races: true, regs: true, marks: true, log: true }, counts: null, done: null });
+const backupFresh = () => { const t = Date.parse(store.get(BACKUP_KEY) || ''); return Number.isFinite(t) && Date.now() - t < 2 * 36e5 ? Math.max(1, Math.round((Date.now() - t) / 6e4)) : null; };   // copia de las últimas 2 horas
+function purgeCard() {
+  const st = purgeState(), years = [...new Set([...S.data.races, ...S.data.registrations].flatMap((x) => [yearOf(x.date), x.end_date ? yearOf(x.end_date) : null]).filter(Boolean))].sort((a, b) => a - b).filter((y) => y <= new Date().getFullYear());   // nunca años futuros: ahí están las inscripciones por venir
+  const cur = new Date().getFullYear(), upto = Number(st.upto) || null, c = st.counts, fresh = backupFresh();
+  const num = (k) => (c ? Number(c[k] || 0).toLocaleString('es-ES') : '');
+  const lines = c ? [st.what.races ? `${ico('flag')}<b>${num('races')}</b> carreras con <b>${num('results')}</b> resultados${c.circuits ? ` y ${num('circuits')} podios de circuito` : ''}` : '',
+    st.what.regs ? `${ico('list')}<b>${num('regs')}</b> inscripciones (<b>${num('entries')}</b> apuntados${c.notes ? `, ${num('notes')} notas` : ''}${c.cars ? `, ${num('cars')} coches` : ''})` : '',
+    st.what.marks ? `${ico('check')}<b>${num('marks')}</b> marcas de crónicas, publicaciones y correcciones` : '', st.what.log ? `${ico('clock')}<b>${num('log')}</b> movimientos del historial` : ''].filter(Boolean) : [];
+  return `<section class="card stack purge-card"><h2>${ico('trash')} Borrar datos antiguos</h2>
+    <p class="hint" data-nofold>Para cuando haga falta (cada varias temporadas), no cada año: varias temporadas pueden convivir y verse a la vez. Borra <b>todo lo anterior al 1 de enero del año siguiente</b> al que elijas. Se conserva lo posterior, las carreras que se prolongan al año siguiente, los corredores, los bonos y las estadísticas de Instagram.</p>
+    <label>Borrar hasta el año (incluido)<select data-purge="year"><option value="">Elige un año…</option>${years.map((y) => `<option value="${y}"${upto === y ? ' selected' : ''}>${y}</option>`).join('')}</select></label>
+    <div class="purge-what">${PURGE_WHAT.map(([k, l, sub]) => `<label class="check"><input type="checkbox" data-purge="what" data-k="${k}"${st.what[k] ? ' checked' : ''}> <span><b>${l}</b>${sub ? ` <small class="muted">${sub}</small>` : ''}</span></label>`).join('')}</div>
+    ${upto && upto >= cur - 1 ? `<p class="card warn small">${ico('alert')}Incluye ${upto >= cur ? 'la temporada en curso' : 'la temporada pasada'}: <b>las comparaciones con el año anterior y las clasificaciones dejarán de verse</b>.</p>` : ''}
+    <button type="button" class="btn" data-act="purge-preview"${upto ? '' : ' disabled'}>${ico('list')} Ver qué se borraría</button>
+    ${c ? `<div class="purge-sum"><h3>Se borraría${lines.length ? '' : ': nada (no has marcado nada)'}</h3><ul>${lines.map((l) => `<li>${l}</li>`).join('')}</ul></div>
+      <div class="purge-step ${fresh ? 'ok' : ''}"><b>1 · Copia de seguridad</b>${fresh ? `<span>${ico('check')}Descargada hace ${fresh} min</span>` : `<span>Antes de borrar hay que descargarla (vale la de las últimas 2 horas).</span><button type="button" class="btn primary small" data-act="backup">Descargar copia ahora</button>`}</div>
+      <div class="purge-step"><b>2 · Confirmar</b><label>Escribe <code>BORRAR ${upto}</code><input data-purge="confirm" autocomplete="off" autocapitalize="characters" placeholder="BORRAR ${upto}"></label>
+        <button type="button" class="btn danger" data-act="purge-run"${lines.length ? '' : ' disabled'}>${ico('trash')} Borrar para siempre</button>
+        <p class="hint" data-nofold>No se puede deshacer, salvo restaurando la copia (que sustituye todos los datos actuales).</p></div>` : ''}
+    ${st.done ? `<p class="card ok small">${ico('check')}${esc(st.done)}</p>` : ''}</section>`;
+}
 const dataBody = () => `
     <section class="card stack"><h2>Copia de seguridad</h2>
       <p>Descarga todos los datos (corredores, inscripciones, carreras y resultados) en un archivo. Guárdalo en tu Drive o correo una vez al mes.</p>
@@ -5147,6 +5171,7 @@ const dataBody = () => `
       <label class="btn file">Importar resultados desde CSV<input type="file" accept=".csv,text/csv,text/plain" data-file="csv" hidden></label>
       <p class="hint">Columnas: Fecha, Carrera, Lugar, Provincia, País, Modalidad, Corredor, Categoría, Puesto y Tipo de podio (las mismas que la exportación). Se añaden a lo que ya hay; las carreras que ya existan (misma fecha y nombre) se saltan.</p>
     </section>
+    ${purgeCard()}
     <a class="btn block" href="#/historial">🕘 Historial de cambios</a>
     <section class="card"><h2>Privacidad</h2>
       <p>Solo se guarda el nombre, la categoría y las carreras de cada corredor. Los datos están en un servidor de la UE (Frankfurt).
@@ -5573,6 +5598,21 @@ const actions = {
     const text = [...S.data.runners].sort(byName).map((r) => `${r.name}: ${linkFor(r.code)}`).join('\n');
     try { await navigator.clipboard.writeText(text); toast(`${S.data.runners.length} enlaces copiados: pégalos en tus notas y envía a cada uno el suyo`); }
     catch { download('enlaces-corredores.txt', text, 'text/plain;charset=utf-8'); }
+  },
+  async 'purge-preview'() {
+    const st = purgeState(), upto = Number(st.upto); if (!upto) return;
+    const ok = await run(async () => { st.counts = await api.adminPurgeCounts(upto); st.done = null; return true; });
+    if (ok) render();
+  },
+  async 'purge-run'() {
+    const st = purgeState(), upto = Number(st.upto), what = PURGE_WHAT.map(([k]) => k).filter((k) => st.what[k]);
+    if (!upto || !st.counts || !what.length) return toast('Primero elige el año y mira qué se borraría.', true);
+    if (!backupFresh()) return toast('Antes de borrar descarga la copia de seguridad (paso 1).', true);
+    const typed = ($app.querySelector('input[data-purge="confirm"]')?.value || '').trim().toUpperCase();
+    if (typed !== `BORRAR ${upto}`) return toast(`Escribe exactamente BORRAR ${upto} para confirmar.`, true);
+    if (!await confirmAction('Borrar para siempre', `Se borrarán los datos de <b>hasta ${upto}</b> (${what.map((k) => PURGE_WHAT.find((x) => x[0] === k)[1].toLowerCase()).join(', ')}). No se puede deshacer salvo restaurando la copia.`, 'Borrar')) return;
+    const r = await run(async () => { const res = await api.adminPurge(upto, what); await reload(); return res; });
+    if (r) { st.done = `Borrado hasta ${upto}: ${Number(r.counts?.races || 0)} carreras, ${Number(r.counts?.regs || 0)} inscripciones. Lo posterior se ha conservado.`; st.counts = null; st.upto = ''; toast('✓ Datos antiguos borrados'); render(); }
   },
   async backup() {
     const data = await run(() => api.exportAll());
@@ -6215,6 +6255,8 @@ $app.addEventListener('input', (ev) => {
 
 $app.addEventListener('change', async (ev) => {
   const t = ev.target;
+  if (t.dataset.purge === 'year') { const st = purgeState(); st.upto = t.value; st.counts = null; st.done = null; render(); return; }
+  if (t.dataset.purge === 'what') { const st = purgeState(); st.what[t.dataset.k] = t.checked; st.counts = null; render(); return; }
   if (t.dataset.yearSel !== undefined) { S.year = Number(t.value); render(); return; }
   if (t.dataset.msgPick) { go(`#/mensajes/${t.dataset.msgPick}/${t.value}`); return; }
   if (t.dataset.filter) { actions[{ mod: 'mod-filter', sub: 'sub-filter', who: 'who-filter' }[t.dataset.filter]]({ dataset: { m: t.value, s: t.value, w: t.value } }); return; }

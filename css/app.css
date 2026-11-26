@@ -2727,3 +2727,18 @@ header.top .icon-btn.sos { position: relative; } header.top .icon-btn.sos::befor
 .car-add { margin-top: .5rem; display: inline-flex; align-items: center; gap: .3rem; } .car-add .ico { width: 16px; height: 16px; }
 .rc-car { display: inline-flex; align-items: center; gap: .2rem; padding: .08rem .45rem; border-radius: 999px; font-size: var(--fs-1); font-weight: 800; background: color-mix(in srgb, var(--accent) 14%, var(--card)); color: var(--accent); white-space: nowrap; }
 .rc-car .ico { width: 12px; height: 12px; } .rc-car.mine { background: var(--ok); color: #fff; } .rc-car.full { background: var(--line); color: var(--muted); }
+
+/* ---- v260 · Borrar datos antiguos (dirección) ---- */
+.purge-card { border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); }
+.purge-card h2 { display: flex; align-items: center; gap: .45rem; color: var(--bad); } .purge-card h2 .ico { width: 20px; height: 20px; }
+.purge-what { display: grid; gap: .45rem; } .purge-what .check { align-items: flex-start; }
+.purge-sum { padding: .6rem .7rem; border-radius: var(--r-sm); background: color-mix(in srgb, var(--bad) 7%, var(--card)); border: 1px solid color-mix(in srgb, var(--bad) 25%, var(--line)); }
+.purge-sum h3 { margin: 0 0 .35rem; font-size: var(--fs-4); } .purge-sum ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .3rem; font-size: var(--fs-3); }
+.purge-sum li { display: flex; align-items: flex-start; gap: .4rem; } .purge-sum li .ico { width: 16px; height: 16px; flex: none; margin-top: 2px; color: var(--muted); }
+.purge-step { display: grid; gap: .4rem; padding: .6rem .7rem; border-radius: var(--r-sm); border: 1px dashed var(--line); } .purge-step.ok { border-style: solid; border-color: var(--ok); background: color-mix(in srgb, var(--ok) 7%, var(--card)); }
+.purge-step span { display: inline-flex; align-items: center; gap: .3rem; font-size: var(--fs-3); } .purge-step .ico { width: 16px; height: 16px; }
+.purge-step code { font-weight: 800; letter-spacing: .02em; }
+.purge-card button[disabled] { opacity: .5; }
+.purge-card .btn .ico { width: 18px; height: 18px; flex: none; } .purge-card .btn { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; }
+.purge-what .check input { flex: none; width: 20px; height: 20px; margin-top: 2px; }
+section.card.purge-card > h2 { color: var(--bad); }
