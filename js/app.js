@@ -430,7 +430,7 @@ const ADMIN_TABS = [
 const ADMIN_GROUP = { '': 'hoy', hoy: 'hoy', movimientos: 'hoy', avisos: 'hoy', mensajes: 'hoy', calidad: 'hoy', actividad: 'hoy', noticias: 'hoy', historial: 'hoy',
   inscripciones: 'inscripciones', carreras: 'inscripciones', federaciones: 'inscripciones',
   corredores: 'corredores', contratos: 'corredores', computo: 'corredores', informe: 'corredores', bonos: 'corredores', corredor: 'corredores', docs: 'corredores',
-  resumen: 'resumen', instagram: 'redes', dossier: 'redes', datos: 'resumen', temporada: 'resumen', memoria: 'resumen', vista: 'corredores', equipo: 'resumen',
+  resumen: 'resumen', instagram: 'redes', dossier: 'redes', datos: 'hoy', temporada: 'resumen', memoria: 'hoy', vista: 'corredores', equipo: 'resumen',
   redes: 'redes', semana: 'redes', publicaciones: 'redes' };
 const SEC_OF = { hoy: 'hoy', inscripciones: 'car', corredores: 'eq', resumen: 'res', redes: 'red', '': 'car', federaciones: 'fed', mi: 'hoy', contrato: 'eq', equipo: 'res', noticias: 'hoy', carrera: 'car', nueva: 'car' };
 const icon = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
@@ -468,7 +468,7 @@ const adminScreens = () => [
   ['📅', 'Próximas carreras (para redes)', '#/semana', 'semana redes avisar encargado proximas'],
   ['🔔', 'Avisos', '#/avisos', 'avisos pendientes campanita correcciones puestos'],
   ['📣', 'Noticias para los corredores', '#/noticias', 'noticias anuncios quedada comunicado'],
-  ['🗂️', 'Datos: copias, versión y aspecto (en Resumen)', '#/resumen', 'datos copia seguridad backup restaurar importar csv version aspecto oscuro claro sesion cerrar'],
+  ['🗂️', 'Datos: copias, versión y aspecto (en Hoy)', '#/hoy', 'datos copia seguridad backup restaurar importar csv version aspecto oscuro claro sesion cerrar'],
   ['🕘', 'Movimientos de la app (quién hace qué)', '#/movimientos', 'movimientos historial inscripciones pagos cronicas quien se inscribio actividad control'],
   ['🕘', 'Historial de cambios', '#/historial', 'historial cambios quien modifico'],
   ['🏁', 'Federaciones y ligas', '#/federaciones', 'federaciones ligas calendario fcc fac catalana aragonesa'],
@@ -2821,6 +2821,18 @@ function task({ tone, icon: ic, title, sub = '', href = '', acts = '' }) {
 }
 const msgBtn = (kind, ref = '', label = 'Recordar por WhatsApp') => `<a class="btn small wa" href="#/mensajes/${kind}${ref ? '/' + ref : ''}">${ico('msg')}${label}</a>`;
 
+/** Informes, exportaciones y copias: a mano en «Hoy» (antes estaban al final de Resumen). */
+function reportsAndDataHtml() {
+  const days = daysSince(BACKUP_KEY), stale = days === null || days > 30;
+  return `<h2 class="sec-h">${ico('db')} Informes y copias</h2>
+    <section class="card bk-card${stale ? ' stale' : ''}"><span class="pi">${ico('db')}</span><span class="pt"><b>Copia de datos</b><small>Última: ${agoText(days)}</small></span><button type="button" class="btn small primary" data-act="backup">${ico('download')}Descargar</button></section>
+    <section class="card rs-card rs-links"><h2>Informes y exportar</h2>
+      <a class="rs-link" href="#/memoria">${ico('book')}<span><b>Memoria para sponsors</b><small>Una página limpia para imprimir o PDF, sin bonos ni contratos</small></span>${ico('go')}</a>
+      <a class="rs-link" href="#/computo">${ico('money')}<span><b>Cómputo de la temporada</b><small>Bonos, control antes de cerrar e informe por corredor</small></span>${ico('go')}</a>
+      <a class="rs-link" href="#/calidad">${ico('list')}<span><b>Datos incompletos</b><small>Carreras a las que les falta algo</small></span>${ico('go')}</a>
+      <div class="row-btns"><button class="btn" data-act="csv-year">📊 Resultados ${S.year} (Excel)</button><button class="btn" data-act="tp-csv-runners">📊 Corredores</button><button class="btn" data-act="tp-csv-disc">📊 Disciplinas</button></div></section>
+    <details class="card data-det" data-open-key="datos"${S.open?.datos ? ' open' : ''}><summary>${ico('settings')} Datos y copias <small class="muted">· restaurar, importar, borrar datos antiguos, aspecto y cerrar sesión</small></summary>${dataBody()}</details>`;
+}
 function viewToday() {
   const b = board(), a = adminAlerts(), year = new Date().getFullYear();
   const per = bonusCfg(year).circuitExtra ?? 4;
@@ -2877,7 +2889,8 @@ function viewToday() {
       <a class="qtile q-violet" href="#/actividad">${ico('act')}<b>Actividad</b><small>quién usa la app</small></a>
       <a class="qtile q-blue" href="#/calidad">${ico('list')}<b>Datos</b><small>carreras incompletas</small></a>
       <a class="qtile q-pink" href="#/memoria">${ico('book')}<b>Memoria</b><small>para sponsors</small></a>
-    </div>`, { actions: '' });
+    </div>
+    ${reportsAndDataHtml()}`, { actions: '' });
 }
 
 // ---------- Actividad: quién usa la app ----------
@@ -3869,7 +3882,7 @@ function viewMemoria() {
       <nav class="mem-toc no-print-links" aria-label="Índice"><h3>Índice</h3><ol>${CH.map((c, k) => `<li><a href="#" data-act="goto-sec" data-to="mem-${c.id}"><span>${num(k)}</span>${esc(c.title)}</a></li>`).join('')}</ol></nav>
       ${CH.map((c, k) => `<section class="mem-ch" id="mem-${c.id}"><header class="mem-ch-h"><span class="mem-n">${num(k)}</span>${ico(c.ic)}<h2>${esc(c.title)}</h2></header>${c.lead ? `<p class="mem-lead">${c.lead}</p>` : ''}${c.body}</section>`).join('')}
       <footer class="mem-foot"><img src="icons/logo.png" alt=""><p><b>Club Ciclista Monzón</b> · Memoria ${year}<br>Datos del club a ${dateEs(todayISO())}. Desplazamientos y costes de viaje son estimaciones.</p></footer>
-    </article>`, { back: '#/resumen' });
+    </article>`, { back: '#/hoy' });
 }
 
 
@@ -4393,13 +4406,7 @@ function viewSummary() {
   return frame('Resumen', `<div class="eq-bar"><nav class="rs-tabs" role="tablist" aria-label="Apartados del resumen">${RES_TABS.map(([k, l, ic]) => `<button type="button" class="${k === tab ? 'on' : ''}" data-act="res-tab" data-t="${k}" role="tab" aria-selected="${k === tab}">${ico(ic)}<span>${l}</span></button>`).join('')}</nav>
       <button type="button" class="eq-fbtn${filterOn ? ' on' : ''}" data-act="eq-filters" aria-label="Filtros${filterOn ? ' (activos)' : ''}" title="Filtros">${icon(ICON_FILTER)}${filterOn ? '<i class="fdot"></i>' : ''}</button></div>
     ${filterOn ? `<div class="eq-active"><span>${S.year}${mod ? ` · ${esc(modLabel)}` : ''}</span><button type="button" class="link" data-act="eq-clear">Quitar filtros ✕</button></div>` : ''}
-    ${body}
-    <section class="card rs-card rs-links"><h2>Informes y exportar</h2>
-      <a class="rs-link" href="#/memoria">${ico('book')}<span><b>Memoria para sponsors</b><small>Una página limpia para imprimir o PDF, sin bonos ni contratos</small></span>${ico('go')}</a>
-      <a class="rs-link" href="#/computo">${ico('money')}<span><b>Cómputo de la temporada</b><small>Bonos, control antes de cerrar e informe por corredor</small></span>${ico('go')}</a>
-      <a class="rs-link" href="#/calidad">${ico('list')}<span><b>Datos incompletos</b><small>Carreras a las que les falta algo</small></span>${ico('go')}</a>
-      <div class="row-btns"><button class="btn" data-act="csv-year">📊 Resultados ${S.year} (Excel)</button><button class="btn" data-act="tp-csv-runners">📊 Corredores</button><button class="btn" data-act="tp-csv-disc">📊 Disciplinas</button></div></section>
-    <details class="card data-det" data-open-key="datos"${S.open?.datos ? ' open' : ''}><summary>⚙️ Datos y copias <small class="muted">· copia de seguridad, restaurar, aspecto, versión y cerrar sesión</small></summary>${dataBody()}</details>`);
+    ${body}`);
 }
 
 /** Resumen del equipo para los corredores (solo lectura). */
