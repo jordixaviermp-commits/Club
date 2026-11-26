@@ -1442,14 +1442,19 @@ const chronicleReminder = (name) => choose('✍️ Recuerda tu crónica', `${nam
 /** Crónicas del corredor: pendientes y pasadas, pequeña y con un desplegable para marcarlas. */
 /** Estado de una crónica enviada con fotos: texto corto y color. */
 const CHRO_ST = { enviada: ['En revisión', 'warn'], lista: ['Lista para publicar', 'ok'], publicada: ['Publicada', 'ok'] };
-/** Botones de una crónica en la lista del corredor: escribirla en la app (texto + 2 fotos), marcarla como pasada o ver cómo va. */
+/** Botones de una crónica en la lista del corredor. Solo se pasa escribiéndola en la app (y para eso hace falta tener puesto el resultado y los datos de la carrera): no hay «ya la pasé». */
 function chroActs(x, isDone) {
   const post = S.myPosts && S.myPosts.get(x.key), st = post && CHRO_ST[post.status];
-  const by = S.chronBy?.get(x.key), byOther = isDone && !post && !!by && !by.mine;   // ya la pasó otro del club: con una crónica por carrera basta
-  const write = S.myPosts && !byOther ? `<button class="btn small${post || isDone ? '' : ' primary'}" data-act="chro-write" data-key="${esc(x.key)}">${ico('pen')}${post ? (post.status === 'enviada' ? 'Editar' : 'Ver') : 'Escribirla'}</button>` : '';
   const state = st ? `<span class="chro-st ${st[1]}">${esc(st[0])}</span>` : '';
-  const mark = post ? '' : `<button class="btn small ghost" data-act="chro-toggle" data-key="${esc(x.key)}" data-done="${isDone ? 0 : 1}">${isDone ? 'Deshacer' : '✓ Ya la pasé'}</button>`;
-  return `<span class="chro-acts">${state}${write}${mark}</span>`;
+  let act = '';
+  if (post) act = `<button class="btn small" data-act="chro-write" data-key="${esc(x.key)}">${ico('pen')}${post.status === 'enviada' ? 'Editar' : 'Ver'}</button>`;
+  else if (!isDone && S.myPosts) {
+    const data = chroDataOf(x);
+    if (!data || data.complete) act = `<button class="btn small primary" data-act="chro-write" data-key="${esc(x.key)}">${ico('pen')}Escribirla</button>`;
+    else if (data.missRes.length) act = `<a class="btn small primary" href="${data.resHref}">Poner mi resultado</a>`;
+    else act = `<a class="btn small primary" href="${data.raceHref}">Completar datos</a>`;
+  }
+  return `<span class="chro-acts">${state}${act}</span>`;
 }
 function chronicleCard(d) {
   if (!(S.chron instanceof Set)) return '';
@@ -1470,7 +1475,7 @@ function chronicleCard(d) {
     const t = imp.totals, H = S.impact.ig, nf = (n) => Number(n || 0).toLocaleString('de-DE');
     const okI = '<span class="imp-ok" aria-label="hecho">✓</span>', noI = '<span class="imp-no" aria-label="aún no">—</span>';
     const rowHtml = (r) => {
-      const act = [!r.mine && !S.preview ? `<a class="btn small primary" href="${resultHref(r.id)}">Poner mi resultado</a>` : '', !r.cro && !S.preview ? `<button type="button" class="btn small" data-act="chro-toggle" data-key="${esc(r.key)}" data-done="1">✓ Crónica pasada</button>` : ''].filter(Boolean).join('');
+      const act = [!r.mine && !S.preview ? `<a class="btn small primary" href="${resultHref(r.id)}">Poner mi resultado</a>` : ''].filter(Boolean).join('');
       return `<li><span class="imp-n"><b>${esc(r.name)}</b><small class="muted">${esc(formatDate(r.date, false))}</small></span>
         <span class="imp-st"><span>📸 Historia ${r.story ? okI : noI}</span><span>🏁 Resultado ${r.mine ? okI : noI}</span><span>✍️ Crónica ${r.cro ? okI : noI}</span>${r.published ? '<span class="imp-pub">🖼️ publicado</span>' : ''}</span>${act ? `<span class="imp-act">${act}</span>` : ''}</li>`;
     };
@@ -1492,7 +1497,7 @@ function chronicleCard(d) {
       <span class="chro-tag ${pend ? 'pend' : 'ok'}">${pend ? `${pend} ${plural(pend, 'pendiente', 'pendientes')}` : `${c.done.length} ${plural(c.done.length, 'pasada', 'pasadas')}`}${ico('go')}</span></summary>
     <div class="seg-sw chro-sw" role="tablist" aria-label="Crónicas o impacto en redes"><button type="button" role="tab" class="${tabImp ? '' : 'on'}" data-act="chro-tab" data-t="cro">Crónicas</button><button type="button" role="tab" class="${tabImp ? 'on' : ''}" data-act="chro-tab" data-t="imp">Impacto en redes</button></div>
     ${tabImp ? impactPane() : `<p class="hint">${CHRONICLE_RULE} Cuando lo hayas enviado, márcala.</p>
-    ${pend ? `<ul class="chro-list">${c.pending.map((x) => li(x, false)).join('')}</ul>${pend > 1 && !S.preview ? '<button class="btn small ghost" data-act="chro-all">✓ Marcar todas como pasadas</button>' : ''}` : '<p class="empty small">No te falta ninguna. 🎉</p>'}
+    ${pend ? `<ul class="chro-list">${c.pending.map((x) => li(x, false)).join('')}</ul>` : '<p class="empty small">No te falta ninguna. 🎉</p>'}
     ${c.done.length ? `<details class="chro-done"${pend ? '' : ' open'}><summary>Pasadas (${c.done.length})</summary><ul class="chro-list">${c.done.map((x) => li(x, true)).join('')}</ul></details>` : ''}`}
   </details></section>`;
 }
@@ -1584,7 +1589,7 @@ function runnerBonusCard(d) {
     ${(() => { const t = bonusTodo(d, b.year); if (!t.rows.length) return '';   // solo lo que falta por rellenar; si no falta nada, no sale nada
       return `<details class="bz-det warn" data-open-key="bz-todo"${S.open?.['bz-todo'] ? ' open' : ''}><summary>${ico('alert')}<span>Te falta rellenar <b>${t.rows.length}</b> ${t.rows.length === 1 ? 'carrera' : 'carreras'}</span>${ico('chevd', 'rules-chev')}</summary>
         <p class="hint">Una carrera <b>sin resultado no cuenta</b> para el bono. El resultado y la crónica son obligación del contrato.</p>
-        <ul class="bz-rows">${t.rows.map((r) => `<li><span class="bz-n"><b>${esc(r.name)}</b><small class="muted">${esc(formatDate(r.date, false))} · falta ${!r.res && !r.cro ? 'resultado y crónica' : !r.res ? 'el resultado' : 'la crónica'}</small></span><span class="bz-act">${!r.res && !S.preview ? `<a class="btn small primary" href="${resultHref(r.id)}">Poner resultado</a>` : ''}${!r.cro && !S.preview ? `<button type="button" class="btn small" data-act="chro-toggle" data-key="${esc(r.key)}" data-done="1">✓ Crónica pasada</button>` : ''}</span></li>`).join('')}</ul></details>`; })()}
+        <ul class="bz-rows">${t.rows.map((r) => `<li><span class="bz-n"><b>${esc(r.name)}</b><small class="muted">${esc(formatDate(r.date, false))} · falta ${!r.res && !r.cro ? 'resultado y crónica' : !r.res ? 'el resultado' : 'la crónica'}</small></span><span class="bz-act">${!r.res && !S.preview ? `<a class="btn small primary" href="${resultHref(r.id)}">Poner resultado</a>` : ''}${!r.cro && r.res && !S.preview ? `<a class="btn small primary" href="${runnerHref('mi')}">Escribir crónica</a>` : ''}</span></li>`).join('')}</ul></details>`; })()}
     ${b.planned ? `<p class="hint bn-plan">Con tus ${b.planned} inscripcion${b.planned === 1 ? '' : 'es'} de ${b.year} llegarías a ${proj.bonusCount}${proj.tier ? ` (${euros(proj.amount)})` : ''}${proj.reachesMinimum ? '' : ', aún por debajo del mínimo'}.</p>` : ''}
     ${rules}
   </section>`;
@@ -5661,11 +5666,6 @@ const actions = {
     if (!ok) return;
     S.rdraft = null; S.team = null; await chronicleReminder(S.runnerData.my_results?.find((x) => x.race_id === el.dataset.id)?.name); go(resultHref(el.dataset.id));
   },
-  async 'chro-toggle'(el) {
-    const done = el.dataset.done === '1';
-    await run(async () => { await api.runnerSetChronicle(S.code, el.dataset.key, done); await loadChron(); }, done ? '✓ Crónica pasada' : 'Crónica pendiente otra vez (para todos)');
-    render();
-  },
   async 'chro-write'(el) {
     const c = chronicleStatus(S.runnerData, S.chron, S.runnerData.today || todayISO(), S.myYear || new Date().getFullYear());
     const x = [...c.pending, ...c.done].find((y) => y.key === el.dataset.key); if (!x) return;
@@ -5679,12 +5679,6 @@ const actions = {
   async 'cro-sponsors'() {
     const h = await askSponsors(sponsorHandles()); if (h === null) return;
     await run(async () => { await api.saveSetting('sponsors', { handles: h }); await reload(); }, h.length ? 'Patrocinadores guardados' : 'Lista vaciada');
-    render();
-  },
-  async 'chro-all'() {
-    const c = chronicleStatus(S.runnerData, S.chron, S.runnerData.today || todayISO(), S.myYear || new Date().getFullYear());
-    if (!c.pending.length || !await confirmAction('Marcar todas', `Vas a marcar <b>${c.pending.length}</b> crónicas como pasadas. ¿Las has enviado todas?`, 'Sí, todas pasadas', 'primary')) return;
-    await run(async () => { for (const x of c.pending) await api.runnerSetChronicle(S.code, x.key, true); await loadChron(); }, 'Crónicas marcadas');
     render();
   },
   async 'r-leave'(el) {
@@ -6424,7 +6418,7 @@ document.addEventListener('visibilitychange', async () => {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['chro-write', 'r-web', 'note-edit', 'car-open', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'chro-toggle', 'chro-all', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
+const RUNNER_ACTIONS = new Set(['chro-write', 'r-web', 'note-edit', 'car-open', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
 // los enlaces de la ventana emergente (p. ej. las carreras de un compañero) cierran la ventana al navegar
 document.getElementById('dialog').addEventListener('click', (ev) => { if (ev.target.closest('a[href^="#/"]')) ev.currentTarget.close(); });
 $app.addEventListener('click', (ev) => {
