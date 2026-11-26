@@ -2702,3 +2702,11 @@ details.tip.tip-lab > summary { width: auto; height: 28px; padding: 0 .65rem 0 .
 .toolbar { gap: .55rem; } .toolbar .fbtn, .toolbar .icon-btn { min-width: 44px; min-height: 44px; }
 header.top .icon-btn { min-width: 44px; min-height: 44px; }
 header.top .icon-btn.sos { position: relative; } header.top .icon-btn.sos::before { content: ""; position: absolute; inset: -3px; }
+
+/* ---- v258 · Clasificación general y podios importantes ---- */
+.gen-tag { display: inline-block; padding: 0 .4rem; border-radius: 999px; background: color-mix(in srgb, #6c63e0 14%, var(--card)); color: color-mix(in srgb, #6c63e0 70%, var(--text)); font-weight: 700; font-size: var(--fs-1); white-space: nowrap; }
+.pod-pill.gen { background: color-mix(in srgb, #6c63e0 14%, var(--card)); color: color-mix(in srgb, #6c63e0 72%, var(--text)); } .pod-pill.imp { background: color-mix(in srgb, #f2b705 26%, var(--card)); color: var(--warn-t); }
+.pod-pill .ico { width: 13px; height: 13px; }
+.gen-row { margin-top: .35rem; }
+.rs-edit .rs-gen { width: 4.2rem; } .edit-list.results .res-fields { grid-template-columns: 1fr 70px 70px 1.3fr; }
+@media (max-width: 420px) { .edit-list.results .res-fields { grid-template-columns: minmax(0, 1fr) 54px 54px minmax(0, 1.1fr); } }

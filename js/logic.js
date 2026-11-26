@@ -120,6 +120,33 @@ export function podiumsOf(parts) {
   return out;
 }
 
+/** Puesto en la clasificación general (todas las categorías) de una participación, o null. */
+export const generalOf = (res) => (Number(res?.general_position) > 0 ? Number(res.general_position) : null);
+/** Tipos de «podio importante»: campeonatos, circuitos (copas, opens…), general de varias pruebas y podio absoluto (top 3 de la general de la carrera). */
+export const IMPORTANT_KINDS = [
+  { id: 'absoluto', label: 'Podio absoluto', short: 'Absoluto' },
+  { id: 'campeonato', label: 'Campeonato', short: 'Campeonato' },
+  { id: 'circuito', label: 'Circuito', short: 'Circuito' },
+  { id: 'general', label: 'General de varias pruebas', short: 'General final' },
+];
+/**
+ * Podios importantes de una lista de participaciones: un elemento por participación, con sus tipos.
+ * - campeonato / circuito / general: podio (1º–3º) de su categoría en un campeonato, un circuito o la general final de varias pruebas.
+ * - absoluto: top 3 de la clasificación general de la carrera (todas las categorías).
+ */
+export function importantOf(parts) {
+  const out = [];
+  for (const { race, res } of parts) {
+    const kinds = [], pod = isPodium(res.position), g = generalOf(res);
+    if (pod && (race.race_type === 'campeonato' || res.podium_type === 'campeonato')) kinds.push('campeonato');
+    if (pod && race.race_type === 'circuito') kinds.push('circuito');
+    if (pod && res.podium_type === 'general') kinds.push('general');
+    if (g && g <= 3) kinds.push('absoluto');
+    if (kinds.length) out.push({ race, res, kinds, position: res.position ?? null, general: g });
+  }
+  return out;
+}
+
 /** Minúsculas, sin tildes y sin espacios sobrantes: para comparar nombres. */
 export function normalize(s) {
   return String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -215,6 +242,7 @@ export function yearSummary(year, races, runners) {
     .sort((a, b) => a.date.localeCompare(b.date) || byText(a.name, b.name));
   const parts = yr.flatMap((race) => (race.results || []).map((res) => ({ race, res })));
   const podiums = podiumsOf(parts);
+  const important = importantOf(parts);
   const personKey = (res) => res.runner_id || 'n:' + normalize(res.runner_name);
 
   const totals = {
@@ -223,6 +251,13 @@ export function yearSummary(year, races, runners) {
     participations: parts.length,
     podiums: podiums.length,
     wins: podiums.filter((p) => p.position === 1).length,
+    // clasificación general (todas las categorías), solo de las participaciones que la tienen
+    genRecorded: parts.filter((p) => generalOf(p.res)).length,
+    genPodiums: parts.filter((p) => generalOf(p.res) && generalOf(p.res) <= 3).length,
+    genWins: parts.filter((p) => generalOf(p.res) === 1).length,
+    genTop10: parts.filter((p) => generalOf(p.res) && generalOf(p.res) <= 10).length,
+    genBest: parts.reduce((m, p) => { const g = generalOf(p.res); return g && (m == null || g < m) ? g : m; }, null),
+    important: important.length,
     km: Math.round(parts.reduce((n, p) => n + (Number(p.race.km) || 0), 0) * 10) / 10, // km recorridos entre todos
     // ratios (solo con las carreras que tienen los datos necesarios): días de competición con km, km con tiempo, carreras con km, km con ubicación frente al viaje
     kmDays: parts.reduce((n, p) => n + (Number(p.race.km) > 0 ? numDays(p.race.date, p.race.end_date) : 0), 0),
@@ -323,10 +358,17 @@ export function yearSummary(year, races, runners) {
     if (race.modality === 'Carretera') row.road++;
     if (race.modality === 'BTT') row.btt++;
   }
+  for (const r of rows.values()) Object.assign(r, { gen: 0, genPod: 0, genWin: 0, top10: 0, genBest: null, imp: 0 });
   for (const p of podiums) {
     const row = rows.get(personKey(p.res));
     row['p' + p.position]++;
   }
+  for (const { race, res } of parts) {
+    const g = generalOf(res); if (!g) continue;
+    const row = rows.get(personKey(res));
+    row.gen++; if (g <= 3) row.genPod++; if (g === 1) row.genWin++; if (g <= 10) row.top10++; if (row.genBest == null || g < row.genBest) row.genBest = g;
+  }
+  for (const im of important) rows.get(personKey(im.res)).imp++;
   const perRunner = [...rows.values()].sort((a, b) => b.races - a.races || b.p1 - a.p1 || byText(a.name, b.name));
 
   // Estadística por categoría: corredores distintos, participaciones, podios y km (los resultados sin categoría, al final).
@@ -350,7 +392,7 @@ export function yearSummary(year, races, runners) {
 
   const podiumList = podiums.map(({ race, res, position, type, stage }) => ({
     date: race.date, race: race.name, raceId: race.id, modality: race.modality, subtype: race.subtype || null, km: race.km ?? null, runner: res.runner_name, category: res.category || '',
-    type, stage, position,
+    type, stage, position, general: generalOf(res),
   }));
 
   // Carrera más larga (km) y quién la corrió
@@ -364,13 +406,13 @@ export function yearSummary(year, races, runners) {
   const pick = (score) => { let best = null; for (const { race } of parts) { const v = score(race); if (v > 0 && (!best || v > best.value)) best = { value: v, race: race.name, raceId: race.id, km: Number(race.km) || null, elevation: elevOf(race) || null, price: priceOf(race), place: race.place || '' }; }
     if (best) best.runners = parts.filter((x) => x.race.id === best.raceId).map((x) => x.res.runner_name).sort(byText); return best; };
   const farthest = pick((r) => distOf(r)?.km ?? 0), hardest = pick(elevOf), steepest = pick((r) => (Number(r.km) > 0 && elevOf(r) > 0 ? elevOf(r) / Number(r.km) : 0)), priciest = pick((r) => priceOf(r) ?? 0);
-  return { year, totals, longest, longestTime, hardest, steepest, priciest, farthest, byModality, byMonth, bySubtype, disciplines, byCategory, countries, provinces, missingPlace, perRunner, byPodiumType, podiumList };
+  return { year, totals, longest, longestTime, hardest, steepest, priciest, farthest, byModality, byMonth, bySubtype, disciplines, byCategory, countries, provinces, missingPlace, perRunner, byPodiumType, podiumList, important };
 }
 
 // ---------- CSV ----------
 
 export const CSV_COLUMNS = ['Fecha', 'Fecha fin', 'Carrera', 'Lugar', 'Provincia', 'País', 'Modalidad', 'Corredor',
-  'Categoría', 'Puesto', 'Podio', 'Tipo de podio', 'Disciplina', 'Km', 'Desnivel (m)', 'Precio inscripción (€)'];
+  'Categoría', 'Puesto', 'Podio', 'Tipo de podio', 'Disciplina', 'Km', 'Desnivel (m)', 'Precio inscripción (€)', 'Puesto general'];
 
 /** Filas de exportación (una por participación). */
 export function csvRows(races) {
@@ -380,11 +422,11 @@ export function csvRows(races) {
     for (const res of [...(r.results || [])].sort((a, b) => (a.position ?? 9999) - (b.position ?? 9999) || byText(a.runner_name, b.runner_name))) {
       const pod = isPodium(res.position);
       out.push([r.date, r.end_date || '', r.name, r.place || '', r.province || '', r.country || '', r.modality, res.runner_name,
-        res.category || '', res.position ?? '', pod ? 'Sí' : 'No', pod ? podiumLabel(res.podium_type) : '', r.subtype || '', r.km ?? '', r.elevation ?? '', r.price ?? '']);
+        res.category || '', res.position ?? '', pod ? 'Sí' : 'No', pod ? podiumLabel(res.podium_type) : '', r.subtype || '', r.km ?? '', r.elevation ?? '', r.price ?? '', generalOf(res) ?? '']);
       (res.stage_positions || []).forEach((pos, i) => {
         if (i < (r.stages || []).length && isPodium(pos)) {
           out.push([r.date, r.end_date || '', r.name, r.place || '', r.province || '', r.country || '', r.modality, res.runner_name,
-            res.category || '', pos, 'Sí', `${STAGE_TYPE.label}: ${stageName(r, i)}`, r.subtype || '', r.km ?? '', r.elevation ?? '', r.price ?? '']);
+            res.category || '', pos, 'Sí', `${STAGE_TYPE.label}: ${stageName(r, i)}`, r.subtype || '', r.km ?? '', r.elevation ?? '', r.price ?? '', '']);
         }
       });
     }
@@ -512,7 +554,7 @@ export const SEASON_COLUMNS = ['Corredor', 'Categoría', 'Contrato', 'Carreras',
   'Km', 'Desnivel (m)', 'Desplazamiento (km, ida y vuelta)', 'Tiempo total (h:mm:ss)', 'Carreras con tiempo', 'Provincias', 'Países'];
 export const SEASON_BONUS_COLUMNS = ['Carreras para el bono', 'Llega al mínimo', 'Tramo alcanzado (carreras)', 'Bono (€)', 'Penalización (€)', 'Saldo (€, + el club debe)', 'Inscritas pendientes'];
 export const SEASON_DETAIL_COLUMNS = ['Corredor', 'Fecha', 'Fecha fin', 'Carrera', 'Lugar', 'Provincia', 'País', 'Modalidad', 'Formato', 'Km', 'Desnivel (m)', 'Precio inscripción (€)', 'Distancia desde la salida (km, ida)', 'Circuito',
-  'Categoría', 'Puesto', 'Podio', 'Tipo de podio', 'Tiempo', 'Días', 'Etapas en podio'];
+  'Categoría', 'Puesto', 'Puesto general', 'Podio', 'Tipo de podio', 'Tiempo', 'Días', 'Etapas en podio'];
 
 /** Una fila por corredor con lo que ha hecho en la temporada (también quien no ha corrido, con ceros). */
 export function seasonStats(year, races, runners, contractName = (c) => c || '') {
@@ -556,7 +598,7 @@ export function seasonDetail(year, races) {
       const pod = isPodium(res.position);
       const stagePods = (res.stage_positions || []).filter((pos, i) => i < (r.stages || []).length && isPodium(pos)).length;
       out.push([res.runner_name, r.date, r.end_date || '', r.name, r.place || '', r.province || '', r.country || '', r.modality, r.subtype || '', r.km ?? '', r.elevation ?? '', r.price ?? '', distOf(r)?.km ?? '',
-        r.race_type === 'circuito' ? (r.circuit || 'Circuito') : r.race_type === 'campeonato' ? 'Campeonato' : '', res.category || '', res.position ?? '',
+        r.race_type === 'circuito' ? (r.circuit || 'Circuito') : r.race_type === 'campeonato' ? 'Campeonato' : '', res.category || '', res.position ?? '', generalOf(res) ?? '',
         pod ? 'Sí' : 'No', pod ? podiumLabel(res.podium_type) : '', res.time_seconds ? formatTime(res.time_seconds) : '', numDays(r.date, r.end_date), stagePods || '']);
     }
   }
@@ -633,7 +675,7 @@ export function importResultsCsv(text) {
     date: col('Fecha'), end: col('Fecha fin'), race: col('Carrera'), place: col('Lugar'), province: col('Provincia'),
     country: col('País', 'Pais'), modality: col('Modalidad'), runner: col('Corredor'),
     category: col('Categoría', 'Categoria'), position: col('Puesto'), type: col('Tipo de podio', 'Tipo'),
-    subtype: col('Disciplina', 'Formato'), km: col('Km'), elevation: col('Desnivel (m)', 'Desnivel'), price: col('Precio inscripción (€)', 'Precio inscripcion', 'Precio'),
+    subtype: col('Disciplina', 'Formato'), general: col('Puesto general', 'Puesto en la general', 'General'), km: col('Km'), elevation: col('Desnivel (m)', 'Desnivel'), price: col('Precio inscripción (€)', 'Precio inscripcion', 'Precio'),
   };
   const errors = [];
   if (ix.date < 0 || ix.race < 0 || ix.runner < 0) {
@@ -689,8 +731,10 @@ export function importResultsCsv(text) {
     const posText = get(ix.position);
     const position = /^\d+$/.test(posText) && Number(posText) > 0 ? Number(posText) : null;
     if (posText && position === null) errors.push(`Línea ${line}: puesto «${posText}» no es un número; se deja vacío.`);
+    const genText = get(ix.general), general = /^\d+$/.test(genText) && Number(genText) > 0 && Number(genText) <= 9999 && (!position || Number(genText) >= position) ? Number(genText) : null;
+    if (genText && general === null) errors.push(`Línea ${line}: puesto general «${genText}» no válido (un número, no menor que el puesto de categoría); se deja vacío.`);
     race.results.push({ runner_name: runner, category: matchCategory(get(ix.category)),
-      position, podium_type: matchPodiumType(get(ix.type)) });
+      position, podium_type: matchPodiumType(get(ix.type)), ...(general ? { general_position: general } : {}) });
   });
   for (const race of races.values()) {
     for (const res of race.results) {

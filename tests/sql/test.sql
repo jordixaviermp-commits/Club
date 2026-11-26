@@ -164,6 +164,11 @@ select runner_report_result('BBBBBBBBBB', 'reg', '20000000-0000-0000-0000-000000
 select runner_report_result('BBBBBBBBBB', 'reg', '20000000-0000-0000-0000-000000000050', 3, 'Élite', 'campeonato');
 select runner_report_result('BBBBBBBBBB', 'reg', '20000000-0000-0000-0000-000000000050', 2, 'Élite', 'campeonato');
 select pg_temp.check((select (g->'my_result'->>'position')::int from jsonb_array_elements(runner_view('BBBBBBBBBB')->'registrations') g where g->>'id' = '20000000-0000-0000-0000-000000000050') = 2, 'puede cambiar su propio resultado');
+-- puesto en la general: opcional, nunca por delante del de su categoría, y viaja con la inscripción
+select runner_report_result('BBBBBBBBBB', 'reg', '20000000-0000-0000-0000-000000000050', 2, 'Élite', 'campeonato', null, 5);
+select pg_temp.check((select (g->'my_result'->>'general_position')::int from jsonb_array_elements(runner_view('BBBBBBBBBB')->'registrations') g where g->>'id' = '20000000-0000-0000-0000-000000000050') = 5, 'puesto general: lo guarda y lo ve');
+select pg_temp.expect_fail($q$select runner_report_result('BBBBBBBBBB', 'reg', '20000000-0000-0000-0000-000000000050', 4, 'Élite', null, null, 3)$q$, 'puesto general: no puede ir por delante de su categoría');
+select pg_temp.expect_fail($q$select runner_report_result('BBBBBBBBBB', 'reg', '20000000-0000-0000-0000-000000000050', 2, 'Élite', null, null, 10000)$q$, 'puesto general: máximo 9999');
 select pg_temp.expect_fail($q$select runner_report_result('BBBBBBBBBB', 'reg', '20000000-0000-0000-0000-000000000009', 1, null, null)$q$, 'no pone resultado donde no está apuntado');
 select pg_temp.check((select (g->'my_result'->>'position')::int from jsonb_array_elements(runner_view('BBBBBBBBBB')->'registrations') g where g->>'id' = '20000000-0000-0000-0000-000000000050') = 2, 've su resultado enviado');
 reset role;
@@ -173,10 +178,18 @@ select promote_registration('20000000-0000-0000-0000-000000000050') as rp \gset
 select pg_temp.check((select position from results where race_id = :'rp' and runner_id = '10000000-0000-0000-0000-000000000002') = 2, 'pasar a resultados copia su puesto');
 select pg_temp.check((select podium_type from results where race_id = :'rp' and runner_id = '10000000-0000-0000-0000-000000000002') = 'campeonato', 'y su tipo de podio');
 select pg_temp.check((select self_reported from results where race_id = :'rp' and runner_id = '10000000-0000-0000-0000-000000000002'), 'marcado como puesto por el corredor');
+select pg_temp.check((select general_position from results where race_id = :'rp' and runner_id = '10000000-0000-0000-0000-000000000002') = 5, 'pasar a resultados copia su puesto general');
 reset role;
 set role anon;
 select runner_report_result('CCCCCCCCCC', 'race', :'rp', 7, null, null);
 select runner_report_result('CCCCCCCCCC', 'race', :'rp', 6, null, null);
+select runner_report_result('CCCCCCCCCC', 'race', :'rp', 6, null, null, null, 21);
+select pg_temp.check((select (r->>'general_position')::int from jsonb_array_elements(runner_view('CCCCCCCCCC')->'my_results') r where r->>'race_id' = :'rp') = 21, 'puesto general: lo ve en sus carreras hechas');
+select pg_temp.check(exists (select 1 from jsonb_array_elements(runner_team('BBBBBBBBBB')->'races') r, jsonb_array_elements(r->'results') x where (x->>'general_position')::int = 21), 'puesto general: el resumen del equipo lo incluye');
+select runner_report_result('CCCCCCCCCC', 'race', :'rp', 6, null, null);
+reset role;
+select pg_temp.check((select general_position from results where race_id = :'rp' and runner_id = '10000000-0000-0000-0000-000000000003') is null, 'puesto general: se quita si se vuelve a enviar sin él');
+set role anon;
 select runner_report_result('CCCCCCCCCC', 'race', :'rp', 7, null, null);
 select pg_temp.expect_fail($q$select runner_report_result('XXXXXXXXXXXX', 'race', '$q$ || :'rp' || $q$', 1, null, null)$q$, 'sin enlace no cambia puestos');
 select pg_temp.check(jsonb_array_length(runner_view('BBBBBBBBBB')->'my_results') >= 1, 'mis carreras: ve sus resultados');
