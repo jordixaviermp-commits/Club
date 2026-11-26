@@ -1215,25 +1215,52 @@ const carBadge = (g) => {
   const free = cs.reduce((n, c) => n + carFree(c), 0), mine = carMine(g.id);
   return `<span class="rc-car${mine ? ' mine' : free ? '' : ' full'}" title="${mine ? 'Vas en un coche' : `${cs.length} coche${cs.length === 1 ? '' : 's'} · ${free} plaza${free === 1 ? '' : 's'} libre${free === 1 ? '' : 's'}`}">${ico('car')}${mine ? '✓' : free}</span>`;
 };
-/** Bloque «Coches» de la ficha de una carrera próxima: quién conduce, plazas, de dónde sale, y botones para apuntarse. */
-function carsBlock(g) {
-  if (S.cars === null || S.cars === undefined) return '';        // sin el SQL no se enseña nada
+/** Botón discreto de la fila de iconos (entre «Pagar» y el lápiz): un coche, con las plazas libres o ✓ si ya vas en uno. Abre la ventana de coches. */
+function carTool(g, inscribed) {
+  if (S.cars === null || S.cars === undefined || g.suspended || g.date < (S.runnerData?.today || todayISO())) return '';
+  const cs = carsOf(g.id), free = cs.reduce((n, c) => n + carFree(c), 0), mine = carMine(g.id);
+  if (!cs.length && (!inscribed || S.preview)) return '';
+  const tip = mine ? 'Vas en un coche' : cs.length ? `${cs.length} coche${cs.length === 1 ? '' : 's'} · ${free} plaza${free === 1 ? '' : 's'} libre${free === 1 ? '' : 's'}` : 'Ofrecer o buscar coche';
+  return `<button type="button" class="rc-tool car${mine ? ' mine' : ''}" data-act="car-open" data-id="${g.id}" aria-label="Coches compartidos: ${tip}" title="${tip}">${ico('car')}${cs.length ? `<b class="car-n${mine ? ' ok' : free ? '' : ' full'}">${mine ? '✓' : free}</b>` : ''}</button>`;
+}
+/** Contenido de la ventana «Coches» de una carrera: quién conduce, plazas, de dónde sale, y botones para apuntarse. */
+function carsHtml(g) {
   const me = S.runnerData?.me?.id, inscribed = !!myEntry(g), cs = carsOf(g.id), canAct = inscribed && !S.preview;
-  if (!cs.length && !canAct) return '';
-  const imRider = cs.some((c) => c.riders.some((r) => r.id === me)), imDriver = cs.some((c) => c.driver_id === me), free = cs.reduce((n, c) => n + carFree(c), 0);
+  const imRider = cs.some((c) => c.riders.some((r) => r.id === me)), imDriver = cs.some((c) => c.driver_id === me);
   const seats = (c) => `<span class="car-seats" aria-label="${carFree(c)} libres de ${c.seats}">${Array.from({ length: c.seats }, (_, i) => `<i class="${i < c.riders.length ? 'on' : ''}"></i>`).join('')}</span>`;
   const row = (c) => { const mineCar = c.driver_id === me, here = c.riders.some((r) => r.id === me), full = carFree(c) === 0;
     return `<li class="car${mineCar ? ' mine' : ''}${here ? ' here' : ''}"><div class="car-top"><span class="car-d">${ico('car')}<b>${esc(c.driver)}</b>${mineCar ? ' <small>(tú)</small>' : ''}</span>${seats(c)}<small class="car-free${full ? ' full' : ''}">${full ? 'lleno' : `${carFree(c)} libre${carFree(c) === 1 ? '' : 's'}`}</small></div>
       ${c.from || c.depart || c.note ? `<p class="car-meta">${[c.from ? `📍 ${esc(c.from)}` : '', c.depart ? `🕖 ${esc(c.depart)}` : '', c.note ? `“${esc(c.note)}”` : ''].filter(Boolean).join(' · ')}</p>` : ''}
       ${c.riders.length ? `<p class="car-riders">${c.riders.map((r) => `<span class="${r.id === me ? 'me' : ''}">${esc(r.name)}</span>`).join('')}</p>` : ''}
-      ${canAct ? `<div class="car-acts">${mineCar ? `<button type="button" class="btn small" data-act="car-offer" data-id="${g.id}">${ico('pen')}Editar</button>`
-        : here ? `<button type="button" class="btn small ghost" data-act="car-leave" data-id="${g.id}">Bajarme</button>`
-        : !full && !imDriver ? `<button type="button" class="btn small primary" data-act="car-join" data-offer="${c.id}" data-id="${g.id}">${imRider ? 'Cambiarme a este' : 'Apuntarme'}</button>` : ''}</div>` : ''}</li>`; };
-  return `<section class="cars" aria-label="Coches compartidos">
-    <h4>${ico('car')}Coches${cs.length ? ` <small>${cs.length} · ${free} libre${free === 1 ? '' : 's'}</small>` : ''}</h4>
-    ${cs.length ? `<ul class="car-list">${cs.map(row).join('')}</ul>` : '<p class="hint" data-nofold>Nadie ofrece coche todavía.</p>'}
-    ${canAct && !imDriver && !imRider ? `<button type="button" class="btn small ghost car-add" data-act="car-offer" data-id="${g.id}">${ico('car')}Ofrezco mi coche</button>` : canAct && !imDriver ? `<button type="button" class="btn small ghost car-add" data-act="car-offer" data-id="${g.id}">${ico('car')}Llevo yo mi coche</button>` : ''}
-    ${!inscribed && cs.length && !S.preview ? '<p class="hint" data-nofold>Apúntate a la carrera para subir a un coche.</p>' : ''}</section>`;
+      ${canAct ? `<div class="car-acts">${mineCar ? `<button type="button" class="btn small" data-car="edit" data-reg="${g.id}">${ico('pen')}Editar</button>`
+        : here ? `<button type="button" class="btn small ghost" data-car="leave" data-reg="${g.id}">Bajarme</button>`
+        : carFree(c) > 0 && !imDriver ? `<button type="button" class="btn small primary" data-car="join" data-offer="${c.id}" data-reg="${g.id}">${imRider ? 'Cambiarme a este' : 'Apuntarme'}</button>` : ''}</div>` : ''}</li>`; };
+  return `<form method="dialog" class="dlg cars-dlg"><h2>${ico('car')} Coches</h2><p><b>${esc(g.name)}</b> <small class="muted">${esc(formatDate(g.date, false))}</small></p>
+    ${cs.length ? `<ul class="car-list">${cs.map(row).join('')}</ul>` : '<p class="muted">Nadie ofrece coche todavía.</p>'}
+    ${canAct && !imDriver ? `<button type="button" class="btn small ghost car-add" data-car="offer" data-reg="${g.id}">${ico('car')}${imRider ? 'Llevo yo mi coche' : 'Ofrezco mi coche'}</button>` : ''}
+    ${!inscribed && cs.length && !S.preview ? '<p class="hint" data-nofold>Apúntate a la carrera para subir a un coche.</p>' : ''}
+    <div class="dlg-actions"><button value="" class="btn primary">Cerrar</button></div></form>`;
+}
+function openCars(regId) {
+  const g = S.runnerData?.registrations.find((x) => x.id === regId); if (!g) return;
+  const dlg = document.getElementById('dialog'); dlg.dataset.carReg = regId; dlg.innerHTML = carsHtml(g); if (!dlg.open) dlg.showModal();
+}
+{
+  const dlg = document.getElementById('dialog');
+  const refresh = async (regId) => { await loadCars(); render(); const g = S.runnerData?.registrations.find((x) => x.id === regId); if (g && dlg.open) dlg.innerHTML = carsHtml(g); };
+  dlg.addEventListener('click', async (ev) => {
+    const b = ev.target.closest('.cars-dlg [data-car]'); if (!b || S.preview) return;
+    ev.preventDefault();
+    const reg = b.dataset.reg, g = S.runnerData?.registrations.find((x) => x.id === reg); if (!g) return;
+    if (b.dataset.car === 'join') { await run(async () => { await api.runnerCarJoin(S.code, b.dataset.offer); return true; }, '🚗 Te has apuntado al coche'); await refresh(reg); }
+    else if (b.dataset.car === 'leave') { await run(async () => { await api.runnerCarLeave(S.code, reg); return true; }, 'Te has bajado del coche'); await refresh(reg); }
+    else if (b.dataset.car === 'offer' || b.dataset.car === 'edit') {
+      const cur = carsOf(reg).find((c) => c.driver_id === S.runnerData.me.id) || null;
+      const v = await askCar(g.name, cur);
+      if (v !== null) await run(async () => { if (v === 'del') await api.runnerCarDelete(S.code, reg); else await api.runnerCarSave(S.code, reg, v.seats, v.from, v.depart, v.note); return true; }, v === 'del' ? 'Coche quitado' : cur ? '✓ Coche actualizado' : '🚗 Coche publicado');
+      await loadCars(); render(); openCars(reg);
+    }
+  });
 }
 /** Fila de chips de una inscripción: desde cuándo estoy inscrito y si está pagada (y cuándo). */
 function payChips(g) {
@@ -1597,6 +1624,7 @@ function runnerRegCard(g, opts = {}) {
     const tools = `<div class="rc-tools">${open && !mine && !g.suspended && !S.preview ? starBtn(g, 'w-add-reg', ['id', g.id]) : ''}${g.url ? `<a class="rc-tool lab" href="${esc(g.url)}" target="_blank" rel="noopener noreferrer" title="Web de la carrera">${ico('ext')}<span>Web</span></a>`
       : open && !g.suspended && !S.preview ? `<button type="button" class="rc-tool" data-act="r-web" data-id="${g.id}" aria-label="Añadir la web de la carrera" title="Añadir la web (para todos)">${ico('link')}</button>` : ''}
       ${mine && !S.preview && !g.suspended && (open || !g.my_result) ? `<button type="button" class="rc-tool lab pay${mine.paid ? ' on' : ''}" data-act="r-paid" data-id="${g.id}" aria-label="${mine.paid ? 'Pagada: cambiar o quitar el pago' : 'Marcar como pagada'}" title="${mine.paid ? 'Pagada' : 'Marcar como pagada'}">${ico('euro')}<span>${mine.paid ? `${mine.paid_amount != null ? euros(mine.paid_amount) : 'Pagada'}` : 'Pagar'}</span>${mine.paid ? ico('check', 'pay-ok') : ''}</button>` : ''}
+      ${carTool(g, !!mine)}
       <span class="rc-tools-sp"></span>${!S.preview ? `<a class="rc-tool" href="#/editar/${g.id}" aria-label="Editar los datos de ${esc(g.name)}" title="Editar datos${g.mine_created ? ' (la añadiste tú)' : ''}">${ico('pen')}</a>` : ''}${canSusp ? (g.suspended
         ? `<button type="button" class="rc-tool" data-act="r-suspend" data-id="${g.id}" data-v="0" aria-label="Se vuelve a celebrar" title="Se vuelve a celebrar">${ico('check')}</button>`
         : `<button type="button" class="rc-tool susp" data-act="r-suspend" data-id="${g.id}" data-v="1" aria-label="Marcar como suspendida" title="Marcar como suspendida">${ico('ban')}</button>`) : ''}</div>`;
@@ -1621,7 +1649,6 @@ function runnerRegCard(g, opts = {}) {
       ${myPubLine(g)}
       ${opts.notes && mine && !S.preview ? noteBlock(g) : ''}
       ${opts.notes ? completeBox(g, 'reg', g.id) : ''}
-      ${open && !g.suspended ? carsBlock(g) : ''}
       ${mates}
       ${!open || g.suspended ? '' : mine
         ? `<div class="joined-acts">
@@ -4777,7 +4804,7 @@ function askCar(name, cur = null) {
     dlg.onclose = () => { const v = dlg.returnValue; if (v === 'del') return resolve('del'); if (v !== 'ok') return resolve(null);
       resolve({ seats: Number(dlg.querySelector('select[name="seats"]').value), from: dlg.querySelector('input[name="from"]').value, depart: dlg.querySelector('input[name="depart"]').value, note: dlg.querySelector('input[name="note"]').value }); };
     dlg.returnValue = '';
-    dlg.showModal();
+    if (!dlg.open) dlg.showModal();
   });
 }
 
@@ -5422,24 +5449,7 @@ const actions = {
     render();
   },
   // Pago de la inscripción: lo marca el corredor (con el importe, opcional); los compañeros ven solo «pagada»
-  async 'car-offer'(el) {
-    const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id); if (!g || S.preview) return;
-    const me = S.runnerData.me.id, cur = carsOf(g.id).find((c) => c.driver_id === me) || null;
-    const v = await askCar(g.name, cur); if (v === null) return;
-    const ok = await run(async () => { if (v === 'del') await api.runnerCarDelete(S.code, g.id); else await api.runnerCarSave(S.code, g.id, v.seats, v.from, v.depart, v.note); await loadCars(); return true; },
-      v === 'del' ? 'Coche quitado' : cur ? '✓ Coche actualizado' : '🚗 Coche publicado');
-    if (ok) render();
-  },
-  async 'car-join'(el) {
-    if (S.preview) return;
-    const ok = await run(async () => { await api.runnerCarJoin(S.code, el.dataset.offer); await loadCars(); return true; }, '🚗 Te has apuntado al coche');
-    if (!ok) { await loadCars(); render(); } else render();
-  },
-  async 'car-leave'(el) {
-    if (S.preview) return;
-    const ok = await run(async () => { await api.runnerCarLeave(S.code, el.dataset.id); await loadCars(); return true; }, 'Te has bajado del coche');
-    if (ok) render();
-  },
+  'car-open'(el) { openCars(el.dataset.id); },
   async 'note-edit'(el) {
     const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id); if (!g || S.preview) return;
     const t = await askNote(g.name, noteOf(g));
@@ -6168,7 +6178,7 @@ document.addEventListener('visibilitychange', async () => {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['r-web', 'note-edit', 'car-offer', 'car-join', 'car-leave', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'chro-toggle', 'chro-all', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
+const RUNNER_ACTIONS = new Set(['r-web', 'note-edit', 'car-open', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'chro-toggle', 'chro-all', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
 // los enlaces de la ventana emergente (p. ej. las carreras de un compañero) cierran la ventana al navegar
 document.getElementById('dialog').addEventListener('click', (ev) => { if (ev.target.closest('a[href^="#/"]')) ev.currentTarget.close(); });
 $app.addEventListener('click', (ev) => {
