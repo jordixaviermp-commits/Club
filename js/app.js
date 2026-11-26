@@ -48,6 +48,18 @@ function profileStats() {
   const next = (d.registrations || []).filter((g) => !g.suspended && g.date >= (d.today || todayISO()) && (g.entries || []).some((e) => e.runner_id === d.me.id)).length;
   return [['flag', all.length, 'carreras'], ['trophy', pods, 'podios'], ['cal', next, 'próximas'], ...(streak ? [['act', streak, 'racha']] : [])];
 }
+/** Tallas de ropa del corredor (solo lectura, las pone la dirección): «Maillot M · Culot L · Calcetines XL». */
+const KIT_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+const KIT_FIELDS = [['jersey', 'kit_jersey', 'Maillot'], ['bibs', 'kit_bibs', 'Culot'], ['socks', 'kit_socks', 'Calcetines']];
+function kitRow() {
+  const k = S.myKit; if (!k || !KIT_FIELDS.some(([f]) => k[f])) return '';
+  return `<li class="prof-row"><span class="pi">${ico('shirt')}</span><span class="pt"><b>Mi ropa</b></span><span class="kit-chips">${KIT_FIELDS.filter(([f]) => k[f]).map(([f, , l]) => `<span class="kit-chip" title="${l}"><small>${l}</small><b>${esc(k[f])}</b></span>`).join('')}</span></li>`;
+}
+/** Línea compacta «Mi ropa» para Mi temporada (mismas pastillas que el menú del escudo). */
+function kitStrip() {
+  const k = S.myKit; if (S.preview || !k || !KIT_FIELDS.some(([f]) => k[f])) return '';
+  return `<div class="kit-strip">${ico('shirt')}<b>Mi ropa</b><span class="kit-chips">${KIT_FIELDS.filter(([f]) => k[f]).map(([f, , l]) => `<span class="kit-chip" title="${l}"><small>${l}</small><b>${esc(k[f])}</b></span>`).join('')}</span></div>`;
+}
 function profileHtml() {
   const me = S.runnerData?.me, st = profileStats();
   const row = (ic, title, ctrl, sub = '') => `<li class="prof-row"><span class="pi">${ico(ic)}</span><span class="pt"><b>${title}</b>${sub ? `<small>${sub}</small>` : ''}</span>${ctrl}</li>`;
@@ -57,6 +69,7 @@ function profileHtml() {
     <ul class="prof-list">
       ${row('sun', 'Aspecto', '')}<li class="prof-seg-row">${themeSeg()}</li>
       ${S.shiftOn ? row('clock', 'Mis turnos', `<select data-prof="shift" aria-label="Mi escamot"><option value="">Sin turnos</option>${USPAC_GROUPS.map((g) => `<option value="${g}"${S.myShift === g ? ' selected' : ''}>Escamot ${g.slice(1)}</option>`).join('')}</select>`, 'en tu calendario') : ''}
+      ${kitRow()}
       <li class="prof-row tap"><button type="button" data-prof="link"><span class="pi">${ico('link')}</span><span class="pt"><b>Copiar mi enlace</b><small>para entrar desde otro móvil</small></span>${ico('go', 'pg')}</button></li>
     </ul>
     <footer class="prof-foot"><small class="muted">v${esc(VERSION.slice(1))}</small><button type="button" class="prof-out" data-prof="forget">${ico('logout')}No soy ${esc((me?.name || 'esta persona').split(' ')[0])}</button></footer></form>`;
@@ -399,6 +412,8 @@ async function loadImpact() {
 }
 /** Coches compartidos de las próximas carreras (lo ven todos los corredores). null = falta el SQL. */
 async function loadCars() { try { S.cars = await api.runnerCars(S.code || S.previewCode); } catch { S.cars = null; } }
+/** Tallas de ropa del corredor; null si falta el SQL. */
+async function loadKit() { try { S.myKit = await api.runnerMyKit(S.code || S.previewCode); } catch { S.myKit = null; } }
 /** Escamot (E1–E5) del corredor para pintar sus turnos en el calendario; null si no tiene. */
 async function loadShift() {
   const code = S.code || S.previewCode; let info = null;
@@ -409,7 +424,7 @@ async function loadShift() {
 }
 async function loadRunner() {
   if (!S.session?.isAdmin) api.runnerPing?.(S.code).catch(() => {});   // actividad: última vez que abrió la app
-  try { S.moves = undefined; S.runnerData = await api.runnerView(S.code); await loadNews(); await loadCorrections(); await loadChron(); await loadWatch(); await loadNotes(); await loadShift(); await loadCars(); }
+  try { S.moves = undefined; S.runnerData = await api.runnerView(S.code); await loadNews(); await loadCorrections(); await loadChron(); await loadWatch(); await loadNotes(); await loadShift(); await loadKit(); await loadCars(); }
   catch (e) {
     S.runnerData = null;
     if (/enlace_no_valido/.test(String(e?.message))) { store.del(CODE_KEY); S.code = null; }
@@ -1745,7 +1760,6 @@ function viewRunnerHome() {
   const d = S.runnerData, me = d.me, today = d.today || todayISO();
   const regs = regFilter(d.registrations, me);
   const upcoming = regs.filter((g) => g.date >= today);
-  const past = regs.filter((g) => g.date < today);
   const card = (g) => runnerRegCard(g);
   modFilterBar(d.registrations, me); // calcula S.fd (botón y ventana de filtros)
   const isMine = (g) => (g.entries || []).some((e) => e.runner_id === me.id) || (g.results || []).some((x) => x.runner_id === me.id);
@@ -1755,7 +1769,7 @@ function viewRunnerHome() {
     : `${(() => { const wk = upcoming.filter((g) => daysTo(g.date) <= 7); return wk.length ? `<h2 class="section">📅 Esta semana (${wk.length})</h2>${wk.map(card).join('')}` : ''; })()}
     <h2 class="section">${upcoming.some((g) => daysTo(g.date) <= 7) ? 'Más adelante' : 'Próximas carreras'} (${upcoming.filter((g) => daysTo(g.date) > 7).length || (upcoming.some((g) => daysTo(g.date) <= 7) ? 0 : upcoming.length)})</h2>
     ${upcoming.length ? monthList(upcoming.filter((g) => daysTo(g.date) > 7), card) : `<p class="empty">${filtersOn(me) ? 'Ninguna carrera próxima con estos filtros. <button class="link" data-act="filters-clear">Quitar filtros</button>' : 'Todavía no hay carreras abiertas.'}</p>`}
-    ${past.length ? `<details class="past"><summary>🏁 Ya disputadas${past.some((g) => (g.entries || []).some((e) => e.runner_id === me.id) && !g.my_result) ? ', pendientes de resultados' : ''} (${past.length})</summary>${past.map(card).join('')}</details>` : ''}`;
+    `;
   return frame(runnerTitle(), `
     ${previewBanner()}
     <div class="toolbar">
@@ -1846,6 +1860,7 @@ function viewRunnerMine() {
     ${previewBanner()}
     ${S.preview ? '' : miTabs('mi')}
     ${myRacesCard(d, () => chronicleCard(d))}
+    ${kitStrip()}
     ${installHint()}
     ${S.preview ? `<p class="center"></p>` : ''}${themeLineIfPreview()}${versionLine()}`,
   { rtab: 'mi' });
@@ -4731,6 +4746,7 @@ function viewRunnerCard(id) {
       <label>Categoría${catSelect(`data-runner-cat="${r.id}"`, r.category || '')}</label>
       <label>Contrato${contractSelect(`data-runner-contract="${r.id}"`, r.contract || '')}</label>
       <label>Turnos (escamot)<select data-runner-shift="${r.id}" aria-label="Turnos de ${esc(r.name)}"><option value="">No lo usa</option><option value="on"${r.shift_enabled && !r.shift_group ? ' selected' : ''}>Lo elige él en su perfil</option>${USPAC_GROUPS.map((g) => `<option value="${g}"${r.shift_group === g ? ' selected' : ''}>Escamot ${g.slice(1)}</option>`).join('')}</select></label>
+      <div class="kit-edit"><span class="kit-t">${ico('shirt')} Ropa</span>${KIT_FIELDS.map(([, col, l]) => `<label>${l}<select data-runner-kit="${col}" data-id="${r.id}" aria-label="${l} de ${esc(r.name)}"><option value="">—</option>${KIT_SIZES.map((z) => `<option${r[col] === z ? ' selected' : ''}>${z}</option>`).join('')}${r[col] && !KIT_SIZES.includes(r[col]) ? `<option selected>${esc(r[col])}</option>` : ''}</select></label>`).join('')}</div>
       <p class="muted small">${tot} carrera${tot === 1 ? '' : 's'} en total${r.created_at ? ` · en el club desde ${formatDate(String(r.created_at).slice(0, 10), false)}` : ''}</p>
       <div class="row"><button class="btn primary" data-act="runner-menu" data-id="${r.id}">${ico('share')} Enlace</button>
         <button class="btn" data-act="runner-do" data-a="preview" data-id="${r.id}">Ver su pantalla</button></div>
@@ -6330,6 +6346,9 @@ $app.addEventListener('change', async (ev) => {
     const id = t.dataset.runnerContract;
     await run(async () => { await api.updateRunner(id, { contract: t.value || null }); runnerById(id).contract = t.value || null; }, 'Contrato guardado');
     if (parseRoute().view === 'bonos') render();
+  } else if (t.dataset.runnerKit) {
+    const id = t.dataset.id, col = t.dataset.runnerKit;
+    await run(async () => { await api.updateRunner(id, { [col]: t.value || null }); runnerById(id)[col] = t.value || null; }, 'Talla guardada');
   } else if (t.dataset.runnerShift) {
     const id = t.dataset.runnerShift;
     const patch = t.value === '' ? { shift_enabled: false, shift_group: null } : t.value === 'on' ? { shift_enabled: true, shift_group: null } : { shift_enabled: true, shift_group: t.value };
