@@ -29,6 +29,11 @@ export function friendlyError(e) {
   if (/PGRST202|Could not find/i.test(msg) && /runner_set_paid/.test(msg)) return 'Para marcar el pago falta activarlo en la base de datos. Avisa a la dirección.';
   if (/importe_no_valido/.test(msg)) return 'Revisa el importe: entre 0 y 10 000 euros.';
   if (/no_inscrito/.test(msg)) return 'Primero tienes que estar apuntado a esa carrera.';
+  if (/coche_lleno/.test(msg)) return 'Ese coche ya está lleno.';
+  if (/plazas_ocupadas/.test(msg)) return 'Ya hay más gente apuntada que plazas: deja más plazas o que se bajen antes.';
+  if (/ya_conduces/.test(msg)) return 'En esta carrera ya llevas tu propio coche.';
+  if (/carrera_cerrada/.test(msg)) return 'Esa carrera ya se ha disputado o está suspendida.';
+  if (/PGRST202|Could not find/i.test(msg) && /runner_car/.test(msg)) return 'Los coches compartidos aún no están activados en la base de datos. Avisa a la dirección del club.';
   if (/nota_demasiado_larga/.test(msg)) return 'La nota es demasiado larga (máximo 1000 letras).';
   if (/no_inscrito/.test(msg)) return 'Solo puedes poner notas en las carreras en las que estás inscrito.';
   if (/PGRST202|Could not find/i.test(msg) && /runner_watch/.test(msg)) return 'Esta función aún no está activada en la base de datos. Avisa a la dirección del club.';
@@ -210,6 +215,12 @@ export function supabaseApi(url, key) {
     async runnerWatchDelete(code, id) { ok(await sb.rpc('runner_watch_delete', { p_code: code, p_id: id })); },
     async runnerStreaks(code) { try { return ok(await sb.rpc('runner_streaks', { p_code: code })); } catch (e) { if (/PGRST202|Could not find|runner_streaks/.test(String(e?.message))) return null; throw e; } },   // null = falta el SQL
     async runnerNotes(code) { try { return ok(await sb.rpc('runner_notes_list', { p_code: code })); } catch (e) { if (/PGRST202|Could not find|runner_notes_list/.test(String(e?.message))) return null; throw e; } },   // null = falta el SQL
+    /** Coches compartidos de las próximas carreras. null = falta el SQL «coche-compartido». */
+    async runnerCars(code) { try { return ok(await sb.rpc('runner_cars', { p_code: code })) || []; } catch { return null; } },
+    async runnerCarSave(code, reg, seats, from, depart, note) { ok(await sb.rpc('runner_car_save', { p_code: code, p_reg: reg, p_seats: seats, p_from: from || null, p_depart: depart || null, p_note: note || null })); },
+    async runnerCarDelete(code, reg) { ok(await sb.rpc('runner_car_delete', { p_code: code, p_reg: reg })); },
+    async runnerCarJoin(code, offer) { ok(await sb.rpc('runner_car_join', { p_code: code, p_offer: offer })); },
+    async runnerCarLeave(code, reg) { ok(await sb.rpc('runner_car_leave', { p_code: code, p_reg: reg })); },
     async runnerNoteSet(code, regId, note) { ok(await sb.rpc('runner_note_set', { p_code: code, p_registration: regId, p_note: note })); },
     async runnerPing(code) { try { await sb.rpc('runner_ping', { p_code: code }); } catch { /* sin el SQL de actividad */ } },
     async runnerChroniclesTeam(code) { try { return ok(await sb.rpc('runner_chronicles_team', { p_code: code })); } catch { return null; } },
@@ -835,6 +846,46 @@ export function demoApi(storage = globalThis.localStorage) {
         ].filter(Boolean);
         return { id: r.id, name: r.name, streak: streakCount(items, today) };
       }).filter((x) => x.streak > 0).sort((a, b) => b.streak - a.streak || a.name.localeCompare(b.name, 'es'));
+    },
+    async runnerCars(code) {
+      byCode(code); const d = load(), today = todayISO();
+      const ins = (reg, rid) => d.registration_entries.some((e) => e.registration_id === reg && e.runner_id === rid);   // como en la base de datos: si se borra de la carrera, su coche o su plaza desaparecen
+      return clone((d.car_offers || []).filter((o) => ins(o.registration_id, o.driver_id) && (d.registrations.find((g) => g.id === o.registration_id)?.date || '0') >= today).map((o) => ({
+        id: o.id, reg: o.registration_id, driver_id: o.driver_id, driver: d.runners.find((r) => r.id === o.driver_id)?.name || '?', seats: o.seats, from: o.from_place || null, depart: o.depart || null, note: o.note || null,
+        riders: (d.car_riders || []).filter((x) => x.offer_id === o.id && ins(x.registration_id, x.runner_id)).map((x) => ({ id: x.runner_id, name: d.runners.find((r) => r.id === x.runner_id)?.name || '?' })).sort((a, b) => a.name.localeCompare(b.name, 'es')) })));
+    },
+    async runnerCarSave(code, reg, seats, from, depart, note) {
+      const me = byCode(code), d = load(); d.car_offers = d.car_offers || []; d.car_riders = d.car_riders || [];
+      const g = d.registrations.find((x) => x.id === reg);
+      if (!d.registration_entries.some((e) => e.registration_id === reg && e.runner_id === me.id)) throw new Error('no_inscrito');
+      if (!g || g.suspended || g.date < todayISO()) throw new Error('carrera_cerrada');
+      if (!Number.isInteger(seats) || seats < 1 || seats > 8) throw new Error('datos_no_validos');
+      let o = d.car_offers.find((x) => x.registration_id === reg && x.driver_id === me.id);
+      if (o && d.car_riders.filter((x) => x.offer_id === o.id).length > seats) throw new Error('plazas_ocupadas');
+      d.car_riders = d.car_riders.filter((x) => !(x.registration_id === reg && x.runner_id === me.id));
+      const f = { seats, from_place: String(from || '').trim().slice(0, 60) || null, depart: String(depart || '').trim().slice(0, 30) || null, note: String(note || '').trim().slice(0, 80) || null };
+      if (o) Object.assign(o, f); else d.car_offers.push({ id: uuid(), registration_id: reg, driver_id: me.id, created_at: new Date().toISOString(), ...f });
+      save();
+    },
+    async runnerCarDelete(code, reg) {
+      const me = byCode(code), d = load(); d.car_offers = d.car_offers || []; d.car_riders = d.car_riders || [];
+      const o = d.car_offers.find((x) => x.registration_id === reg && x.driver_id === me.id);
+      if (o) { d.car_riders = d.car_riders.filter((x) => x.offer_id !== o.id); d.car_offers = d.car_offers.filter((x) => x.id !== o.id); save(); }
+    },
+    async runnerCarJoin(code, offer) {
+      const me = byCode(code), d = load(); d.car_offers = d.car_offers || []; d.car_riders = d.car_riders || [];
+      const o = d.car_offers.find((x) => x.id === offer); if (!o) throw new Error('no_existe');
+      if (o.driver_id === me.id || d.car_offers.some((x) => x.registration_id === o.registration_id && x.driver_id === me.id)) throw new Error('ya_conduces');
+      if (!d.registration_entries.some((e) => e.registration_id === o.registration_id && e.runner_id === me.id)) throw new Error('no_inscrito');
+      const g = d.registrations.find((x) => x.id === o.registration_id);
+      if (!g || g.suspended || g.date < todayISO()) throw new Error('carrera_cerrada');
+      if (d.car_riders.filter((x) => x.offer_id === offer && x.runner_id !== me.id).length >= o.seats) throw new Error('coche_lleno');
+      d.car_riders = d.car_riders.filter((x) => !(x.registration_id === o.registration_id && x.runner_id === me.id));
+      d.car_riders.push({ offer_id: offer, registration_id: o.registration_id, runner_id: me.id, created_at: new Date().toISOString() });
+      save();
+    },
+    async runnerCarLeave(code, reg) {
+      const me = byCode(code), d = load(); d.car_riders = (d.car_riders || []).filter((x) => !(x.registration_id === reg && x.runner_id === me.id)); save();
     },
     async runnerNotes(code) {
       const me = byCode(code), d = load(); d.runner_notes = d.runner_notes || [];
