@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError, cleanWeb } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, disciplineKey, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   teamMoves, parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  directorBoard, raceImpact, alDia, tierRanges, nextTeamRace, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, projectLeagueRaces, WATCH_TBC, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, igHeadline, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
+  directorBoard, raceImpact, alDia, tierRanges, nextTeamRace, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, projectLeagueRaces, WATCH_TBC, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, igHeadline, uspacShift, USPAC_GROUPS, USPAC_NAMES, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -354,9 +354,11 @@ async function loadImpact() {
   S.impact = r && Array.isArray(r.posted) ? { posted: new Set(r.posted), ig: r.ig_rows ? igHeadline(r.ig_rows) : null } : null;
   if (S.runnerData) render();
 }
+/** Escamot (E1–E5) del corredor para pintar sus turnos en el calendario; null si no tiene. */
+async function loadShift() { let g = null; try { g = await api.runnerMyShift(S.code || S.previewCode); } catch { g = null; } S.myShift = g || null; }
 async function loadRunner() {
   if (!S.session?.isAdmin) api.runnerPing?.(S.code).catch(() => {});   // actividad: última vez que abrió la app
-  try { S.moves = undefined; S.runnerData = await api.runnerView(S.code); await loadNews(); await loadCorrections(); await loadChron(); await loadWatch(); await loadNotes(); }
+  try { S.moves = undefined; S.runnerData = await api.runnerView(S.code); await loadNews(); await loadCorrections(); await loadChron(); await loadWatch(); await loadNotes(); await loadShift(); }
   catch (e) {
     S.runnerData = null;
     if (/enlace_no_valido/.test(String(e?.message))) { store.del(CODE_KEY); S.code = null; }
@@ -791,7 +793,7 @@ const viewToggle = () => S.regView === 'cal'
  * Mes con las carreras marcadas y, debajo, las tarjetas de ese mes (o del día pulsado).
  * `isMine(g)` marca los días en que el corredor ya está apuntado.
  */
-function calendarView(regs, card, isMine = () => false, { done = [], doneCard = null, isPosted = null } = {}) {
+function calendarView(regs, card, isMine = () => false, { done = [], doneCard = null, isPosted = null, shiftGroup = null } = {}) {
   const today = todayISO();
   // Elementos del calendario: inscripciones (próximas o ya disputadas sin resultado) y carreras con resultados.
   const items = [
@@ -817,16 +819,18 @@ function calendarView(regs, card, isMine = () => false, { done = [], doneCard = 
     const people = list.reduce((n, it) => n + it.people, 0);
     const discs = new Set(list.map(discOf));
     const pst = isPosted && list.length ? (list.every((it) => isPosted(it.g)) ? 'posted' : list.some((it) => isPosted(it.g)) ? 'part-posted' : '') : '';
+    const sh = shiftGroup ? uspacShift(shiftGroup, d) : null;
+    const shTag = sh ? `<em class="sh sh-${sh.code}" aria-hidden="true">${sh.code}</em>` : '';
     const cls = ['cal-cell', pst, list.length ? 'has' : '', list.length && !up.length ? 'past-only' : '', d === today ? 'today' : '',
-      d === S.calDay ? 'sel' : '', d < today ? 'past' : '', list.some((it) => isMine(it.g)) ? 'mine' : '',
+      d === S.calDay ? 'sel' : '', d < today ? 'past' : '', list.some((it) => isMine(it.g)) ? 'mine' : '', sh ? `shc shc-${sh.code}` : '',
       list.some((it) => it.g.end_date) ? 'stage' : '', list.length ? (discs.size === 1 ? discOf(list[0]) : 'multi-mod') : '']
       .filter(Boolean).join(' ');
-    const label = `${Number(d.slice(8))} de ${MONTH_NAMES[m - 1]}${list.length ? `: ${list.map((it) => `${it.g.name} (${modText(it.g)}${it.past ? ', ya disputada' : ''}, ${it.people} del club)`).join(', ')}` : ''}`;
+    const label = `${Number(d.slice(8))} de ${MONTH_NAMES[m - 1]}${sh ? ` (turno ${USPAC_NAMES[sh.code] || sh.code})` : ''}${list.length ? `: ${list.map((it) => `${it.g.name} (${modText(it.g)}${it.past ? ', ya disputada' : ''}, ${it.people} del club)`).join(', ')}` : ''}`;
     return list.length
-      ? `<button class="${cls}" data-act="cal-day" data-d="${d}" aria-label="${esc(label)}"><b>${Number(d.slice(8))}</b>
+      ? `<button class="${cls}" data-act="cal-day" data-d="${d}" aria-label="${esc(label)}"><b>${Number(d.slice(8))}</b>${shTag}
           ${people ? `<i class="cnt">${people}</i>` : ''}
           <span class="dots">${list.slice(0, 4).map((it) => `<i class="${discOf(it)}"></i>`).join('')}</span></button>`
-      : `<span class="${cls}" aria-label="${esc(label)}"><b>${Number(d.slice(8))}</b></span>`;
+      : `<span class="${cls}" aria-label="${esc(label)}"><b>${Number(d.slice(8))}</b>${shTag}</span>`;
   };
   const monthItems = items.filter((it) => touches(it.g, ym));
   const mineN = monthItems.filter((it) => isMine(it.g)).length;
@@ -844,6 +848,7 @@ function calendarView(regs, card, isMine = () => false, { done = [], doneCard = 
         ${['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d) => `<span class="cal-dow">${d}</span>`).join('')}
         ${monthGrid(ym).flat().map(cell).join('')}
       </div>
+      ${shiftGroup && monthGrid(ym).flat().some((d) => d && uspacShift(shiftGroup, d)) ? `<div class="cal-legend sh-legend" aria-label="Mis turnos"><span class="sh-who">${ico('clock')}Escamot ${esc(shiftGroup.slice(1))}</span>${['M', 'T', 'N', 'D', 'TN', 'F'].map((c) => `<span><em class="sh sh-${c}">${c}</em>${c === 'M' ? 'Mañana' : c === 'T' ? 'Tarde' : c === 'N' ? 'Noche' : c === 'F' ? 'Fiesta' : c}</span>`).join('')}</div>` : ''}
       ${monthDiscs.length ? `<div class="cal-legend">${monthDiscs.map(([k, g]) => `<span class="${discClass(g.modality, g.subtype)}"><i></i>${esc(discLabel(g.modality, g.subtype))}</span>`).join('')}</div>` : ''}
     </section>
     ${S.calDay ? `<h2 class="section">${formatDate(S.calDay)} <button class="link small" data-act="cal-day" data-d="${S.calDay}">Ver todo el mes</button></h2>` : ''}
@@ -1630,7 +1635,7 @@ function viewRunnerHome() {
   const isMine = (g) => (g.entries || []).some((e) => e.runner_id === me.id) || (g.results || []).some((x) => x.runner_id === me.id);
   const done = byMod((S.team?.races || []).filter((r) => (r.results || []).length));
   const body = S.regView === 'cal'
-    ? calendarView(regs, card, isMine, { done, doneCard: (r) => doneRaceCard(r, { meId: me.id }) })
+    ? calendarView(regs, card, isMine, { done, doneCard: (r) => doneRaceCard(r, { meId: me.id }), shiftGroup: S.myShift })
     : `${(() => { const wk = upcoming.filter((g) => daysTo(g.date) <= 7); return wk.length ? `<h2 class="section">📅 Esta semana (${wk.length})</h2>${wk.map(card).join('')}` : ''; })()}
     <h2 class="section">${upcoming.some((g) => daysTo(g.date) <= 7) ? 'Más adelante' : 'Próximas carreras'} (${upcoming.filter((g) => daysTo(g.date) > 7).length || (upcoming.some((g) => daysTo(g.date) <= 7) ? 0 : upcoming.length)})</h2>
     ${upcoming.length ? monthList(upcoming.filter((g) => daysTo(g.date) > 7), card) : `<p class="empty">${filtersOn(me) ? 'Ninguna carrera próxima con estos filtros. <button class="link" data-act="filters-clear">Quitar filtros</button>' : 'Todavía no hay carreras abiertas.'}</p>`}
@@ -4565,6 +4570,7 @@ function viewRunnerCard(id) {
     <section class="card stack">
       <label>Categoría${catSelect(`data-runner-cat="${r.id}"`, r.category || '')}</label>
       <label>Contrato${contractSelect(`data-runner-contract="${r.id}"`, r.contract || '')}</label>
+      <label>Turnos (escamot)<select data-runner-shift="${r.id}" aria-label="Escamot de ${esc(r.name)}"><option value="">Sin turnos</option>${USPAC_GROUPS.map((g) => `<option value="${g}"${r.shift_group === g ? ' selected' : ''}>Escamot ${g.slice(1)}</option>`).join('')}</select></label>
       <p class="muted small">${tot} carrera${tot === 1 ? '' : 's'} en total${r.created_at ? ` · en el club desde ${formatDate(String(r.created_at).slice(0, 10), false)}` : ''}</p>
       <div class="row"><button class="btn primary" data-act="runner-menu" data-id="${r.id}">${ico('share')} Enlace</button>
         <button class="btn" data-act="runner-do" data-a="preview" data-id="${r.id}">Ver su pantalla</button></div>
@@ -6092,6 +6098,9 @@ $app.addEventListener('change', async (ev) => {
     const id = t.dataset.runnerContract;
     await run(async () => { await api.updateRunner(id, { contract: t.value || null }); runnerById(id).contract = t.value || null; }, 'Contrato guardado');
     if (parseRoute().view === 'bonos') render();
+  } else if (t.dataset.runnerShift) {
+    const id = t.dataset.runnerShift;
+    await run(async () => { await api.updateRunner(id, { shift_group: t.value || null }); runnerById(id).shift_group = t.value || null; }, t.value ? 'Escamot guardado' : 'Turnos quitados');
   } else if (t.dataset.runnerCat) {
     const id = t.dataset.runnerCat;
     await run(async () => { await api.updateRunner(id, { category: t.value || null }); runnerById(id).category = t.value || null; }, 'Categoría guardada');

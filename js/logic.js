@@ -1155,6 +1155,26 @@ export function igHeadline(rows, from = '', to = '') {
 }
 
 // ======================================================================
+//  Turnos por escamots (calendario USPAC 2027-28): ciclo de 5 semanas
+// ======================================================================
+
+/** Calendario de turnos de escamots: del lunes 1 de febrero de 2027 al 31 de enero de 2028. La semana del 1/2/2027 es la 2.ª del ciclo. */
+export const USPAC_START = '2027-02-01', USPAC_END = '2028-01-31';
+/** Turno de lunes a viernes de cada escamot en las 5 semanas del ciclo (M mañana, T tarde, N noche, F fiesta). */
+const USPAC_CYCLE = { E1: 'TNFMF', E2: 'FTNFM', E3: 'MFTNF', E4: 'FMFTN', E5: 'NFMFT' };
+export const USPAC_GROUPS = Object.keys(USPAC_CYCLE);
+export const USPAC_NAMES = { M: 'Mañana', T: 'Tarde', N: 'Noche', D: 'D', TN: 'TN', F: 'Fiesta' };
+/** Turno de un escamot en un día: { code: 'M'|'T'|'N'|'D'|'TN'|'F', week: turno de esa semana, n: nº de semana desde el 1/2/2027 } o null fuera del calendario. */
+export function uspacShift(group, iso) {
+  const cyc = USPAC_CYCLE[group];
+  if (!cyc || !/^\d{4}-\d{2}-\d{2}$/.test(iso || '') || iso < USPAC_START || iso > USPAC_END) return null;
+  const days = Math.round((Date.parse(iso + 'T12:00:00Z') - Date.parse(USPAC_START + 'T12:00:00Z')) / 864e5);
+  const n = Math.floor(days / 7), dow = days % 7;                       // 0 = lunes
+  const w = cyc[(n + 1) % 5];
+  return { code: dow < 5 ? w : w === 'N' ? 'TN' : w === 'M' ? 'D' : 'F', week: w, n };
+}
+
+// ======================================================================
 //  Panel de redes (dirección): estado de las 3 publicaciones de cada carrera
 // ======================================================================
 

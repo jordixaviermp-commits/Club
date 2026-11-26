@@ -15,6 +15,9 @@ create table if not exists public.runners (
   created_at  timestamptz default now()
 );
 alter table public.runners add column if not exists last_seen timestamptz;   -- última vez que abrió la app
+alter table public.runners add column if not exists shift_group text;
+alter table public.runners drop constraint if exists runners_shift_group_check;
+alter table public.runners add constraint runners_shift_group_check check (shift_group is null or shift_group in ('E1','E2','E3','E4','E5'));
 
 create table if not exists public.registrations (          -- inscripciones (carreras futuras)
   id          uuid primary key default gen_random_uuid(),
@@ -1498,6 +1501,16 @@ begin
 end $$;
 
 -- «Impacto en redes» de los corredores: publicaciones hechas por el club y cifras agregadas de Instagram (30 días)
+create or replace function public.runner_my_shift(p_code text)
+returns text language plpgsql stable security definer set search_path = public as $$
+declare v text;
+begin
+  select shift_group into v from runners where code = p_code;
+  if not found then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  return v;
+end $$;
+grant execute on function public.runner_my_shift(text) to anon, authenticated;
+
 create or replace function public.runner_social_impact(p_code text)
 returns jsonb language plpgsql stable security definer set search_path = public as $$
 declare
@@ -1775,7 +1788,7 @@ grant execute on function public.runner_set_registration_url(text, uuid, text), 
                           public.runner_update_race(text, uuid, jsonb), public.runner_delete_race(text, uuid), public.runner_set_suspended(text, uuid, boolean),
                           public.runner_report_result(text, text, uuid, int, text, text, int),
                           public.runner_documents_list(text), public.runner_get_document(text, uuid), public.runner_contract_template(text), public.runner_get_contract_template(text),
-                          public.runner_team(text), public.runner_streaks(text), public.runner_team_moves(text), public.runner_notes_list(text), public.runner_note_set(text, uuid, text), public.runner_chronicles(text), public.runner_chronicles_team(text), public.runner_social_impact(text), public.runner_chronicle_set(text, text, boolean),
+                          public.runner_team(text), public.runner_streaks(text), public.runner_team_moves(text), public.runner_notes_list(text), public.runner_note_set(text, uuid, text), public.runner_chronicles(text), public.runner_chronicles_team(text), public.runner_social_impact(text), public.runner_my_shift(text), public.runner_chronicle_set(text, text, boolean),
                           public.runner_leave(text, uuid), public.runner_set_paid(text, uuid, boolean, numeric, date), public.runner_join_race(text, uuid, text),
                           public.runner_set_race_type(text, uuid, text, text), public.runner_propose_circuit(text, text, int, int, text),
                           public.runner_cancel_circuit(text, uuid), public.runner_news(text), public.runner_set_race_details(text, uuid, text, numeric), public.runner_complete_race(text, text, uuid, jsonb), public.auto_promote_registrations(),

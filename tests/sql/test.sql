@@ -927,4 +927,16 @@ select pg_temp.check(not (select suspended from registrations where id = '200000
 set role anon;
 select pg_temp.expect_fail($q$select runner_set_suspended('codigo-falso', '20000000-0000-0000-0000-0000000000a7', true)$q$, 'suspender: enlace falso no puede');
 select pg_temp.expect_fail($q$select runner_set_suspended('codigo-valorador-dos-02', '20000000-0000-0000-0000-0000000000ff', true)$q$, 'suspender: carrera inexistente');
+-- turnos: el corredor ve solo su escamot; la dirección lo fija; valores raros se rechazan
+reset role;
+update runners set shift_group = 'E4' where code = 'codigo-valorador-dos-02';
+set role anon;
+select pg_temp.check(runner_my_shift('codigo-valorador-dos-02') = 'E4', 'turnos: el corredor ve su escamot');
+select pg_temp.check(runner_my_shift('codigo-valorador-uno-01') is null, 'turnos: sin escamot devuelve vacío');
+select pg_temp.expect_fail($q$select runner_my_shift('codigo-falso')$q$, 'turnos: enlace falso no lee');
+select pg_temp.expect_fail($q$select shift_group from runners$q$, 'turnos: anon no lee la tabla de corredores');
+reset role;
+select pg_temp.expect_fail($q$update runners set shift_group = 'E9' where code = 'codigo-valorador-dos-02'$q$, 'turnos: escamot inválido rechazado');
+update runners set shift_group = null where code = 'codigo-valorador-dos-02';
+set role anon;
 \echo TODAS LAS PRUEBAS SQL OK
