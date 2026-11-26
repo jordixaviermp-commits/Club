@@ -192,6 +192,7 @@ export function supabaseApi(url, key) {
     // publicaciones del club y cifras agregadas de Instagram (30 días) para «Impacto en redes»; null si falta su SQL
     async runnerSocialImpact(code) { try { return ok(await sb.rpc('runner_social_impact', { p_code: code })); } catch { return null; } },
     async runnerMyShift(code) { try { return ok(await sb.rpc('runner_my_shift', { p_code: code })) || null; } catch { return null; } },
+    async runnerSetMyShift(code, group) { ok(await sb.rpc('runner_set_my_shift', { p_code: code, p_group: group || null })); },
     async runnerSetChronicle(code, key, done) { ok(await sb.rpc('runner_chronicle_set', { p_code: code, p_key: key, p_done: !!done })); },
     /** Dirección: marca o desmarca la crónica de un corredor (por si la pasó y no la marcó en su perfil). */
     async setChronicle(runnerId, key, done) {
@@ -825,6 +826,7 @@ export function demoApi(storage = globalThis.localStorage) {
     async runnerPing(code) { const me = byCode(code); me.last_seen = new Date().toISOString(); save(); },
     async runnerChronicles(code) { const me = byCode(code); return clone((load().chronicles || []).filter((x) => x.runner_id === me.id).map((x) => x.race_key)); },
     async runnerMyShift(code) { return byCode(code).shift_group || null; },
+    async runnerSetMyShift(code, group) { const r = byCode(code); if (group && !/^E[1-5]$/.test(group)) throw new Error('datos_no_validos'); r.shift_group = group || null; save(); },
     async runnerSocialImpact(code) {
       byCode(code); const d = load(), snaps = d.ig_snapshots || [];
       const periods = snaps.filter((x) => x.kind === 'period' && /^\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2}$/.test(x.key));

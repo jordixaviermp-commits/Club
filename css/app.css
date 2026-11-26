@@ -2652,3 +2652,9 @@ a.sum-streak { text-decoration: none; color: var(--text); }
 .sh-legend .sh { position: static; display: inline-grid; place-items: center; min-width: 22px; height: 18px; padding: 0 3px; margin-right: .3rem; border-radius: 5px; font-size: .68rem; background: color-mix(in srgb, var(--shb) 22%, var(--card)); }
 .sh-legend { flex-wrap: wrap; gap: .3rem .6rem; overflow: visible; } .sh-legend > span { white-space: nowrap; flex: none; }
 .sh-legend .sh { font-style: normal; }
+.shift-pick { padding: .55rem .8rem; } .shift-pick > summary { display: flex; align-items: center; gap: .5rem; cursor: pointer; list-style: none; min-height: 36px; font-weight: 700; }
+.shift-pick > summary::-webkit-details-marker { display: none; } .shift-pick > summary small { color: var(--muted); font-weight: 500; }
+.shift-pick .sp-cur { margin-left: auto; font-size: var(--fs-3); color: var(--muted); font-weight: 600; } .shift-pick .desp-chev { flex: none; transition: transform .15s; } .shift-pick[open] .desp-chev { transform: rotate(180deg); }
+.shift-pick .sp-row { display: flex; align-items: center; gap: .6rem; margin-top: .4rem; } .shift-pick select { flex: 1; }
+.shift-pick > summary > .ico:first-child { width: 20px; height: 20px; flex: none; color: var(--muted); }
+.shift-pick .sp-cur { white-space: nowrap; } .shift-pick .sp-row { justify-content: space-between; text-align: left; } .shift-pick .sp-row select { max-width: 60%; }

@@ -36,6 +36,11 @@ function applyTheme(t) {
   if (meta) meta.content = t === 'dark' || (t === 'auto' && window.matchMedia?.('(prefers-color-scheme: dark)').matches) ? '#0e151a' : '#284556';
 }
 applyTheme(getTheme());
+/** «Mis turnos»: cada corredor elige su escamot (opcional) y ve sus turnos en el calendario. Plegado: solo interesa a quien trabaja a turnos. */
+const shiftPicker = () => (S.preview ? '' : `<details class="card shift-pick" data-open-key="shift"${S.open?.shift ? ' open' : ''}>
+  <summary>${ico('clock')}<span>Mis turnos de trabajo <small>(opcional)</small></span><b class="sp-cur">${S.myShift ? `Escamot ${esc(S.myShift.slice(1))}` : 'Sin turnos'}</b>${ico('chevd', 'desp-chev')}</summary>
+  <label class="sp-row">Mi escamot<select data-my-shift aria-label="Mi escamot"><option value="">Sin turnos</option>${USPAC_GROUPS.map((g) => `<option value="${g}"${S.myShift === g ? ' selected' : ''}>Escamot ${g.slice(1)}</option>`).join('')}</select></label>
+  <p class="hint">Si trabajas por escamots, elígelo y verás tus turnos (M, T, N, F…) en el calendario de Carreras. Solo lo ves tú.</p></details>`);
 const themeLine = () => `<div class="theme-line"><span class="muted">Aspecto de la app:</span><div class="years">${[['auto', '🌓 Automático'], ['light', '☀️ Claro'], ['dark', '🌙 Oscuro']].map(([v, l]) =>
   `<button class="chip${getTheme() === v ? ' on' : ''}" data-act="theme" data-t="${v}" aria-pressed="${getTheme() === v}">${l}</button>`).join('')}</div>
   ${getTheme() === 'auto' ? '<small class="muted">Automático sigue el modo claro u oscuro de tu móvil.</small>' : ''}</div>`;
@@ -1732,7 +1737,7 @@ function viewRunnerMine() {
     ${myRacesCard(d, () => chronicleCard(d))}
     ${installHint()}
     ${S.preview ? '' : `<p class="center"><button class="link muted" data-act="r-forget">No soy ${esc(me.name)}</button></p>`}
-    ${themeLine()}${versionLine()}`,
+    ${shiftPicker()}${themeLine()}${versionLine()}`,
   { rtab: 'mi' });
 }
 
@@ -6098,6 +6103,8 @@ $app.addEventListener('change', async (ev) => {
     const id = t.dataset.runnerContract;
     await run(async () => { await api.updateRunner(id, { contract: t.value || null }); runnerById(id).contract = t.value || null; }, 'Contrato guardado');
     if (parseRoute().view === 'bonos') render();
+  } else if (t.hasAttribute('data-my-shift')) {
+    await run(async () => { await api.runnerSetMyShift(S.code, t.value); S.myShift = t.value || null; }, t.value ? 'Escamot guardado' : 'Turnos quitados'); render();
   } else if (t.dataset.runnerShift) {
     const id = t.dataset.runnerShift;
     await run(async () => { await api.updateRunner(id, { shift_group: t.value || null }); runnerById(id).shift_group = t.value || null; }, t.value ? 'Escamot guardado' : 'Turnos quitados');
