@@ -1048,7 +1048,7 @@ html, body { overscroll-behavior-y: contain; }
 .joined-acts { grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr) minmax(0, 1fr); gap: .35rem; }
 .joined-acts .btn { min-width: 0; padding: .3rem .25rem; gap: .2rem; font-size: clamp(.7rem, 3.2vw, .82rem); }
 .joined-acts .btn .ico { width: 15px; height: 15px; }
-.joined-acts { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr); } .joined-btn .jb-more { display: none; }
+.joined-acts { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr); } .joined-btn .jb-more { display: inline-block; }
 
 /* ---- Pago de la inscripción: discreto (una pastilla) y una marca pequeña en los compañeros que ya pagaron ---- */
 .pay-btn { display: inline-flex; align-items: center; gap: .35rem; margin-top: .55rem; padding: .2rem .7rem .2rem .5rem; border-radius: 999px; border: 1px dashed var(--line); background: none; color: var(--muted); font: inherit; font-size: var(--fs-3); cursor: pointer; }
@@ -2360,7 +2360,7 @@ body.rsearch .next-team, body.rsearch #pulse-box { display: none; }
 body.rsearch .ruta-strip { display: none; }
 .joined-acts .btn { white-space: nowrap; }
 .joined-acts { grid-template-columns: 1.1fr .8fr 1.1fr; } .joined-acts .btn { min-width: 0; }
-@media (max-width: 350px) { .joined-acts .btn .ico { display: none; } }
+@media (max-width: 350px) { .joined-acts .btn:not(.joined-btn) .ico { display: none; } .joined-acts .joined-btn .ico:not(.jb-more) { display: none; } }
 
 /* v221: en Carreras, en lugar del saludo, el acceso a Pacing en la cabecera */
 body.rsearch .ruta-strip { display: none; }
@@ -2774,3 +2774,20 @@ section.card.purge-card > h2 { color: var(--bad); }
 .bk-card .pi { width: 36px; height: 36px; border-radius: 12px; background: var(--accent-2); color: var(--accent); display: grid; place-items: center; flex: none; } .bk-card .pi .ico { width: 19px; height: 19px; }
 .bk-card .pt { display: flex; flex-direction: column; min-width: 0; flex: 1; } .bk-card .pt b { font-size: var(--fs-4); } .bk-card .pt small { color: var(--muted); font-size: var(--fs-2); }
 .bk-card .btn { display: inline-flex; align-items: center; gap: .3rem; flex: none; } .bk-card .btn .ico { width: 16px; height: 16px; }
+
+/* ---- v264 · Las «i» van siempre pegadas a lo que explican ---- */
+.tip-body { margin: .3rem 0 .6rem; padding: .55rem .75rem; border-radius: var(--r-sm); background: var(--accent-2); color: var(--text); font-size: var(--fs-3); line-height: 1.4; text-align: left; }
+.tip-body[hidden] { display: none !important; }
+label.tip-host, .flabel-l.tip-host { position: relative; }
+label.tip-host > .tip-btn { position: absolute; top: 0; right: 0; margin: 0; }
+.flabel .tip-btn { margin-left: .45rem; vertical-align: middle; }
+.btn-tip { display: flex; align-items: center; gap: .4rem; } .btn-tip > :first-child { flex: 1; min-width: 0; } .btn-tip > .tip-btn { margin-left: 0; }
+.tip-btn:has(span) { width: auto; height: 28px; padding: 0 .65rem 0 .45rem; gap: .3rem; border-radius: 999px; font-size: var(--fs-2); font-weight: 700; }
+.tip-btn.inl { margin-left: .45rem; } h1.has-tip:has(.inl), h2.has-tip:has(.inl), h3.has-tip:has(.inl), h4.has-tip:has(.inl) { display: inline-flex; }
+.tip-btn.line { margin: .35rem 0 .1rem; justify-self: start; align-self: flex-start; }
+/* Web de la carrera: siempre el mismo cuadradito con el clip (abre la web si la hay; si no, permite añadirla) */
+.rc-tool.has-url { color: var(--accent); }
+
+/* «✓ Inscrito ▾»: se ve que es un botón que abre un menú (cambiar categoría / borrarme) */
+.joined-acts .joined-btn { justify-content: space-between; padding-inline: .6rem .45rem; gap: .25rem; }
+.joined-acts .joined-btn .jb-more { width: 18px; height: 18px; margin-left: auto; flex: none; opacity: .85; padding: 1px; border-radius: 50%; background: color-mix(in srgb, var(--ok) 22%, transparent); }

@@ -1356,6 +1356,8 @@ export const seenLevel = (days) => (days == null ? 'never' : days <= 7 ? 'hot' :
 
 /** Huecos que no impiden la estadística básica: se piden, pero no cuentan como «datos incompletos». */
 export const SOFT_GAPS = new Set(['km', 'desnivel', 'precio', 'ubicación']);
+/** Desde esta fecha, cada resultado lleva obligatoriamente puesto de categoría, puesto en la general y tiempo. Las carreras anteriores no se marcan como incompletas por eso (no tenían esos campos). */
+export const FULL_RESULTS_FROM = '2026-11-27';
 /** Qué le falta a una carrera con resultados para que la memoria y las estadísticas salgan completas. */
 export function raceGaps(r) {
   const out = [];
@@ -1367,6 +1369,12 @@ export function raceGaps(r) {
   if (!distanceKm(r)) out.push('ubicación');
   const noPos = (r?.results || []).filter((x) => x.position == null || x.position === '').length;
   if (noPos) out.push(`${noPos} sin puesto`);
+  // desde FULL_RESULTS_FROM cada resultado lleva obligatoriamente puesto de categoría, puesto en la general y tiempo: si falta alguno, la carrera queda incompleta
+  if (String(r?.date ?? '') >= FULL_RESULTS_FROM) {
+    const res = r?.results || [], noTime = res.filter((x) => !(Number(x.time_seconds) > 0)).length, noGen = res.filter((x) => x.position != null && x.position !== '' && !generalOf(x)).length;
+    if (noTime) out.push(`${noTime} sin tiempo`);
+    if (noGen) out.push(`${noGen} sin puesto general`);
+  }
   if (!(r?.results || []).length) out.push('sin participantes');
   return out;
 }
