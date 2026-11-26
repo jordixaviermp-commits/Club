@@ -1004,4 +1004,44 @@ delete from registration_entries where registration_id = '20000000-0000-0000-000
 select pg_temp.check((select count(*) = 0 from car_offers), 'coche: si el conductor se borra de la carrera, su coche desaparece');
 set role anon;
 select pg_temp.expect_fail('select * from car_offers', 'coche: anon no lee las tablas');
+-- limpieza de datos antiguos (solo dirección): borra hasta el año elegido y conserva lo posterior y las carreras que se prolongan al año siguiente
+reset role;
+insert into races (id, name, date, end_date, modality) values
+  ('30000000-0000-0000-0000-0000000000f1', 'Purga Antigua', '2023-05-01', null, 'Carretera'), ('30000000-0000-0000-0000-0000000000f2', 'Purga Continua', '2024-12-30', '2025-01-02', 'Carretera'),
+  ('30000000-0000-0000-0000-0000000000f3', 'Purga 2025', '2025-06-01', null, 'Carretera'), ('30000000-0000-0000-0000-0000000000f4', 'Purga Dic2024', '2024-12-10', null, 'Carretera');
+insert into results (race_id, runner_id, runner_name, position) select id, '10000000-0000-0000-0000-0000000000c3', 'Pere Coche', 5 from races where name like 'Purga%';
+insert into registrations (id, name, date, modality) values ('20000000-0000-0000-0000-0000000000f5', 'Purga Insc 2024', '2024-11-01', 'Carretera'), ('20000000-0000-0000-0000-0000000000f6', 'Purga Insc futura', '2099-03-01', 'Carretera');
+insert into registration_entries (registration_id, runner_id) values ('20000000-0000-0000-0000-0000000000f5', '10000000-0000-0000-0000-0000000000c3'), ('20000000-0000-0000-0000-0000000000f6', '10000000-0000-0000-0000-0000000000c3');
+insert into car_offers (registration_id, driver_id, seats) values ('20000000-0000-0000-0000-0000000000f5', '10000000-0000-0000-0000-0000000000c3', 2);
+insert into runner_entry_notes (runner_id, registration_id, note) values ('10000000-0000-0000-0000-0000000000c3', '20000000-0000-0000-0000-0000000000f5', 'hotel');
+insert into chronicles (runner_id, race_key) values ('10000000-0000-0000-0000-0000000000c3', '2024-12-10|purga dic2024'), ('10000000-0000-0000-0000-0000000000c3', '2025-06-01|purga 2025');
+insert into social_posts (key) values ('2024-12-10|purga dic2024'), ('res|2024-12-10|purga dic2024'), ('2025-06-01|purga 2025');
+insert into circuit_podiums (runner_id, year, circuit, position) values ('10000000-0000-0000-0000-0000000000c3', 2024, 'Circuito Purga', 1), ('10000000-0000-0000-0000-0000000000c3', 2025, 'Circuito Purga', 2);
+insert into change_log (at, actor, entity, action, summary) values ('2024-05-05', 'Test', 'race', 'x', 'purga vieja'), (now(), 'Test', 'race', 'x', 'purga reciente');
+set role anon;
+select pg_temp.expect_fail($q$select admin_purge_counts(2024)$q$, 'limpieza: anónimo no puede');
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000ee', false);
+select pg_temp.expect_fail($q$select admin_purge(2024, array['races'])$q$, 'limpieza: un usuario sin ser dirección no puede');
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+select pg_temp.check((admin_purge_counts(2024)->>'races')::int >= 2 and (admin_purge_counts(2024)->>'regs')::int >= 1 and (admin_purge_counts(2024)->>'cars')::int = 1 and (admin_purge_counts(2024)->>'notes')::int = 1 and (admin_purge_counts(2024)->>'circuits')::int = 1, 'limpieza: la vista previa cuenta lo que se borraría');
+select pg_temp.check(exists (select 1 from races where name = 'Purga Antigua'), 'limpieza: la vista previa no borra nada');
+select pg_temp.expect_fail($q$select admin_purge(2024, array['todo'])$q$, 'limpieza: categoría desconocida rechazada');
+select pg_temp.expect_fail($q$select admin_purge(1900, array['races'])$q$, 'limpieza: año no válido rechazado');
+-- solo marcas: las carreras siguen
+select admin_purge(2024, array['marks']);
+select pg_temp.check(exists (select 1 from races where name = 'Purga Antigua') and not exists (select 1 from chronicles where race_key like '2024-12-10%') and exists (select 1 from chronicles where race_key like '2025-06-01%'), 'limpieza: solo las marcas, y solo las de hasta 2024');
+select pg_temp.check(not exists (select 1 from social_posts where key like '%2024-12-10%') and exists (select 1 from social_posts where key like '2025-06-01%'), 'limpieza: publicaciones marcadas, hasta 2024');
+-- todo
+select admin_purge(2024, array['races','regs','marks','log']);
+select pg_temp.check(not exists (select 1 from races where name in ('Purga Antigua', 'Purga Dic2024')), 'limpieza: borra las carreras de hasta 2024');
+select pg_temp.check(exists (select 1 from races where name = 'Purga Continua') and exists (select 1 from races where name = 'Purga 2025'), 'limpieza: conserva la que se prolonga a 2025 y las de después');
+select pg_temp.check(not exists (select 1 from results x join races r on r.id = x.race_id where r.name in ('Purga Antigua', 'Purga Dic2024')) and exists (select 1 from results x join races r on r.id = x.race_id where r.name = 'Purga Continua'), 'limpieza: sus resultados siguen a su carrera');
+select pg_temp.check(not exists (select 1 from registrations where name = 'Purga Insc 2024') and exists (select 1 from registrations where name = 'Purga Insc futura'), 'limpieza: inscripciones antiguas fuera, futuras se quedan');
+reset role;
+select pg_temp.check((select count(*) from car_offers where registration_id = '20000000-0000-0000-0000-0000000000f5') = 0 and (select count(*) from runner_entry_notes where registration_id = '20000000-0000-0000-0000-0000000000f5') = 0, 'limpieza: coches y notas de las inscripciones borradas se van con ellas');
+select pg_temp.check(not exists (select 1 from circuit_podiums where circuit = 'Circuito Purga' and year = 2024) and exists (select 1 from circuit_podiums where circuit = 'Circuito Purga' and year = 2025), 'limpieza: podios de circuito hasta 2024');
+select pg_temp.check(not exists (select 1 from change_log where summary = 'purga vieja') and exists (select 1 from change_log where summary = 'purga reciente') and exists (select 1 from change_log where entity = 'purga' and summary like 'borró datos hasta 2024%'), 'limpieza: historial antiguo fuera, el reciente y el aviso de la propia limpieza se quedan');
+reset role;
+set role anon;
 \echo TODAS LAS PRUEBAS SQL OK

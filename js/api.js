@@ -29,6 +29,7 @@ export function friendlyError(e) {
   if (/PGRST202|Could not find/i.test(msg) && /runner_set_paid/.test(msg)) return 'Para marcar el pago falta activarlo en la base de datos. Avisa a la dirección.';
   if (/importe_no_valido/.test(msg)) return 'Revisa el importe: entre 0 y 10 000 euros.';
   if (/no_inscrito/.test(msg)) return 'Primero tienes que estar apuntado a esa carrera.';
+  if (/PGRST202|Could not find/i.test(msg) && /admin_purge/.test(msg)) return 'Para borrar datos falta activarlo en la base de datos (SQL «limpieza»). Pídelo en el chat de Claude.';
   if (/coche_lleno/.test(msg)) return 'Ese coche ya está lleno.';
   if (/plazas_ocupadas/.test(msg)) return 'Ya hay más gente apuntada que plazas: deja más plazas o que se bajen antes.';
   if (/ya_conduces/.test(msg)) return 'En esta carrera ya llevas tu propio coche.';
@@ -185,6 +186,9 @@ export function supabaseApi(url, key) {
     async importAll(data) { ok(await sb.rpc('import_backup', { p: data })); },
 
     /** Puestos en la clasificación general (todas las categorías). null = falta el SQL «posicion-general»: sin ellos todo sigue igual. */
+    /** Limpieza de datos antiguos (dirección): cuántas filas se borrarían hasta un año, y borrar de verdad las categorías elegidas. */
+    async adminPurgeCounts(upto) { return ok(await sb.rpc('admin_purge_counts', { p_upto: upto })); },
+    async adminPurge(upto, what) { return ok(await sb.rpc('admin_purge', { p_upto: upto, p_what: what })); },
     async runnerGenerals(code) { try { return ok(await sb.rpc('runner_generals', { p_code: code })) || null; } catch { return null; } },
     async runnerView(code) {
       const [d, g] = await Promise.all([sb.rpc('runner_view', { p_code: code }).then(ok), this.runnerGenerals(code)]);
@@ -361,6 +365,17 @@ function demoSeed() {
   };
 }
 
+/** Lo que borraría la limpieza hasta un año (inclusive): lo anterior al 1 de enero siguiente; las carreras que se prolongan al año siguiente se conservan. */
+function purgeCounts(d, upto) {
+  if (!Number.isInteger(upto) || upto < 2000 || upto > 2100) throw new Error('datos_no_validos');
+  const c = `${upto + 1}-01-01`, old = (x) => (x.end_date || x.date) < c;
+  const races = new Set(d.races.filter(old).map((r) => r.id)), regs = new Set(d.registrations.filter(old).map((g) => g.id));
+  return { races: races.size, results: d.results.filter((x) => races.has(x.race_id)).length, circuits: (d.circuit_podiums || []).filter((x) => x.year <= upto).length,
+    regs: regs.size, entries: d.registration_entries.filter((e) => regs.has(e.registration_id)).length, notes: (d.runner_notes || []).filter((x) => regs.has(x.registration_id)).length,
+    cars: (d.car_offers || []).filter((x) => regs.has(x.registration_id)).length,
+    marks: (d.chronicles || []).filter((x) => String(x.race_key).slice(0, 10) < c).length + (d.social_posts || []).filter((x) => (String(x.key).match(/\d{4}-\d{2}-\d{2}/)?.[0] || c) < c).length + (d.correction_requests || []).filter((x) => x.race_date && x.race_date < c).length,
+    log: (d.change_log || []).filter((x) => String(x.at).slice(0, 10) < c).length };
+}
 export function demoApi(storage = globalThis.localStorage) {
   let mem = null;
   const load = () => {
@@ -846,6 +861,19 @@ export function demoApi(storage = globalThis.localStorage) {
         ].filter(Boolean);
         return { id: r.id, name: r.name, streak: streakCount(items, today) };
       }).filter((x) => x.streak > 0).sort((a, b) => b.streak - a.streak || a.name.localeCompare(b.name, 'es'));
+    },
+    async adminPurgeCounts(upto) { requireAdmin(); return purgeCounts(load(), upto); },
+    async adminPurge(upto, what) {
+      requireAdmin(); const d = load();
+      if (!Number.isInteger(upto) || upto < 2000 || upto > 2100 || !Array.isArray(what) || !what.every((x) => ['races', 'regs', 'marks', 'log'].includes(x))) throw new Error('datos_no_validos');
+      const n = purgeCounts(d, upto), c = `${upto + 1}-01-01`, old = (x) => (x.end_date || x.date) < c;
+      if (what.includes('races')) { const ids = new Set(d.races.filter(old).map((r) => r.id)); d.races = d.races.filter((r) => !ids.has(r.id)); d.results = d.results.filter((r) => !ids.has(r.race_id)); d.circuit_podiums = (d.circuit_podiums || []).filter((x) => x.year > upto); }
+      if (what.includes('regs')) { const ids = new Set(d.registrations.filter(old).map((g) => g.id)); d.registrations = d.registrations.filter((g) => !ids.has(g.id)); d.registration_entries = d.registration_entries.filter((e) => !ids.has(e.registration_id));
+        d.car_offers = (d.car_offers || []).filter((o) => !ids.has(o.registration_id)); d.car_riders = (d.car_riders || []).filter((o) => !ids.has(o.registration_id)); d.runner_notes = (d.runner_notes || []).filter((o) => !ids.has(o.registration_id)); }
+      if (what.includes('marks')) { d.chronicles = (d.chronicles || []).filter((x) => String(x.race_key).slice(0, 10) >= c); d.social_posts = (d.social_posts || []).filter((x) => (String(x.key).match(/\d{4}-\d{2}-\d{2}/)?.[0] || c) >= c); d.correction_requests = (d.correction_requests || []).filter((x) => !(x.race_date && x.race_date < c)); }
+      if (what.includes('log')) d.change_log = (d.change_log || []).filter((x) => String(x.at).slice(0, 10) >= c);
+      logc('Dirección', 'borrado', `borró datos hasta ${upto} (${what.join(', ')})`);
+      save(); return { upto, what, counts: n };
     },
     async runnerCars(code) {
       byCode(code); const d = load(), today = todayISO();
