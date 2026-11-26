@@ -2767,3 +2767,10 @@ section.card.purge-card > h2 { color: var(--bad); }
 .prof-foot { display: flex; align-items: center; justify-content: space-between; margin-top: .8rem; padding-top: .6rem; border-top: 1px solid var(--line); }
 .prof-out { display: inline-flex; align-items: center; gap: .4rem; min-height: 44px; padding: 0 .95rem; border-radius: 999px; border: 1.5px solid color-mix(in srgb, var(--bad) 55%, var(--line)); background: none; color: var(--bad); font: inherit; font-weight: 700; cursor: pointer; } .prof-out .ico { width: 18px; height: 18px; }
 .prof-row select { max-width: 52%; } @media (max-width: 340px) { .prof-row select { max-width: 56%; font-size: var(--fs-3); } .prof-row .pt small { font-size: var(--fs-1); } }
+
+/* ---- v263 · Informes y copias a mano en «Hoy» ---- */
+.bk-card { display: flex; align-items: center; gap: .7rem; padding: .6rem .75rem; border-left: 5px solid var(--ok); }
+.bk-card.stale { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 8%, var(--card)); }
+.bk-card .pi { width: 36px; height: 36px; border-radius: 12px; background: var(--accent-2); color: var(--accent); display: grid; place-items: center; flex: none; } .bk-card .pi .ico { width: 19px; height: 19px; }
+.bk-card .pt { display: flex; flex-direction: column; min-width: 0; flex: 1; } .bk-card .pt b { font-size: var(--fs-4); } .bk-card .pt small { color: var(--muted); font-size: var(--fs-2); }
+.bk-card .btn { display: inline-flex; align-items: center; gap: .3rem; flex: none; } .bk-card .btn .ico { width: 16px; height: 16px; }
