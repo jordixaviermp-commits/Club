@@ -1,24 +1,11 @@
 {
- "updated_at": "2026-11-23T05:36:47.353Z",
+ "updated_at": "2026-11-26T05:28:33.361Z",
  "sources": {
   "FCC": "https://www.ciclisme.cat/calendari/tot",
   "FAC": "https://aragonciclismo.com/es/smartweb/seccion/seccion/aragon/CALENDARIO_GLOBAL"
  },
  "errors": [],
  "races": [
-  {
-   "source": "FAC",
-   "date": "2026-11-22",
-   "name": "V Trofeo CX Castejon de Sos",
-   "place": "Castejon de Sos",
-   "province": "Huesca",
-   "country": "España",
-   "modality": "Ciclocross",
-   "discipline": "CicloCross",
-   "kind": "Competición",
-   "info": "COPA ARAGONESA CX · VALLE DE BENASQUE A.C. · Cadete, Cadete fem., Elit...",
-   "url": "https://aragonciclismo.com/index.php/smartweb/inscripciones/prueba/35887-V-TROFEO-CX-CASTEJON-DE-SOS"
-  },
   {
    "source": "FCC",
    "date": "2026-11-28",
@@ -159,8 +146,8 @@
    "modality": "Ciclocross",
    "discipline": "CicloCross",
    "kind": "Competición",
-   "info": "UTEBO C.C. · Cadete, Cadete fem., Elit...",
-   "url": "https://aragonciclismo.com/es/smartweb/seccion/seccion/aragon/CALENDARIO_GLOBAL"
+   "info": "COPA ARAGONESA CX · UTEBO C.C. · Cadete, Cadete fem., Elit...",
+   "url": "https://aragonciclismo.com/index.php/smartweb/inscripciones/prueba/36886-IX-CX-UTEBO"
   },
   {
    "source": "FAC",
@@ -256,6 +243,19 @@
   {
    "source": "FCC",
    "date": "2026-12-20",
+   "name": "Viladecans Gravel Ride",
+   "place": "Viladecans",
+   "province": "Barcelona",
+   "country": "España",
+   "modality": "Gravel",
+   "discipline": "Pedalades · Marxes Gravel",
+   "kind": "Competición",
+   "info": "",
+   "url": "https://www.ciclisme.cat/cursa/pedalades/viladecans-gravel-ride"
+  },
+  {
+   "source": "FCC",
+   "date": "2026-12-20",
    "name": "XVI Bmxmas",
    "place": "Terrassa",
    "province": "Barcelona",
@@ -309,7 +309,7 @@
    "source": "FCC",
    "date": "2026-12-31",
    "name": "Ruta Lepertel",
-   "place": "San",
+   "place": "San Cugat del Vallès",
    "province": "Barcelona",
    "country": "España",
    "modality": "Carretera",
