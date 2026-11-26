@@ -2805,3 +2805,32 @@ label.tip-host > .tip-btn { position: absolute; top: 0; right: 0; margin: 0; }
 
 /* v269 · el engranaje de «Datos y copias» salía gigante */
 .data-det > summary .ico { width: 18px; height: 18px; vertical-align: -3px; margin-right: .2rem; }
+
+/* v270 · detalle de «podios importantes» */
+.imp-det{margin:6px 0}.imp-det>summary{list-style:none;cursor:pointer;display:inline-block}.imp-det>summary::-webkit-details-marker{display:none}
+.imp-det>summary .pod-pill{display:inline-flex;align-items:center;gap:4px}.imp-det>summary .ico:last-child{width:14px;height:14px;transition:transform .15s}.imp-det[open]>summary .ico:last-child{transform:rotate(180deg)}
+.imp-list{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:6px}.imp-list li{display:flex;align-items:center;gap:10px}
+.imp-list span{display:flex;flex-direction:column;min-width:0}.imp-list b{overflow-wrap:anywhere}.imp-list small{opacity:.7}
+
+/* v271 · ficha de carrera por líneas: nombre / fecha y lugar / disciplina / km · desnivel · precio / estado */
+.rc-mi:not(:last-child)::after { content: none; }
+.rc-meta { gap: .1rem .7rem; }
+.rc-meta .rc-dis { flex-basis: 100%; }
+.rc-mi { display: inline-flex; align-items: center; gap: .25rem; }
+.rc-mi .ico { width: 14px; height: 14px; flex: none; opacity: .65; }
+.rc-sum, .rc-sum:has(.rc-name.long, .rc-name.xlong) { grid-template-columns: auto minmax(0, 1fr) 20px; align-items: start; }
+.rc-sum > .rc-date { grid-row: 1 / span 2; align-self: center; }
+.rc-sum > .rc-main, .rc-sum:has(.rc-name.long, .rc-name.xlong) > .rc-main { grid-column: 2; grid-row: 1; }
+.rc-sum > .rc-chev, .rc-sum:has(.rc-name.long, .rc-name.xlong) > .rc-chev { grid-column: 3; grid-row: 1; align-self: center; }
+.rc-sum > .rc-side, .rc-sum:has(.rc-name.long, .rc-name.xlong) > .rc-side { grid-column: 2 / 4; grid-row: 2; flex-direction: row; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: .25rem .6rem; text-align: left; }
+.rc-sum > .rc-side:empty { display: none; }
+.rc-meta .rc-mi:first-child { flex-basis: 100%; }
+
+/* v272 · recuadros más diferenciados: aire, sombra y cabeceras de mes marcadas */
+details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid var(--line); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); box-shadow: 0 1px 2px rgba(0, 0, 0, .07), 0 8px 18px rgba(26, 52, 68, .13); }
+:root:not([data-theme="light"]) details.rcard { box-shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 18px rgba(0, 0, 0, .35); }
+:root[data-theme="dark"] details.rcard { box-shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 18px rgba(0, 0, 0, .35); }
+:root[data-theme="light"] details.rcard { box-shadow: 0 1px 2px rgba(0, 0, 0, .07), 0 8px 18px rgba(26, 52, 68, .13); }
+.month-head { display: flex; align-items: center; gap: .5rem; width: 100%; margin: 20px 0 10px; padding: .5rem .75rem; border: 0; border-left: 5px solid var(--sec); border-radius: 10px; background: var(--sec-soft); }
+.month-head .mh-name { font-size: var(--fs-4); font-weight: 800; letter-spacing: .03em; text-transform: uppercase; color: var(--text); }
+.month-head .mh-meta { margin-left: auto; color: var(--muted); }
