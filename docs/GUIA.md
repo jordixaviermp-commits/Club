@@ -402,3 +402,4 @@ Si algún día te paso una versión nueva de este archivo, se repite este mismo 
 - **Podios importantes con detalle (versión 270)**: en Mi temporada, «⭐ N podios importantes ⌄» se despliega y dice cuáles son: carrera, tipo (campeonato, circuito, general o absoluto) y fecha.
 - **Fichas de carrera por líneas (versión 271)**: en todas las listas, cada carrera muestra nombre, fecha y lugar, disciplina, «📏 km · ⛰ desnivel · precio» y debajo la cuenta atrás, el pago y los apuntados; antes todo saltaba en un mismo bloque.
 - **Fichas más diferenciadas (versión 272)**: más aire y sombra entre carreras, y cabeceras de mes en una barra de color con el recuento.
+- **Enlace a la web de la carrera con color (versión 273)**: el botón del enlace sale en verde si la carrera ya tiene web y en gris discontinuo si falta ponerla (al pulsarlo se añade).
