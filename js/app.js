@@ -36,11 +36,33 @@ function applyTheme(t) {
   if (meta) meta.content = t === 'dark' || (t === 'auto' && window.matchMedia?.('(prefers-color-scheme: dark)').matches) ? '#0e151a' : '#284556';
 }
 applyTheme(getTheme());
-/** «Mis turnos»: cada corredor elige su escamot (opcional) y ve sus turnos en el calendario. Plegado: solo interesa a quien trabaja a turnos. */
-const shiftPicker = () => (S.preview || !S.shiftOn ? '' : `<details class="card shift-pick" data-open-key="shift"${S.open?.shift ? ' open' : ''}>
-  <summary>${ico('clock')}<span>Mis turnos de trabajo <small>(opcional)</small></span><b class="sp-cur">${S.myShift ? `Escamot ${esc(S.myShift.slice(1))}` : 'Sin turnos'}</b>${ico('chevd', 'desp-chev')}</summary>
-  <label class="sp-row">Mi escamot<select data-my-shift aria-label="Mi escamot"><option value="">Sin turnos</option>${USPAC_GROUPS.map((g) => `<option value="${g}"${S.myShift === g ? ' selected' : ''}>Escamot ${g.slice(1)}</option>`).join('')}</select></label>
-  <p class="hint">Si trabajas por escamots, elígelo y verás tus turnos (M, T, N, F…) en el calendario de Carreras. Solo lo ves tú.</p></details>`);
+/** Menú de perfil (toca el logo de arriba a la izquierda): aspecto, turnos (si la dirección lo habilitó) y «No soy…». */
+const themeButtons = () => [['auto', '🌓 Automático'], ['light', '☀️ Claro'], ['dark', '🌙 Oscuro']].map(([v, l]) => `<button type="button" class="chip${getTheme() === v ? ' on' : ''}" data-prof="theme" data-t="${v}" aria-pressed="${getTheme() === v}">${l}</button>`).join('');
+function profileHtml() {
+  const me = S.runnerData?.me;
+  return `<form method="dialog" class="dlg profile"><h2>${avatar(me?.name || '')}<span>${esc(me?.name || 'Mi perfil')}</span></h2>
+    <h3>Aspecto de la app</h3><div class="years">${themeButtons()}</div>
+    ${S.shiftOn ? `<h3>Mis turnos de trabajo <small class="muted">(opcional)</small></h3>
+      <label class="sp-row">Mi escamot<select data-prof="shift" aria-label="Mi escamot"><option value="">Sin turnos</option>${USPAC_GROUPS.map((g) => `<option value="${g}"${S.myShift === g ? ' selected' : ''}>Escamot ${g.slice(1)}</option>`).join('')}</select></label>
+      <p class="hint" data-nofold>Verás tus turnos (M, T, N, F…) en el calendario de Carreras. Solo los ves tú.</p>` : ''}
+    <p class="muted center small">Versión de la app: <b>${esc(VERSION)}</b></p>
+    <div class="dlg-actions"><button type="button" class="btn danger" data-prof="forget">No soy ${esc(me?.name || 'esta persona')}</button><button value="" class="btn primary">Cerrar</button></div></form>`;
+}
+function openProfile() { const dlg = document.getElementById('dialog'); dlg.innerHTML = profileHtml(); if (!dlg.open) dlg.showModal(); }
+{
+  const dlg = document.getElementById('dialog');
+  dlg.addEventListener('click', async (ev) => {
+    const b = ev.target.closest('.profile [data-prof]'); if (!b) return;
+    if (b.dataset.prof === 'theme') { ev.preventDefault(); store.set(THEME_KEY, b.dataset.t); applyTheme(b.dataset.t); dlg.innerHTML = profileHtml(); render(); }
+    else if (b.dataset.prof === 'forget') { ev.preventDefault(); dlg.close(); await actions['r-forget'](); }
+  });
+  dlg.addEventListener('change', async (ev) => {
+    const t = ev.target.closest('.profile select[data-prof="shift"]'); if (!t) return;
+    await run(async () => { await api.runnerSetMyShift(S.code, t.value); S.myShift = t.value || null; }, t.value ? 'Escamot guardado' : 'Turnos quitados');
+    dlg.innerHTML = profileHtml(); render();
+  });
+}
+const themeLineIfPreview = () => (S.preview ? themeLine() : '');
 const themeLine = () => `<div class="theme-line"><span class="muted">Aspecto de la app:</span><div class="years">${[['auto', '🌓 Automático'], ['light', '☀️ Claro'], ['dark', '🌙 Oscuro']].map(([v, l]) =>
   `<button class="chip${getTheme() === v ? ' on' : ''}" data-act="theme" data-t="${v}" aria-pressed="${getTheme() === v}">${l}</button>`).join('')}</div>
   ${getTheme() === 'auto' ? '<small class="muted">Automático sigue el modo claro u oscuro de tu móvil.</small>' : ''}</div>`;
@@ -173,16 +195,18 @@ const raceMeta = (x) => [`<span class="rc-dis">${esc(x.modality === 'Otra' ? 'Ca
 const raceCd = (x, today = todayISO()) => { if (x.suspended || x.date < today) return ''; const n = daysTo(x.date);
   return `<span class="rc-cd${n <= 7 ? ' now' : n <= 30 ? ' soon' : ''}">${n <= 0 ? 'hoy' : n === 1 ? 'mañana' : n < 100 ? `en ${n} d` : `en ${Math.round(n / 30)} m`}</span>`; };
 /** Cabecera de una casilla de carrera (se usa en todas las listas). */
+/** Nombres con una palabra muy larga (MEGATAMPANADA): se achican un punto en vez de partirse a mitad de palabra. */
+const nameFit = (n) => { const m = Math.max(0, ...String(n).split(/[\s\-–/]+/).map((w) => w.length)); return m >= 16 ? ' xlong' : m >= 11 ? ' long' : ''; };
 function raceHead(x, { mine = false, side = '', today } = {}) {
   const t = today || S.runnerData?.today || todayISO();
-  return `<div class="race-head rh2">${raceTile(x, { mine })}<div class="rh-main"><h3>${esc(x.name)}</h3><p class="rh-sub">${esc(raceSub(x))}</p><p class="rc-meta">${raceMeta(x)}</p></div>${raceCd(x, t) || side ? `<div class="rc-side">${raceCd(x, t)}${side}</div>` : ''}</div>`;
+  return `<div class="race-head rh2">${raceTile(x, { mine })}<div class="rh-main"><h3 class="${nameFit(x.name).trim()}">${esc(x.name)}</h3><p class="rh-sub">${esc(raceSub(x))}</p><p class="rc-meta">${raceMeta(x)}</p></div>${raceCd(x, t) || side ? `<div class="rc-side">${raceCd(x, t)}${side}</div>` : ''}</div>`;
 }
 /** Casilla de carrera plegable (la misma de Carreras): cabecera con fecha, nombre, datos y cuenta atrás; al tocar se despliega `body`. */
 function raceFold(x, { key, mine = false, side = '', body = '', today, open = false, id = '', cls = '', noPast = false } = {}) {
   const t = today || S.runnerData?.today || todayISO(), isOpen = open || !!S.open?.[key];
   return `<details class="card race rcard ${x.date < t && !noPast ? 'past-reg ' : ''}${modClass(x.modality)}${cls ? ' ' + cls : ''}"${id ? ` id="${id}"` : ''} data-open-key="${esc(key)}"${isOpen ? ' open' : ''}>
       <summary class="rc-sum">${raceTile(x, { mine })}
-        <span class="rc-main"><b class="rc-name">${esc(x.name)}</b><span class="rc-sub">${esc(raceSub(x))}</span><span class="rc-meta">${raceMeta(x)}</span></span>
+        <span class="rc-main"><b class="rc-name${nameFit(x.name)}">${esc(x.name)}</b><span class="rc-sub">${esc(raceSub(x))}</span><span class="rc-meta">${raceMeta(x)}</span></span>
         <span class="rc-side">${raceCd(x, t)}${side}</span><span class="rc-chev" aria-hidden="true">${ico('chevd')}</span>
       </summary>
       <div class="rc-body">${body}</div>
@@ -539,7 +563,7 @@ function frame(title, body, { back, actions = '', rtab = null, noSearch = false,
   return `
     ${api.mode === 'demo' ? `<div class="demo-bar">Modo demostración: datos de prueba guardados solo en este móvil.</div>` : ''}
     <header class="top">
-      ${back ? `<a class="back" href="${back}" aria-label="Volver">‹</a>` : '<img class="logo" src="icons/logo.png" alt="">'}
+      ${back ? `<a class="back" href="${back}" aria-label="Volver">‹</a>` : rtab !== null && !S.preview && S.runnerData?.me ? `<button type="button" class="logo-btn" data-act="profile" aria-label="Mi perfil: aspecto, turnos y cambiar de persona" title="Mi perfil"><img class="logo" src="icons/logo.png" alt=""></button>` : '<img class="logo" src="icons/logo.png" alt="">'}
       ${head ? head : rtab !== null && !S.preview && S.runnerData?.me?.name && title === runnerTitle() ? `<h1 class="greet" aria-label="${esc(title)}" title="${esc(title)}"><span>${esc(title)}</span></h1>` : `<h1>${esc(title)}</h1>`}${actions}${(admin && rtab === null && !back && S.data) || rtab !== null ? (noSearch ? '' : searchButton()) + accidentButton() : ''}${rtab !== null ? newsBell() : ''}
     </header>
     <main>${body}</main>
@@ -1172,6 +1196,9 @@ function payLineInline(list) {
   const paid = mine.filter((e) => e.paid).length, unpaid = mine.length - paid;
   return `<span class="ok">${ico('euro')}${paid} ${paid === 1 ? 'pagada' : 'pagadas'}</span>${unpaid ? `<span class="wait">${unpaid} sin pagar</span>` : ''}`;
 }
+/** Estado de pago en la cabecera de cada inscripción de Mi temporada: de un vistazo cuáles faltan por pagar. */
+const payBadge = (g, opts = {}) => { const e = opts.notes && !g.suspended && g.date >= (S.runnerData?.today || todayISO()) ? myEntry(g) : null;
+  return e ? `<span class="rc-pay ${e.paid ? 'on' : 'due'}" title="${e.paid ? 'Inscripción pagada' : 'Pendiente de pagar'}">${ico('euro')}${e.paid ? 'Pagada' : 'Pendiente'}</span>` : ''; };
 /** Fila de chips de una inscripción: desde cuándo estoy inscrito y si está pagada (y cuándo). */
 function payChips(g) {
   const e = myEntry(g);
@@ -1558,13 +1585,13 @@ function runnerRegCard(g, opts = {}) {
       ${mates}
       ${!open || g.suspended ? '' : mine
         ? `<div class="joined-acts">
-             <button class="btn joined-btn" data-act="r-joined" data-id="${g.id}" aria-label="Estás inscrito${mine.category ? ' en ' + esc(mine.category) : ''}: cambiar categoría o borrarme">${ico('check')}<span>Inscrito${mine.category ? ' (' + esc(mine.category) + ')' : ''}</span>${ico('chevd', 'jb-more')}</button>
+             <button class="btn joined-btn" data-act="r-joined" data-id="${g.id}" aria-label="Estás inscrito${mine.category ? ' en ' + esc(mine.category) : ''}: cambiar categoría o borrarme">${ico('check')}<span>Inscrito</span>${ico('chevd', 'jb-more')}</button>
              <a class="btn ghost small" href="pacing/?fecha=${esc(g.date)}" aria-label="Pacing de esta carrera: vatios por tramo y nutrición">⚡ Pacing</a>
              <button class="btn ghost small" data-act="r-ics" data-id="${g.id}" aria-label="Añadir al calendario del móvil" title="Añadir al calendario del móvil">${ico('calplus')}Calendario</button></div>`
         : `<div class="row join-row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">Apuntarme</button></div>`}
     `;
-    return raceFold(g, { key, id: key, mine: !!(mine && !g.suspended), open: !!opts.open, cls: opts.cls || '', noPast: !!opts.noPast, side: `${myPubChip(g)}${state}<span class="rc-n" title="Inscritos del club" aria-label="${g.entries.length} del club inscrito${g.entries.length === 1 ? '' : 's'}">${ico('users')}${g.entries.length}</span>`, body, today });
+    return raceFold(g, { key, id: key, mine: !!(mine && !g.suspended), open: !!opts.open, cls: opts.cls || '', noPast: !!opts.noPast, side: `${myPubChip(g)}${state}${payBadge(g, opts)}<span class="rc-n" title="Inscritos del club" aria-label="${g.entries.length} del club inscrito${g.entries.length === 1 ? '' : 's'}">${ico('users')}${g.entries.length}</span>`, body, today });
   }
 
 /** Barra de «participaciones futuras» del equipo: cuántas inscripciones hay ya en las próximas carreras, por mes (para animar a apuntarse y a crear carreras). */
@@ -1663,7 +1690,7 @@ function viewRunnerHome() {
     <div id="pulse-box">${S.regView === 'cal' || normalize(S.q.runner || '').length >= 2 ? '' : teamPulse(d)}</div>
     <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
     ${body}`,
-  { rtab: '', noSearch: true, head: S.preview ? null : `<a class="hdr-pacing" href="ruta/" aria-label="Pacing y planificar ruta: viento, tiempo, vatios y nutrición" title="Pacing y planificar ruta"><i aria-hidden="true">⚡</i>Pacing${ico('go', 'hp-go')}</a>` });
+  { rtab: '', head: S.preview ? null : `<a class="hdr-pacing" href="ruta/" aria-label="Pacing y planificar ruta: viento, tiempo, vatios y nutrición" title="Pacing y planificar ruta"><i aria-hidden="true">⚡</i>Pacing${ico('go', 'hp-go')}</a>` });
 }
 
 const FIELD_LABELS = { province: 'provincia', km: 'distancia', subtype: 'formato', elevation: 'desnivel', price: 'precio' };
@@ -1742,8 +1769,7 @@ function viewRunnerMine() {
     ${S.preview ? '' : miTabs('mi')}
     ${myRacesCard(d, () => chronicleCard(d))}
     ${installHint()}
-    ${S.preview ? '' : `<p class="center"><button class="link muted" data-act="r-forget">No soy ${esc(me.name)}</button></p>`}
-    ${shiftPicker()}${themeLine()}${versionLine()}`,
+    ${S.preview ? `<p class="center"></p>` : ''}${themeLineIfPreview()}${versionLine()}`,
   { rtab: 'mi' });
 }
 
@@ -5374,6 +5400,7 @@ const actions = {
   'who-filter'(el) { S.who = el.dataset.w; render(); },
   'filters-clear'() { clearFilters(); render(); },
   'gsearch'() { openGlobalSearch(); },
+  'profile'() { openProfile(); },
   'r-filters'() {
     const dlg = document.getElementById('dialog');
     dlg.innerHTML = `<form method="dialog" class="dlg fdlg"><h2>Filtros</h2>
@@ -6109,8 +6136,6 @@ $app.addEventListener('change', async (ev) => {
     const id = t.dataset.runnerContract;
     await run(async () => { await api.updateRunner(id, { contract: t.value || null }); runnerById(id).contract = t.value || null; }, 'Contrato guardado');
     if (parseRoute().view === 'bonos') render();
-  } else if (t.hasAttribute('data-my-shift')) {
-    await run(async () => { await api.runnerSetMyShift(S.code, t.value); S.myShift = t.value || null; }, t.value ? 'Escamot guardado' : 'Turnos quitados'); render();
   } else if (t.dataset.runnerShift) {
     const id = t.dataset.runnerShift;
     const patch = t.value === '' ? { shift_enabled: false, shift_group: null } : t.value === 'on' ? { shift_enabled: true, shift_group: null } : { shift_enabled: true, shift_group: t.value };
@@ -6174,7 +6199,9 @@ function foldHints(root) {
       head.classList.add('has-tip'); head.append(bt); p.dataset.tipKey = key; p.hidden = !S.open?.[key]; bt.setAttribute('aria-expanded', String(!p.hidden)); bt.classList.toggle('on', !p.hidden);
     } else {      // suelta: la «i» queda siempre en el borde derecho, en la misma vertical que las demás
       const d = document.createElement('details'); d.className = 'tip'; d.dataset.openKey = key; if (S.open?.[key]) d.open = true;
-      const sm = document.createElement('summary'); sm.setAttribute('aria-label', 'Más información'); sm.title = 'Más información'; sm.innerHTML = ico('info');
+      const lab = p.closest('.chro-card');   // en Sin resultado y Crónicas la «i» lleva su etiqueta, a la izquierda, para que se entienda qué explica
+      if (lab) d.classList.add('tip-lab');
+      const sm = document.createElement('summary'); sm.setAttribute('aria-label', 'Más información'); sm.title = 'Más información'; sm.innerHTML = lab ? `${ico('info')}<span>Cómo funciona</span>` : ico('info');
       p.replaceWith(d); d.append(sm, p);
     }
   });
