@@ -1191,6 +1191,7 @@ const ICO = {
   mountain: 'm8 3 4 8 5-5 5 15H2L8 3z',
   map: 'M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14',
   user: 'M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+  refresh: 'M23 4v6h-6M1 20v-6h6M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15',
   down: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
   camera: 'M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
   image: 'M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM21 15l-5-5L5 21',
@@ -2376,6 +2377,7 @@ const CHRO_FILTERS = [['enviada', 'Por revisar'], ['lista', 'Listas'], ['publica
 async function loadChroPosts(force = false) {
   if (S.chroPosts && !force) return;
   S.chroPosts = { loading: true };
+  try { await api.collectChroAi?.(); } catch { /* sin el SQL de IA */ }
   try { const rows = await api.listChroPosts(); S.chroPosts = rows ? { rows } : { missing: true }; } catch (e) { S.chroPosts = { failed: friendlyError(e) }; }
   if (parseRoute().view === 'cronicas') render();
 }
@@ -2390,16 +2392,18 @@ function viewChronicles() {
   if (cp.missing) return head('<p class="card warn">Aún no está activado: falta ejecutar en Supabase <code>supabase/cambios/2026-11-30-cronicas.sql</code> (3 trozos cortos).</p>');
   if (cp.failed) return head(`<p class="card warn">${esc(cp.failed)}</p>`);
   const f = S.chroF || 'enviada', rows = cp.rows, list = rows.filter((p) => p.status === f);
+  if (rows.some((p) => p.ai_state === 'pendiente') && !S.chroPoll) S.chroPoll = setTimeout(() => { S.chroPoll = null; if (parseRoute().view === 'cronicas') loadChroPosts(true); }, 6000);
   const sp = sponsorHandles();
   const card = (p) => `<button type="button" class="card chro-post" data-act="cro-open" data-id="${esc(p.id)}">
     <span class="cp-h"><b>${esc(p.race_name)}</b><span class="chro-st ${CHRO_ST[p.status][1]}">${esc(CHRO_ST[p.status][0])}</span></span>
+    ${p.status === 'enviada' && p.ai_state ? `<span class="chro-ai ${p.ai_state}">${p.ai_state === 'pendiente' ? '⏳ Claude está corrigiendo…' : p.ai_state === 'hecho' ? '✅ Corregida por Claude' : '⚠️ No se pudo corregir sola'}</span>` : ''}
     <small class="muted">${esc(runnerById(p.runner_id)?.name || 'Corredor')}${p.race_date ? ' · ' + esc(formatDate(p.race_date, false)) : ''}${p.photos ? ` · ${ico('camera')}${p.photos}` : ' · sin fotos'}</small>
     <span class="cp-x">${esc(String(p.final_text || p.body).slice(0, 140))}${String(p.final_text || p.body).length > 140 ? '…' : ''}</span>${ico('go', 'pg')}</button>`;
   return head(`
     <div class="years cro-f">${CHRO_FILTERS.map(([k, l]) => { const n = rows.filter((p) => p.status === k).length; return `<button class="chip${f === k ? ' on' : ''}" data-act="cro-filter" data-f="${k}">${l}${n ? ` (${n})` : ''}</button>`; }).join('')}</div>
     ${list.length ? list.map(card).join('') : `<p class="empty">${f === 'enviada' ? 'No hay crónicas por revisar. 🎉' : 'Nada aquí todavía.'}</p>`}
     <button type="button" class="card chro-sponsors" data-act="cro-sponsors">${ico('users')}<span><b>Patrocinadores a etiquetar</b><small class="muted">${sp.length ? esc(sp.join(' ')) : 'Aún no hay ninguno: toca para añadirlos'}</small></span>${ico('pen')}</button>
-    <p class="muted small">Cómo va: el corredor escribe su crónica y sube 2 fotos desde la app. Tú abres la crónica, copias la petición para Claude, pegas su versión corregida, copias el texto con las etiquetas y lo publicas. Al marcarla publicada se borran las fotos del servidor.</p>`);
+    <p class="muted small">Cómo va: el corredor escribe su crónica y sube 2 fotos desde la app. Claude la corrige solo y deja el texto listo; tú la revisas, copias el texto con las etiquetas, descargas las fotos y la publicas. Al marcarla publicada se borran las fotos del servidor.</p>`);
 }
 
 function chroPrompt(p, handles) {
@@ -2427,8 +2431,11 @@ async function openChroPost(id) {
     <p class="muted small">${esc(runnerById(p.runner_id)?.name || 'Corredor')}${p.race_date ? ' · ' + esc(formatDate(p.race_date, false)) : ''} · <span class="chro-st ${CHRO_ST[p.status][1]}">${esc(CHRO_ST[p.status][0])}</span></p>
     ${photos.length ? `<div class="chro-photos">${photos.map((x) => `<figure><img src="${esc(x.data)}" alt="Foto ${x.ord}"><a class="btn small" href="${esc(x.data)}" download="cronica-${esc(p.race_key.slice(0, 10))}-${x.ord}.jpg">${ico('down')} Descargar</a></figure>`).join('')}</div>` : `<p class="muted small">${done ? 'Fotos ya borradas del servidor.' : 'Esta crónica no trae fotos.'}</p>`}
     <details class="chro-orig"><summary>Texto original</summary><p>${esc(p.body).replace(/\n/g, '<br>')}</p></details>
-    ${done ? '' : `<button type="button" class="btn block" data-cro="ai">${ico('share')} Copiar petición para Claude</button>
-    <p class="muted small">Pégasela a Claude (en el chat) y pega aquí su respuesta.</p>`}
+    ${done ? '' : p.ai_state === 'pendiente' ? '<p class="muted small">⏳ Claude está corrigiendo la crónica… ábrela otra vez en unos segundos.</p>'
+      : p.ai_state === 'hecho' ? '<p class="muted small">✅ Corregida por Claude: revísala antes de publicar.</p>'
+      : p.ai_state === 'error' ? '<p class="muted small">⚠️ No se pudo corregir sola. Puedes reintentarlo o copiar la petición y pasársela a Claude.</p>' : ''}
+    ${done || !('ai_state' in p) ? '' : `<button type="button" class="btn block" data-cro="retry">${ico('refresh')} Corregir otra vez con Claude</button>`}
+    ${done || (('ai_state' in p) && p.ai_state !== 'error') ? '' : `<button type="button" class="btn block ghost" data-cro="ai">${ico('share')} Copiar petición para Claude</button>`}
     <label>Texto final<textarea name="final" rows="9" maxlength="4000" ${done ? 'readonly' : ''}>${esc(p.final_text || '')}</textarea></label>
     ${sp.length ? `<fieldset class="chro-tags"><legend>Etiquetas</legend>${sp.map((h) => `<label class="check"><input type="checkbox" name="tag" value="${esc(h)}" checked> ${esc(h)}</label>`).join('')}</fieldset>` : '<p class="muted small">Sin patrocinadores guardados: añádelos en la lista de Crónicas.</p>'}
     <div class="dlg-actions"><button type="button" class="btn primary" data-cro="copy">${ico('clip')} Copiar texto + etiquetas</button>
@@ -2439,7 +2446,12 @@ async function openChroPost(id) {
   dlg.onclick = async (ev) => {
     const b = ev.target.closest('[data-cro]'); if (!b) return;
     ev.preventDefault();
-    if (b.dataset.cro === 'ai') await copyText(chroPrompt(p, tags()), 'Petición copiada: pégala en Claude');
+    if (b.dataset.cro === 'retry') {
+      dlg.onclick = null;
+      if (final() && !await confirmAction('Corregir otra vez', 'El texto final actual se <b>reemplazará</b> por una corrección nueva.', 'Sí, corregir otra vez', 'primary')) { openChroPost(id); return; }
+      await run(async () => { await api.updateChroPost(id, { final_text: null }); await api.retryChroAi(id); await loadChroPosts(true); }, 'Pedida la corrección a Claude');
+      render();
+    } else if (b.dataset.cro === 'ai') await copyText(chroPrompt(p, tags()), 'Petición copiada: pégala en Claude');
     else if (b.dataset.cro === 'copy') await copyText(withTags(), 'Texto copiado');
     else if (b.dataset.cro === 'save') { dlg.onclick = null; dlg.close(); await run(async () => { await api.updateChroPost(id, { final_text: final() || null, status: 'lista' }); await loadChroPosts(true); }, 'Guardada como lista'); render(); }
     else if (b.dataset.cro === 'pub') {

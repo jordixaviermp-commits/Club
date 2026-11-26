@@ -3,6 +3,8 @@
 //  - Demostración, guardada solo en este navegador, para probar la app sin montar nada.
 import { streakCount, newCode, todayISO, pastLimit, numDays, yearOf, SUBTYPES, parseKm, normalize, parseElev, parsePrice } from './logic.js';
 
+/** Demo: «corrige» una crónica ordenando espacios y poniendo mayúscula y punto (la corrección real la hace Claude desde la base de datos). */
+const demoPolish = (t) => { const x = String(t).trim().replace(/\s+/g, ' '); return x.charAt(0).toUpperCase() + x.slice(1) + (/[.!?]$/.test(x) ? '' : '.'); };
 const TABLES = ['runners', 'registrations', 'registration_entries', 'races', 'results', 'settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests', 'social_posts', 'chronicles'];
 const OPTIONAL = new Set(['settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests', 'social_posts', 'chronicles']); // tablas que pueden faltar si aún no se ha ejecutado su SQL
 
@@ -240,6 +242,8 @@ export function supabaseApi(url, key) {
     async listChroPosts() { const { data, error } = await sb.from('chronicle_posts').select('*').order('created_at', { ascending: false }); return error ? null : data; },
     async getChroPhotos(id) { return ok(await sb.from('chronicle_photos').select('ord,data').eq('post_id', id).order('ord')); },
     async updateChroPost(id, patch) { ok(await sb.from('chronicle_posts').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)); },
+    async collectChroAi() { try { return ok(await sb.rpc('admin_chronicle_ai_collect')); } catch { return null; } },   // recoge las correcciones de Claude ya listas (null = sin el SQL de IA)
+    async retryChroAi(id) { ok(await sb.rpc('admin_chronicle_ai_retry', { p_id: id })); },
     async deleteChroPhotos(id) { ok(await sb.from('chronicle_photos').delete().eq('post_id', id)); ok(await sb.from('chronicle_posts').update({ photos: 0 }).eq('id', id)); },
     /** Dirección: marca o desmarca la crónica de un corredor (por si la pasó y no la marcó en su perfil). */
     async setChronicle(runnerId, key, done) {
@@ -967,6 +971,7 @@ export function demoApi(storage = globalThis.localStorage) {
       p.body = String(c.body).trim(); p.updated_at = new Date().toISOString();
       if (c.p1 || c.p2) { d.chronicle_photos = d.chronicle_photos.filter((x) => x.post_id !== p.id); [c.p1, c.p2].filter(Boolean).forEach((data, i) => d.chronicle_photos.push({ post_id: p.id, ord: i + 1, data })); }
       p.photos = d.chronicle_photos.filter((x) => x.post_id === p.id).length;
+      if (!p.final_text) { p.final_text = demoPolish(p.body); p.ai_state = 'hecho'; }   // en la demo la «corrección» es solo ordenar el texto
       d.chronicles = d.chronicles || []; if (!d.chronicles.some((x) => x.runner_id === me.id && x.race_key === c.key)) d.chronicles.push({ runner_id: me.id, race_key: c.key, done_at: new Date().toISOString() });
       save();
     },
@@ -974,6 +979,8 @@ export function demoApi(storage = globalThis.localStorage) {
     async listChroPosts() { requireAdmin(); return clone((load().chronicle_posts || []).slice().sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))); },
     async getChroPhotos(id) { requireAdmin(); return clone((load().chronicle_photos || []).filter((x) => x.post_id === id).sort((a, b) => a.ord - b.ord)); },
     async updateChroPost(id, patch) { requireAdmin(); const p = (load().chronicle_posts || []).find((x) => x.id === id); if (p) Object.assign(p, patch, { updated_at: new Date().toISOString() }); save(); },
+    async collectChroAi() { requireAdmin(); return 0; },
+    async retryChroAi(id) { requireAdmin(); const p = (load().chronicle_posts || []).find((x) => x.id === id); if (p) { p.final_text = demoPolish(p.body); p.ai_state = 'hecho'; save(); } },
     async deleteChroPhotos(id) { requireAdmin(); const d = load(); d.chronicle_photos = (d.chronicle_photos || []).filter((x) => x.post_id !== id); const p = (d.chronicle_posts || []).find((x) => x.id === id); if (p) p.photos = 0; save(); },
     async runnerSetChronicle(code, key, done) {
       const me = byCode(code), d = load(); d.chronicles = (d.chronicles || []).filter((x) => (done ? !(x.runner_id === me.id && x.race_key === key) : x.race_key !== key));   // deshacer = pendiente para todos

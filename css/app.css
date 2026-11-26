@@ -2869,3 +2869,6 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .cro-f { flex-wrap: wrap; } .cro-f .chip { padding-left: .8rem; padding-right: .8rem; }
 .chro-ph svg { width: 28px !important; height: 28px !important; margin: 0 !important; }
 .cro-f .chip { padding: .45rem .6rem; font-size: var(--fs-3); }
+
+/* v275 · corrección automática */
+.chro-ai { font-size: var(--fs-2); font-weight: 600; } .chro-ai.hecho { color: var(--ok); } .chro-ai.pendiente { color: var(--muted); } .chro-ai.error { color: var(--warn-t); }
