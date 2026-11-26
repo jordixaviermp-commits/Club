@@ -899,7 +899,6 @@ function calendarView(regs, card, isMine = () => false, { done = [], doneCard = 
         ${['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d) => `<span class="cal-dow">${d}</span>`).join('')}
         ${monthGrid(ym).flat().map(cell).join('')}
       </div>
-      ${shiftGroup && monthGrid(ym).flat().some((d) => d && uspacShift(shiftGroup, d)) ? `<div class="cal-legend sh-legend" aria-label="Mis turnos"><span class="sh-who">${ico('clock')}Escamot ${esc(shiftGroup.slice(1))}</span>${['M', 'T', 'N', 'D', 'TN', 'F'].map((c) => `<span><em class="sh sh-${c}">${c}</em>${c === 'M' ? 'Mañana' : c === 'T' ? 'Tarde' : c === 'N' ? 'Noche' : c === 'F' ? 'Fiesta' : c}</span>`).join('')}</div>` : ''}
       ${monthDiscs.length ? `<div class="cal-legend">${monthDiscs.map(([k, g]) => `<span class="${discClass(g.modality, g.subtype)}"><i></i>${esc(discLabel(g.modality, g.subtype))}</span>`).join('')}</div>` : ''}
     </section>
     ${S.calDay ? `<h2 class="section">${formatDate(S.calDay)} <button class="link small" data-act="cal-day" data-d="${S.calDay}">Ver todo el mes</button></h2>` : ''}
