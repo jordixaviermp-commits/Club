@@ -1076,7 +1076,7 @@ select runner_chronicle_send('codigo-valorador-dos-02', '2026-04-02|ia con clave
 reset role;
 select pg_temp.check((select ai_state = 'pendiente' and ai_req is not null and ai_tries = 1 from chronicle_posts where race_key = '2026-04-02|ia con clave'), 'ia: al enviar la crónica se manda a Claude');
 select pg_temp.check((select headers->>'x-api-key' = 'sk-test-123' and url = 'https://api.anthropic.com/v1/messages' and body->>'model' = 'claude-sonnet-5-5' and body::text like '%@patro_uno%' and body::text like '%Mi cronica con faltas%' from net.calls order by id desc limit 1), 'ia: petición con clave, modelo, texto y etiquetas');
-select pg_temp.check((select body::text not like '%Valorador Dos%' from net.calls order by id desc limit 1), 'ia: solo se manda el nombre de pila');
+select pg_temp.check((select body::text not like '%Valorador Dos%' from net.calls order by id desc limit 1), 'ia: sin carrera en la base de datos solo viaja el nombre de pila');
 insert into net._http_response select ai_req, 200, '{"content":[{"type":"text","text":"Mi crónica corregida.\n\n@patro_uno @patro_dos"}]}', null from chronicle_posts where race_key = '2026-04-02|ia con clave';
 set role anon;
 select pg_temp.expect_fail($q$select admin_chronicle_ai_collect()$q$, 'ia: el anónimo no recoge respuestas');
@@ -1107,8 +1107,8 @@ insert into results (race_id, runner_id, runner_name, category, position, genera
 set role anon;
 select runner_chronicle_send('codigo-valorador-dos-02', '2026-05-01|carrera datos', 'Carrera Datos', '2026-05-01', 'Lo pase fatal en la subida pero acabe feliz', null, null);
 reset role;
-select pg_temp.check((select (body #>> '{messages,0,content}') like '%Lugar: Lleida, Lleida%' and (body #>> '{messages,0,content}') like '%Distancia: 70.0 km%' and (body #>> '{messages,0,content}') like '%Puesto en su categoría: 3º%' and (body #>> '{messages,0,content}') like '%Puesto en la general: 12º%' and (body #>> '{messages,0,content}') like '%Tiempo: 2:30:05%' from net.calls order by id desc limit 1), 'ia: la petición lleva lugar, distancia, puestos y tiempo');
-select pg_temp.check((select (body #>> '{messages,0,content}') like '%Otros del club en la carrera (1): % (M40, 1º)%' and (body #>> '{messages,0,content}') like '%Lo pase fatal%' from net.calls order by id desc limit 1), 'ia: lleva a los compañeros del club y lo que cuenta el corredor');
+select pg_temp.check((select (body #>> '{messages,0,content}') like '%Lugar: Lleida, Lleida%' and (body #>> '{messages,0,content}') like '%Distancia: 70.0 km%' and (body #>> '{messages,0,content}') like '%Valorador Dos (M40): 3º en su categoría, 12º en la general, 2:30:05%' from net.calls order by id desc limit 1), 'ia: la petición lleva lugar, distancia y la fila de resultados con puestos y tiempo');
+select pg_temp.check((select c like '%Participantes del club (clasificación):%' and c like '%- Valorador Uno (M40): 1º en su categoría, 2:13:20%' and c like '%Lo pase fatal%' and position('Valorador Dos (M40)' in c) < position('Valorador Uno (M40)' in c) from (select body #>> '{messages,0,content}' as c from net.calls order by id desc limit 1) q), 'ia: lleva a todos los del club ordenados por la general, con su resultado, y lo que cuenta el corredor');
 delete from vault.decrypted_secrets;
 set role anon;
 reset role;

@@ -2416,15 +2416,18 @@ function viewChronicles() {
 }
 
 function chroPrompt(p, handles) {
-  return `Eres el community manager del Club Ciclista Monzón. Corrige esta crónica de carrera para publicarla en Instagram:
-- Mantén el idioma original (castellano o catalán) y la primera persona. No inventes datos, cifras ni nombres.
-- Corrige ortografía, puntuación y formato. Tono cercano, deportivo y positivo. Párrafos cortos. Máximo 1.800 caracteres.
-- Quita insultos o críticas a personas, organizadores o rivales.
-${handles.length ? `- Termina con una última línea con estas etiquetas: ${handles.join(' ')}\n` : ''}- Devuélveme solo el texto final, sin explicaciones.
+  return `Eres el responsable de comunicación del Club Ciclista Monzón. Redacta el post de Instagram de esta carrera con tono serio, sobrio y profesional (sin exclamaciones ni coloquialismos), con estas partes en este orden:
+1) Titular: una línea con 🏁, el nombre de la carrera, el lugar y la fecha.
+2) Ficha: disciplina, distancia y desnivel (solo los datos que consten).
+3) «🏆 Resultados»: una línea por corredor, «Nombre (categoría) · Xº categoría · Yº general · tiempo», ordenados por la general.
+4) Crónica: un resumen breve y bien escrito de 3 a 4 frases (60-80 palabras). Redáctalo tú: no cites literalmente al corredor ni enumeres frases sueltas.
+5) Cierre: ${handles.length ? 'las etiquetas ' + handles.join(' ') + ' y ' : ''}3 o 4 hashtags (incluye #CCMonzón).
+Usa SOLO los datos que te doy; si falta alguno, omítelo. Mantén el idioma de la crónica. Máximo 1.800 caracteres. Devuelve solo el texto del post.
 
 Carrera: ${p.race_name}${p.race_date ? ' (' + formatDate(p.race_date, false) + ')' : ''}
 Autor: ${runnerById(p.runner_id)?.name || 'un corredor del club'}
-Crónica:
+(Añade aquí los datos y resultados de la carrera si los tienes.)
+Lo que cuenta el corredor (material para el resumen, no para citar):
 """
 ${p.body}
 """`;
