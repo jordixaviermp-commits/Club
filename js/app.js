@@ -1745,7 +1745,6 @@ function viewRunnerHome() {
   const d = S.runnerData, me = d.me, today = d.today || todayISO();
   const regs = regFilter(d.registrations, me);
   const upcoming = regs.filter((g) => g.date >= today);
-  const past = regs.filter((g) => g.date < today);
   const card = (g) => runnerRegCard(g);
   modFilterBar(d.registrations, me); // calcula S.fd (botón y ventana de filtros)
   const isMine = (g) => (g.entries || []).some((e) => e.runner_id === me.id) || (g.results || []).some((x) => x.runner_id === me.id);
@@ -1755,7 +1754,7 @@ function viewRunnerHome() {
     : `${(() => { const wk = upcoming.filter((g) => daysTo(g.date) <= 7); return wk.length ? `<h2 class="section">📅 Esta semana (${wk.length})</h2>${wk.map(card).join('')}` : ''; })()}
     <h2 class="section">${upcoming.some((g) => daysTo(g.date) <= 7) ? 'Más adelante' : 'Próximas carreras'} (${upcoming.filter((g) => daysTo(g.date) > 7).length || (upcoming.some((g) => daysTo(g.date) <= 7) ? 0 : upcoming.length)})</h2>
     ${upcoming.length ? monthList(upcoming.filter((g) => daysTo(g.date) > 7), card) : `<p class="empty">${filtersOn(me) ? 'Ninguna carrera próxima con estos filtros. <button class="link" data-act="filters-clear">Quitar filtros</button>' : 'Todavía no hay carreras abiertas.'}</p>`}
-    ${past.length ? `<details class="past"><summary>🏁 Ya disputadas${past.some((g) => (g.entries || []).some((e) => e.runner_id === me.id) && !g.my_result) ? ', pendientes de resultados' : ''} (${past.length})</summary>${past.map(card).join('')}</details>` : ''}`;
+    `;
   return frame(runnerTitle(), `
     ${previewBanner()}
     <div class="toolbar">
