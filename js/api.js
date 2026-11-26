@@ -11,6 +11,7 @@ export function friendlyError(e) {
   const msg = String(e?.message || e || '');
   if (/enlace_no_valido/.test(msg)) return 'Este enlace ya no es válido. Pide uno nuevo a la dirección del club.';
   if (/resultado_ya_puesto/.test(msg)) return 'Para poder cambiar tu resultado falta activarlo en la base de datos. Avisa a la dirección del club.';
+  if (/puesto_general_no_valido/.test(msg)) return 'El puesto en la general no puede ser menor que el de tu categoría (y llega hasta 9999). Revísalo o déjalo vacío.';
   if (/puesto_no_valido/.test(msg)) return 'Pon un puesto válido (1, 2, 3…).';
   if (/tiempo_no_valido/.test(msg)) return 'Pon un tiempo válido, por ejemplo 2:05:30 (horas:minutos:segundos).';
   if (/PGRST202|runner_report_result/.test(msg) && /tiempo|schema cache|Could not find/i.test(msg)) return 'Para guardar el tiempo falta activarlo en la base de datos. Avisa a la dirección (o guarda el resultado sin tiempo).';
@@ -145,14 +146,20 @@ export function supabaseApi(url, key) {
     async deleteRegistration(id) { ok(await sb.from('registrations').delete().eq('id', id)); },
     async promoteRegistration(id) { return ok(await sb.rpc('promote_registration', { p_id: id })); },
     /** La dirección pone o corrige el puesto (y el tiempo) de un corredor en una inscripción ('reg') o una carrera ('race'). position null = borrarlo. */
-    async adminSetResult(kind, id, runnerId, position, podiumType, timeSeconds) {
-      const pod = position && position <= 3 ? (podiumType || 'suelta') : null;
-      if (kind === 'reg') ok(await sb.from('registration_entries').update({ self_position: position || null, self_podium_type: pod, self_time_seconds: position ? (timeSeconds || null) : null, self_reported_at: position ? new Date().toISOString() : null }).eq('registration_id', id).eq('runner_id', runnerId));
-      else ok(await sb.from('results').update({ position: position || null, podium_type: pod || 'suelta', time_seconds: position ? (timeSeconds || null) : null }).eq('race_id', id).eq('runner_id', runnerId));
+    async adminSetResult(kind, id, runnerId, position, podiumType, timeSeconds, generalPosition) {
+      const pod = position && position <= 3 ? (podiumType || 'suelta') : null, gen = position ? (generalPosition || null) : null;
+      // el puesto general solo se envía si la dirección lo ha cambiado (undefined = no tocarlo): así sigue funcionando antes de activar el cambio en la base
+      const touchGen = generalPosition !== undefined || !position;
+      if (kind === 'reg') ok(await sb.from('registration_entries').update({ self_position: position || null, self_podium_type: pod, self_time_seconds: position ? (timeSeconds || null) : null, self_reported_at: position ? new Date().toISOString() : null, ...(touchGen ? { self_general_position: gen } : {}) }).eq('registration_id', id).eq('runner_id', runnerId));
+      else ok(await sb.from('results').update({ position: position || null, podium_type: pod || 'suelta', time_seconds: position ? (timeSeconds || null) : null, ...(touchGen ? { general_position: gen } : {}) }).eq('race_id', id).eq('runner_id', runnerId));
     },
 
     async saveRace(race, results) {
       const id = ok(await sb.rpc('save_race', { p_race: race, p_results: results }));
+      for (const x of results.filter((r) => r.general_position)) {   // save_race vuelve a crear los resultados: se reponen los puestos generales
+        const q = sb.from('results').update({ general_position: x.general_position }).eq('race_id', id);
+        ok(await (x.runner_id ? q.eq('runner_id', x.runner_id) : q.eq('runner_name', x.runner_name)));
+      }
       await sb.from('races').update(typeFields(race)).eq('id', id);
       await sb.from('races').update(detailFields(race)).eq('id', id);
       if (race.elevation !== undefined || race.price !== undefined) await sb.from('races').update({ elevation: parseElev(race.elevation), price: parsePrice(race.price) }).eq('id', id);
@@ -172,8 +179,25 @@ export function supabaseApi(url, key) {
     async exportAll() { return { app: 'cc-monzon', version: 1, exported_at: new Date().toISOString(), ...(await rawAll()) }; },
     async importAll(data) { ok(await sb.rpc('import_backup', { p: data })); },
 
-    async runnerView(code) { return ok(await sb.rpc('runner_view', { p_code: code })); },
-    async runnerTeam(code) { return ok(await sb.rpc('runner_team', { p_code: code })); },
+    /** Puestos en la clasificación general (todas las categorías). null = falta el SQL «posicion-general»: sin ellos todo sigue igual. */
+    async runnerGenerals(code) { try { return ok(await sb.rpc('runner_generals', { p_code: code })) || null; } catch { return null; } },
+    async runnerView(code) {
+      const [d, g] = await Promise.all([sb.rpc('runner_view', { p_code: code }).then(ok), this.runnerGenerals(code)]);
+      if (g && d) {
+        const me = d.me?.id, by = new Map((g.results || []).filter((x) => x[1] === me).map((x) => [x[0], x[2]]));
+        for (const r of d.my_results || []) if (by.has(r.race_id)) r.general_position = by.get(r.race_id);
+        for (const reg of d.registrations || []) if (reg.my_result && g.regs?.[reg.id]) reg.my_result.general_position = g.regs[reg.id];
+      }
+      return d;
+    },
+    async runnerTeam(code) {
+      const [d, g] = await Promise.all([sb.rpc('runner_team', { p_code: code }).then(ok), this.runnerGenerals(code)]);
+      if (g && d) {
+        const by = new Map((g.results || []).map((x) => [`${x[0]}|${x[1]}`, x[2]]));
+        for (const r of d.races || []) for (const x of r.results || []) { const v = by.get(`${r.id}|${x.runner_id}`); if (v) x.general_position = v; }
+      }
+      return d;
+    },
     async runnerTeamMoves(code) { try { return ok(await sb.rpc('runner_team_moves', { p_code: code })); } catch (e) { if (/PGRST202|Could not find|runner_team_moves/.test(String(e?.message))) return null; throw e; } },
     /** Crónicas ya pasadas por el corredor (claves «AAAA-MM-DD|nombre»). null = falta el SQL. */
     async runnerChronicles(code) { try { return ok(await sb.rpc('runner_chronicles', { p_code: code })); } catch { return null; } },
@@ -203,10 +227,13 @@ export function supabaseApi(url, key) {
     async runnerNews(code) { return ok(await sb.rpc('runner_news', { p_code: code })); },
     async runnerDocuments(code) { return ok(await sb.rpc('runner_documents_list', { p_code: code })); },
     async runnerGetDocument(code, id) { return ok(await sb.rpc('runner_get_document', { p_code: code, p_id: id })); },
-    async runnerReport(code, kind, id, position, category, podiumType, timeSeconds) {
+    async runnerReport(code, kind, id, position, category, podiumType, timeSeconds, generalPosition) {
       const args = { p_code: code, p_kind: kind, p_id: id, p_position: position, p_category: category || null, p_podium_type: podiumType || null };
       if (timeSeconds) args.p_time = timeSeconds; // solo se envía si hay tiempo: así sigue funcionando antes de activar el cambio en la base
       ok(await sb.rpc('runner_report_result', args));
+      // puesto en la general: llamada aparte (si no hay, se limpia el que hubiera; sin el SQL esa limpieza se ignora)
+      if (generalPosition) ok(await sb.rpc('runner_set_general', { p_code: code, p_kind: kind, p_id: id, p_general: generalPosition }));
+      else { try { ok(await sb.rpc('runner_set_general', { p_code: code, p_kind: kind, p_id: id, p_general: null })); } catch { /* sin el SQL */ } }
     },
     async runnerUpdate(code, id, reg) { ok(await sb.rpc('runner_update_registration', { p_code: code, p_id: id, p_reg: reg })); },
     async runnerDelete(code, id) { ok(await sb.rpc('runner_delete_registration', { p_code: code, p_id: id })); },
@@ -355,7 +382,7 @@ export function demoApi(storage = globalThis.localStorage) {
       for (const e of ents) {
         const rn = d.runners.find((r) => r.id === e.runner_id);
         d.results.push({ id: uuid(), race_id: race.id, runner_id: e.runner_id, runner_name: rn?.name || '?', category: e.category || null, position: e.self_position,
-          podium_type: e.self_position <= 3 ? (e.self_podium_type || 'suelta') : 'suelta', time_seconds: e.self_time_seconds || null, self_reported: true });
+          podium_type: e.self_position <= 3 ? (e.self_podium_type || 'suelta') : 'suelta', time_seconds: e.self_time_seconds || null, general_position: e.self_general_position || null, self_reported: true });
       }
       d.registrations = d.registrations.filter((x) => x.id !== g.id);
       d.registration_entries = d.registration_entries.filter((e) => e.registration_id !== g.id);
@@ -494,13 +521,13 @@ export function demoApi(storage = globalThis.localStorage) {
       d.registration_entries = d.registration_entries.filter((e) => e.registration_id !== id);
       save();
     },
-    async adminSetResult(kind, id, runnerId, position, podiumType, timeSeconds) {
+    async adminSetResult(kind, id, runnerId, position, podiumType, timeSeconds, generalPosition) {
       requireAdmin(); const d = load();
-      const pod = position && position <= 3 ? (podiumType || 'suelta') : null;
+      const pod = position && position <= 3 ? (podiumType || 'suelta') : null, gen = position ? (generalPosition || null) : null;
       if (kind === 'reg') { const e = d.registration_entries.find((x) => x.registration_id === id && x.runner_id === runnerId); if (!e) throw new Error('no_existe');
-        Object.assign(e, { self_position: position || null, self_podium_type: pod, self_time_seconds: position ? (timeSeconds || null) : null }); }
+        Object.assign(e, { self_position: position || null, self_podium_type: pod, self_time_seconds: position ? (timeSeconds || null) : null, self_general_position: gen }); }
       else { const r = d.results.find((x) => x.race_id === id && x.runner_id === runnerId); if (!r) throw new Error('no_existe');
-        Object.assign(r, { position: position || null, podium_type: pod || 'suelta', time_seconds: position ? (timeSeconds || null) : null }); }
+        Object.assign(r, { position: position || null, podium_type: pod || 'suelta', time_seconds: position ? (timeSeconds || null) : null, general_position: gen }); }
       save();
     },
     async promoteRegistration(id) {
@@ -513,7 +540,7 @@ export function demoApi(storage = globalThis.localStorage) {
         const rn = d.runners.find((r) => r.id === e.runner_id);
         d.results.push({ id: uuid(), race_id: race.id, runner_id: e.runner_id, runner_name: rn.name, category: e.category,
           position: e.self_position || null, podium_type: e.self_position && e.self_position <= 3 ? (e.self_podium_type || 'suelta') : 'suelta',
-          time_seconds: e.self_time_seconds || null, self_reported: !!e.self_position });
+          time_seconds: e.self_time_seconds || null, general_position: e.self_general_position || null, self_reported: !!e.self_position });
       }
       save(); await this.deleteRegistration(id); return race.id;
     },
@@ -527,7 +554,7 @@ export function demoApi(storage = globalThis.localStorage) {
       Object.assign(r, fields(race));
       d.results = d.results.filter((x) => x.race_id !== r.id).concat(results.map((x) => ({
         id: uuid(), race_id: r.id, runner_id: x.runner_id || null, runner_name: x.runner_name, category: x.category || null,
-        position: x.position ?? null, podium_type: x.podium_type || 'suelta', stage_positions: x.stage_positions || null, time_seconds: x.time_seconds || null, self_reported: !!x.self_reported })));
+        position: x.position ?? null, general_position: x.general_position || null, podium_type: x.podium_type || 'suelta', stage_positions: x.stage_positions || null, time_seconds: x.time_seconds || null, self_reported: !!x.self_reported })));
       save(); return r.id;
     },
     async deleteRace(id) {
@@ -660,7 +687,7 @@ export function demoApi(storage = globalThis.localStorage) {
             country: r.country, modality: r.modality, stages: r.stages || null, race_type: r.race_type || 'suelta', circuit: r.circuit || null, subtype: r.subtype || null, km: r.km ?? null, elevation: r.elevation ?? null, price: r.price ?? null, lat: r.lat ?? null, lon: r.lon ?? null, geo_key: r.geo_key ?? null,
             notes: r.notes || null, mine_created: r.created_by === me.id, others: d.results.filter((y) => y.race_id === r.id && y.runner_id !== me.id).length,
             category: x.category, position: x.position,
-            podium_type: x.podium_type, stage_positions: x.stage_positions || null, time_seconds: x.time_seconds || null, self_reported: !!x.self_reported };
+            podium_type: x.podium_type, stage_positions: x.stage_positions || null, time_seconds: x.time_seconds || null, general_position: x.general_position || null, self_reported: !!x.self_reported };
         }).filter(Boolean).sort((a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name)),
         circuits: (d.circuit_podiums || []).filter((c) => c.runner_id === me.id).map(({ runner_id, created_at, ...c }) => c),
         bonus: (() => { // igual que runner_view en la base de datos
@@ -685,7 +712,7 @@ export function demoApi(storage = globalThis.localStorage) {
         registrations: [...d.registrations].sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name)).map((g) => ({
           ...g, mine_created: g.created_by === me.id, url_mine: !!g.url && g.url_by === me.id,
           my_result: (() => { const e = d.registration_entries.find((x) => x.registration_id === g.id && x.runner_id === me.id && x.self_position);
-            return e ? { position: e.self_position, podium_type: e.self_podium_type, time_seconds: e.self_time_seconds || null } : null; })(),
+            return e ? { position: e.self_position, podium_type: e.self_podium_type, time_seconds: e.self_time_seconds || null, general_position: e.self_general_position || null } : null; })(),
           entries: d.registration_entries.filter((e) => e.registration_id === g.id).map((e) => {
             const rn = d.runners.find((r) => r.id === e.runner_id);
             return { runner_id: e.runner_id, name: rn?.name, category: e.category, paid: !!e.paid_at, paid_amount: e.runner_id === me.id ? (e.paid_amount ?? null) : null,
@@ -694,9 +721,10 @@ export function demoApi(storage = globalThis.localStorage) {
         })),
       });
     },
-    async runnerReport(code, kind, id, position, category, podiumType, timeSeconds) {
+    async runnerReport(code, kind, id, position, category, podiumType, timeSeconds, generalPosition) {
       const me = byCode(code); const d = load();
       if (!Number.isInteger(position) || position < 1) throw new Error('puesto_no_valido');
+      if (generalPosition != null && (!Number.isInteger(generalPosition) || generalPosition < position || generalPosition > 9999)) throw new Error('puesto_general_no_valido');
       if (timeSeconds != null && (!Number.isInteger(timeSeconds) || timeSeconds < 1 || timeSeconds > 3600000)) throw new Error('tiempo_no_valido');
       const pod = position <= 3 ? (podiumType || 'suelta') : null;
       if (kind === 'reg') {
@@ -705,14 +733,14 @@ export function demoApi(storage = globalThis.localStorage) {
         if (g?.suspended) throw new Error('carrera_suspendida');
         if (!e || !g || g.date > todayISO()) throw new Error('no_es_tuya');
         const old = e.self_position;
-        Object.assign(e, { self_position: position, self_podium_type: pod, self_time_seconds: timeSeconds || null, self_reported_at: new Date().toISOString() });
+        Object.assign(e, { self_position: position, self_podium_type: pod, self_time_seconds: timeSeconds || null, self_general_position: generalPosition || null, self_reported_at: new Date().toISOString() });
         if (category) e.category = category;
         logc(me.name, 'resultado', old ? `cambió su resultado: ${old}º → ${position}º en ${g.name}` : `puso su resultado: ${position}º en ${g.name}`);
       } else {
         const r = d.results.find((x) => x.race_id === id && x.runner_id === me.id);
         if (!r) throw new Error('no_es_tuya');
         const old = r.position;
-        Object.assign(r, { position, podium_type: pod || 'suelta', time_seconds: timeSeconds || null, self_reported: true });
+        Object.assign(r, { position, podium_type: pod || 'suelta', time_seconds: timeSeconds || null, general_position: generalPosition || null, self_reported: true });
         if (category) r.category = category;
         logc(me.name, 'resultado', old ? `cambió su resultado: ${old}º → ${position}º en ${d.races.find((x) => x.id === id)?.name}` : `puso su resultado: ${position}º en ${d.races.find((x) => x.id === id)?.name}`);
       }
@@ -855,7 +883,7 @@ export function demoApi(storage = globalThis.localStorage) {
         races: d.races.map((r) => ({ id: r.id, name: r.name, date: r.date, end_date: r.end_date || null, place: r.place, province: r.province,
           country: r.country, modality: r.modality, stages: r.stages || null, race_type: r.race_type || 'suelta', circuit: r.circuit || null, subtype: r.subtype || null, km: r.km ?? null, elevation: r.elevation ?? null, price: r.price ?? null, lat: r.lat ?? null, lon: r.lon ?? null, geo_key: r.geo_key ?? null,
           results: d.results.filter((x) => x.race_id === r.id).map((x) => ({ runner_id: x.runner_id, runner_name: x.runner_name,
-            category: x.category, position: x.position, podium_type: x.podium_type, stage_positions: x.stage_positions || null, time_seconds: x.time_seconds || null })) })),
+            category: x.category, position: x.position, podium_type: x.podium_type, stage_positions: x.stage_positions || null, time_seconds: x.time_seconds || null, general_position: x.general_position || null })) })),
       });
     },
     async runnerTeamMoves(code) {

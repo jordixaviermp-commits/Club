@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError, cleanWeb } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, disciplineKey, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   teamMoves, parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  directorBoard, raceImpact, alDia, tierRanges, nextTeamRace, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, projectLeagueRaces, WATCH_TBC, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, igHeadline, uspacShift, USPAC_GROUPS, USPAC_NAMES, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
+  directorBoard, raceImpact, alDia, tierRanges, nextTeamRace, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, projectLeagueRaces, WATCH_TBC, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, igHeadline, importantOf, IMPORTANT_KINDS, generalOf, uspacShift, USPAC_GROUPS, USPAC_NAMES, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -959,7 +959,7 @@ function openMate(id, forYear = null) {
       const x = r.results.find((y) => y.runner_id === id);
       return `<li class="mini ${modClass(r.modality)} tappable"><a class="mini-main" href="#/carrera/race_${r.id}"><b>${esc(r.name)}</b>
         <small class="muted">${when(r)}${place(r) ? ' · ' + esc(place(r)) : ''} · ${esc(modText(r))}</small></a>
-        ${x.position ? `<span class="pos">${medal(x.position)} ${x.position}º</span>` : ''}${x.time_seconds ? `<small class="muted">⏱️ ${formatTime(x.time_seconds)}</small>` : ''}</li>`; }).join('')}</ul>${doneAll.length > done.length ? `<p class="hint">…y ${doneAll.length - done.length} más.</p>` : ''}` : (S.team ? `<h3 class="mate-h">Carreras de ${year}</h3><p class="hint">Todavía ninguna con resultado.</p>` : '')}
+        ${x.position ? `<span class="pos">${medal(x.position)} ${x.position}º</span>` : ''}${genTag(x.general_position)}${x.time_seconds ? `<small class="muted">⏱️ ${formatTime(x.time_seconds)}</small>` : ''}</li>`; }).join('')}</ul>${doneAll.length > done.length ? `<p class="hint">…y ${doneAll.length - done.length} más.</p>` : ''}` : (S.team ? `<h3 class="mate-h">Carreras de ${year}</h3><p class="hint">Todavía ninguna con resultado.</p>` : '')}
     <div class="dlg-actions"><button value="" class="btn ghost">Cerrar</button></div></form>`;
   dlg.onclose = null;
   if (!dlg.open) dlg.showModal();
@@ -1041,6 +1041,8 @@ const resultHref = (id) => (S.runnerData?.registrations.some((g) => g.id === id)
 const emptyRunnerDraft = (pre = {}) => ({ name: '', date: '', multi: false, end_date: '', place: '', province: '', country: DEFAULT_COUNTRY,
   modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', category: '', url: '', elevation: '', price: '', ...pre });
 
+/** «Gral. 12º»: el puesto en la clasificación general (todas las categorías), si se conoce. */
+const genTag = (g) => (g ? `<small class="gen-tag" title="Puesto en la general (todas las categorías)">Gral. ${g}º</small>` : '');
 /** Formulario para que el corredor ponga o cambie SU resultado. id = «reg_<uuid>» o «race_<uuid>». */
 function viewRunnerReport(key) {
   const d = S.runnerData;
@@ -1057,6 +1059,7 @@ function viewRunnerReport(key) {
         <label>Tu puesto<input type="number" name="position" inputmode="numeric" min="1" max="999" required autofocus value="${esc(cur?.position ?? '')}"></label>
         <label>Categoría${catSelect('name="category"', cat || d.me.category || '', 'Categoría')}</label>
       </div>
+      <label>Puesto en la general <small class="muted">(opcional · de todos, no solo de tu categoría)</small><input type="number" name="general" inputmode="numeric" min="1" max="9999" placeholder="—" value="${esc(cur?.general_position ?? '')}"></label>
       <div class="tf-row"><span class="flabel">⏱️ Tu tiempo <small class="muted">(opcional)</small></span>${timeFields(cur?.time_seconds, 'name="time"')}</div>
       <p class="hint">Escribe solo números en cada casilla, tal como sale en la clasificación: para <b>2 h 05 min</b> pon 2 · 05; si fue menos de una hora, deja las horas vacías (45 min). Sirve para ver cuántas horas acumula cada uno en Equipo.</p>
       <input type="hidden" name="podium" value="${podiumKind(race, cur?.podium_type)}">
@@ -1242,7 +1245,7 @@ function myRacesCard(d, afterSummary = () => '') {
   const row = (r) => {
     const stagePods = (r.stage_positions || []).slice(0, (r.stages || []).length).map((p, i) => ({ p, n: stageName(r, i) })).filter((x) => isPodium(x.p));
     const badge = r.position ? `${isPodium(r.position) ? medalBadge(r.position) : `${r.position}º`}${r.category ? ` <small>${esc(r.category)}</small>` : ''}` : '';
-    const extra = [r.time_seconds ? `<small class="muted">${formatTime(r.time_seconds)}</small>` : '', r.self_reported ? '<small class="self-res">puesto por ti</small>' : '',
+    const extra = [genTag(r.general_position), r.time_seconds ? `<small class="muted">${formatTime(r.time_seconds)}</small>` : '', r.self_reported ? '<small class="self-res">puesto por ti</small>' : '',
       stagePods.length ? `<small>${stagePods.map((x) => `${medalBadge(x.p)} ${esc(x.n)}`).join(' · ')}</small>` : ''].filter(Boolean).join(' · ');
     return mrow(r, { href: `${runnerHref('carrera')}/race_${r.race_id}`, side: `<span class="pos">${badge || '<span class="rc-none">sin puesto</span>'}</span>`, below: extra,
       end: `${!r.position && !S.preview ? `<a class="btn primary small" href="#/resultado/race_${r.race_id}">Poner mi puesto</a>` : ''}${!S.preview ? `<a class="edit-btn" href="#/editar/race_${r.race_id}" aria-label="Editar los datos de ${esc(r.name)}">${ico('pen')}Editar datos</a>` : ''}` });
@@ -1265,14 +1268,17 @@ function myRacesCard(d, afterSummary = () => '') {
       return `<div class="sum-todo"><a href="#" class="sum-next${n ? ' has' : ' ok'}" data-act="goto-sec" data-to="${to}">${ico(n ? 'flag' : 'ok')}<span>${txt}</span>${ico('go')}</a>
         <div class="sum-meta">${ad.streak ? (() => { const me = streakRows().find((x) => x.id === d.me.id); return `<a class="sum-streak" href="${runnerHref('equipo')}" title="Carreras seguidas con tu resultado puesto y tu crónica pasada. Toca para ver la clasificación del club.">🔥 <b>${ad.streak}</b> ${pl(ad.streak, 'carrera seguida', 'carreras seguidas')} al día${me ? ` · <b>${me.pos}º</b> del club` : ''}</a>`; })() : ''}</div></div>`; })()}
     ${cancelled.length ? `<a href="#" class="canc-line" data-act="goto-sec" data-to="sec-canc">${ico('ban')}<span><b>${cancelled.length}</b> ${cancelled.length === 1 ? 'carrera suspendida' : 'carreras suspendidas'}</span>${ico('go')}</a>` : ''}
-    ${(() => { const sentYear = sent.filter((g) => yearOf(g.date) === S.myYear).map((g) => ({ position: g.my_result.position, time_seconds: g.my_result.time_seconds })), allMine = [...list, ...sentYear];   // los enviados también cuentan
+    ${(() => { const sentYear = sent.filter((g) => yearOf(g.date) === S.myYear).map((g) => ({ position: g.my_result.position, time_seconds: g.my_result.time_seconds, general_position: g.my_result.general_position, race_type: g.race_type, podium_type: g.my_result.podium_type })), allMine = [...list, ...sentYear];   // los enviados también cuentan
       const pod = [1, 2, 3].map((k) => allMine.filter((x) => x.position === k).length), NAMES = [['Oro', 'Oros'], ['Plata', 'Platas'], ['Bronce', 'Bronces']];
       // una sola línea pequeña: tiempo en carrera y, al lado, km de viaje (ida y vuelta, aprox.)
       // una sola fila: las horas encima de la bici con el maillot (lo que más se ve) y, al lado, los km totales de esas carreras
       const myTime = allMine.reduce((n, r) => n + (Number(r.time_seconds) || 0), 0), myKm = list.reduce((n, r) => n + (Number(r.km) || 0), 0) + sent.filter((g) => yearOf(g.date) === S.myYear).reduce((n, g) => n + (Number(g.km) || 0), 0);
       const mySpeed = avgSpeed([...list, ...sent.filter((g) => yearOf(g.date) === S.myYear).map((g) => ({ km: g.km, time_seconds: g.my_result.time_seconds }))]);   // tiempo por km
       const road = myTime || myKm ? `<p class="my-line">${myTime ? `<span title="Tiempo total en carrera" aria-label="Tiempo total en carrera">${ico('timer')}<b>${formatTime(myTime, true)}</b></span>` : ''}${myKm ? `<span title="Kilómetros totales de las carreras que has hecho" aria-label="Kilómetros totales en carrera">${ico('ruler')}<b>${kmText(Math.round(myKm))}</b></span>` : ''}${mySpeed.pace ? `<span title="Tiempo por km: por cada km de carrera tardas de media ${paceText(mySpeed.pace)} (${kmText(Math.round(mySpeed.km))} en ${formatTime(mySpeed.sec, true)}; carreras con distancia y tiempo)" aria-label="Tiempo por kilómetro">${ico('route')}<b>${paceText(mySpeed.pace)}</b></span>` : ''}</p>` : '';
-      return (pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}"><i class="medal m${i + 1}"></i>${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : '') + road; })()}
+      // más estadísticas: clasificación general y podios importantes (campeonatos, circuitos y top 3 absoluto)
+      const gens = allMine.map((x) => generalOf(x)).filter(Boolean), imp = importantOf(allMine.map((x) => ({ race: x, res: x })));
+      const genRow = gens.length || imp.length ? `<div class="pod-row gen-row" aria-label="En la general y podios importantes ${S.myYear}">${gens.length ? `<b class="pod-title">En la general:</b><span class="pod-pill gen" title="Mejor puesto en la clasificación general">${ico('flag')}mejor ${Math.min(...gens)}º</span>${gens.filter((g) => g <= 3).length ? `<span class="pod-pill gen">${gens.filter((g) => g <= 3).length} ${gens.filter((g) => g <= 3).length === 1 ? 'podio' : 'podios'}</span>` : ''}<span class="pod-pill gen">${gens.filter((g) => g <= 10).length} top 10</span>` : ''}${imp.length ? `<span class="pod-pill imp" title="Podios en campeonatos, circuitos o top 3 absoluto">${ico('star')}${imp.length} ${imp.length === 1 ? 'podio importante' : 'podios importantes'}</span>` : ''}</div>` : '';
+      return (pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}"><i class="medal m${i + 1}"></i>${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : '') + genRow + road; })()}
   </section>
 
   ${pendingN ? `<section class="card chro-card pend-card has-pend" id="sec-pend"><details class="chro-det" data-open-key="pend"${S.open?.pend ? ' open' : ''}>
@@ -1289,7 +1295,7 @@ function myRacesCard(d, afterSummary = () => '') {
       <span class="chro-tag ok">${sent.length}${ico('go')}</span></summary>
     <p class="hint">Lo que pones vale tal cual y ya cuenta para tu bono; nadie tiene que validarlo. Una semana después de la carrera pasa solo a la clasificación del equipo (se espera por si otros compañeros ponen también su resultado). Mientras tanto puedes cambiar el puesto o el tiempo.</p>
     <ul class="mini-list">${sent.map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, edit: editMine(g),
-      below: `<span class="badge-sent">${g.my_result.position}º${g.my_result.time_seconds ? ' · ' + formatTime(g.my_result.time_seconds) : ''} · ya cuenta</span>${S.preview ? '' : `<a class="edit-btn" href="#/resultado/reg_${g.id}">${ico('pen')}Cambiar</a>`}` })).join('')}</ul>
+      below: `<span class="badge-sent">${g.my_result.position}º${g.my_result.general_position ? ` · Gral. ${g.my_result.general_position}º` : ''}${g.my_result.time_seconds ? ' · ' + formatTime(g.my_result.time_seconds) : ''} · ya cuenta</span>${S.preview ? '' : `<a class="edit-btn" href="#/resultado/reg_${g.id}">${ico('pen')}Cambiar</a>`}` })).join('')}</ul>
   </details></section>` : ''}
 
   ${afterSummary()}
@@ -1518,7 +1524,7 @@ function doneRaceBody(r, { admin = false, meId = null } = {}) {
   return `${typeTag(r)}
     <p class="count">🏁 Disputada · ${res.length} del club${res.length ? ': ' + esc(res.map((x) => x.runner_name).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p>
     ${pods.length ? `<p class="pods">${pods.map((x) => `${medal(x.position)} ${esc(x.runner_name)}`).join(' · ')}</p>` : ''}
-    ${mine ? `<p class="joined-done">✓ Participaste${mine.position ? ` · ${mine.position}º` : ''}</p>` : ''}
+    ${mine ? `<p class="joined-done">✓ Participaste${mine.position ? ` · ${mine.position}º` : ''}${mine.general_position ? ` · Gral. ${mine.general_position}º` : ''}</p>` : ''}
     ${!admin && meId && !mine && r.date >= pastLimit() && !S.preview ? `<p><button class="btn small" data-act="r-join-race" data-id="${r.id}">La hice y no salgo: añadirme</button></p>` : ''}${admin ? `<a class="btn small ghost" href="#/carreras/${r.id}">${ico('pen')}Editar${ico('go')}</a>` : ''}`;
 }
 function doneRaceCard(r, { admin = false, meId = null } = {}) {
@@ -2426,9 +2432,10 @@ function viewNetworks() {
       const act2 = canMark && (x.st !== 'curso') ? `<label class="check post-check"><input type="checkbox" data-act-change="post" data-key="${esc(x.key)}" ${posted.has(x.key) ? 'checked' : ''}> Publicado</label>` : '';
       const copy2 = it.kind === 'race' && x.st !== 'ok' && x.st !== 'curso' ? `<button class="btn small" data-act="pub-copy" data-id="${esc(it.id)}">📋 Copiar texto</button>` : '';
       return `<li class="net-piece ${x.st}"><details class="net-cro net-res" data-open-key="${esc(ok)}"${S.open?.[ok] ? ' open' : ''}><summary><span class="net-k" title="${NET_LABEL.res}">${NET_ICON.res}</span><span class="net-tx">${esc(x.text)}</span><span class="net-glyph" aria-hidden="true">${NET_GLYPH[x.st]}</span></summary>
-        <ul class="rs-edit">${x.people.map((q) => `<li class="rs-row" data-runner="${esc(q.id)}" data-orig="${q.position || ''}|${q.time || ''}" data-podium="${esc(q.podium || '')}">
+        <ul class="rs-edit">${x.people.map((q) => `<li class="rs-row" data-runner="${esc(q.id)}" data-orig="${q.position || ''}|${q.time || ''}|${q.general || ''}" data-podium="${esc(q.podium || '')}">
           <span class="rs-who"><b>${esc(q.name)}</b>${q.category ? `<small class="muted"> ${esc(q.category)}</small>` : ''}</span>
           <label class="rs-pos"><span>Puesto</span><input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" autocomplete="off" data-rs="pos" value="${q.position || ''}" placeholder="—" aria-label="Puesto de ${esc(q.name)}"></label>
+          <label class="rs-pos rs-gen"><span>Gral.</span><input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" data-rs="gen" value="${q.general || ''}" placeholder="—" aria-label="Puesto en la general de ${esc(q.name)}"></label>
           ${timeFields(q.time, 'data-rs="time"')}</li>`).join('')}</ul>
         <div class="rs-actions"><button type="button" class="btn small primary" data-act="res-admin-save" data-kind="${esc(x.rkind)}" data-id="${esc(x.rid)}">Guardar puestos</button><small class="muted">Vale como si lo hubiera puesto el corredor. Vacío = sin puesto.</small></div></details>
         ${act2 || copy2 ? `<span class="net-act">${act2}${copy2}</span>` : ''}</li>`;
@@ -2954,7 +2961,7 @@ function draftRace(id) {
   if (!r) return null;
   const stages = (r.stages || []).map((_, i) => stageName(r, i));
   return { kind: 'race', ...r, stages, multi: !!r.end_date, people: r.results.map((x) => ({ runner_id: x.runner_id, runner_name: x.runner_name, category: x.category || '',
-    position: x.position ?? '', podium_type: x.podium_type || 'suelta', self_reported: !!x.self_reported, origPosition: x.position ?? '', time: x.time_seconds ? formatTime(x.time_seconds) : '',
+    position: x.position ?? '', general_position: x.general_position ?? '', podium_type: x.podium_type || 'suelta', self_reported: !!x.self_reported, origPosition: x.position ?? '', time: x.time_seconds ? formatTime(x.time_seconds) : '',
     stage_positions: stages.map((_, i) => x.stage_positions?.[i] ?? '') }))
     .sort((a, b) => (a.position || 9999) - (b.position || 9999) || a.runner_name.localeCompare(b.runner_name, 'es')) };
 }
@@ -3000,6 +3007,7 @@ function viewRaceEdit() {
         <div class="res-fields">
           ${catSelect(`data-p="${i}" data-pf="category" aria-label="Categoría"`, p.category)}
           <input type="number" inputmode="numeric" min="1" placeholder="${d.stages.length ? 'General' : 'Puesto'}" aria-label="${d.stages.length ? 'Puesto en la general' : 'Puesto'}" data-p="${i}" data-pf="position" value="${esc(p.position)}">
+          <input type="number" inputmode="numeric" min="1" max="9999" placeholder="Gral." aria-label="Puesto en la general (todas las categorías)" data-p="${i}" data-pf="general_position" value="${esc(p.general_position)}">
           <select data-p="${i}" data-pf="podium_type" aria-label="Tipo de podio" ${pod ? '' : 'disabled'}>
             ${PODIUM_TYPES.map((t) => opt(t.id, { suelta: 'Suelta', general: 'General', campeonato: 'Campeonato' }[t.id] || t.label, p.podium_type)).join('')}</select>
         </div>
@@ -3727,7 +3735,7 @@ function viewMemoria() {
   const podList = podRaces.length ? `<ul class="mem-pods">${podRaces.map((r) => `<li><span class="mp-d">${esc(formatDate(r.date, false))}</span><b>${esc(r.name)}</b><span class="mp-w">${podBy.get(r.id).sort((a, b) => a.position - b.position).map((p) => `${medal(p.position)} ${esc(p.runner)}${p.category ? ` <small class="muted">${esc(p.category)}</small>` : ''}${p.stage ? ` <small class="muted">(${esc(p.stage)})</small>` : ''}`).join(' · ')}</span></li>`).join('')}</ul>` : '';
   ch('resultados', 'trophy', 'Resultados',
     t.podiums ? `<b>${plural(t.podiums, 'podio')}</b> en ${plural(podRaces.length, 'carrera')}: ${i.podiumRate} % de las participaciones acaban en el podio.` : 'Esta temporada todavía no hay podios.',
-    t.podiums ? `${medals}<div class="mem-two">${box('Los que más suben al podio', rank(hunters, 'pod', (v) => v, 8))}${box('Récords del equipo', seasonRecords(pk).replace('class="tp-table"', 'class="tp-table mem-rec"'))}</div>${box('Por categoría y disciplina', seasonPodiums(pk))}${box(`Todos los podios (${podRaces.length} carreras)`, podList)}` : box('Récords del equipo', seasonRecords(pk).replace('class="tp-table"', 'class="tp-table mem-rec"')));
+    t.podiums ? `${medals}${box('En la clasificación general', resGeneralTiles(pk) + (resGeneralRank(pk, 5) ? `<h3>Los mejores en la general</h3>${resGeneralRank(pk, 5)}` : ''))}${box('Podios importantes', resImportantList(pk, 15))}<div class="mem-two">${box('Los que más suben al podio', rank(hunters, 'pod', (v) => v, 8))}${box('Récords del equipo', seasonRecords(pk).replace('class="tp-table"', 'class="tp-table mem-rec"'))}</div>${box('Por categoría y disciplina', seasonPodiums(pk))}${box(`Todos los podios (${podRaces.length} carreras)`, podList)}` : box('Récords del equipo', seasonRecords(pk).replace('class="tp-table"', 'class="tp-table mem-rec"')));
 
   // Dónde
   ch('lugares', 'pin', 'Dónde hemos competido',
@@ -3889,6 +3897,8 @@ function resHighlights(pk) {
     ${tile('calplus', 'Por venir', up.races ? `${up.races} carrera${up.races === 1 ? '' : 's'}` : 'Nada más', up.races ? `${up.entries} inscripcion${up.entries === 1 ? '' : 'es'}` : 'este año', up.races ? '#/inscripciones' : '')}
     ${tile('timer', 'Más horas', pk.s.longestTime ? esc(formatTime(pk.s.longestTime.seconds, true)) : '—', pk.s.longestTime ? esc(pk.s.longestTime.race) : 'sin tiempos indicados', pk.s.longestTime ? `#/carreras/${pk.s.longestTime.raceId}` : '')}
     ${tile('mountain', 'La más dura', pk.s.hardest ? esc(elevText(pk.s.hardest.elevation)) : '—', pk.s.hardest ? esc(pk.s.hardest.race) : 'sin desnivel indicado', pk.s.hardest ? `#/carreras/${pk.s.hardest.raceId}` : '')}
+    ${tile('star', 'Podios importantes', t.important ? `${t.important}` : '0', t.genBest ? `mejor gral. ${t.genBest}º` : 'camp. y circuitos')}
+    ${tile('flag', 'Top 10 en la general', t.genRecorded ? `${t.genTop10}` : '—', t.genRecorded ? `${t.genPodiums} absoluto${t.genPodiums === 1 ? '' : 's'}` : 'sin datos')}
     ${tile('money', 'Coste de competir', t.cost ? esc(euros(Math.round(t.cost))) : '—', t.cost ? `${esc(euros(Math.round((t.cost / Math.max(1, t.participations)) * 10) / 10))} por inscripción` : 'sin precios indicados')}
     ${tile('compass', 'Viaje del equipo', t.travelKm ? esc(kmText(t.travelKm)) : '—', t.travelKm ? 'ida y vuelta, aprox.' : 'sin ubicación de las carreras')}
     ${tile('route', 'La más lejana', pk.s.farthest ? esc(kmText(pk.s.farthest.value)) : '—', pk.s.farthest ? esc(pk.s.farthest.race) : 'sin ubicación', pk.s.farthest ? `#/carreras/${pk.s.farthest.raceId}` : '')}
@@ -3964,6 +3974,32 @@ function resPanorama(pk) {
 }
 
 // ---------- Podios ----------
+/** Puesto de una participación en texto: «1º M40 · Gral. 2º». */
+const placeText = (x) => `${x.position ? `${x.position}º${x.category ? ' ' + esc(x.category) : ''}` : ''}${x.general ? `${x.position ? ' · ' : ''}Gral. ${x.general}º` : ''}`;
+/** Cifras de la clasificación general (todas las categorías): podios absolutos, victorias, top 10 y mejor puesto. */
+function resGeneralTiles(pk) {
+  const t = pk.s.totals, tile = (ic, label, val, sub = '') => `<div class="rs-tile">${ico(ic)}<small>${label}</small><b>${val}</b>${sub ? `<em>${sub}</em>` : ''}</div>`;
+  if (!t.genRecorded) return '<p class="hint">Todavía nadie ha puesto su puesto en la general. Se pide al poner el resultado (es opcional) y la dirección también puede ponerlo.</p>';
+  return `<div class="rs-tiles">
+    ${tile('trophy', 'Podios absolutos', t.genPodiums, `${t.genWins} victoria${t.genWins === 1 ? '' : 's'}`)}
+    ${tile('flag', 'Top 10 general', t.genTop10, `de ${t.genRecorded} con gral.`)}
+    ${tile('star', 'Mejor general', t.genBest ? `${t.genBest}º` : '—', 'del equipo')}
+    ${tile('act', 'Podios importantes', t.important, 'camp. y circuitos')}</div>`;
+}
+/** Quién ha estado mejor en la general. */
+function resGeneralRank(pk, n = 8) {
+  const l = pk.s.perRunner.filter((r) => r.gen > 0).sort((a, b) => b.genPod - a.genPod || b.top10 - a.top10 || a.genBest - b.genBest || a.name.localeCompare(b.name, 'es')).slice(0, n);
+  return l.length ? `<ol class="rs-rank">${l.map((r, k) => `<li><span class="pos">${k + 1}</span><div>${personTag(r.key, r.name)}<small class="muted">${r.gen} con puesto general · mejor ${r.genBest}º${r.top10 ? ` · ${r.top10} top 10` : ''}</small></div><span class="rk-m">${r.genPod ? `${r.genPod} 🏅` : `${r.genBest}º`}</span></li>`).join('')}</ol>` : '';
+}
+/** Lista de podios importantes (campeonatos, circuitos, general final y absolutos), los más recientes primero. */
+function resImportantList(pk, max = 12) {
+  const im = [...pk.s.important].sort((a, b) => b.race.date.localeCompare(a.race.date) || a.res.runner_name.localeCompare(b.res.runner_name, 'es'));
+  if (!im.length) return '<p class="hint">Todavía no hay podios en campeonatos o circuitos, ni en el top 3 de la general.</p>';
+  const counts = IMPORTANT_KINDS.map((k) => [k, im.filter((x) => x.kinds.includes(k.id)).length]).filter(([, n]) => n);
+  const row = (x) => `<li><span class="mp-d">${esc(formatDate(x.race.date, false))}</span><b>${esc(x.race.name)}</b><span class="mp-w">${esc(x.res.runner_name)} <small class="muted">${placeText({ position: x.position, category: x.res.category, general: x.general })}</small> ${x.kinds.map((k) => `<small class="imp-k k-${k}">${esc(IMPORTANT_KINDS.find((y) => y.id === k).short)}</small>`).join(' ')}</span></li>`;
+  return `<div class="pills">${counts.map(([k, n]) => `<span class="pill">${esc(k.label)} <b>${n}</b></span>`).join('')}</div>
+    <ul class="mem-pods imp-list">${im.slice(0, max).map(row).join('')}</ul>${im.length > max ? `<details class="pod-more"><summary>Ver los ${im.length - max} restantes</summary><ul class="mem-pods imp-list">${im.slice(max).map(row).join('')}</ul></details>` : ''}`;
+}
 function resPodiums(pk) {
   const s = pk.s, pl = s.podiumList, n = (k) => pl.filter((x) => x.position === k).length;
   const t = s.totals, i = pk.ins;
@@ -3981,6 +4017,8 @@ function resPodiums(pk) {
       ${types.length ? `<div class="pills">${types.map((x) => `<span class="pill">${esc(x.label)} <b>${x.podiums}</b>${x.wins ? ` · 🥇 ${x.wins}` : ''}</span>`).join('')}</div>` : ''}</section>
     ${hunters.length ? `<section class="card rs-card"><h2>Los que más suben al podio</h2><ol class="rs-rank">${hunters.slice(0, 10).map((r, k) => `<li><span class="pos">${k + 1}</span><div><a href="#/corredor/${esc(r.key)}"><b>${esc(r.name)}</b></a>
       <small class="muted">${r.races} carrera${r.races === 1 ? '' : 's'} · ${pctOf(r.p1 + r.p2 + r.p3, r.races)} % en podio</small>${bar(((r.p1 + r.p2 + r.p3) / topP) * 100, 'gold')}</div><span class="rk-m">${r.p1 ? `🥇${r.p1} ` : ''}${r.p2 ? `🥈${r.p2} ` : ''}${r.p3 ? `🥉${r.p3}` : ''}</span></li>`).join('')}</ol></section>` : ''}
+    <section class="card rs-card"><h2>${ico('star')} Podios importantes</h2>${resImportantList(pk)}<p class="hint">Cuentan los podios de categoría en campeonatos, circuitos y la general final de varias pruebas, y el top 3 de la clasificación general de la carrera (todas las categorías).</p></section>
+    <section class="card rs-card"><h2>${ico('flag')} Clasificación general</h2>${resGeneralTiles(pk)}${resGeneralRank(pk) ? `<h3>Los mejores en la general</h3>${resGeneralRank(pk)}` : ''}</section>
     <section class="card rs-card"><h2>Por categoría y disciplina</h2>${seasonPodiums(pk)}</section>
     <section class="card rs-card"><h2>Récords del equipo</h2>${seasonRecords(pk)}</section>
     <section class="card rs-card"><h2>Todos los podios (${races.length} carrera${races.length === 1 ? '' : 's'})</h2>
@@ -4193,6 +4231,12 @@ const EQ_METRICS = [
     det: (r) => `${r.p1 ? `🥇${r.p1} ` : ''}${r.p2 ? `🥈${r.p2} ` : ''}${r.p3 ? `🥉${r.p3}` : ''}`.trim(), hint: 'Podios (1º, 2º o 3º) de su categoría, también en etapas.' },
   { k: 'wins', label: 'Victorias', ico: 'medal', val: (r) => r.p1, fmt: (n) => `${n}`, month: 'wins', mfmt: (n) => `${n}`, sum: true, unit: 'victorias',
     det: (r) => `${r.p1 + r.p2 + r.p3} podio${r.p1 + r.p2 + r.p3 === 1 ? '' : 's'} en total`, hint: 'Primeros puestos de su categoría.' },
+  { k: 'genpod', label: 'Podios gral.', ico: 'flag', val: (r) => r.genPod, fmt: (n) => `${n}`, sum: true, unit: 'podios absolutos',
+    det: (r) => `mejor ${r.genBest}º en la general · ${r.gen} con puesto general`, hint: 'Podios absolutos: top 3 de la clasificación general de la carrera (todas las categorías). Solo cuentan las carreras donde se ha puesto el puesto general.' },
+  { k: 'top10', label: 'Top 10 gral.', ico: 'flag', val: (r) => r.top10, fmt: (n) => `${n}`, sum: true, unit: 'top 10',
+    det: (r) => `mejor ${r.genBest}º en la general`, hint: 'Veces entre los 10 primeros de la clasificación general de la carrera (todas las categorías).' },
+  { k: 'imp', label: 'Podios import.', ico: 'star', val: (r) => r.imp, fmt: (n) => `${n}`, sum: true, unit: 'podios importantes',
+    det: (r) => `${r.p1 + r.p2 + r.p3} podio${r.p1 + r.p2 + r.p3 === 1 ? '' : 's'} de categoría en total`, hint: 'Podios en campeonatos, circuitos o la general final de varias pruebas, y top 3 de la general de la carrera.' },
   { k: 'km', label: 'Km', ico: 'ruler', val: (r) => r.km, fmt: (n) => kmText(Math.round(n)), month: 'km', mfmt: (n) => kmShort(n), sum: true, unit: 'km',
     det: (r) => `${r.races} carrera${r.races === 1 ? '' : 's'}`, hint: 'Kilómetros de las carreras en las que ha participado (solo las que tienen distancia indicada).' },
   { k: 'kmday', label: 'Km/día', ico: 'route', val: (r) => (r.kmDays ? r.km / r.kmDays : 0), fmt: (n) => perDayText(n), sum: false,
@@ -4831,7 +4875,7 @@ function runnerSheet(r, year, minimum) {
     ${list.length ? `<div class="rp-scroll"><table class="rp-table"><thead><tr><th>Fecha</th><th>Carrera</th><th>Lugar</th><th>Modalidad</th><th>Km</th><th>Puesto</th><th>Tiempo</th></tr></thead><tbody>
       ${list.map(({ x, y }) => `<tr><td class="num">${esc(formatRange(x.date, x.end_date))}</td><td><b>${esc(x.name)}</b>${x.race_type === 'circuito' && x.circuit ? `<small>${esc(x.circuit)}</small>` : ''}</td>
         <td>${esc([x.place, x.province].filter(Boolean).join(', ') || '—')}</td><td>${esc(x.modality)}${x.subtype ? `<small>${esc(x.subtype)}</small>` : ''}</td><td class="num">${x.km ? kmText(x.km) : '—'}</td>
-        <td class="num">${y.position ? `${isPodium(y.position) ? medal(y.position) + ' ' : ''}${y.position}º` : '—'}</td><td class="num">${y.time_seconds ? formatTime(y.time_seconds) : '—'}</td></tr>`).join('')}</tbody></table></div>`
+        <td class="num">${y.position ? `${isPodium(y.position) ? medal(y.position) + ' ' : ''}${y.position}º` : '—'}${y.general_position ? ` <small class="muted">· Gral. ${y.general_position}º</small>` : ''}</td><td class="num">${y.time_seconds ? formatTime(y.time_seconds) : '—'}</td></tr>`).join('')}</tbody></table></div>`
       : '<p class="empty">Sin carreras con resultado esta temporada.</p>'}
     ${planned.length ? `<p class="rp-note"><b>Inscrito, pendiente:</b> ${esc(planned.map((g) => `${g.name} (${formatRange(g.date, g.end_date)})`).join(' · '))}.</p>` : ''}
     <p class="rp-note">Cifras registradas a fecha de ${dateEs(todayISO())}. El saldo es el bono menos la penalización, si la hubiera.</p>
@@ -5527,13 +5571,16 @@ const actions = {
     const changes = [];
     for (const row of box.querySelectorAll('.rs-row')) {
       const posTxt = row.querySelector('[data-rs="pos"]').value.trim(), timeTxt = row.querySelector('input[data-rs="time"]').value.trim();
+      const genTxt = row.querySelector('[data-rs="gen"]')?.value.trim() || '', general = genTxt ? Number(genTxt) : null;
       const position = posTxt ? Number(posTxt) : null, time = timeTxt ? parseTime(timeTxt) : null;
       if (posTxt && !(Number.isInteger(position) && position >= 1 && position <= 999)) return toast(`Puesto no válido: ${row.querySelector('.rs-who b').textContent}.`, true);
+      if (genTxt && !(Number.isInteger(general) && general >= 1 && general <= 9999 && (!position || general >= position))) return toast(`Puesto en la general no válido para ${row.querySelector('.rs-who b').textContent} (no puede ser menor que su puesto de categoría).`, true);
       if (timeTxt && !time) return toast(`Revisa el tiempo de ${row.querySelector('.rs-who b').textContent}: los minutos van de 0 a 59.`, true);
-      if (`${position || ''}|${time || ''}` !== row.dataset.orig) changes.push({ id: row.dataset.runner, position, time, podium: row.dataset.podium });
+      const origGen = row.dataset.orig.split('|')[2] || '', genChanged = String(general || '') !== origGen;   // el general solo se toca si la dirección lo cambia
+      if (`${position || ''}|${time || ''}|${general || ''}` !== row.dataset.orig) changes.push({ id: row.dataset.runner, position, time, general: genChanged ? general : undefined, podium: row.dataset.podium });
     }
     if (!changes.length) return toast('No has cambiado nada.');
-    const ok = await run(async () => { for (const c of changes) await api.adminSetResult(el.dataset.kind, el.dataset.id, c.id, c.position, c.podium, c.time); await reload(); return true; },
+    const ok = await run(async () => { for (const c of changes) await api.adminSetResult(el.dataset.kind, el.dataset.id, c.id, c.position, c.podium, c.time, c.general); await reload(); return true; },
       `Guardado: ${changes.length} ${changes.length === 1 ? 'puesto' : 'puestos'}`);
     if (ok) render();
   },
@@ -5835,9 +5882,12 @@ const forms = {
     const cat = f.category.value || null, pod = f.podium.value;
     const rawTime = f.time.value.trim(), time = rawTime ? parseTime(rawTime) : null;
     if (rawTime && !time) return toast('Revisa el tiempo: minutos y segundos van de 0 a 59. Déjalo vacío si no lo sabes.', true);
-    const txt = `${position}º${cat ? ' en ' + cat : ''}${time ? ' · ⏱️ ' + formatTime(time) : ''}${position <= 3 && pod === 'campeonato' ? ` · ${podiumLabel(pod)}` : ''}`;
+    const general = f.general.value.trim() ? Number(f.general.value) : null;
+    if (general != null && (!Number.isInteger(general) || general < 1 || general > 9999)) return toast('Revisa el puesto en la general (1, 2, 3…) o déjalo vacío.', true);
+    if (general != null && general < position) return toast('En la general no puedes ir por delante que en tu categoría: revisa los dos puestos.', true);
+    const txt = `${position}º${cat ? ' en ' + cat : ''}${general ? ` · Gral. ${general}º` : ''}${time ? ' · ⏱️ ' + formatTime(time) : ''}${position <= 3 && pod === 'campeonato' ? ` · ${podiumLabel(pod)}` : ''}`;
     if (!await confirmAction('Guardar resultado', `Vas a guardar: <b>${esc(txt)}</b>.<br>Si te equivocas, lo puedes cambiar después.`, 'Guardar', 'primary')) return;
-    const ok = await run(async () => { await api.runnerReport(S.code, f.dataset.kind, f.dataset.id, position, cat, pod, time); await loadRunner(); return true; },
+    const ok = await run(async () => { await api.runnerReport(S.code, f.dataset.kind, f.dataset.id, position, cat, pod, time, general); await loadRunner(); return true; },
       position <= 3 ? `${medal(position)} ¡Enhorabuena! Resultado enviado` : 'Resultado enviado');
     if (ok) go(runnerHref('mi'));
   },
@@ -5923,7 +5973,9 @@ const forms = {
         });
         const rawTime = String(p.time || '').trim(), time_seconds = rawTime ? parseTime(rawTime) : null;
         if (rawTime && !time_seconds) throw new Error(`Tiempo no válido para ${p.runner_name}: usa horas:minutos:segundos (2:05:30).`);
-        return { runner_id: p.runner_id, runner_name: p.runner_name, category: p.category || null, position, time_seconds,
+        const gRaw = String(p.general_position ?? '').trim(), general_position = gRaw ? Number(gRaw) : null;
+        if (gRaw && !(Number.isInteger(general_position) && general_position >= 1 && general_position <= 9999 && (!position || general_position >= position))) throw new Error(`Puesto en la general no válido para ${p.runner_name} (no puede ser menor que su puesto de categoría).`);
+        return { runner_id: p.runner_id, runner_name: p.runner_name, category: p.category || null, position, time_seconds, general_position,
           podium_type: isPodium(position) ? p.podium_type || 'suelta' : 'suelta',
           stage_positions: stage_positions.some((x) => x !== null) ? stage_positions : null,
           self_reported: !!p.self_reported && String(p.position) === String(p.origPosition) };

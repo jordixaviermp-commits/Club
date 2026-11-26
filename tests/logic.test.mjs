@@ -40,7 +40,7 @@ const races = [
 
 test('resumen anual', () => {
   const s = yearSummary(2026, races, runners);
-  { const { travelKm, travelRaces, travelApprox, avgDist, ...base } = s.totals;
+  { const { travelKm, travelRaces, travelApprox, avgDist, genRecorded, genPodiums, genWins, genTop10, genBest, important, ...base } = s.totals;
   assert.deepEqual(base, { races: 3, runners: 3, participations: 4, podiums: 3, wins: 1, km: 0, kmDays: 0, kmTimed: 0, secTimed: 0, kmRaces: 0, kmBoth: 0, tripBoth: 0, time: 0, timed: 0, elevation: 0, cost: 0, elevRaces: 0, pricedRaces: 0, avgPrice: 0 }); }
   assert.deepEqual(s.byModality.map((m) => m.modality), ['Carretera', 'BTT', 'Gravel']); // Pista no aparece en 2026
   { const { elevation, trip, cost, km, ...base } = s.byModality[1];
@@ -57,7 +57,7 @@ test('resumen anual', () => {
 
 test('CSV ida y vuelta', () => {
   const csv = toCsv(csvRows(races.filter((r) => r.date.startsWith('2026'))));
-  assert.ok(csv.startsWith('﻿Fecha;Fecha fin;Carrera;Lugar;Provincia;País;Modalidad;Corredor;Categoría;Puesto;Podio;Tipo de podio;Disciplina;Km;Desnivel (m);Precio inscripción (€)\r\n'));
+  assert.ok(csv.startsWith('﻿Fecha;Fecha fin;Carrera;Lugar;Provincia;País;Modalidad;Corredor;Categoría;Puesto;Podio;Tipo de podio;Disciplina;Km;Desnivel (m);Precio inscripción (€);Puesto general\r\n'));
   assert.match(csv, /2026-05-01;;Dos;;;Francia;BTT;Dani \(baja\);M50;2;Sí;General de varias pruebas/);
   const back = importResultsCsv(csv);
   assert.deepEqual(back.errors, []);
@@ -130,7 +130,7 @@ test('podios de etapa: cuentan como tipo «Etapa»', () => {
       { runner_id: 'b', runner_name: 'Biel', position: 7, podium_type: 'general', stage_positions: [null, 1, null, 1] }, // la 4.ª no existe
     ] }];
   const s = yearSummary(2027, races2, runners2);
-  { const { travelKm, travelRaces, travelApprox, avgDist, ...base } = s.totals;
+  { const { travelKm, travelRaces, travelApprox, avgDist, genRecorded, genPodiums, genWins, genTop10, genBest, important, ...base } = s.totals;
   assert.deepEqual(base, { races: 1, runners: 2, participations: 2, podiums: 4, wins: 2, km: 0, kmDays: 0, kmTimed: 0, secTimed: 0, kmRaces: 0, kmBoth: 0, tripBoth: 0, time: 0, timed: 0, elevation: 0, cost: 0, elevRaces: 0, pricedRaces: 0, avgPrice: 0 }); }
   assert.deepEqual(s.byPodiumType.map((t) => [t.type, t.podiums, t.wins]),
     [['suelta', 0, 0], ['general', 1, 0], ['campeonato', 0, 0], ['etapa', 3, 2]]);
