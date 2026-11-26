@@ -2710,3 +2710,20 @@ header.top .icon-btn.sos { position: relative; } header.top .icon-btn.sos::befor
 .gen-row { margin-top: .35rem; }
 .rs-edit .rs-gen { width: 4.2rem; } .edit-list.results .res-fields { grid-template-columns: 1fr 70px 70px 1.3fr; }
 @media (max-width: 420px) { .edit-list.results .res-fields { grid-template-columns: minmax(0, 1fr) 54px 54px minmax(0, 1.1fr); } }
+
+/* ---- v259 · Coche compartido ---- */
+.cars { margin: .6rem 0; padding: .6rem .7rem; border: 1px solid var(--line); border-radius: var(--r-md); background: color-mix(in srgb, var(--brand-cyan, #0aa) 5%, var(--card)); }
+.cars h4 { display: flex; align-items: center; gap: .4rem; margin: 0 0 .4rem; font-size: var(--fs-4); } .cars h4 .ico { width: 18px; height: 18px; color: var(--accent); } .cars h4 small { color: var(--muted); font-weight: 600; }
+.car-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .45rem; }
+.car { padding: .5rem .6rem; border-radius: var(--r-sm); background: var(--card); border: 1px solid var(--line); }
+.car.mine { border-color: var(--accent); } .car.here { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 8%, var(--card)); }
+.car-top { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.car-d { display: inline-flex; align-items: center; gap: .3rem; min-width: 0; font-size: var(--fs-3); } .car-d .ico { width: 16px; height: 16px; color: var(--muted); flex: none; }
+.car-seats { display: inline-flex; gap: 3px; margin-left: auto; } .car-seats i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--accent); background: transparent; } .car-seats i.on { background: var(--accent); }
+.car-free { font-weight: 700; color: var(--ok-2, var(--ok)); } .car-free.full { color: var(--bad); }
+.car-meta { margin: .25rem 0 0; font-size: var(--fs-2); color: var(--muted); }
+.car-riders { display: flex; flex-wrap: wrap; gap: .3rem; margin: .35rem 0 0; } .car-riders span { padding: .1rem .5rem; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); font-size: var(--fs-2); } .car-riders span.me { background: var(--accent-2); border-color: var(--brand-cyan); font-weight: 700; }
+.car-acts { display: flex; gap: .4rem; margin-top: .45rem; } .car-acts .btn, .car-add { min-height: 40px; }
+.car-add { margin-top: .5rem; display: inline-flex; align-items: center; gap: .3rem; } .car-add .ico { width: 16px; height: 16px; }
+.rc-car { display: inline-flex; align-items: center; gap: .2rem; padding: .08rem .45rem; border-radius: 999px; font-size: var(--fs-1); font-weight: 800; background: color-mix(in srgb, var(--accent) 14%, var(--card)); color: var(--accent); white-space: nowrap; }
+.rc-car .ico { width: 12px; height: 12px; } .rc-car.mine { background: var(--ok); color: #fff; } .rc-car.full { background: var(--line); color: var(--muted); }

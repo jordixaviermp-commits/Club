@@ -383,6 +383,8 @@ async function loadImpact() {
   S.impact = r && Array.isArray(r.posted) ? { posted: new Set(r.posted), ig: r.ig_rows ? igHeadline(r.ig_rows) : null } : null;
   if (S.runnerData) render();
 }
+/** Coches compartidos de las próximas carreras (lo ven todos los corredores). null = falta el SQL. */
+async function loadCars() { try { S.cars = await api.runnerCars(S.code || S.previewCode); } catch { S.cars = null; } }
 /** Escamot (E1–E5) del corredor para pintar sus turnos en el calendario; null si no tiene. */
 async function loadShift() {
   const code = S.code || S.previewCode; let info = null;
@@ -393,7 +395,7 @@ async function loadShift() {
 }
 async function loadRunner() {
   if (!S.session?.isAdmin) api.runnerPing?.(S.code).catch(() => {});   // actividad: última vez que abrió la app
-  try { S.moves = undefined; S.runnerData = await api.runnerView(S.code); await loadNews(); await loadCorrections(); await loadChron(); await loadWatch(); await loadNotes(); await loadShift(); }
+  try { S.moves = undefined; S.runnerData = await api.runnerView(S.code); await loadNews(); await loadCorrections(); await loadChron(); await loadWatch(); await loadNotes(); await loadShift(); await loadCars(); }
   catch (e) {
     S.runnerData = null;
     if (/enlace_no_valido/.test(String(e?.message))) { store.del(CODE_KEY); S.code = null; }
@@ -1127,6 +1129,7 @@ const ICO = {
   clock: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2',
   link: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71',
   ruler: 'M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0zM14.5 12.5l2-2M11.5 9.5l2-2M8.5 6.5l2-2M17.5 15.5l2-2',
+  car: 'M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2M9 17h6M5 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M15 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0',
   users: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
   calplus: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM12 14v4M10 16h4',
   check: 'M20 6L9 17l-5-5',
@@ -1202,6 +1205,36 @@ function payLineInline(list) {
 /** Estado de pago en la cabecera de cada inscripción de Mi temporada: de un vistazo cuáles faltan por pagar. */
 const payBadge = (g, opts = {}) => { const e = opts.notes && !g.suspended && g.date >= (S.runnerData?.today || todayISO()) ? myEntry(g) : null;
   return e ? `<span class="rc-pay ${e.paid ? 'on' : 'due'}" title="${e.paid ? 'Inscripción pagada' : 'Pendiente de pagar'}">${ico('euro')}${e.paid ? 'Pagada' : 'Pendiente'}</span>` : ''; };
+// ---------- coche compartido ----------
+const carsOf = (regId) => (S.cars || []).filter((c) => c.reg === regId);
+const carFree = (c) => Math.max(0, c.seats - c.riders.length);
+const carMine = (regId) => { const me = S.runnerData?.me?.id; return carsOf(regId).some((c) => c.driver_id === me || c.riders.some((r) => r.id === me)); };
+/** Insignia de la cabecera de cada carrera: plazas libres de los coches (o ✓ si ya vas en uno). */
+const carBadge = (g) => {
+  const cs = carsOf(g.id); if (!cs.length || g.suspended || g.date < (S.runnerData?.today || todayISO())) return '';
+  const free = cs.reduce((n, c) => n + carFree(c), 0), mine = carMine(g.id);
+  return `<span class="rc-car${mine ? ' mine' : free ? '' : ' full'}" title="${mine ? 'Vas en un coche' : `${cs.length} coche${cs.length === 1 ? '' : 's'} · ${free} plaza${free === 1 ? '' : 's'} libre${free === 1 ? '' : 's'}`}">${ico('car')}${mine ? '✓' : free}</span>`;
+};
+/** Bloque «Coches» de la ficha de una carrera próxima: quién conduce, plazas, de dónde sale, y botones para apuntarse. */
+function carsBlock(g) {
+  if (S.cars === null || S.cars === undefined) return '';        // sin el SQL no se enseña nada
+  const me = S.runnerData?.me?.id, inscribed = !!myEntry(g), cs = carsOf(g.id), canAct = inscribed && !S.preview;
+  if (!cs.length && !canAct) return '';
+  const imRider = cs.some((c) => c.riders.some((r) => r.id === me)), imDriver = cs.some((c) => c.driver_id === me), free = cs.reduce((n, c) => n + carFree(c), 0);
+  const seats = (c) => `<span class="car-seats" aria-label="${carFree(c)} libres de ${c.seats}">${Array.from({ length: c.seats }, (_, i) => `<i class="${i < c.riders.length ? 'on' : ''}"></i>`).join('')}</span>`;
+  const row = (c) => { const mineCar = c.driver_id === me, here = c.riders.some((r) => r.id === me), full = carFree(c) === 0;
+    return `<li class="car${mineCar ? ' mine' : ''}${here ? ' here' : ''}"><div class="car-top"><span class="car-d">${ico('car')}<b>${esc(c.driver)}</b>${mineCar ? ' <small>(tú)</small>' : ''}</span>${seats(c)}<small class="car-free${full ? ' full' : ''}">${full ? 'lleno' : `${carFree(c)} libre${carFree(c) === 1 ? '' : 's'}`}</small></div>
+      ${c.from || c.depart || c.note ? `<p class="car-meta">${[c.from ? `📍 ${esc(c.from)}` : '', c.depart ? `🕖 ${esc(c.depart)}` : '', c.note ? `“${esc(c.note)}”` : ''].filter(Boolean).join(' · ')}</p>` : ''}
+      ${c.riders.length ? `<p class="car-riders">${c.riders.map((r) => `<span class="${r.id === me ? 'me' : ''}">${esc(r.name)}</span>`).join('')}</p>` : ''}
+      ${canAct ? `<div class="car-acts">${mineCar ? `<button type="button" class="btn small" data-act="car-offer" data-id="${g.id}">${ico('pen')}Editar</button>`
+        : here ? `<button type="button" class="btn small ghost" data-act="car-leave" data-id="${g.id}">Bajarme</button>`
+        : !full && !imDriver ? `<button type="button" class="btn small primary" data-act="car-join" data-offer="${c.id}" data-id="${g.id}">${imRider ? 'Cambiarme a este' : 'Apuntarme'}</button>` : ''}</div>` : ''}</li>`; };
+  return `<section class="cars" aria-label="Coches compartidos">
+    <h4>${ico('car')}Coches${cs.length ? ` <small>${cs.length} · ${free} libre${free === 1 ? '' : 's'}</small>` : ''}</h4>
+    ${cs.length ? `<ul class="car-list">${cs.map(row).join('')}</ul>` : '<p class="hint" data-nofold>Nadie ofrece coche todavía.</p>'}
+    ${canAct && !imDriver && !imRider ? `<button type="button" class="btn small ghost car-add" data-act="car-offer" data-id="${g.id}">${ico('car')}Ofrezco mi coche</button>` : canAct && !imDriver ? `<button type="button" class="btn small ghost car-add" data-act="car-offer" data-id="${g.id}">${ico('car')}Llevo yo mi coche</button>` : ''}
+    ${!inscribed && cs.length && !S.preview ? '<p class="hint" data-nofold>Apúntate a la carrera para subir a un coche.</p>' : ''}</section>`;
+}
 /** Fila de chips de una inscripción: desde cuándo estoy inscrito y si está pagada (y cuándo). */
 function payChips(g) {
   const e = myEntry(g);
@@ -1588,6 +1621,7 @@ function runnerRegCard(g, opts = {}) {
       ${myPubLine(g)}
       ${opts.notes && mine && !S.preview ? noteBlock(g) : ''}
       ${opts.notes ? completeBox(g, 'reg', g.id) : ''}
+      ${open && !g.suspended ? carsBlock(g) : ''}
       ${mates}
       ${!open || g.suspended ? '' : mine
         ? `<div class="joined-acts">
@@ -1597,7 +1631,7 @@ function runnerRegCard(g, opts = {}) {
         : `<div class="row join-row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">Apuntarme</button></div>`}
     `;
-    return raceFold(g, { key, id: key, mine: !!(mine && !g.suspended), open: !!opts.open, cls: opts.cls || '', noPast: !!opts.noPast, side: `${myPubChip(g)}${state}${payBadge(g, opts)}<span class="rc-n" title="Inscritos del club" aria-label="${g.entries.length} del club inscrito${g.entries.length === 1 ? '' : 's'}">${ico('users')}${g.entries.length}</span>`, body, today });
+    return raceFold(g, { key, id: key, mine: !!(mine && !g.suspended), open: !!opts.open, cls: opts.cls || '', noPast: !!opts.noPast, side: `${myPubChip(g)}${state}${payBadge(g, opts)}${carBadge(g)}<span class="rc-n" title="Inscritos del club" aria-label="${g.entries.length} del club inscrito${g.entries.length === 1 ? '' : 's'}">${ico('users')}${g.entries.length}</span>`, body, today });
   }
 
 /** Barra de «participaciones futuras» del equipo: cuántas inscripciones hay ya en las próximas carreras, por mes (para animar a apuntarse y a crear carreras). */
@@ -4729,6 +4763,24 @@ function askPaid(name, mine) {
 }
 
 /** Editar mi nota de una inscripción (privada). Devuelve el texto (vacío = borrar) o null si se cancela. */
+/** Ofrecer o cambiar mi coche: plazas, de dónde sale, hora y una nota. Devuelve {seats, from, depart, note}, 'del' (quitarlo) o null (cancelar). */
+function askCar(name, cur = null) {
+  return new Promise((resolve) => {
+    const dlg = document.getElementById('dialog'), taken = cur?.riders?.length || 0;
+    dlg.innerHTML = `<form method="dialog" class="dlg"><h2>${ico('car')} ${cur ? 'Mi coche' : 'Ofrezco mi coche'}</h2><p><b>${esc(name || '')}</b></p>
+      <label>Plazas libres para otros<select name="seats">${[1, 2, 3, 4, 5, 6, 7, 8].filter((n) => n >= taken).map((n) => `<option value="${n}"${n === (cur?.seats ?? 3) ? ' selected' : ''}>${n}</option>`).join('')}</select></label>
+      <label>Sale de<input name="from" maxlength="60" placeholder="Monzón, plaza…" value="${esc(cur?.from || '')}"></label>
+      <label>Hora de salida<input name="depart" maxlength="30" placeholder="7:00" value="${esc(cur?.depart || '')}"></label>
+      <label>Nota <small class="muted">(opcional)</small><input name="note" maxlength="80" placeholder="Sin paradas, bicis en el techo…" value="${esc(cur?.note || '')}"></label>
+      <p class="hint" data-nofold>Lo ven todos los que van a esta carrera. Pueden apuntarse hasta llenar las plazas.</p>
+      <div class="dlg-actions"><button value="ok" class="btn primary">Guardar</button>${cur ? '<button value="del" class="btn danger" formnovalidate>Quitar mi coche</button>' : ''}<button value="" class="btn" formnovalidate>Cancelar</button></div></form>`;
+    dlg.onclose = () => { const v = dlg.returnValue; if (v === 'del') return resolve('del'); if (v !== 'ok') return resolve(null);
+      resolve({ seats: Number(dlg.querySelector('select[name="seats"]').value), from: dlg.querySelector('input[name="from"]').value, depart: dlg.querySelector('input[name="depart"]').value, note: dlg.querySelector('input[name="note"]').value }); };
+    dlg.returnValue = '';
+    dlg.showModal();
+  });
+}
+
 function askNote(name, current = '') {
   return new Promise((resolve) => {
     const dlg = document.getElementById('dialog');
@@ -5345,6 +5397,24 @@ const actions = {
     render();
   },
   // Pago de la inscripción: lo marca el corredor (con el importe, opcional); los compañeros ven solo «pagada»
+  async 'car-offer'(el) {
+    const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id); if (!g || S.preview) return;
+    const me = S.runnerData.me.id, cur = carsOf(g.id).find((c) => c.driver_id === me) || null;
+    const v = await askCar(g.name, cur); if (v === null) return;
+    const ok = await run(async () => { if (v === 'del') await api.runnerCarDelete(S.code, g.id); else await api.runnerCarSave(S.code, g.id, v.seats, v.from, v.depart, v.note); await loadCars(); return true; },
+      v === 'del' ? 'Coche quitado' : cur ? '✓ Coche actualizado' : '🚗 Coche publicado');
+    if (ok) render();
+  },
+  async 'car-join'(el) {
+    if (S.preview) return;
+    const ok = await run(async () => { await api.runnerCarJoin(S.code, el.dataset.offer); await loadCars(); return true; }, '🚗 Te has apuntado al coche');
+    if (!ok) { await loadCars(); render(); } else render();
+  },
+  async 'car-leave'(el) {
+    if (S.preview) return;
+    const ok = await run(async () => { await api.runnerCarLeave(S.code, el.dataset.id); await loadCars(); return true; }, 'Te has bajado del coche');
+    if (ok) render();
+  },
   async 'note-edit'(el) {
     const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id); if (!g || S.preview) return;
     const t = await askNote(g.name, noteOf(g));
@@ -6058,7 +6128,7 @@ document.addEventListener('visibilitychange', async () => {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['r-web', 'note-edit', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'chro-toggle', 'chro-all', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
+const RUNNER_ACTIONS = new Set(['r-web', 'note-edit', 'car-offer', 'car-join', 'car-leave', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'chro-toggle', 'chro-all', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
 // los enlaces de la ventana emergente (p. ej. las carreras de un compañero) cierran la ventana al navegar
 document.getElementById('dialog').addEventListener('click', (ev) => { if (ev.target.closest('a[href^="#/"]')) ev.currentTarget.close(); });
 $app.addEventListener('click', (ev) => {

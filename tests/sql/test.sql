@@ -969,4 +969,39 @@ select pg_temp.expect_fail($q$select runner_shift_info('codigo-falso')$q$, 'turn
 reset role;
 update runners set shift_enabled = false where code = 'codigo-valorador-dos-02';
 set role anon;
+-- coche compartido: solo inscritos, plazas limitadas, un coche por carrera y limpieza al borrarse de la carrera
+reset role;
+insert into runners (id, name, code) values ('10000000-0000-0000-0000-0000000000c3', 'Pere Coche', 'CARPERE00001'), ('10000000-0000-0000-0000-0000000000c7', 'Anna Coche', 'CARANNA00001'), ('10000000-0000-0000-0000-0000000000c4', 'Dani Coche', 'CARDANI0001'), ('10000000-0000-0000-0000-0000000000c5', 'Eva Coche', 'CAREVA00001'), ('10000000-0000-0000-0000-0000000000c6', 'Fer Fuera', 'CARFER00001');
+insert into registrations (id, name, date, modality) values ('20000000-0000-0000-0000-0000000000c1', 'Cursa del Coche', current_date + 10, 'Carretera'), ('20000000-0000-0000-0000-0000000000c2', 'Cursa Pasada', current_date - 3, 'Carretera');
+insert into registration_entries (registration_id, runner_id) values
+  ('20000000-0000-0000-0000-0000000000c1', '10000000-0000-0000-0000-0000000000c3'), ('20000000-0000-0000-0000-0000000000c1', '10000000-0000-0000-0000-0000000000c7'),
+  ('20000000-0000-0000-0000-0000000000c1', '10000000-0000-0000-0000-0000000000c4'), ('20000000-0000-0000-0000-0000000000c1', '10000000-0000-0000-0000-0000000000c5'),
+  ('20000000-0000-0000-0000-0000000000c2', '10000000-0000-0000-0000-0000000000c3');
+set role anon;
+select runner_car_save('CARPERE00001', '20000000-0000-0000-0000-0000000000c1', 2, 'Monzón, plaza', '7:00', 'Sin parar');
+select pg_temp.check((select (c->>'seats')::int = 2 and c->>'driver' = 'Pere Coche' and c->>'from' = 'Monzón, plaza' and c->>'depart' = '7:00' from jsonb_array_elements(runner_cars('CARDANI0001')) c where c->>'reg' = '20000000-0000-0000-0000-0000000000c1'), 'coche: lo ofrece un inscrito y lo ven los demás');
+select pg_temp.expect_fail($q$select runner_car_save('CARFER00001', '20000000-0000-0000-0000-0000000000c1', 3, null, null, null)$q$, 'coche: no inscrito no puede ofrecer');
+select pg_temp.expect_fail($q$select runner_car_save('CARPERE00001', '20000000-0000-0000-0000-0000000000c2', 3, null, null, null)$q$, 'coche: no en carreras ya pasadas');
+select pg_temp.expect_fail($q$select runner_car_save('CARPERE00001', '20000000-0000-0000-0000-0000000000c1', 9, null, null, null)$q$, 'coche: máximo 8 plazas');
+select pg_temp.expect_fail($q$select runner_car_save('XXXXXXXXXXXX', '20000000-0000-0000-0000-0000000000c1', 3, null, null, null)$q$, 'coche: enlace falso no escribe');
+select runner_car_join('CARANNA00001', (select (c->>'id')::uuid from jsonb_array_elements(runner_cars('CARANNA00001')) c limit 1));
+select runner_car_join('CARDANI0001', (select (c->>'id')::uuid from jsonb_array_elements(runner_cars('CARANNA00001')) c limit 1));
+select pg_temp.check((select jsonb_array_length(c->'riders') = 2 from jsonb_array_elements(runner_cars('CARANNA00001')) c limit 1), 'coche: dos inscritos se apuntan');
+select pg_temp.expect_fail($q$select runner_car_join('CAREVA00001', (select (c->>'id')::uuid from jsonb_array_elements(runner_cars('CARANNA00001')) c limit 1))$q$, 'coche: lleno');
+select pg_temp.expect_fail($q$select runner_car_join('CARFER00001', (select (c->>'id')::uuid from jsonb_array_elements(runner_cars('CARANNA00001')) c limit 1))$q$, 'coche: no inscrito no se apunta');
+select pg_temp.expect_fail($q$select runner_car_join('CARPERE00001', (select (c->>'id')::uuid from jsonb_array_elements(runner_cars('CARANNA00001')) c limit 1))$q$, 'coche: el conductor no se apunta a su coche');
+select pg_temp.expect_fail($q$select runner_car_save('CARPERE00001', '20000000-0000-0000-0000-0000000000c1', 1, null, null, null)$q$, 'coche: no puede reducir las plazas por debajo de los apuntados');
+select runner_car_save('CAREVA00001', '20000000-0000-0000-0000-0000000000c1', 3, 'Fraga', '7:30', null);
+select runner_car_join('CARDANI0001', (select (c->>'id')::uuid from jsonb_array_elements(runner_cars('CARANNA00001')) c where c->>'driver' = 'Eva Coche'));
+select pg_temp.check((select count(*) = 1 from (select r from jsonb_array_elements(runner_cars('CARANNA00001')) c, jsonb_array_elements(c->'riders') r where r->>'name' = 'Dani Coche') x), 'coche: solo en un coche por carrera (cambia de uno a otro)');
+select runner_car_leave('CARDANI0001', '20000000-0000-0000-0000-0000000000c1');
+select pg_temp.check((select count(*) = 0 from jsonb_array_elements(runner_cars('CARANNA00001')) c, jsonb_array_elements(c->'riders') r where r->>'name' = 'Dani Coche'), 'coche: puede salir');
+select runner_car_delete('CARPERE00001', '20000000-0000-0000-0000-0000000000c1');
+select pg_temp.check((select count(*) = 1 from jsonb_array_elements(runner_cars('CARANNA00001'))), 'coche: quitarlo lo borra');
+reset role;
+select pg_temp.check((select count(*) = 0 from car_riders where runner_id = '10000000-0000-0000-0000-0000000000c7'), 'coche: sus pasajeros se quedan sin plaza');
+delete from registration_entries where registration_id = '20000000-0000-0000-0000-0000000000c1' and runner_id = '10000000-0000-0000-0000-0000000000c5';
+select pg_temp.check((select count(*) = 0 from car_offers), 'coche: si el conductor se borra de la carrera, su coche desaparece');
+set role anon;
+select pg_temp.expect_fail('select * from car_offers', 'coche: anon no lee las tablas');
 \echo TODAS LAS PRUEBAS SQL OK
