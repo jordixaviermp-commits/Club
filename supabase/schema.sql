@@ -102,6 +102,8 @@ alter table public.registration_entries add constraint entries_self_check check 
   (self_position is null or self_position > 0) and (self_podium_type is null or self_podium_type in ('suelta','general','campeonato'))
   and (self_time_seconds is null or (self_time_seconds > 0 and self_time_seconds <= 3600000)));
 -- Puesto en la clasificación GENERAL (todas las categorías), opcional, además del puesto en su categoría.
+alter table public.results add column if not exists dnf boolean not null default false;   -- abandonó: cuenta como carrera hecha, sin puesto ni tiempo
+alter table public.registration_entries add column if not exists self_dnf boolean not null default false;
 alter table public.results add column if not exists general_position integer;
 alter table public.results drop constraint if exists results_general_position_check;
 alter table public.results add constraint results_general_position_check check (general_position is null or (general_position > 0 and general_position <= 9999));
@@ -469,17 +471,17 @@ begin
   perform set_config('app.skip_log', 'on', true);
   for g in select * from registrations r
             where not r.suspended and coalesce(r.end_date, r.date) < current_date - 7
-              and exists (select 1 from registration_entries e where e.registration_id = r.id and e.self_position is not null)
+              and exists (select 1 from registration_entries e where e.registration_id = r.id and (e.self_position is not null or e.self_dnf))
             for update skip locked loop
     insert into races (name, date, end_date, place, province, country, modality, notes, race_type, circuit, subtype, km, created_by, url, elevation, price, lat, lon, geo_key)
     values (g.name, g.date, g.end_date, g.place, g.province, g.country, g.modality, g.notes, g.race_type, g.circuit, g.subtype, g.km, g.created_by, g.url, g.elevation, g.price, g.lat, g.lon, g.geo_key)
     returning id into v_race;
-    insert into results (race_id, runner_id, runner_name, category, position, podium_type, self_reported, time_seconds)
+    insert into results (race_id, runner_id, runner_name, category, position, podium_type, self_reported, time_seconds, dnf)
     select v_race, e.runner_id, rn.name, e.category, e.self_position,
            case when e.self_position between 1 and 3 then coalesce(e.self_podium_type, 'suelta') else 'suelta' end, true,
-           e.self_time_seconds
+           e.self_time_seconds, e.self_dnf
       from registration_entries e join runners rn on rn.id = e.runner_id
-     where e.registration_id = g.id and e.self_position is not null;
+     where e.registration_id = g.id and (e.self_position is not null or e.self_dnf);
     delete from registrations where id = g.id;
     perform public.log_change('Sistema', 'race', v_race, 'auto_resultados', format('pasó sola a resultados: %s (%s)', g.name, g.date));
     v_n := v_n + 1;
@@ -585,11 +587,11 @@ begin
   end if;
 
   delete from results where race_id = v_id;
-  insert into results (race_id, runner_id, runner_name, category, position, podium_type, stage_positions, self_reported, time_seconds)
+  insert into results (race_id, runner_id, runner_name, category, position, podium_type, stage_positions, self_reported, time_seconds, dnf)
   select v_id, nullif(x->>'runner_id','')::uuid, btrim(x->>'runner_name'), nullif(x->>'category',''),
          nullif(x->>'position','')::int, coalesce(nullif(x->>'podium_type',''),'suelta'),
          nullif(nullif(x->'stage_positions', 'null'::jsonb), '[]'::jsonb), coalesce((x->>'self_reported')::boolean, false),
-         nullif(x->>'time_seconds','')::int
+         nullif(x->>'time_seconds','')::int, coalesce((x->>'dnf')::boolean, false)
     from jsonb_array_elements(coalesce(p_results,'[]')) x;
   return v_id;
 end $$;
@@ -606,11 +608,11 @@ begin
   select name, date, end_date, place, province, country, modality, notes, race_type, circuit, subtype, km, created_by from registrations where id = p_id
   returning id into v_race;
   if v_race is null then raise exception 'no_existe'; end if;
-  insert into results (race_id, runner_id, runner_name, category, position, podium_type, self_reported, time_seconds)
+  insert into results (race_id, runner_id, runner_name, category, position, podium_type, self_reported, time_seconds, dnf)
   select v_race, e.runner_id, r.name, e.category, e.self_position,
          case when e.self_position between 1 and 3 then coalesce(e.self_podium_type, 'suelta') else 'suelta' end,
-         e.self_position is not null,
-         e.self_time_seconds
+         (e.self_position is not null or e.self_dnf),
+         e.self_time_seconds, e.self_dnf
     from registration_entries e join runners r on r.id = e.runner_id
    where e.registration_id = p_id;
   perform public.log_change('Dirección', 'race', v_race, 'a_resultados', format('pasó a resultados: %s', (select name from races where id = v_race)));
@@ -691,10 +693,10 @@ begin
                 where x.runner_id = me.id and extract(year from r.date) = v_year)
             + (select coalesce(sum(coalesce(g.end_date - g.date, 0) + 1), 0)
                  from registration_entries e join registrations g on g.id = e.registration_id
-                where e.runner_id = me.id and e.self_position is not null and not g.suspended and extract(year from g.date) = v_year),
+                where e.runner_id = me.id and (e.self_position is not null or e.self_dnf) and not g.suspended and extract(year from g.date) = v_year),
       'planned', (select coalesce(sum(coalesce(g.end_date - g.date, 0) + 1), 0)
                     from registration_entries e join registrations g on g.id = e.registration_id
-                   where e.runner_id = me.id and e.self_position is null and not g.suspended and extract(year from g.date) = v_year),
+                   where e.runner_id = me.id and (e.self_position is null and not e.self_dnf) and not g.suspended and extract(year from g.date) = v_year),
       -- carreras suspendidas en las que estaba apuntado: cuentan para el mínimo, no para el bono
       'suspended', (select coalesce(sum(coalesce(g.end_date - g.date, 0) + 1), 0)
                       from registration_entries e join registrations g on g.id = e.registration_id
@@ -717,7 +719,7 @@ begin
                'mine_created', r.created_by = me.id,
                'others', (select count(*) from results o where o.race_id = r.id and o.runner_id is distinct from me.id),
                'category', x.category, 'position', x.position, 'podium_type', x.podium_type,
-               'stage_positions', x.stage_positions, 'self_reported', x.self_reported, 'time_seconds', x.time_seconds)
+               'stage_positions', x.stage_positions, 'self_reported', x.self_reported, 'time_seconds', x.time_seconds, 'dnf', x.dnf)
              order by r.date desc, r.name)
         from results x join races r on r.id = x.race_id
        where x.runner_id = me.id), '[]'::jsonb),
@@ -725,8 +727,8 @@ begin
       select jsonb_agg(jsonb_build_object(
                'id', g.id, 'name', g.name, 'date', g.date, 'end_date', g.end_date, 'place', g.place,
                'mine_created', g.created_by = me.id, 'race_type', g.race_type, 'circuit', g.circuit, 'suspended', g.suspended, 'subtype', g.subtype, 'km', g.km, 'url', g.url, 'url_mine', coalesce(g.url_by = me.id, false), 'elevation', g.elevation, 'price', g.price, 'lat', g.lat, 'lon', g.lon, 'geo_key', g.geo_key,
-               'my_result', (select jsonb_build_object('position', e.self_position, 'podium_type', e.self_podium_type, 'time_seconds', e.self_time_seconds)
-                               from registration_entries e where e.registration_id = g.id and e.runner_id = me.id and e.self_position is not null),
+               'my_result', (select jsonb_build_object('position', e.self_position, 'podium_type', e.self_podium_type, 'time_seconds', e.self_time_seconds, 'dnf', e.self_dnf)
+                               from registration_entries e where e.registration_id = g.id and e.runner_id = me.id and (e.self_position is not null or e.self_dnf)),
                'province', g.province, 'country', g.country, 'modality', g.modality, 'notes', g.notes,
                'entries', coalesce((
                   select jsonb_agg(jsonb_build_object('runner_id', r.id, 'name', r.name, 'category', e.category,
@@ -797,11 +799,11 @@ begin
   return coalesce((
     with rws as (
       select res.runner_id, rc.date, coalesce(rc.end_date, rc.date) as last_day,
-             (res.position is not null and exists (select 1 from chronicles c where c.race_key = to_char(rc.date, 'YYYY-MM-DD') || '|' || public.cron_name_key(rc.name))) as complete
+             ((res.position is not null or res.dnf) and exists (select 1 from chronicles c where c.race_key = to_char(rc.date, 'YYYY-MM-DD') || '|' || public.cron_name_key(rc.name))) as complete
         from results res join races rc on rc.id = res.race_id where res.runner_id is not null
       union all
       select e.runner_id, g.date, coalesce(g.end_date, g.date),
-             (e.self_position is not null and exists (select 1 from chronicles c where c.race_key = to_char(g.date, 'YYYY-MM-DD') || '|' || public.cron_name_key(g.name)))
+             ((e.self_position is not null or e.self_dnf) and exists (select 1 from chronicles c where c.race_key = to_char(g.date, 'YYYY-MM-DD') || '|' || public.cron_name_key(g.name)))
         from registration_entries e join registrations g on g.id = e.registration_id
        where g.date < current_date and not g.suspended
     ), br as (
@@ -1082,14 +1084,17 @@ end $$;
 --  p_kind = 'reg': inscripción ya disputada en la que está apuntado (se copiará al pasar a resultados).
 --  p_kind = 'race': carrera ya en resultados en la que participó.
 create or replace function public.runner_report_result(p_code text, p_kind text, p_id uuid, p_position int,
-                                                       p_category text, p_podium_type text, p_time int default null)
+                                                       p_category text, p_podium_type text, p_time int default null, p_dnf boolean default false)
 returns void language plpgsql security definer set search_path = public as $$
-declare v_runner uuid; v_who text; v_old int; v_pod text := case when p_position between 1 and 3 then coalesce(nullif(p_podium_type,''), 'suelta') else null end;
+declare v_runner uuid; v_who text; v_old int; v_dnf boolean := coalesce(p_dnf, false);
+        v_pos int := case when coalesce(p_dnf, false) then null else p_position end;
+        v_time int := case when coalesce(p_dnf, false) then null else p_time end;
+        v_pod text := case when not coalesce(p_dnf, false) and p_position between 1 and 3 then coalesce(nullif(p_podium_type,''), 'suelta') else null end;
 begin
   select id, name into v_runner, v_who from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
-  if p_position is null or p_position < 1 or p_position > 999 then raise exception 'puesto_no_valido'; end if;
-  if p_time is not null and (p_time < 1 or p_time > 3600000) then raise exception 'tiempo_no_valido'; end if;  -- segundos: de 1 s a 1000 h
+  if not v_dnf and (p_position is null or p_position < 1 or p_position > 999) then raise exception 'puesto_no_valido'; end if;
+  if v_time is not null and (v_time < 1 or v_time > 3600000) then raise exception 'tiempo_no_valido'; end if;  -- segundos: de 1 s a 1000 h
   if p_kind = 'reg' then
     if exists (select 1 from registrations where id = p_id and suspended) then raise exception 'carrera_suspendida'; end if;
     if not exists (select 1 from registration_entries e join registrations g on g.id = e.registration_id
@@ -1097,22 +1102,26 @@ begin
       raise exception 'no_es_tuya' using errcode = '42501';
     end if;
     select self_position into v_old from registration_entries where registration_id = p_id and runner_id = v_runner;
-    update registration_entries set self_position = p_position, self_podium_type = v_pod, self_reported_at = now(), self_time_seconds = p_time,
+    update registration_entries set self_position = v_pos, self_dnf = v_dnf, self_podium_type = v_pod, self_reported_at = now(), self_time_seconds = v_time,
+           self_general_position = case when v_dnf then null else self_general_position end,
            category = coalesce(nullif(p_category, ''), category)
      where registration_id = p_id and runner_id = v_runner;
     perform public.log_change(v_who, 'result', p_id, 'resultado',
-      case when v_old is null then format('puso su resultado: %sº en %s', p_position, (select name from registrations where id = p_id))
+      case when v_dnf then format('marcó que abandonó en %s', (select name from registrations where id = p_id))
+           when v_old is null then format('puso su resultado: %sº en %s', p_position, (select name from registrations where id = p_id))
            else format('cambió su resultado: %sº → %sº en %s', v_old, p_position, (select name from registrations where id = p_id)) end);
   elsif p_kind = 'race' then
     if not exists (select 1 from results where race_id = p_id and runner_id = v_runner) then
       raise exception 'no_es_tuya' using errcode = '42501';
     end if;
     select position into v_old from results where race_id = p_id and runner_id = v_runner;
-    update results set position = p_position, podium_type = coalesce(v_pod, 'suelta'), self_reported = true, time_seconds = p_time,
+    update results set position = v_pos, dnf = v_dnf, podium_type = coalesce(v_pod, 'suelta'), self_reported = true, time_seconds = v_time,
+           general_position = case when v_dnf then null else general_position end,
            category = coalesce(nullif(p_category, ''), category)
      where race_id = p_id and runner_id = v_runner;
     perform public.log_change(v_who, 'result', p_id, 'resultado',
-      case when v_old is null then format('puso su resultado: %sº en %s', p_position, (select name from races where id = p_id))
+      case when v_dnf then format('marcó que abandonó en %s', (select name from races where id = p_id))
+           when v_old is null then format('puso su resultado: %sº en %s', p_position, (select name from races where id = p_id))
            else format('cambió su resultado: %sº → %sº en %s', v_old, p_position, (select name from races where id = p_id)) end);
   else
     raise exception 'tipo_no_valido';
@@ -1482,7 +1491,7 @@ begin
   -- una ya pasada solo si aún no ha puesto su resultado
   if not exists (select 1 from registrations g where g.id = p_registration and g.date >= make_date(extract(year from current_date)::int - 1, 1, 1)
                    and (g.date >= current_date or not exists (select 1 from registration_entries e where e.registration_id = g.id
-                                                                and e.runner_id = v_runner and e.self_position is not null))) then
+                                                                and e.runner_id = v_runner and (e.self_position is not null or e.self_dnf)))) then
     raise exception 'inscripcion_cerrada';
   end if;
   delete from registration_entries where registration_id = p_registration and runner_id = v_runner;
@@ -1540,15 +1549,65 @@ begin
 end $$;
 
 -- Crónica con fotos: el corredor la envía y ve el estado de las suyas.
-create or replace function public.runner_chronicle_send(p_code text, p_key text, p_name text, p_date date, p_body text, p_p1 text, p_p2 text)
-returns void language plpgsql security definer set search_path = public as $$
-declare v_runner uuid; v_post uuid; v_st text; v_n int;
+create or replace function public.runner_race_group(p_code text, p_kind text, p_id uuid)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare v_runner uuid;
 begin
   select id into v_runner from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  if p_kind = 'reg' then
+    if not exists (select 1 from registration_entries where registration_id = p_id and runner_id = v_runner) then raise exception 'no_es_tuya' using errcode = '42501'; end if;
+    return coalesce((select jsonb_agg(jsonb_build_object('runner_id', e.runner_id, 'name', r.name, 'category', e.category, 'position', e.self_position,
+                      'general', e.self_general_position, 'time', e.self_time_seconds, 'dnf', e.self_dnf, 'me', e.runner_id = v_runner) order by (e.runner_id = v_runner) desc, r.name)
+                      from registration_entries e join runners r on r.id = e.runner_id where e.registration_id = p_id), '[]'::jsonb);
+  elsif p_kind = 'race' then
+    if not exists (select 1 from results where race_id = p_id and runner_id = v_runner) then raise exception 'no_es_tuya' using errcode = '42501'; end if;
+    return coalesce((select jsonb_agg(jsonb_build_object('runner_id', x.runner_id, 'name', x.runner_name, 'category', x.category, 'position', x.position,
+                      'general', x.general_position, 'time', x.time_seconds, 'dnf', x.dnf, 'me', x.runner_id = v_runner) order by (x.runner_id = v_runner) desc, x.runner_name)
+                      from results x where x.race_id = p_id and x.runner_id is not null), '[]'::jsonb);
+  end if;
+  raise exception 'tipo_no_valido';
+end $$;
+grant execute on function public.runner_race_group(text, text, uuid) to anon, authenticated;
+
+
+create or replace function public.runner_chronicle_send(p_code text, p_key text, p_name text, p_date date, p_body text, p_p1 text, p_p2 text,
+                                                         p_kind text default null, p_id uuid default null, p_results jsonb default null)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_runner uuid; v_who text; v_post uuid; v_st text; v_n int; it jsonb; v_rid uuid; v_pos int; v_gen int; v_time int; v_last date; v_dnf boolean;
+begin
+  select id, name into v_runner, v_who from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
   if p_key is null or length(p_key) not between 3 and 200 or length(trim(coalesce(p_body, ''))) not between 1 and 4000 or length(coalesce(p_name, '')) > 200 then raise exception 'datos_no_validos'; end if;
   select id, status into v_post, v_st from chronicle_posts where runner_id = v_runner and race_key = p_key;
   if v_st is not null and v_st <> 'enviada' then raise exception 'ya_en_proceso'; end if;
+  -- resultados de los compañeros: solo se rellenan los que aún no tienen el suyo (nunca se pisa uno puesto)
+  if jsonb_typeof(p_results) = 'array' and p_kind in ('reg', 'race') and p_id is not null then
+    if not (case when p_kind = 'reg' then exists (select 1 from registration_entries where registration_id = p_id and runner_id = v_runner)
+                 else exists (select 1 from results where race_id = p_id and runner_id = v_runner) end) then raise exception 'no_es_tuya' using errcode = '42501'; end if;
+    -- los 2 primeros días tras la carrera cada uno pone el suyo; desde el tercero, cualquiera puede poner los que falten
+    select case when p_kind = 'reg' then (select coalesce(end_date, date) from registrations where id = p_id) else (select coalesce(end_date, date) from races where id = p_id) end into v_last;
+    for it in select * from jsonb_array_elements(p_results) loop
+      v_rid := (it->>'runner_id')::uuid; v_pos := (it->>'position')::int; v_gen := (it->>'general')::int; v_time := (it->>'time')::int; v_dnf := coalesce((it->>'dnf')::boolean, false);
+      if v_rid = v_runner then continue; end if;
+      if not v_dnf and (v_pos is null or v_pos < 1 or v_pos > 999 or v_gen is null or v_gen < v_pos or v_gen > 9999 or v_time is null or v_time < 1 or v_time > 3600000) then raise exception 'datos_no_validos'; end if;
+      if p_kind = 'reg' then
+        update registration_entries set self_position = case when v_dnf then null else v_pos end, self_general_position = case when v_dnf then null else v_gen end,
+               self_time_seconds = case when v_dnf then null else v_time end, self_dnf = v_dnf, self_reported_at = now(),
+               self_podium_type = case when not v_dnf and v_pos between 1 and 3 then coalesce(self_podium_type, 'suelta') else null end
+         where registration_id = p_id and runner_id = v_rid and self_position is null and not self_dnf;
+      else
+        update results set position = case when v_dnf then null else v_pos end, general_position = case when v_dnf then null else v_gen end,
+               time_seconds = case when v_dnf then null else v_time end, dnf = v_dnf, self_reported = true
+         where race_id = p_id and runner_id = v_rid and position is null and not dnf;
+      end if;
+      get diagnostics v_n = row_count;
+      if v_n > 0 and current_date < v_last + 3 then raise exception 'plazo_resultados'; end if;
+      if v_n > 0 then
+        perform public.log_change(v_who, 'result', p_id, 'resultado', case when v_dnf then format('marcó que %s abandonó en %s', (select name from runners where id = v_rid), p_name) else format('puso el resultado de %s: %sº en %s', (select name from runners where id = v_rid), v_pos, p_name) end);
+      end if;
+    end loop;
+  end if;
   if v_post is null then
     insert into chronicle_posts (runner_id, race_key, race_name, race_date, body) values (v_runner, p_key, coalesce(nullif(trim(p_name), ''), 'Carrera'), p_date, trim(p_body)) returning id into v_post;
   else
@@ -1563,7 +1622,7 @@ begin
   update chronicle_posts set photos = v_n where id = v_post;
   insert into chronicles (runner_id, race_key) values (v_runner, p_key) on conflict do nothing;
 end $$;
-grant execute on function public.runner_chronicle_send(text, text, text, date, text, text, text) to anon, authenticated;
+grant execute on function public.runner_chronicle_send(text, text, text, date, text, text, text, text, uuid, jsonb) to anon, authenticated;
 
 
 create or replace function public.runner_chronicle_posts(p_code text)
@@ -1582,20 +1641,20 @@ returns text language plpgsql stable security definer set search_path = public a
 declare r record; v text := ''; club text; n int; tm int;
 begin
   select ra.id, ra.name, ra.date, ra.end_date, ra.place, ra.province, ra.modality, ra.subtype, ra.km, ra.elevation, ra.race_type,
-         x.category, x.position, x.general_position, x.time_seconds into r
+         x.category, x.position, x.general_position, x.time_seconds, x.dnf into r
     from races ra join results x on x.race_id = ra.id
    where to_char(ra.date, 'YYYY-MM-DD') || '|' || cron_name_key(ra.name) = p.race_key and x.runner_id = p.runner_id limit 1;
   if found then
-    select count(*) - 1, string_agg(split_part(y.runner_name, ' ', 1) || coalesce(' (' || y.category || coalesce(', ' || y.position || 'º', '') || ')', ''), ', ') filter (where y.runner_id is distinct from p.runner_id)
+    select count(*) - 1, string_agg(split_part(y.runner_name, ' ', 1) || coalesce(' (' || y.category || case when y.dnf then ', abandonó' else coalesce(', ' || y.position || 'º', '') end || ')', ''), ', ') filter (where y.runner_id is distinct from p.runner_id)
       into n, club from results y where y.race_id = r.id;
     tm := r.time_seconds;
   else
     select g.id, g.name, g.date, g.end_date, g.place, g.province, g.modality, g.subtype, g.km, g.elevation, g.race_type,
-           e.category, e.self_position as position, e.self_general_position as general_position, e.self_time_seconds as time_seconds into r
+           e.category, e.self_position as position, e.self_general_position as general_position, e.self_time_seconds as time_seconds, e.self_dnf as dnf into r
       from registrations g join registration_entries e on e.registration_id = g.id
      where to_char(g.date, 'YYYY-MM-DD') || '|' || cron_name_key(g.name) = p.race_key and e.runner_id = p.runner_id limit 1;
     if found then
-      select count(*) - 1, string_agg(split_part(u.name, ' ', 1) || coalesce(' (' || y.category || coalesce(', ' || y.self_position || 'º', '') || ')', ''), ', ') filter (where y.runner_id <> p.runner_id)
+      select count(*) - 1, string_agg(split_part(u.name, ' ', 1) || coalesce(' (' || y.category || case when y.self_dnf then ', abandonó' else coalesce(', ' || y.self_position || 'º', '') end || ')', ''), ', ') filter (where y.runner_id <> p.runner_id)
         into n, club from registration_entries y join runners u on u.id = y.runner_id where y.registration_id = r.id;
       tm := r.time_seconds;
     end if;
@@ -1606,9 +1665,10 @@ begin
     || E'\nDisciplina: ' || r.modality || coalesce(' · ' || nullif(r.subtype, 'Otra'), '')
     || coalesce(E'\nDistancia: ' || r.km || ' km', '') || coalesce(E'\nDesnivel positivo: ' || r.elevation || ' m', '')
     || case when r.race_type = 'campeonato' then E'\nEs un campeonato.' when r.race_type = 'circuito' then E'\nForma parte de un circuito.' else '' end
-    || coalesce(E'\nCategoría del corredor: ' || r.category, '') || coalesce(E'\nPuesto en su categoría: ' || r.position || 'º', '')
-    || coalesce(E'\nPuesto en la general: ' || r.general_position || 'º', '')
-    || coalesce(E'\nTiempo: ' || (tm / 3600) || ':' || lpad(((tm % 3600) / 60)::text, 2, '0') || ':' || lpad((tm % 60)::text, 2, '0'), '')
+    || coalesce(E'\nCategoría del corredor: ' || r.category, '')
+    || case when r.dnf then E'\nResultado: el corredor abandonó y no pudo terminar la carrera.' else coalesce(E'\nPuesto en su categoría: ' || r.position || 'º', '') end
+    || case when r.dnf then '' else coalesce(E'\nPuesto en la general: ' || r.general_position || 'º', '') end
+    || case when r.dnf then '' else coalesce(E'\nTiempo: ' || (tm / 3600) || ':' || lpad(((tm % 3600) / 60)::text, 2, '0') || ':' || lpad((tm % 60)::text, 2, '0'), '') end
     || case when coalesce(n, 0) > 0 and club is not null then E'\nOtros del club en la carrera (' || n || '): ' || club else '' end;
   return v;
 end $$;
@@ -2207,9 +2267,9 @@ grant execute on function public.runner_set_registration_url(text, uuid, text), 
                           public.runner_create_registration(text, jsonb, text),
                           public.runner_update_registration(text, uuid, jsonb), public.runner_delete_registration(text, uuid),
                           public.runner_update_race(text, uuid, jsonb), public.runner_delete_race(text, uuid), public.runner_set_suspended(text, uuid, boolean),
-                          public.runner_report_result(text, text, uuid, int, text, text, int),
+                          public.runner_report_result(text, text, uuid, int, text, text, int, boolean),
                           public.runner_documents_list(text), public.runner_get_document(text, uuid), public.runner_contract_template(text), public.runner_get_contract_template(text),
-                          public.runner_team(text), public.runner_streaks(text), public.runner_team_moves(text), public.runner_notes_list(text), public.runner_note_set(text, uuid, text), public.runner_chronicles(text), public.runner_chronicles_team(text), public.runner_social_impact(text), public.runner_cars(text), public.runner_car_save(text, uuid, int, text, text, text), public.runner_car_delete(text, uuid), public.runner_car_join(text, uuid), public.runner_car_leave(text, uuid), public.runner_set_general(text, text, uuid, int), public.runner_generals(text), public.runner_my_kit(text), public.runner_my_shift(text), public.runner_set_my_shift(text, text), public.runner_shift_info(text), public.runner_chronicle_set(text, text, boolean), public.runner_chronicle_send(text, text, text, date, text, text, text), public.runner_chronicle_posts(text),
+                          public.runner_team(text), public.runner_streaks(text), public.runner_team_moves(text), public.runner_notes_list(text), public.runner_note_set(text, uuid, text), public.runner_chronicles(text), public.runner_chronicles_team(text), public.runner_social_impact(text), public.runner_cars(text), public.runner_car_save(text, uuid, int, text, text, text), public.runner_car_delete(text, uuid), public.runner_car_join(text, uuid), public.runner_car_leave(text, uuid), public.runner_set_general(text, text, uuid, int), public.runner_generals(text), public.runner_my_kit(text), public.runner_my_shift(text), public.runner_set_my_shift(text, text), public.runner_shift_info(text), public.runner_chronicle_set(text, text, boolean), public.runner_chronicle_send(text, text, text, date, text, text, text, text, uuid, jsonb), public.runner_race_group(text, text, uuid), public.runner_chronicle_posts(text),
                           public.runner_leave(text, uuid), public.runner_set_paid(text, uuid, boolean, numeric, date), public.runner_join_race(text, uuid, text),
                           public.runner_set_race_type(text, uuid, text, text), public.runner_propose_circuit(text, text, int, int, text),
                           public.runner_cancel_circuit(text, uuid), public.runner_news(text), public.runner_set_race_details(text, uuid, text, numeric), public.runner_complete_race(text, text, uuid, jsonb), public.auto_promote_registrations(),

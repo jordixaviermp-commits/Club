@@ -2877,3 +2877,32 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .chro-data span { display: inline-flex; align-items: center; gap: .25rem; padding: .15rem .6rem; border-radius: 999px; background: var(--accent-2); font-size: var(--fs-2); font-weight: 600; }
 .chro-data svg { width: 14px; height: 14px; }
 .chro-miss svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: .25rem; }
+
+/* v278 · la crónica solo se envía con todos los datos */
+.chro-need { border: 2px solid var(--warn); border-radius: 14px; padding: .6rem .8rem; background: color-mix(in srgb, var(--warn) 10%, var(--card)); margin: .6rem 0; }
+.chro-need ul { list-style: none; margin: .5rem 0; padding: 0; display: grid; gap: .5rem; }
+.chro-need li { display: flex; align-items: center; gap: .5rem; } .chro-need li span { flex: 1; } .chro-need li svg { width: 18px; height: 18px; flex: none; }
+.chro-dlg button[value="ok"]:disabled { opacity: .45; cursor: not-allowed; }
+
+/* v281 · resultados de los del club en la crónica */
+.chro-group { border: 1px solid var(--line); border-radius: 14px; margin: .6rem 0; padding: .4rem .7rem .7rem; }
+.chro-group legend { font-weight: 700; padding: 0 .3rem; }
+.grp-row { display: grid; gap: .35rem; padding: .45rem 0; border-top: 1px dashed var(--line); }
+.grp-row:first-of-type { border-top: 0; }
+.grp-row.ok { grid-template-columns: 1fr auto auto; align-items: center; gap: .5rem; color: var(--muted); }
+.grp-row.ok svg { width: 16px; height: 16px; color: var(--ok); }
+.grp-n { display: grid; min-width: 0; } .grp-n small { color: var(--muted); }
+.grp-in { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: .4rem; }
+.grp-in input { min-width: 0; width: 100%; }
+.grp-head { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: .4rem; font-size: var(--fs-1); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; margin-top: .3rem; padding-left: .1rem; }
+.grp-row.wait { grid-template-columns: 1fr auto; align-items: center; gap: .5rem; color: var(--muted); } .grp-row.wait svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: .2rem; }
+.grp-v { font-size: var(--fs-2); }
+
+/* v283 · abandono */
+.dnf-check { display: flex; gap: .5rem; align-items: center; padding: .5rem .7rem; border: 1px dashed var(--line); border-radius: 12px; }
+.rc-dnf { font-size: var(--fs-2); font-weight: 700; color: var(--muted); }
+.res-fields[hidden] { display: none; }
+.grp-dnf { display: flex; gap: .4rem; align-items: center; font-size: var(--fs-2); color: var(--muted); }
+.rr-fields[hidden] { display: none !important; }
+.dnf-check { flex-wrap: wrap; } .dnf-check input { flex: none; width: 22px; height: 22px; } .dnf-check small { flex-basis: 100%; padding-left: 1.7rem; }
+.dnf-check { flex-wrap: nowrap; } .dnf-check span { display: grid; gap: .1rem; } .dnf-check small { padding-left: 0; flex-basis: auto; }
