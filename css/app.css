@@ -2742,3 +2742,10 @@ header.top .icon-btn.sos { position: relative; } header.top .icon-btn.sos::befor
 .purge-card .btn .ico { width: 18px; height: 18px; flex: none; } .purge-card .btn { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; }
 .purge-what .check input { flex: none; width: 20px; height: 20px; margin-top: 2px; }
 section.card.purge-card > h2 { color: var(--bad); }
+
+/* ---- v261 · Coche compartido, más discreto: un icono en la fila de herramientas + ventana ---- */
+.rc-tool.car { position: relative; color: var(--muted); } .rc-tool.car.mine { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+.rc-tool.car .car-n { position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px; display: grid; place-items: center; font-size: .68rem; font-weight: 800; background: var(--accent); color: var(--on-accent, #fff); box-shadow: 0 0 0 2px var(--card); }
+.rc-tool.car .car-n.ok { background: var(--ok); } .rc-tool.car .car-n.full { background: var(--muted); }
+.cars-dlg .car-list { list-style: none; margin: .4rem 0; padding: 0; display: grid; gap: .45rem; } .cars-dlg h2 { display: flex; align-items: center; gap: .45rem; } .cars-dlg h2 .ico { width: 22px; height: 22px; }
+.cars-dlg .car-add { margin-top: .5rem; }
