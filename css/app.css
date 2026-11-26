@@ -2897,3 +2897,12 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .grp-head { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: .4rem; font-size: var(--fs-1); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; margin-top: .3rem; padding-left: .1rem; }
 .grp-row.wait { grid-template-columns: 1fr auto; align-items: center; gap: .5rem; color: var(--muted); } .grp-row.wait svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: .2rem; }
 .grp-v { font-size: var(--fs-2); }
+
+/* v283 · abandono */
+.dnf-check { display: flex; gap: .5rem; align-items: center; padding: .5rem .7rem; border: 1px dashed var(--line); border-radius: 12px; }
+.rc-dnf { font-size: var(--fs-2); font-weight: 700; color: var(--muted); }
+.res-fields[hidden] { display: none; }
+.grp-dnf { display: flex; gap: .4rem; align-items: center; font-size: var(--fs-2); color: var(--muted); }
+.rr-fields[hidden] { display: none !important; }
+.dnf-check { flex-wrap: wrap; } .dnf-check input { flex: none; width: 22px; height: 22px; } .dnf-check small { flex-basis: 100%; padding-left: 1.7rem; }
+.dnf-check { flex-wrap: nowrap; } .dnf-check span { display: grid; gap: .1rem; } .dnf-check small { padding-left: 0; flex-basis: auto; }

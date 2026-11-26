@@ -1367,11 +1367,11 @@ export function raceGaps(r) {
   if (!(Number(r?.elevation) > 0)) out.push('desnivel');
   if (r?.price == null || r.price === '') out.push('precio');
   if (!distanceKm(r)) out.push('ubicación');
-  const noPos = (r?.results || []).filter((x) => x.position == null || x.position === '').length;
+  const noPos = (r?.results || []).filter((x) => (x.position == null || x.position === '') && !x.dnf).length;
   if (noPos) out.push(`${noPos} sin puesto`);
   // desde FULL_RESULTS_FROM cada resultado lleva obligatoriamente puesto de categoría, puesto en la general y tiempo: si falta alguno, la carrera queda incompleta
   if (String(r?.date ?? '') >= FULL_RESULTS_FROM) {
-    const res = r?.results || [], noTime = res.filter((x) => !(Number(x.time_seconds) > 0)).length, noGen = res.filter((x) => x.position != null && x.position !== '' && !generalOf(x)).length;
+    const res = r?.results || [], noTime = res.filter((x) => !(Number(x.time_seconds) > 0) && !x.dnf).length, noGen = res.filter((x) => x.position != null && x.position !== '' && !x.dnf && !generalOf(x)).length;
     if (noTime) out.push(`${noTime} sin tiempo`);
     if (noGen) out.push(`${noGen} sin puesto general`);
   }
@@ -1598,7 +1598,7 @@ export function alDia(d, chronDone, today, year = null, { payDays = 7, graceDays
   const mineReg = (d.registrations || []).filter((g) => (g.entries || []).some((e) => e.runner_id === me));
   const out = [];
   for (const g of mineReg.filter((x) => x.date < today && !x.suspended && !x.my_result)) out.push({ type: 'result', id: g.id, kind: 'reg', name: g.name, date: g.date, age: diff(today, g.end_date || g.date) });
-  for (const r of (d.my_results || []).filter((x) => !x.position)) out.push({ type: 'result', id: r.race_id, kind: 'race', name: r.name, date: r.date, age: diff(today, r.end_date || r.date) });
+  for (const r of (d.my_results || []).filter((x) => !x.position && !x.dnf)) out.push({ type: 'result', id: r.race_id, kind: 'race', name: r.name, date: r.date, age: diff(today, r.end_date || r.date) });
   const status = chronDone instanceof Set ? chronicleStatus(d, chronDone, today, year) : { pending: [] };
   for (const x of status.pending) out.push({ type: 'cron', id: x.id, kind: x.kind, name: x.name, date: x.date, age: diff(today, x.end_date || x.date) });
   for (const g of mineReg.filter((x) => x.date >= today && !x.suspended)) {
@@ -1612,7 +1612,7 @@ export function alDia(d, chronDone, today, year = null, { payDays = 7, graceDays
   // racha
   const all = chronicleStatus(d, chronDone instanceof Set ? chronDone : new Set(), today, null);
   const items = [...all.pending, ...all.done].map((x) => {
-    const hasResult = x.kind === 'race' ? !!(d.my_results || []).find((r) => r.race_id === x.id)?.position : !!(d.registrations || []).find((g) => g.id === x.id)?.my_result;
+    const hasResult = x.kind === 'race' ? (() => { const r = (d.my_results || []).find((q) => q.race_id === x.id); return !!(r?.position || r?.dnf); })() : !!(d.registrations || []).find((g) => g.id === x.id)?.my_result;
     return { date: x.end_date || x.date, complete: hasResult && !!chronDone?.has?.(x.key) };
   }).sort((a, b) => b.date.localeCompare(a.date));
   const streak = streakCount(items, today, graceDays);
