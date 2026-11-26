@@ -5024,10 +5024,15 @@ function askChronicle(x, post, group = null) {
   return new Promise((resolve) => {
     const dlg = document.getElementById('dialog'), locked = !!post && post.status !== 'enviada', photos = [null, null], data = chroDataOf(x);
     const others = locked ? [] : (group || []).filter((g) => !g.me), grpDone = (g) => !!(g.position && g.general && g.time);
+    // los 2 primeros días tras la carrera cada uno pone su resultado; desde el tercero, quien escribe la crónica puede poner los que falten
+    const lastDay = x.end_date || x.date, today = S.runnerData?.today || todayISO(), since = Math.round((Date.parse(today + 'T12:00:00Z') - Date.parse(lastDay + 'T12:00:00Z')) / 864e5);
+    const openOn = new Date(Date.parse(lastDay + 'T12:00:00Z') + 3 * 864e5).toISOString().slice(0, 10), inGrace = since < 3;
+    const lockedByGrace = inGrace && others.some((g) => !grpDone(g));
     const grpRow = (g) => grpDone(g)
       ? `<div class="grp-row ok"><span class="grp-n"><b>${esc(g.name)}</b><small>${esc(g.category || '')}</small></span><span class="grp-v">${g.position}º · ${g.general}º gral · ${esc(formatTime(g.time))}</span>${ico('check')}</div>`
+      : inGrace ? `<div class="grp-row wait"><span class="grp-n"><b>${esc(g.name)}</b><small>${esc(g.category || '')} · falta su resultado</small></span><span class="grp-v">${ico('clock')}aún lo puede poner él</span></div>`
       : `<div class="grp-row" data-rid="${esc(g.runner_id)}"><span class="grp-n"><b>${esc(g.name)}</b><small>${esc(g.category || '')} · falta su resultado</small></span><span class="grp-in"><input inputmode="numeric" data-grp="pos" placeholder="Puesto" aria-label="Puesto de ${esc(g.name)}" value="${g.position || ''}"><input inputmode="numeric" data-grp="gen" placeholder="General" aria-label="Puesto en la general de ${esc(g.name)}" value="${g.general || ''}"><input data-grp="time" placeholder="h:mm:ss" aria-label="Tiempo de ${esc(g.name)}" value="${g.time ? esc(formatTime(g.time)) : ''}"></span></div>`;
-    const groupHtml = others.length ? `<fieldset class="chro-group"><legend>Resultados de los del club</legend><p class="muted small">Si falta el de alguno, ponlo tú: así cuenta para todos y el post sale completo.</p>${others.some((g) => !grpDone(g)) ? '<div class="grp-head"><span>Puesto</span><span>General</span><span>Tiempo</span></div>' : ''}${others.map(grpRow).join('')}</fieldset>` : '';
+    const groupHtml = others.length ? `<fieldset class="chro-group"><legend>Resultados de los del club</legend><p class="muted small">${lockedByGrace ? `Los 2 primeros días cada uno pone su resultado. Si siguen sin ponerlo, desde el <b>${esc(formatDate(openOn, false))}</b> podrás ponerlo tú y enviar la crónica con todo.` : 'Si falta el de alguno, ponlo tú: así cuenta para todos y el post sale completo.'}</p>${!inGrace && others.some((g) => !grpDone(g)) ? '<div class="grp-head"><span>Puesto</span><span>General</span><span>Tiempo</span></div>' : ''}${others.map(grpRow).join('')}</fieldset>` : '';
     const slot = (i) => `<label class="chro-ph" data-slot="${i}">${ico('camera')}<span>Foto ${i + 1}${i ? ' (opcional)' : ''}</span><img alt="" hidden><input type="file" accept="image/*" data-chro-photo="${i}" hidden></label>`;
     const blocked = !locked && data && !data.complete;
     const todo = blocked ? `<div class="chro-need"><p><b>Antes de escribirla falta completar:</b></p><ul>
@@ -5048,7 +5053,7 @@ function askChronicle(x, post, group = null) {
       const okRow = Number.isInteger(pos) && pos >= 1 && pos <= 999 && Number.isInteger(gen) && gen >= pos && gen <= 9999 && time != null;
       return { runner_id: row.dataset.rid, position: pos, general: gen, time, ok: okRow };
     });
-    const refresh = () => { if (okBtn) okBtn.disabled = !(dlg.querySelector('textarea[name="body"]').value.trim().length >= 20 && (photos.some(Boolean) || post?.photos) && grpValues().every((g) => g.ok)); };
+    const refresh = () => { if (okBtn) okBtn.disabled = !(dlg.querySelector('textarea[name="body"]').value.trim().length >= 20 && (photos.some(Boolean) || post?.photos) && !lockedByGrace && grpValues().every((g) => g.ok)); };
     dlg.oninput = refresh;
     dlg.onclick = (ev) => { if (ev.target.closest('[data-chro-close]')) dlg.close(); };
     dlg.onchange = async (ev) => {

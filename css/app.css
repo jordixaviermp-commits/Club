@@ -2895,3 +2895,5 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .grp-in { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: .4rem; }
 .grp-in input { min-width: 0; width: 100%; }
 .grp-head { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: .4rem; font-size: var(--fs-1); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; margin-top: .3rem; padding-left: .1rem; }
+.grp-row.wait { grid-template-columns: 1fr auto; align-items: center; gap: .5rem; color: var(--muted); } .grp-row.wait svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: .2rem; }
+.grp-v { font-size: var(--fs-2); }

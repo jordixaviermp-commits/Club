@@ -28,7 +28,7 @@ drop function if exists public.runner_chronicle_send(text, text, text, date, tex
 create or replace function public.runner_chronicle_send(p_code text, p_key text, p_name text, p_date date, p_body text, p_p1 text, p_p2 text,
                                                          p_kind text default null, p_id uuid default null, p_results jsonb default null)
 returns void language plpgsql security definer set search_path = public as $$
-declare v_runner uuid; v_who text; v_post uuid; v_st text; v_n int; it jsonb; v_rid uuid; v_pos int; v_gen int; v_time int;
+declare v_runner uuid; v_who text; v_post uuid; v_st text; v_n int; it jsonb; v_rid uuid; v_pos int; v_gen int; v_time int; v_last date;
 begin
   select id, name into v_runner, v_who from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
@@ -39,6 +39,8 @@ begin
   if jsonb_typeof(p_results) = 'array' and p_kind in ('reg', 'race') and p_id is not null then
     if not (case when p_kind = 'reg' then exists (select 1 from registration_entries where registration_id = p_id and runner_id = v_runner)
                  else exists (select 1 from results where race_id = p_id and runner_id = v_runner) end) then raise exception 'no_es_tuya' using errcode = '42501'; end if;
+    -- los 2 primeros días tras la carrera cada uno pone el suyo; desde el tercero, cualquiera puede poner los que falten
+    select case when p_kind = 'reg' then (select coalesce(end_date, date) from registrations where id = p_id) else (select coalesce(end_date, date) from races where id = p_id) end into v_last;
     for it in select * from jsonb_array_elements(p_results) loop
       v_rid := (it->>'runner_id')::uuid; v_pos := (it->>'position')::int; v_gen := (it->>'general')::int; v_time := (it->>'time')::int;
       if v_rid = v_runner then continue; end if;
@@ -52,6 +54,7 @@ begin
          where race_id = p_id and runner_id = v_rid and position is null;
       end if;
       get diagnostics v_n = row_count;
+      if v_n > 0 and current_date < v_last + 3 then raise exception 'plazo_resultados'; end if;
       if v_n > 0 then
         perform public.log_change(v_who, 'result', p_id, 'resultado', format('puso el resultado de %s: %sº en %s', (select name from runners where id = v_rid), v_pos, p_name));
       end if;
