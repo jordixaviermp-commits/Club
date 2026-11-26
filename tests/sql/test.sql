@@ -1098,6 +1098,17 @@ select pg_temp.check((select ai_tries = 3 from chronicle_posts where race_key = 
 select pg_temp.check((select final_text = 'Texto de dirección' from chronicle_posts where race_key = '2026-04-02|ia con clave'), 'ia: nunca pisa el texto que dirección ya puso');
 update chronicle_posts set status = 'lista' where race_key = '2026-04-02|ia con clave';
 select pg_temp.check((select count(*) from net.calls) = 3, 'ia: ya revisada no se vuelve a mandar');
+-- los datos de la carrera y del resultado viajan con la crónica
+insert into vault.decrypted_secrets values ('anthropic_key', 'sk-test-123');
+insert into races (id, name, date, place, province, modality, km, elevation) values ('00000000-0000-0000-0000-0000000000d1', 'Carrera Datos', '2026-05-01', 'Lleida', 'Lleida', 'BTT', 70, 1200);
+insert into results (race_id, runner_id, runner_name, category, position, general_position, time_seconds)
+  select '00000000-0000-0000-0000-0000000000d1', id, name, 'M40', case when code = 'codigo-valorador-dos-02' then 3 else 1 end, case when code = 'codigo-valorador-dos-02' then 12 else null end, case when code = 'codigo-valorador-dos-02' then 9005 else 8000 end
+  from runners where code in ('codigo-valorador-dos-02', 'codigo-valorador-uno-01');
+set role anon;
+select runner_chronicle_send('codigo-valorador-dos-02', '2026-05-01|carrera datos', 'Carrera Datos', '2026-05-01', 'Lo pase fatal en la subida pero acabe feliz', null, null);
+reset role;
+select pg_temp.check((select (body #>> '{messages,0,content}') like '%Lugar: Lleida, Lleida%' and (body #>> '{messages,0,content}') like '%Distancia: 70.0 km%' and (body #>> '{messages,0,content}') like '%Puesto en su categoría: 3º%' and (body #>> '{messages,0,content}') like '%Puesto en la general: 12º%' and (body #>> '{messages,0,content}') like '%Tiempo: 2:30:05%' from net.calls order by id desc limit 1), 'ia: la petición lleva lugar, distancia, puestos y tiempo');
+select pg_temp.check((select (body #>> '{messages,0,content}') like '%Otros del club en la carrera (1): % (M40, 1º)%' and (body #>> '{messages,0,content}') like '%Lo pase fatal%' from net.calls order by id desc limit 1), 'ia: lleva a los compañeros del club y lo que cuenta el corredor');
 delete from vault.decrypted_secrets;
 set role anon;
 \echo TODAS LAS PRUEBAS SQL OK

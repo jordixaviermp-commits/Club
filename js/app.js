@@ -4996,17 +4996,33 @@ async function photoToJpeg(file, max = 1280) {
   }
   throw new Error('La foto es demasiado grande: prueba con otra.');
 }
+/** Datos de la carrera y del resultado del corredor que acompañan a su crónica (los pone la app, no hay que escribirlos). */
+function chroDataOf(x) {
+  const d = S.runnerData; if (!d) return null;
+  const res = (d.my_results || []).find((r) => postKeyOf(r) === x.key) || ((d.registrations || []).find((g) => postKeyOf(g) === x.key) || {}).my_result || null;
+  const race = (d.my_results || []).find((r) => postKeyOf(r) === x.key) || (d.registrations || []).find((g) => postKeyOf(g) === x.key) || {};
+  const chips = [];
+  if (race.km) chips.push(['ruler', kmText(race.km)]);
+  if (race.elevation) chips.push(['mountain', elevText(race.elevation)]);
+  if (res?.position) chips.push(['trophy', `${res.position}º${res.category || race.category ? ' ' + (res.category || race.category) : ''}`]);
+  if (generalOf(res)) chips.push(['flag', `${generalOf(res)}º general`]);
+  if (res?.time_seconds) chips.push(['timer', formatTime(res.time_seconds, true)]);
+  return { chips, hasResult: !!res?.position };
+}
 /** Diálogo de «Mi crónica»: texto + hasta 2 fotos. Devuelve {body, p1, p2} o null. */
 function askChronicle(x, post) {
   return new Promise((resolve) => {
-    const dlg = document.getElementById('dialog'), locked = !!post && post.status !== 'enviada', photos = [null, null];
+    const dlg = document.getElementById('dialog'), locked = !!post && post.status !== 'enviada', photos = [null, null], data = chroDataOf(x);
     const slot = (i) => `<label class="chro-ph" data-slot="${i}">${ico('camera')}<span>Foto ${i + 1}${i ? ' (opcional)' : ''}</span><img alt="" hidden><input type="file" accept="image/*" data-chro-photo="${i}" hidden></label>`;
     dlg.innerHTML = `<form method="dialog" class="dlg chro-dlg"><h2>${ico('pen')} Mi crónica</h2><p><b>${esc(x.name)}</b> · ${esc(formatDate(x.date, false))}</p>
       ${locked ? `<p class="muted small">Ya la tiene la dirección (${esc((CHRO_ST[post.status] || [''])[0].toLowerCase())}): no se puede cambiar.</p>`
-        : '<p class="muted small">Cuéntalo como quieras: la dirección la revisa, la corrige y la publica en redes con tus fotos y las etiquetas de los patrocinadores.</p>'}
-      <label>Tu crónica<textarea name="body" rows="9" minlength="${locked ? 0 : 20}" maxlength="3000" ${locked ? 'readonly' : 'required'} placeholder="Cómo fue la carrera, cómo te sentiste, quién iba contigo…">${esc(post?.body || '')}</textarea></label>
+        : `<p class="muted small">Cuenta <b>cómo lo has vivido</b>: sensaciones, el momento clave, a quién das las gracias. Esto lo añade la app solo:</p>
+        ${data?.chips.length ? `<p class="chro-data">${data.chips.map(([ic, t]) => `<span>${ico(ic)}${esc(t)}</span>`).join('')}</p>` : ''}
+        ${data && !data.hasResult ? `<p class="muted small chro-miss">${ico('flag')}Aún no has puesto tu resultado: <a href="${resultHref(x.id || '')}" data-chro-close>ponlo antes</a> y tu puesto y tu tiempo saldrán en el post.</p>` : ''}`}
+      <label>Tu crónica<textarea name="body" rows="9" minlength="${locked ? 0 : 20}" maxlength="3000" ${locked ? 'readonly' : 'required'} placeholder="Cómo te sentiste, qué tal las piernas, quién iba contigo, qué momento recordarás…">${esc(post?.body || '')}</textarea></label>
       ${locked ? '' : `<div class="chro-photos">${slot(0)}${slot(1)}</div>${post?.photos ? `<p class="muted small">Ya tienes ${post.photos} foto${post.photos === 1 ? '' : 's'} enviada${post.photos === 1 ? '' : 's'}; si eliges nuevas, las sustituyen.</p>` : '<p class="muted small">Sube al menos 1 foto.</p>'}`}
       <div class="dlg-actions">${locked ? '' : '<button value="ok" class="btn primary">Enviar a dirección</button>'}<button value="" class="btn ghost" formnovalidate>${locked ? 'Cerrar' : 'Cancelar'}</button></div></form>`;
+    dlg.onclick = (ev) => { if (ev.target.closest('[data-chro-close]')) dlg.close(); };
     dlg.onchange = async (ev) => {
       const inp = ev.target.closest('[data-chro-photo]'); if (!inp || !inp.files?.[0]) return;
       const i = Number(inp.dataset.chroPhoto), lab = inp.closest('.chro-ph'), img = lab.querySelector('img');
@@ -5016,7 +5032,7 @@ function askChronicle(x, post) {
     dlg.querySelector('form').addEventListener('submit', (ev) => {
       if (ev.submitter?.value === 'ok' && !photos.some(Boolean) && !post?.photos) { ev.preventDefault(); toast('Sube al menos 1 foto'); }
     });
-    dlg.onclose = () => { dlg.onchange = null; resolve(dlg.returnValue === 'ok' ? { body: dlg.querySelector('textarea[name="body"]').value.trim(), p1: photos[0], p2: photos[1] } : null); };
+    dlg.onclose = () => { dlg.onchange = null; dlg.onclick = null; resolve(dlg.returnValue === 'ok' ? { body: dlg.querySelector('textarea[name="body"]').value.trim(), p1: photos[0], p2: photos[1] } : null); };
     dlg.returnValue = '';
     dlg.showModal();
   });

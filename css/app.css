@@ -2872,3 +2872,8 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 
 /* v275 · corrección automática */
 .chro-ai { font-size: var(--fs-2); font-weight: 600; } .chro-ai.hecho { color: var(--ok); } .chro-ai.pendiente { color: var(--muted); } .chro-ai.error { color: var(--warn-t); }
+
+.chro-data { display: flex; flex-wrap: wrap; gap: .35rem; margin: .4rem 0; }
+.chro-data span { display: inline-flex; align-items: center; gap: .25rem; padding: .15rem .6rem; border-radius: 999px; background: var(--accent-2); font-size: var(--fs-2); font-weight: 600; }
+.chro-data svg { width: 14px; height: 14px; }
+.chro-miss svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: .25rem; }
