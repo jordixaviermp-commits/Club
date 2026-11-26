@@ -1445,7 +1445,8 @@ const CHRO_ST = { enviada: ['En revisión', 'warn'], lista: ['Lista para publica
 /** Botones de una crónica en la lista del corredor: escribirla en la app (texto + 2 fotos), marcarla como pasada o ver cómo va. */
 function chroActs(x, isDone) {
   const post = S.myPosts && S.myPosts.get(x.key), st = post && CHRO_ST[post.status];
-  const write = S.myPosts ? `<button class="btn small${post || isDone ? '' : ' primary'}" data-act="chro-write" data-key="${esc(x.key)}">${ico('pen')}${post ? (post.status === 'enviada' ? 'Editar' : 'Ver') : 'Escribirla'}</button>` : '';
+  const by = S.chronBy?.get(x.key), byOther = isDone && !post && !!by && !by.mine;   // ya la pasó otro del club: con una crónica por carrera basta
+  const write = S.myPosts && !byOther ? `<button class="btn small${post || isDone ? '' : ' primary'}" data-act="chro-write" data-key="${esc(x.key)}">${ico('pen')}${post ? (post.status === 'enviada' ? 'Editar' : 'Ver') : 'Escribirla'}</button>` : '';
   const state = st ? `<span class="chro-st ${st[1]}">${esc(st[0])}</span>` : '';
   const mark = post ? '' : `<button class="btn small ghost" data-act="chro-toggle" data-key="${esc(x.key)}" data-done="${isDone ? 0 : 1}">${isDone ? 'Deshacer' : '✓ Ya la pasé'}</button>`;
   return `<span class="chro-acts">${state}${write}${mark}</span>`;
