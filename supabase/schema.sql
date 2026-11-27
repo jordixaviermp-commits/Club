@@ -1747,7 +1747,10 @@ begin
     else
       txt := null;
       begin
-        if resp.status_code = 200 then txt := nullif(trim(resp.content::jsonb->'content'->0->>'text'), ''); end if;
+        if resp.status_code = 200 then
+          select string_agg(b->>'text', E'\n') into txt from jsonb_array_elements(resp.content::jsonb->'content') b where b->>'type' = 'text';   -- puede venir un bloque de razonamiento antes del texto
+          txt := nullif(trim(txt), '');
+        end if;
       exception when others then txt := null;
       end;
       update chronicle_posts set ai_state = case when txt is null then 'error' else 'hecho' end,

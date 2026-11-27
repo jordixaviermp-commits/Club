@@ -1078,7 +1078,7 @@ reset role;
 select pg_temp.check((select ai_state = 'pendiente' and ai_req is not null and ai_tries = 1 from chronicle_posts where race_key = '2026-04-02|ia con clave'), 'ia: al enviar la crónica se manda a Claude');
 select pg_temp.check((select headers->>'x-api-key' = 'sk-test-123' and url = 'https://api.anthropic.com/v1/messages' and body->>'model' = 'claude-sonnet-5-5' and body::text like '%@patro_uno%' and body::text like '%Mi cronica con faltas%' from net.calls order by id desc limit 1), 'ia: petición con clave, modelo, texto y etiquetas');
 select pg_temp.check((select body::text not like '%Valorador Dos%' from net.calls order by id desc limit 1), 'ia: sin carrera en la base de datos solo viaja el nombre de pila');
-insert into net._http_response select ai_req, 200, '{"content":[{"type":"text","text":"Mi crónica corregida.\n\n@patro_uno @patro_dos"}]}', null from chronicle_posts where race_key = '2026-04-02|ia con clave';
+insert into net._http_response select ai_req, 200, '{"content":[{"type":"thinking","thinking":""},{"type":"text","text":"Mi crónica corregida.\n\n@patro_uno @patro_dos"}]}', null from chronicle_posts where race_key = '2026-04-02|ia con clave';
 set role anon;
 select pg_temp.expect_fail($q$select admin_chronicle_ai_collect()$q$, 'ia: el anónimo no recoge respuestas');
 select pg_temp.expect_fail($q$select chronicle_ai_queue('00000000-0000-0000-0000-000000000000')$q$, 'ia: el anónimo no manda peticiones');
