@@ -1462,7 +1462,9 @@ function chroActs(x, isDone) {
   const post = S.myPosts && S.myPosts.get(x.key), st = post && CHRO_ST[post.status];
   const state = st ? `<span class="chro-st ${st[1]}">${esc(st[0])}</span>` : '';
   let act = '';
-  if (post) act = `<button class="btn small" data-act="chro-write" data-key="${esc(x.key)}">${ico('pen')}${post.status === 'enviada' ? 'Editar' : 'Ver'}</button>`;
+  if (post && post.status === 'enviada') act = `<button class="btn small" data-act="chro-write" data-key="${esc(x.key)}">${ico('pen')}Editar</button>`;
+  else if (post && post.status === 'lista') act = `<button class="btn small" data-act="chro-write" data-key="${esc(x.key)}">Ver</button>`;   // publicada: ya no hay nada que ver ni cambiar (solo el estado)
+  else if (post) act = '';
   else if (!isDone && S.myPosts) {
     const data = chroDataOf(x);
     if (!data || data.complete) act = `<button class="btn small primary" data-act="chro-write" data-key="${esc(x.key)}">${ico('pen')}Contar cómo me fue</button>`;
@@ -1508,7 +1510,7 @@ function chronicleCard(d) {
   if (!c.total) return '';
   const plural = (n, a, b) => (n === 1 ? a : b);
   const li = (x, isDone) => { const by = S.chronBy?.get(x.key), other = isDone && by && !by.mine;   // cualquiera puede deshacer una crónica (corregir): queda pendiente para todos
-    return `<li class="chro-row"><span class="chro-name"><b>${esc(x.name)}</b><small class="muted">${esc(formatDate(x.date, false))}${x.place ? ' · ' + esc(x.place) : ''}${other ? ` · la pasó ${esc(by.by)}` : ''}</small></span>${S.preview ? '' : chroActs(x, isDone)}</li>`; };
+    return `<li class="chro-row"><a class="chro-link" href="${runnerHref('carrera')}/${x.kind === 'race' ? 'race_' + x.id : x.id}" aria-label="Abrir la carrera ${esc(x.name)}"><span class="chro-name"><b>${esc(x.name)}</b><small class="muted">${esc(formatDate(x.date, false))}${x.place ? ' · ' + esc(x.place) : ''}${other ? ` · la pasó ${esc(by.by)}` : ''}</small></span>${ico('go', 'chro-go')}</a>${S.preview ? '' : chroActs(x, isDone)}</li>`; };
   const pend = c.pending.length;
   return `<section class="card chro-card${pend ? ' has-pend' : ''}" id="sec-chro"><details class="chro-det" data-open-key="chro"${S.open?.chro ? ' open' : ''}>
     <summary><span class="chro-ic">${ico('book')}</span><b class="chro-t">Crónicas${year === new Date().getFullYear() ? '' : ` <small class="muted">${year}</small>`}</b>
@@ -5801,6 +5803,7 @@ const actions = {
     const c = chronicleStatus(S.runnerData, S.chron, S.runnerData.today || todayISO(), S.myYear || new Date().getFullYear());
     const x = [...c.pending, ...c.done].find((y) => y.key === el.dataset.key); if (!x) return;
     let group = null; try { group = await api.runnerRaceGroup(S.code, x.kind, x.id); } catch { group = null; }   // null = sin el SQL de grupo: solo el autor
+    if (S.myPosts?.get(x.key)?.status === 'publicada') return;   // ya publicada en redes: no se toca más
     const v = await askChronicle(x, S.myPosts?.get(x.key), Array.isArray(group) ? group : null); if (!v) return;
     await run(async () => { await api.runnerChronicleSend(S.code, { key: x.key, name: x.name, date: x.date, body: v.body, p1: v.p1, p2: v.p2, kind: x.kind, id: x.id, results: v.results }); await loadRunner(); }, '✓ Crónica enviada a dirección');
     render();

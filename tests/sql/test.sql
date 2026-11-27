@@ -1229,5 +1229,17 @@ select pg_temp.expect_fail($q$select runner_report_result('codigo-valorador-uno-
 reset role;
 set role anon;
 select pg_temp.check((select (e->>'pub')::boolean from jsonb_array_elements(runner_chronicles_team('codigo-valorador-uno-01')) e where e->>'key' = :'k_cer'), 'cerrado: la app sabe qué carreras están publicadas');
+reset role;
+-- ===== Publicada: no se vuelve a pedir nada a Claude =====
+select count(*) as n_ant from net.calls \gset
+update chronicle_posts set status = 'publicada', ai_tries = 0 where race_key = '2026-05-01|carrera datos';
+select id as post_pub from chronicle_posts where race_key = '2026-05-01|carrera datos' \gset
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+select admin_chronicle_ai_retry(:'post_pub');
+select set_config('request.jwt.claim.sub', '', false);
+reset role;
+select pg_temp.check((select count(*) = :n_ant from net.calls), 'publicada: volver a crear no llama a Claude (no gasta)');
+set role anon;
 set role anon;
 \echo TODAS LAS PRUEBAS SQL OK
