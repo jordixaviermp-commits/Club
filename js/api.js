@@ -1006,7 +1006,16 @@ export function demoApi(storage = globalThis.localStorage) {
     async runnerChroPosts(code) { const me = byCode(code); return (load().chronicle_posts || []).filter((x) => x.runner_id === me.id).map((x) => ({ key: x.race_key, name: x.race_name, body: x.body, status: x.status, photos: x.photos })); },
     async listChroPosts() { requireAdmin(); return clone((load().chronicle_posts || []).slice().sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))); },
     async getChroPhotos(id) { requireAdmin(); return clone((load().chronicle_photos || []).filter((x) => x.post_id === id).sort((a, b) => a.ord - b.ord)); },
-    async updateChroPost(id, patch) { requireAdmin(); const p = (load().chronicle_posts || []).find((x) => x.id === id); if (p) Object.assign(p, patch, { updated_at: new Date().toISOString() }); save(); },
+    async updateChroPost(id, patch) {
+      requireAdmin(); const d = load(), p = (d.chronicle_posts || []).find((x) => x.id === id);
+      const was = p?.status; if (p) Object.assign(p, patch, { updated_at: new Date().toISOString() }); save();
+      // publicada: si la inscripción ya se disputó y todos tienen resultado, pasa sola a Carreras hechas (como en la base de datos)
+      if (p && patch.status === 'publicada' && was !== 'publicada') {
+        const g = d.registrations.find((x) => !x.suspended && `${x.date}|${String(x.name).toLowerCase().replace(/\s+/g, ' ').trim()}` === p.race_key);
+        const ents = g ? d.registration_entries.filter((e) => e.registration_id === g.id) : [];
+        if (g && (g.end_date || g.date) < todayISO() && ents.length && ents.every((e) => e.self_position || e.self_dnf)) { try { await this.promoteRegistration(g.id); } catch { /* sigue la regla de los 7 días */ } }
+      }
+    },
     async collectChroAi() { requireAdmin(); return 0; },
     async retryChroAi(id) { requireAdmin(); const p = (load().chronicle_posts || []).find((x) => x.id === id); if (p) { p.final_text = demoPolish(p.body) + (p.admin_notes ? ' ' + demoPolish(p.admin_notes) : ''); p.ai_state = 'hecho'; save(); } },
     async deleteChroPhotos(id) { requireAdmin(); const d = load(); d.chronicle_photos = (d.chronicle_photos || []).filter((x) => x.post_id !== id); const p = (d.chronicle_posts || []).find((x) => x.id === id); if (p) p.photos = 0; save(); },

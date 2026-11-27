@@ -1229,5 +1229,34 @@ select pg_temp.expect_fail($q$select runner_report_result('codigo-valorador-uno-
 reset role;
 set role anon;
 select pg_temp.check((select (e->>'pub')::boolean from jsonb_array_elements(runner_chronicles_team('codigo-valorador-uno-01')) e where e->>'key' = :'k_cer'), 'cerrado: la app sabe qué carreras están publicadas');
+reset role;
+-- ===== Pasar a resultados conserva el puesto en la general =====
+insert into registrations (id, name, date) values ('20000000-0000-0000-0000-0000000000e1', 'Carrera General', current_date - 9);
+insert into registration_entries (registration_id, runner_id, category, self_position, self_general_position, self_time_seconds)
+  select '20000000-0000-0000-0000-0000000000e1', id, 'M40', 4, 11, 7000 from runners where code = 'codigo-valorador-uno-01';
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+select promote_registration('20000000-0000-0000-0000-0000000000e1');
+select set_config('request.jwt.claim.sub', '', false);
+reset role;
+select pg_temp.check((select general_position = 11 and position = 4 from results where race_id = (select id from races where name = 'Carrera General')), 'promoción: pasar a resultados conserva el puesto en la general');
+set role anon;
+reset role;
+-- ===== Publicada: la carrera pasa sola a resultados =====
+insert into registrations (id, name, date) values ('20000000-0000-0000-0000-0000000000e2', 'Carrera Publicada Sola', current_date - 3), ('20000000-0000-0000-0000-0000000000e3', 'Carrera Incompleta', current_date - 3), ('20000000-0000-0000-0000-0000000000e4', 'Carrera Futura Pub', current_date + 3);
+insert into registration_entries (registration_id, runner_id, category, self_position, self_general_position, self_time_seconds)
+  select '20000000-0000-0000-0000-0000000000e2', id, 'M40', 2, 5, 7000 from runners where code in ('codigo-valorador-uno-01', 'codigo-valorador-dos-02');
+insert into registration_entries (registration_id, runner_id, category, self_position, self_general_position, self_time_seconds)
+  select '20000000-0000-0000-0000-0000000000e3', id, 'M40', case when code = 'codigo-valorador-uno-01' then 2 else null end, case when code = 'codigo-valorador-uno-01' then 5 else null end, case when code = 'codigo-valorador-uno-01' then 7000 else null end from runners where code in ('codigo-valorador-uno-01', 'codigo-valorador-dos-02');
+select to_char(current_date - 3, 'YYYY-MM-DD') || '|carrera publicada sola' as k_ps, to_char(current_date - 3, 'YYYY-MM-DD') || '|carrera incompleta' as k_inc \gset
+insert into chronicle_posts (runner_id, race_key, race_name, body, status) select id, :'k_ps', 'Carrera Publicada Sola', 'texto', 'lista' from runners where code = 'codigo-valorador-dos-02';
+insert into chronicle_posts (runner_id, race_key, race_name, body, status) select id, :'k_inc', 'Carrera Incompleta', 'texto', 'lista' from runners where code = 'codigo-valorador-dos-02';
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+update chronicle_posts set status = 'publicada' where race_key in (:'k_ps', :'k_inc');
+select set_config('request.jwt.claim.sub', '', false);
+reset role;
+select pg_temp.check(not exists (select 1 from registrations where name = 'Carrera Publicada Sola') and (select count(*) = 2 from results where race_id = (select id from races where name = 'Carrera Publicada Sola')), 'publicada: con todos los resultados pasa sola a Carreras hechas');
+select pg_temp.check(exists (select 1 from registrations where name = 'Carrera Incompleta') and not exists (select 1 from races where name = 'Carrera Incompleta'), 'publicada: si falta un resultado, no pasa y sigue como inscripción');
 set role anon;
 \echo TODAS LAS PRUEBAS SQL OK

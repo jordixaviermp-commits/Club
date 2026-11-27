@@ -2510,7 +2510,7 @@ async function openChroPost(id) {
     else if (b.dataset.cro === 'pub') {
       const txt = final() || null; dlg.onclick = null;
       if (!await confirmAction('Marcar como publicada', `Se <b>borrarán las fotos</b> del servidor para no gastar espacio. ¿Ya las has descargado y publicado?`, 'Sí, publicada', 'primary')) { openChroPost(id); return; }
-      await run(async () => { await api.updateChroPost(id, { final_text: txt, status: 'publicada' }); await api.deleteChroPhotos(id); await loadChroPosts(true); }, '✅ Publicada; fotos borradas');
+      await run(async () => { await api.updateChroPost(id, { final_text: txt, status: 'publicada' }); await api.deleteChroPhotos(id); await loadChroPosts(true); await reload(); }, '✅ Publicada; fotos borradas');
       render();
     }
   };
