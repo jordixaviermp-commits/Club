@@ -1775,8 +1775,11 @@ function runnerRegCard(g, opts = {}) {
     const tools = `<div class="rc-tools">${lead}${lead.replace(/\s+/g, '') ? '<span class="rc-tools-sp"></span>' : ''}${!S.preview ? `<a class="rc-tool" href="#/editar/${g.id}" aria-label="Editar los datos de ${esc(g.name)}" title="Editar datos${g.mine_created ? ' (la añadiste tú)' : ''}">${ico('pen')}</a>` : ''}${canSusp ? (g.suspended
         ? `<button type="button" class="rc-tool" data-act="r-suspend" data-id="${g.id}" data-v="0" aria-label="Se vuelve a celebrar" title="Se vuelve a celebrar">${ico('check')}</button>`
         : `<button type="button" class="rc-tool susp" data-act="r-suspend" data-id="${g.id}" data-v="1" aria-label="Marcar como suspendida" title="Marcar como suspendida">${ico('ban')}</button>`) : ''}</div>`;
-    const mates = g.entries.length ? `<div class="club-row"><span class="count">${ico('users')}${g.entries.length} del club</span><ul class="people">${g.entries.map((e) =>
+    const matesFull = g.entries.length ? `<div class="club-row"><span class="count">${ico('users')}${g.entries.length} del club</span><ul class="people">${g.entries.map((e) =>
       `<li class="${e.runner_id === me.id ? 'me' : ''}${e.paid ? ' paid' : ''}">${esc(e.name)}${e.category ? ` <small>${esc(e.category)}</small>` : ''}${e.paid ? `<span class="paid-mark" title="Ha pagado la inscripción" aria-label="ha pagado la inscripción">${ico('euro')}</span>` : ''}</li>`).join('')}</ul></div>` : '';
+    const matesCompact = g.entries.length ? `<details class="club-det" data-open-key="club-${g.id}"${S.open?.['club-' + g.id] ? ' open' : ''}><summary>${ico('users')}${g.entries.length} del club${ico('chevd', 'cd-chev')}</summary><ul class="people">${g.entries.map((e) =>
+      `<li class="${e.runner_id === me.id ? 'me' : ''}${e.paid ? ' paid' : ''}">${esc(e.name)}${e.category ? ` <small>${esc(e.category)}</small>` : ''}${e.paid ? `<span class="paid-mark" title="Ha pagado la inscripción" aria-label="ha pagado la inscripción">${ico('euro')}</span>` : ''}</li>`).join('')}</ul></details>` : '';
+    const mates = opts.notes ? matesCompact : matesFull;
     const key = `rc-${g.id}`, isOpen = !!opts.open || !!S.open?.[key];
     // ficha cerrada: fecha en cajita, disciplina y datos clave, cuenta atrás con color y estado
     const state = [
@@ -1784,6 +1787,7 @@ function runnerRegCard(g, opts = {}) {
       !open && !g.suspended && mine && !g.my_result ? `<span class="rc-chip warn">${ico('flag')}Falta tu resultado</span>` : '',
       !open && !g.suspended && !mine ? `<span class="rc-chip off">${ico('flag')}Ya disputada</span>` : '',
     ].filter(Boolean).join('');
+    const notesInRow = !!(opts.notes && mine && S.notes && !S.preview && open && !g.suspended);   // la nota va en la fila de botones, no en un recuadro aparte
     const body = `
       ${tools}${typeTag(g)}
       ${open || g.suspended ? '' : `${mine && g.my_result ? '' : `<p class="state-tag">${ico('flag', 't-i')}Ya disputada · pendiente de resultados ${weekChip(g.end_date || g.date, today)}</p>`}
@@ -1795,14 +1799,16 @@ function runnerRegCard(g, opts = {}) {
            <button class="btn primary" data-act="r-join" data-id="${g.id}">La hice: apuntarme</button></div>` : ''}`}
       ${g.notes ? `<p class="notes">${esc(g.notes)}</p>` : ''}
       ${myPubLine(g)}
-      ${opts.notes && mine && !S.preview ? noteBlock(g) : ''}
+      ${opts.notes && mine && !S.preview && !notesInRow ? noteBlock(g) : ''}
       ${opts.notes ? completeBox(g, 'reg', g.id) : ''}
       ${mates}
       ${!open || g.suspended ? '' : mine
-        ? `<div class="joined-acts">
+        ? `<div class="joined-acts${notesInRow ? ' n4' : ''}">
              <button class="btn joined-btn" data-act="r-joined" data-id="${g.id}" aria-label="Estás inscrito${mine.category ? ' en ' + esc(mine.category) : ''}: cambiar categoría o borrarme">${ico('check')}<span>Inscrito</span>${ico('chevd', 'jb-more')}</button>
              <a class="btn ghost small" href="pacing/?fecha=${esc(g.date)}" aria-label="Pacing de esta carrera: vatios por tramo y nutrición">⚡ Pacing</a>
-             <button class="btn ghost small" data-act="r-ics" data-id="${g.id}" aria-label="Añadir al calendario del móvil" title="Añadir al calendario del móvil">${ico('calplus')}Calendario</button></div>`
+             <button class="btn ghost small" data-act="r-ics" data-id="${g.id}" aria-label="Añadir al calendario del móvil" title="Añadir al calendario del móvil">${ico('calplus')}<span class="lab">Calendario</span></button>
+             ${notesInRow ? `<button class="btn ghost small${noteOf(g) ? ' has-note' : ''}" data-act="note-edit" data-id="${g.id}" title="${noteOf(g) ? 'Editar mis notas' : 'Añadir una nota personal (hotel, coche…)'}" aria-label="${noteOf(g) ? 'Editar mis notas' : 'Añadir una nota personal (hotel, coche…)'}">${ico('pen')}<span class="lab">Notas</span></button>` : ''}</div>
+           ${notesInRow && noteOf(g) ? `<button type="button" class="rc-note-line" data-act="note-edit" data-id="${g.id}">${ico('pen')}<span>${esc(noteOf(g))}</span></button>` : ''}`
         : `<div class="row join-row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">Apuntarme</button></div>`}
     `;
