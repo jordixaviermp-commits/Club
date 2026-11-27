@@ -1342,7 +1342,7 @@ function payChips(g) {
   return `${e.joined_on ? `<span class="ins-chip">${ico('check')}Inscrito ${dayMon(e.joined_on)}</span>` : ''}${S.preview ? `<span class="pay-chip${e.paid ? ' on' : ''}">${chip}</span>` : `<button type="button" class="pay-chip${e.paid ? ' on' : ''}" data-act="r-paid" data-id="${g.id}">${chip}</button>`}`;
 }
 
-function myRacesCard(d, afterSummary = () => '') {
+function myRacesCard(d) {
   const results = d.my_results;
   if (!results) return ''; // base de datos aún sin actualizar
   const today = d.today || todayISO();
@@ -1350,7 +1350,6 @@ function myRacesCard(d, afterSummary = () => '') {
   const pastReg = mineReg.filter((g) => g.date < today && !g.suspended);
   const pending = pastReg.filter((g) => !g.my_result);   // les falta poner el puesto
   const noPos = results.filter((r) => !r.position && !r.dnf);          // carreras ya en resultados donde participó pero no consta su puesto: también le falta ponerlo
-  const pendingN = pending.length + noPos.length;
   // «al día»: resultados sin poner, crónicas sin pasar y pagos que ya tocan (carrera dentro de una semana), lo siguiente y la racha
   const ad = alDia(d, S.chron instanceof Set ? S.chron : null, today, S.myYear || new Date().getFullYear());
   S.payDue = new Set(ad.items.filter((x) => x.type === 'pay').map((x) => x.id));
@@ -1358,7 +1357,7 @@ function myRacesCard(d, afterSummary = () => '') {
   const parts = [ad.counts.result ? `${ad.counts.result} resultado${pl(ad.counts.result, '', 's')}` : '', ad.counts.cron ? `${ad.counts.cron} crónica${pl(ad.counts.cron, '', 's')}` : '', ad.counts.pay ? `${ad.counts.pay} pago${pl(ad.counts.pay, '', 's')}` : ''].filter(Boolean);
   const todoTxt = !parts.length ? 'todo al día' : parts.length === 1 ? `falta${pl(ad.total, '', 'n')} ${parts[0]}` : `${parts.slice(0, -1).join(', ')} y ${parts[parts.length - 1]}`;
   const heroId = mineReg.filter((g) => g.date >= today && !g.suspended).sort((a, b) => a.date.localeCompare(b.date))[0]?.id;
-  const todoTo = ad.counts.result || !ad.total ? 'sec-pend' : ad.counts.cron ? 'sec-chro' : S.payDue.has(heroId) ? 'sec-hero' : 'sec-next';
+  const todoTo = ad.counts.result || !ad.total ? 'sec-after' : ad.counts.cron ? 'sec-after' : S.payDue.has(heroId) ? 'sec-hero' : 'sec-next';
   const sent = pastReg.filter((g) => g.my_result);        // ya puso su puesto: cuenta para el bono aunque la dirección aún no la haya pasado a resultados
   const upcoming = mineReg.filter((g) => g.date >= today && !g.suspended).sort((a, b) => a.date.localeCompare(b.date));
   const cancelled = mineReg.filter((g) => g.suspended).sort((a, b) => a.date.localeCompare(b.date));
@@ -1395,7 +1394,7 @@ function myRacesCard(d, afterSummary = () => '') {
     ${(() => { const n = ad.next, ageTxt = (x) => (x.age <= 7 ? `te ${7 - x.age === 1 ? 'queda 1 día' : `quedan ${7 - x.age} días`}` : `hace ${x.age} días`);
       const txt = !n ? (upcoming[0] ? `Estás al día. Lo próximo: <b>${esc(upcoming[0].name)}</b> · ${dleft(upcoming[0])}` : 'Estás al día.')
         : n.type === 'result' ? `Pon tu puesto en <b>${esc(n.name)}</b> · ${ageTxt(n)}` : n.type === 'cron' ? `Pasa la crónica de <b>${esc(n.name)}</b> · ${ageTxt(n)}` : `Marca el pago de <b>${esc(n.name)}</b> · ${n.in === 0 ? 'es hoy' : n.in === 1 ? 'es mañana' : `en ${n.in} días`}`;
-      const to = !n ? (upcoming[0] ? 'sec-hero' : 'sec-pend') : n.type === 'result' ? 'sec-pend' : n.type === 'cron' ? 'sec-chro' : 'sec-next';
+      const to = !n ? (upcoming[0] ? 'sec-hero' : 'sec-after') : n.type === 'result' ? 'sec-after' : n.type === 'cron' ? 'sec-after' : 'sec-next';
       return `<div class="sum-todo"><a href="#" class="sum-next${n ? ' has' : ' ok'}" data-act="goto-sec" data-to="${to}">${ico(n ? 'flag' : 'ok')}<span>${txt}</span>${ico('go')}</a>
         <div class="sum-meta">${ad.streak ? (() => { const me = streakRows().find((x) => x.id === d.me.id); return `<a class="sum-streak" href="${runnerHref('equipo')}" title="Carreras seguidas con tu resultado puesto y tu crónica pasada. Toca para ver la clasificación del club.">🔥 <b>${ad.streak}</b> ${pl(ad.streak, 'carrera seguida', 'carreras seguidas')} al día${me ? ` · <b>${me.pos}º</b> del club` : ''}</a>`; })() : ''}</div></div>`; })()}
     ${cancelled.length ? `<a href="#" class="canc-line" data-act="goto-sec" data-to="sec-canc">${ico('ban')}<span><b>${cancelled.length}</b> ${cancelled.length === 1 ? 'carrera suspendida' : 'carreras suspendidas'}</span>${ico('go')}</a>` : ''}
@@ -1415,24 +1414,8 @@ function myRacesCard(d, afterSummary = () => '') {
       return (pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}"><i class="medal m${i + 1}"></i>${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : '') + genRow + impBlock + road; })()}
   </section>
 
-  ${pendingN ? `<section class="card chro-card pend-card has-pend" id="sec-pend"><details class="chro-det" data-open-key="pend"${S.open?.pend ? ' open' : ''}>
-    <summary><span class="chro-ic">${ico('flag')}</span><b class="chro-t">Sin resultado</b>
-      <span class="chro-tag pend">${pendingN} ${pendingN === 1 ? 'pendiente' : 'pendientes'}${ico('go')}</span></summary>
-    <p class="hint">Pon tu puesto: en cuanto lo pongas <b>ya cuenta para el bono</b>. Si no fuiste, pulsa «No fui: borrarme». ${WEEK_RULE}</p>
-    <ul class="mini-list">${pending.map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`,
-      edit: editMine(g),
-      below: weekChip(g.end_date || g.date, today) + (S.preview ? '<span class="badge-pend">pendiente</span>' : `<a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a><button type="button" class="btn ghost small" data-act="r-leave" data-id="${g.id}">No fui: borrarme</button>`) })).join('')}${noPos.map((r) => mrow(r, { href: `${runnerHref('carrera')}/race_${r.race_id}`,
-      below: weekChip(r.end_date || r.date, today) + (S.preview ? '<span class="badge-pend">sin puesto</span>' : `<a class="btn primary small" href="#/resultado/race_${r.race_id}">Poner mi puesto</a>`) })).join('')}</ul>
-  </details></section>` : ''}
-  ${sent.length ? `<section class="card chro-card sent-card"><details class="chro-det" data-open-key="sent"${S.open?.sent ? ' open' : ''}>
-    <summary><span class="chro-ic">${ico('check')}</span><b class="chro-t">Resultado enviado</b>
-      <span class="chro-tag ok">${sent.length}${ico('go')}</span></summary>
-    <p class="hint">Lo que pones vale tal cual y ya cuenta para tu bono; nadie tiene que validarlo. Una semana después de la carrera pasa solo a la clasificación del equipo (se espera por si otros compañeros ponen también su resultado). Mientras tanto puedes cambiar el puesto o el tiempo.</p>
-    <ul class="mini-list">${sent.map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, edit: editMine(g),
-      below: `<span class="badge-sent">${g.my_result.dnf ? 'Abandonó' : `${g.my_result.position}º${g.my_result.general_position ? ` · Gral. ${g.my_result.general_position}º` : ''}${g.my_result.time_seconds ? ' · ' + formatTime(g.my_result.time_seconds) : ''}`} · ya cuenta</span>${S.preview ? '' : resultClosed(g) ? lockTag : `<a class="edit-btn" href="#/resultado/reg_${g.id}">${ico('pen')}Cambiar</a>`}` })).join('')}</ul>
-  </details></section>` : ''}
+  ${afterRaceCard(d, { pending, noPos, sent, today })}
 
-  ${afterSummary()}
 
   ${upcoming.length ? `<ul class="mini-list next-hero" id="sec-hero">${mrow(upcoming[0], { href: `${runnerHref('carrera')}/${upcoming[0].id}`, hero: true, pill: `${dleft(upcoming[0])}${myCat(upcoming[0]) ? ` · ${esc(myCat(upcoming[0]))}` : ''}`, edit: editMine(upcoming[0]), below: payChips(upcoming[0]) })}</ul>` : ''}
 
@@ -1523,23 +1506,48 @@ function impactBody(d) {
       <ul class="imp-list">${imp.rows.map(rowHtml).join('')}</ul></details>`;
   }
 
-function chronicleCard(d) {
-  if (!(S.chron instanceof Set)) return '';
-  const year = S.myYear || new Date().getFullYear();
-  const c = chronicleStatus(d, S.chron, d.today || todayISO(), year);
-  if (!c.total) return '';
-  const plural = (n, a, b) => (n === 1 ? a : b);
-  const li = (x, isDone) => { const by = S.chronBy?.get(x.key), other = isDone && by && !by.mine;   // cualquiera puede deshacer una crónica (corregir): queda pendiente para todos
-    return `<li class="chro-row"><a class="chro-link" href="${runnerHref('carrera')}/${x.kind === 'race' ? 'race_' + x.id : x.id}" aria-label="Abrir la carrera ${esc(x.name)}"><span class="chro-name"><b>${esc(x.name)}</b><small class="muted">${esc(formatDate(x.date, false))}${x.place ? ' · ' + esc(x.place) : ''}${other ? ` · la pasó ${esc(by.by)}` : ''}</small></span>${ico('go', 'chro-go')}</a>${S.preview ? '' : chroActs(x, isDone)}</li>`; };
-  const pend = c.pending.length;
-  return `<section class="card chro-card${pend ? ' has-pend' : ''}" id="sec-chro"><details class="chro-det" data-open-key="chro"${S.open?.chro ? ' open' : ''}>
-    <summary><span class="chro-ic">${ico('book')}</span><b class="chro-t">Crónicas${year === new Date().getFullYear() ? '' : ` <small class="muted">${year}</small>`}</b>
-      <span class="chro-tag ${pend ? 'pend' : 'ok'}">${pend ? `${pend} ${plural(pend, 'pendiente', 'pendientes')}` : `${c.done.length} ${plural(c.done.length, 'pasada', 'pasadas')}`}${ico('go')}</span></summary>
-    ${`<p class="chro-intro">${ico('pen')}<span><b>Basta con 2 líneas y una foto.</b> Cuéntanos cómo te fue, sin hacer un resumen: los datos ya los tenemos y el resumen y la publicación los hacemos nosotros.</span></p>
-    <p class="hint">${CHRONICLE_RULE}</p>
-    ${pend ? `<ul class="chro-list">${c.pending.map((x) => li(x, false)).join('')}</ul>` : '<p class="empty small">No te falta ninguna. 🎉</p>'}
-    ${c.done.length ? `<details class="chro-done"${pend ? '' : ' open'}><summary>Pasadas (${c.done.length})</summary><ul class="chro-list">${c.done.map((x) => li(x, true)).join('')}</ul></details>` : ''}`}
-  </details></section>`;
+/** «Después de la carrera»: resultado → crónica → publicada, una fila por carrera con su paso siguiente. Sustituye a los antiguos bloques sueltos. */
+function afterRaceCard(d, { pending, noPos, sent, today }) {
+  const year = S.myYear || new Date().getFullYear(), hasChron = S.chron instanceof Set;
+  const rows = new Map(), mk = (key, o) => { rows.set(key, { key, ...(rows.get(key) || {}), ...o }); };
+  for (const g of pending) mk(postKeyOf(g), { kind: 'reg', id: g.id, name: g.name, date: g.date, end_date: g.end_date || null, place: g.place || '', res: 'pend', resHref: `#/resultado/reg_${g.id}`, leave: g.id, g });
+  for (const r of noPos) mk(postKeyOf(r), { kind: 'race', id: r.race_id, name: r.name, date: r.date, end_date: r.end_date || null, place: r.place || '', res: 'pend', resHref: `#/resultado/race_${r.race_id}`, g: r });
+  for (const g of sent) mk(postKeyOf(g), { kind: 'reg', id: g.id, name: g.name, date: g.date, end_date: g.end_date || null, place: g.place || '', res: g.my_result.dnf ? 'dnf' : 'sent', resHref: `#/resultado/reg_${g.id}`, g, txt: g.my_result.dnf ? 'Abandonó' : `${g.my_result.position}º${g.my_result.general_position ? ` · Gral. ${g.my_result.general_position}º` : ''}${g.my_result.time_seconds ? ' · ' + formatTime(g.my_result.time_seconds) : ''}` });
+  if (hasChron) { const c = chronicleStatus(d, S.chron, d.today || today, year);
+    for (const x of [...c.pending, ...c.done]) if (!rows.has(x.key)) mk(x.key, { ...x, res: 'done', resHref: `#/resultado/race_${x.id}` }); }
+  const list = [...rows.values()].map((r) => ({ ...r, cron: hasChron ? S.chron.has(r.key) : null, pub: !!S.chronBy?.get?.(r.key)?.pub }))
+    .map((r) => { if (r.res === 'done' && r.cron === false) { const dd = chroDataOf(r); if (dd && dd.missRes?.length) return { ...r, res: 'pend', resHref: dd.resHref }; } return r; })
+    .map((r) => ({ ...r, todo: r.res === 'pend' || r.cron === false }))
+    .sort((x, y) => y.date.localeCompare(x.date) || x.name.localeCompare(y.name, 'es'));
+  if (!list.length) return '';
+  const todo = list.filter((r) => r.todo), ok = list.filter((r) => !r.todo);
+  const tab = S.afterTab === 'ok' && ok.length || !todo.length && ok.length ? 'ok' : 'todo', shown = tab === 'ok' ? ok : todo;
+  const pl = (n, a, b) => (n === 1 ? a : b);
+  const step = (cls, label, sub = '') => `<li class="ar-s ${cls}"><i>${cls === 'ok' ? ico('check') : cls === 'todo' ? '' : ico('lock')}</i><span>${label}${sub ? `<small>${esc(sub)}</small>` : ''}</span></li>`;
+  const rowHtml = (r) => {
+    const resS = r.res === 'pend' ? step('todo', 'Resultado') : step('ok', r.res === 'dnf' ? 'Abandonó' : 'Resultado', r.txt || '');
+    const cronS = r.cron === null ? '' : step(r.cron ? 'ok' : r.res === 'pend' ? 'wait' : 'todo', 'Crónica');
+    const pubS = r.cron === null || !r.cron ? '' : step(r.pub ? 'ok' : 'wait', 'Publicada');
+    let act = '';
+    if (!S.preview) {
+      if (r.res === 'pend') act = `<a class="btn primary small" href="${r.resHref}">${ico('flag')}Poner mi resultado</a>${r.leave ? `<button type="button" class="btn ghost small" data-act="r-leave" data-id="${r.leave}">No fui: borrarme</button>` : ''}`;
+      else {
+        act = r.cron === null ? '' : chroActs(r, r.cron);
+        if (r.kind === 'reg' && r.g?.my_result) act += resultClosed(r.g) ? lockTag : `<a class="edit-btn" href="${r.resHref}">${ico('pen')}Cambiar resultado</a>`;
+      }
+    }
+    const wk = r.res === 'pend' || r.cron === false ? weekChip(r.end_date || r.date, today) : '';
+    return `<li class="ar-row${r.todo ? ' todo' : ''}"><a class="ar-head" href="${runnerHref('carrera')}/${r.kind === 'race' ? 'race_' + r.id : r.id}" aria-label="Abrir la carrera ${esc(r.name)}"><span class="ar-name"><b>${esc(r.name)}</b><small>${esc(formatDate(r.date, false))}${r.place ? ' · ' + esc(r.place) : ''}</small>${wk}</span>${ico('go', 'chro-go')}</a>
+      <ol class="ar-steps">${resS}${cronS}${pubS}</ol>${act ? `<div class="ar-acts">${act}</div>` : ''}</li>`;
+  };
+  return `<section class="card ar-card${todo.length ? ' has-pend' : ''}" id="sec-after">
+    <div class="ar-top"><span class="chro-ic">${ico('flag')}</span><h2>Después de la carrera</h2>
+      <span class="chro-tag ${todo.length ? 'pend' : 'ok'}">${todo.length ? `${todo.length} por hacer` : 'Todo al día'}</span></div>
+    <div class="ar-tabs" role="tablist"><button type="button" role="tab" aria-selected="${tab === 'todo'}" class="${tab === 'todo' ? 'on' : ''}" data-act="after-tab" data-t="todo">Por hacer <b>${todo.length}</b></button><button type="button" role="tab" aria-selected="${tab === 'ok'}" class="${tab === 'ok' ? 'on' : ''}" data-act="after-tab" data-t="ok">Al día <b>${ok.length}</b></button></div>
+    <p class="hint">${WEEK_RULE} ${CHRONICLE_RULE}</p>
+    ${shown.length ? `<ul class="ar-list">${shown.map(rowHtml).join('')}</ul>` : `<p class="empty small">${tab === 'todo' ? 'No te falta nada. 🎉' : 'Aún no tienes carreras completas.'}</p>`}
+    ${tab === 'todo' && todo.length ? `<p class="ar-note">${ico('pen')}<span><b>Basta con 2 líneas y una foto.</b> Los datos ya los tenemos: el resumen y la publicación los hacemos nosotros.</span></p>` : ''}
+  </section>`;
 }
 
 /** Barra de bonificación por zonas reales: pre-mínimo apagado (con la penalización), y un trozo por tramo (12–16, 17–21, 22 o más) con su importe debajo. */
@@ -1923,7 +1931,7 @@ function viewRunnerMine() {
   return frame(runnerTitle(), `
     ${previewBanner()}
     ${S.preview ? '' : miTabs('mi')}
-    ${myRacesCard(d, () => chronicleCard(d))}
+    ${myRacesCard(d)}
     ${kitStrip()}
     ${installHint()}
     ${S.preview ? `<p class="center"></p>` : ''}${themeLineIfPreview()}${versionLine()}`,
@@ -6134,6 +6142,7 @@ const actions = {
     if (ok) render();
   },
   'eq-tab'(el) { S.eqTab = el.dataset.t === 'imp' ? 'imp' : 'res'; render(); },
+  'after-tab'(el) { S.afterTab = el.dataset.t === 'ok' ? 'ok' : 'todo'; render(); },
   async 'r-suspend'(el) {
     const susp = el.dataset.v === '1', g = (S.runnerData?.registrations || []).find((x) => x.id === el.dataset.id);
     if (!await confirmAction(susp ? 'Carrera suspendida' : 'Se vuelve a celebrar',
@@ -6615,7 +6624,7 @@ document.addEventListener('visibilitychange', async () => {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['chro-write', 'eq-tab', 'circuit-pick', 'r-web', 'note-edit', 'car-open', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
+const RUNNER_ACTIONS = new Set(['chro-write', 'after-tab', 'eq-tab', 'circuit-pick', 'r-web', 'note-edit', 'car-open', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
 // los enlaces de la ventana emergente (p. ej. las carreras de un compañero) cierran la ventana al navegar
 document.getElementById('dialog').addEventListener('click', (ev) => { if (ev.target.closest('a[href^="#/"]')) ev.currentTarget.close(); });
 $app.addEventListener('click', (ev) => {
