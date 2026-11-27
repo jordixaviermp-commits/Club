@@ -396,12 +396,16 @@ function streakBoard(meId) {
 const myPub = (g) => {
   if (!g || (Array.isArray(g.entries) && !g.entries.some((e) => e.runner_id === S.runnerData?.me?.id))) return null;
   const hit = S.stories?.byKey?.get?.(postKeyOf(g)), manual = S.impact?.posted?.has?.(postKeyOf(g)), res = S.impact?.posted?.has?.(resKeyOf(g));
-  if (!hit && !manual && !res) return null;
-  return { story: !!(hit || manual), date: hit?.publicada || null, res: !!res };
+  const key = postKeyOf(g), cr = S.chronBy?.get?.(key), cron = !!(cr || (S.chron instanceof Set && S.chron.has(key)));
+  if (!hit && !manual && !res && !cron) return null;
+  return { story: !!(hit || manual), date: hit?.publicada || null, res: !!res, cron, cronAt: cr?.at ? String(cr.at).slice(0, 10) : null, cronBy: cr && !cr.mine ? cr.by : null };
 };
-const myPubChip = (g) => { const p = myPub(g); return p ? `<span class="rc-pub" title="${p.story ? 'Historia publicada' : ''}${p.story && p.res ? ' · ' : ''}${p.res ? 'Post de resultados publicado' : ''}" aria-label="Publicado en redes">${ico('camera')}${ico('check', 'rc-pub-ok')}</span>` : ''; };
+const myPubChip = (g) => { const p = myPub(g); if (!p) return '';
+  const social = p.story || p.res ? `<span class="rc-pub" title="${p.story ? 'Historia publicada' + (p.date ? ' el ' + shortDate(p.date) : '') : ''}${p.story && p.res ? ' · ' : ''}${p.res ? 'Post de resultados publicado' : ''}" aria-label="Publicado en redes">${ico('camera')}${ico('check', 'rc-pub-ok')}${p.story && p.date ? `<small>${dayMon(p.date)}</small>` : ''}</span>` : '';
+  const cron = p.cron ? `<span class="rc-pub" title="Crónica pasada${p.cronAt ? ' el ' + shortDate(p.cronAt) : ''}${p.cronBy ? ' por ' + esc(p.cronBy) : ''}" aria-label="Crónica pasada">${ico('pen')}${ico('check', 'rc-pub-ok')}${p.cronAt ? `<small>${dayMon(p.cronAt)}</small>` : ''}</span>` : '';
+  return social + cron; };
 const myPubLine = (g) => { const p = myPub(g); if (!p) return '';
-  return `<div class="rc-pubs">${p.story ? `<p><span class="rc-pub">${ico('camera')}${ico('check', 'rc-pub-ok')}</span>Historia publicada${p.date ? ' el ' + esc(shortDate(p.date)) : ''}: sale gracias a tu inscripción.</p>` : ''}${p.res ? `<p><span class="rc-pub">${ico('image')}${ico('check', 'rc-pub-ok')}</span>Post de resultados publicado.</p>` : ''}</div>`; };
+  return `<div class="rc-pubs">${p.story ? `<p><span class="rc-pub">${ico('camera')}${ico('check', 'rc-pub-ok')}</span>Historia publicada${p.date ? ' el ' + esc(shortDate(p.date)) : ''}: sale gracias a tu inscripción.</p>` : ''}${p.res ? `<p><span class="rc-pub">${ico('image')}${ico('check', 'rc-pub-ok')}</span>Post de resultados publicado.</p>` : ''}${p.cron ? `<p><span class="rc-pub">${ico('pen')}${ico('check', 'rc-pub-ok')}</span>Crónica pasada${p.cronAt ? ' el ' + esc(shortDate(p.cronAt)) : ''}${p.cronBy ? ' por ' + esc(p.cronBy) : ''}.</p>` : ''}</div>`; };
 /** «Impacto en redes» del corredor: publicaciones del club y cifras de Instagram de 30 días. null = falta el SQL; undefined = sin cargar. */
 async function loadImpact() {
   if (S.impact !== undefined && S.impact !== 'loading') return;

@@ -2906,3 +2906,7 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .rr-fields[hidden] { display: none !important; }
 .dnf-check { flex-wrap: wrap; } .dnf-check input { flex: none; width: 22px; height: 22px; } .dnf-check small { flex-basis: 100%; padding-left: 1.7rem; }
 .dnf-check { flex-wrap: nowrap; } .dnf-check span { display: grid; gap: .1rem; } .dnf-check small { padding-left: 0; flex-basis: auto; }
+
+/* v285 · checks de historia y crónica con su día */
+.rc-pub small { font-size: 11px; font-weight: 700; margin-left: 3px; white-space: nowrap; }
+.rc-side:has(.rc-pub) { flex-wrap: wrap; }

@@ -694,6 +694,7 @@ select pg_temp.expect_fail($q$select runner_chronicle_set('$$ || :'crcode' || $$
 select pg_temp.check((select (e->>'mine')::boolean from jsonb_array_elements(runner_chronicles_team(:'crcode')) e where e->>'key' = '2026-11-08|vii btt') and (select not (e->>'mine')::boolean from jsonb_array_elements(runner_chronicles_team(:'crcode2')) e where e->>'key' = '2026-11-08|vii btt'), 'crónicas: la que pasó un compañero la ve como pasada (y no es suya)');
 select pg_temp.check((select e->>'by' from jsonb_array_elements(runner_chronicles_team(:'crcode2')) e where e->>'key' = '2026-11-08|vii btt') = :'crname', 'crónicas: se sabe quién la pasó');
 select pg_temp.expect_fail($q$select runner_chronicles_team('codigo-falso')$q$, 'crónicas: enlace falso no lee las del equipo');
+select pg_temp.check((select (e->>'at') is not null from jsonb_array_elements(runner_chronicles_team(:'crcode')) e where e->>'key' = '2026-11-08|vii btt'), 'crónicas: se sabe el día en que se pasó');
 select pg_temp.expect_fail('select * from chronicles', 'crónicas: anon no lee la tabla');
 reset role;
 set role authenticated;

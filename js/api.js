@@ -967,7 +967,7 @@ export function demoApi(storage = globalThis.localStorage) {
     },
     async runnerChroniclesTeam(code) {
       const me = byCode(code), d = load(), by = new Map();
-      for (const x of d.chronicles || []) { const cur = by.get(x.race_key); const nm = d.runners.find((r) => r.id === x.runner_id)?.name || '?'; if (!cur || (x.runner_id === me.id && !cur.mine)) by.set(x.race_key, { key: x.race_key, by: nm, mine: x.runner_id === me.id || !!cur?.mine }); else if (x.runner_id === me.id) cur.mine = true; }
+      for (const x of d.chronicles || []) { const cur = by.get(x.race_key); const nm = d.runners.find((r) => r.id === x.runner_id)?.name || '?'; if (!cur || (x.runner_id === me.id && !cur.mine)) by.set(x.race_key, { key: x.race_key, by: nm, mine: x.runner_id === me.id || !!cur?.mine, at: x.done_at || null }); else if (x.runner_id === me.id) cur.mine = true; }
       return clone([...by.values()]);
     },
     async runnerChronicleSend(code, c) {
