@@ -3187,7 +3187,7 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ds2 { --ds-soft: #1d2a33; } }
 :root[data-theme="dark"] .ds2 { --ds-soft: #1d2a33; }
 /* tarjetas: sin bordes ni barras de color, sombra suave */
-.ds2 .card:not(.next-team):not(.rcard) { border: 0; border-radius: 16px; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.ds2 .card:not(.next-team):not(.rcard):not(.warn):not(.net-card) { border: 0; border-radius: 16px; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
 .ds2 .card:not(.next-team)::before { display: none; }
 /* títulos de sección y de tarjeta: sin barra de color */
 .ds2 h2.section::before, .ds2 .rs-card > h2::before { display: none; }
@@ -3226,3 +3226,27 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .ds2 .card h3 { color: var(--text); }
 .ds2 .card h3 > .ico, .ds2 .card h3 > svg { color: var(--muted); }
 .ds2 .docs-block h2 { color: var(--text); } .ds2 .docs-block h2 .ico { color: var(--muted); }
+
+/* v313 · pantallas de la dirección (main.ds2.adm): mismo sistema visual */
+.ds2.adm .net-card { border-top: 0; border-right: 0; border-bottom: 0; border-radius: 16px; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+/* filas de pestañas y de filtros hechas con chips → control segmentado */
+.ds2.adm .years, .ds2.adm .rr-sort { display: flex; flex-wrap: wrap; gap: 3px; padding: 3px; border-radius: 12px; background: var(--ds-soft); align-items: center; }
+.ds2.adm .rr-sort > .muted { padding: 0 6px; font-size: var(--fs-2); }
+.ds2.adm .years .chip, .ds2.adm .rr-sort .chip { flex: 1 1 auto; justify-content: center; min-height: 36px; border: 0; border-radius: 9px; background: none; color: var(--muted); font-weight: 600; box-shadow: none; }
+.ds2.adm .years .chip.on, .ds2.adm .rr-sort .chip.on { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.14); }
+.ds2.adm .years .chip.on .ico { color: var(--kpi); }
+/* pestañas de Redes: iconos de línea, la elegida en blanco */
+.ds2.adm .net-tabs { gap: 3px; padding: 3px; border-radius: 12px; background: var(--ds-soft); }
+.ds2.adm .net-tab { border: 0; border-radius: 9px; background: none; color: var(--muted); box-shadow: none; }
+.ds2.adm .net-tab .ico { width: 22px; height: 22px; }
+.ds2.adm .net-tab.on { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.14); }
+.ds2.adm .net-tab.on .ico { color: var(--kpi); }
+.ds2.adm .years .chip, .ds2.adm .rr-sort .chip { flex: 1 1 0; min-width: fit-content; font-size: var(--fs-3); padding: 6px 10px; }
+.ds2.adm .seg2 { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; padding: 3px; border: 0; border-radius: 12px; background: var(--ds-soft); box-shadow: none; }
+.ds2.adm .seg2 > a, .ds2.adm .seg2 > button { border: 0; border-radius: 9px; background: none; color: var(--muted); box-shadow: none; min-height: 40px; font-weight: 600; }
+.ds2.adm .seg2 > .on { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.14); }
+.ds2.adm .seg2 > .on .ico { color: var(--kpi); }
+.ds2.adm .seg2 b { background: color-mix(in srgb, var(--muted) 20%, transparent); color: inherit; }
+.ds2.adm .seg2 > .on b { background: var(--accent); color: var(--on-accent); }
+.ds2.adm .modbar .chip.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.ds2.adm .modbar .chip.on b, .ds2.adm .modbar .chip.on .n { background: rgba(255,255,255,.2); color: inherit; }
