@@ -1528,7 +1528,7 @@ function raceDetail(key) {
   let race = mine || reg;
   if (!race && S.chron instanceof Set) { const c = chronicleStatus(d, S.chron, d.today || todayISO(), Number(key.slice(0, 4))); race = [...c.pending, ...c.done].find((x) => x.key === key) || null; }
   const post = S.myPosts && S.myPosts.get(key), by = S.chronBy?.get?.(key);
-  return { race, res, cat: res?.category || (reg?.entries || []).find((e) => e.runner_id === d.me?.id)?.category || '', post, by, pub: !!by?.pub, pubAt: by?.pub_at || post?.pub_at || null,
+  return { race, res, cat: res?.category || (reg?.entries || []).find((e) => e.runner_id === d.me?.id)?.category || '', post, by, pub: !!by?.pub, pubAt: by?.pub_at || post?.pub_at || null, url: (by?.pub && by?.url) || null,
     text: String((post && (post.final || post.body)) || by?.text || '').trim(), mineText: !!post, closed: reg ? resultClosed(reg) : false, regId: reg?.id || null, raceId: mine?.race_id || null };
 }
 
@@ -2571,6 +2571,7 @@ async function openChroPost(id) {
       <button type="button" class="btn block" data-cro="regen">${ico('refresh')} Volver a crear con estos datos</button>
       <p class="muted small" id="cro-wait" aria-live="polite"></p></div>`}
     <label>Texto final<textarea name="final" rows="9" maxlength="4000" ${done ? 'readonly' : ''}>${esc(p.final_text || '')}</textarea></label>
+    ${'post_url' in p ? `<label>Enlace del post en Instagram <small class="muted">(opcional: así los corredores lo pueden compartir)</small><input type="url" name="posturl" inputmode="url" maxlength="500" placeholder="https://www.instagram.com/p/…" value="${esc(p.post_url || '')}"></label>${done ? `<button type="button" class="btn block" data-cro="saveurl">Guardar el enlace</button>` : ''}` : ''}
     ${sp.length ? `<fieldset class="chro-tags"><legend>Etiquetas</legend>${sp.map((h) => `<label class="check"><input type="checkbox" name="tag" value="${esc(h)}" checked> ${esc(h)}</label>`).join('')}</fieldset>` : '<p class="muted small">Sin patrocinadores guardados: añádelos en la lista de Crónicas.</p>'}
     <div class="dlg-actions"><button type="button" class="btn primary" data-cro="copy">${ico('clip')} Copiar texto + etiquetas</button>
       ${done ? '' : `<button type="button" class="btn" data-cro="save">Guardar como lista</button><button type="button" class="btn" data-cro="pub">✅ Ya publicada</button>`}<button value="" class="btn ghost" formnovalidate>Cerrar</button></div></form>`;
@@ -2618,11 +2619,19 @@ async function openChroPost(id) {
     } else if (b.dataset.cro === 'undo') { dlg.querySelector('textarea[name="final"]').value = dlg._prev || ''; dlg.querySelector('#cro-wait').textContent = 'Versión anterior recuperada.'; }
     else if (b.dataset.cro === 'ai') await copyText(chroPrompt(p, tags()), 'Petición copiada: pégala en Claude');
     else if (b.dataset.cro === 'copy') await copyText(withTags(), 'Texto copiado');
+    else if (b.dataset.cro === 'saveurl') {
+      const url = (dlg.querySelector('input[name="posturl"]')?.value || '').trim();
+      if (url && !/^https:\/\//i.test(url)) return toast('El enlace debe empezar por https://', true);
+      await run(async () => { await api.updateChroPost(id, { post_url: url || null }); await loadChroPosts(true); }, url ? 'Enlace guardado' : 'Enlace quitado');
+    }
     else if (b.dataset.cro === 'save') { dlg.onclick = null; dlg.close(); await run(async () => { await api.updateChroPost(id, { final_text: final() || null, status: 'lista' }); await loadChroPosts(true); }, 'Guardada como lista'); render(); }
     else if (b.dataset.cro === 'pub') {
+      const url0 = (dlg.querySelector('input[name="posturl"]')?.value || '').trim();
+      if (url0 && !/^https:\/\//i.test(url0)) return toast('El enlace debe empezar por https://', true);
       const txt = final() || null; dlg.onclick = null;
       if (!await confirmAction('Marcar como publicada', `Se <b>borrarán las fotos</b> del servidor para no gastar espacio. ¿Ya las has descargado y publicado?`, 'Sí, publicada', 'primary')) { openChroPost(id); return; }
-      await run(async () => { await api.updateChroPost(id, { final_text: txt, status: 'publicada' }); await api.deleteChroPhotos(id); await loadChroPosts(true); await reload(); }, '✅ Publicada; fotos borradas');
+      const url = url0;
+      await run(async () => { await api.updateChroPost(id, { final_text: txt, status: 'publicada', ...(url ? { post_url: url } : {}) }); await api.deleteChroPhotos(id); await loadChroPosts(true); await reload(); }, '✅ Publicada; fotos borradas');
       render();
     }
   };
@@ -5937,10 +5946,16 @@ const actions = {
     }
     const st = x.pub ? `Publicada en redes${x.pubAt ? ` el ${formatDate(String(x.pubAt).slice(0, 10), false)}` : ''}` : x.post?.status === 'lista' ? 'Lista para publicar' : x.post?.status === 'enviada' ? 'En revisión' : x.by && !x.by.mine ? 'Pasada por un compañero' : 'Pasada';
     const who = x.by && !x.by.mine ? `<p class="ar-sub">La pasó <b>${esc(x.by.by)}</b></p>` : '';
-    const body = x.text ? `<p class="ar-txt">${esc(x.text)}</p>` : `<p class="empty small">${x.pub ? 'El texto publicado no está disponible todavía.' : 'Aún no hay texto publicado de esta crónica.'}</p>`;
+    const link = x.url ? `<p class="ar-link"><a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${ico('ext')}Ver el post en Instagram</a></p>` : '';
+    const body = (x.text ? `<p class="ar-txt">${esc(x.text)}</p>` : `<p class="empty small">${x.pub ? 'El texto publicado no está disponible todavía.' : 'Aún no hay texto publicado de esta crónica.'}</p>`) + link;
     const canEdit = x.mineText && x.post?.status === 'enviada';
-    const v = await infoDialog(`✍️ Crónica`, `<p class="ar-sub">${esc(ttl)} · <b>${esc(st)}</b></p>${who}${body}`, canEdit ? [{ label: 'Editar mi crónica', value: 'edit', kind: 'primary' }] : []);
+    const v = await infoDialog(`✍️ Crónica`, `<p class="ar-sub">${esc(ttl)} · <b>${esc(st)}</b></p>${who}${body}`, [...(x.url ? [{ label: 'Compartir el post', value: 'share', kind: 'primary' }] : []), ...(canEdit ? [{ label: 'Editar mi crónica', value: 'edit', kind: x.url ? '' : 'primary' }] : [])]);
     if (v === 'edit') await actions['chro-write']({ dataset: { key: k } });
+    else if (v === 'share') {
+      const data = { title: x.race.name, text: `${x.race.name}: mira cómo nos fue en la carrera 🚴 #CCMonzón`, url: x.url };
+      try { if (navigator.share) await navigator.share(data); else { await navigator.clipboard.writeText(x.url); toast('Enlace copiado: pégalo donde quieras'); } }
+      catch (e) { if (e?.name !== 'AbortError') { try { await navigator.clipboard.writeText(x.url); toast('Enlace copiado: pégalo donde quieras'); } catch { toast(x.url); } } }
+    }
   },
   async 'chro-write'(el) {
     const c = chronicleStatus(S.runnerData, S.chron, S.runnerData.today || todayISO(), S.myYear || new Date().getFullYear());
