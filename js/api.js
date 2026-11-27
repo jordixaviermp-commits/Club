@@ -981,7 +981,7 @@ export function demoApi(storage = globalThis.localStorage) {
       }
       let p = d.chronicle_posts.find((x) => x.runner_id === me.id && x.race_key === c.key);
       if (p && p.status !== 'enviada') throw new Error('ya_en_proceso');
-      if (!p) { p = { id: 'cp-' + Math.random().toString(36).slice(2, 10), runner_id: me.id, race_key: c.key, race_name: c.name || 'Carrera', race_date: c.date || null, status: 'enviada', final_text: null, photos: 0, created_at: new Date().toISOString() }; d.chronicle_posts.push(p); }
+      if (!p) { p = { id: 'cp-' + Math.random().toString(36).slice(2, 10), runner_id: me.id, race_key: c.key, race_name: c.name || 'Carrera', race_date: c.date || null, status: 'enviada', final_text: null, admin_notes: null, photos: 0, created_at: new Date().toISOString() }; d.chronicle_posts.push(p); }
       p.body = String(c.body).trim(); p.updated_at = new Date().toISOString();
       if (c.p1 || c.p2) { d.chronicle_photos = d.chronicle_photos.filter((x) => x.post_id !== p.id); [c.p1, c.p2].filter(Boolean).forEach((data, i) => d.chronicle_photos.push({ post_id: p.id, ord: i + 1, data })); }
       p.photos = d.chronicle_photos.filter((x) => x.post_id === p.id).length;
@@ -999,7 +999,7 @@ export function demoApi(storage = globalThis.localStorage) {
     async getChroPhotos(id) { requireAdmin(); return clone((load().chronicle_photos || []).filter((x) => x.post_id === id).sort((a, b) => a.ord - b.ord)); },
     async updateChroPost(id, patch) { requireAdmin(); const p = (load().chronicle_posts || []).find((x) => x.id === id); if (p) Object.assign(p, patch, { updated_at: new Date().toISOString() }); save(); },
     async collectChroAi() { requireAdmin(); return 0; },
-    async retryChroAi(id) { requireAdmin(); const p = (load().chronicle_posts || []).find((x) => x.id === id); if (p) { p.final_text = demoPolish(p.body); p.ai_state = 'hecho'; save(); } },
+    async retryChroAi(id) { requireAdmin(); const p = (load().chronicle_posts || []).find((x) => x.id === id); if (p) { p.final_text = demoPolish(p.body) + (p.admin_notes ? ' ' + demoPolish(p.admin_notes) : ''); p.ai_state = 'hecho'; save(); } },
     async deleteChroPhotos(id) { requireAdmin(); const d = load(); d.chronicle_photos = (d.chronicle_photos || []).filter((x) => x.post_id !== id); const p = (d.chronicle_posts || []).find((x) => x.id === id); if (p) p.photos = 0; save(); },
     async runnerSetChronicle(code, key, done) {
       const me = byCode(code), d = load(); d.chronicles = (d.chronicles || []).filter((x) => (done ? !(x.runner_id === me.id && x.race_key === key) : x.race_key !== key));   // deshacer = pendiente para todos

@@ -1177,5 +1177,19 @@ select set_config('request.jwt.claim.sub', '', false);
 reset role;
 select pg_temp.check((select count(*) = 2 and bool_and(dnf) and bool_and(position is null) from results where race_id = (select id from races where name = 'Carrera Abandono')), 'abandono: pasa a resultados como abandono, sin puesto');
 set role anon;
+reset role;
+-- ===== Datos de la dirección en la crónica =====
+insert into vault.decrypted_secrets values ('anthropic_key', 'sk-test-123') on conflict do nothing;
+update chronicle_posts set admin_notes = 'Pinchó a 10 km de meta y perdió 3 minutos', status = 'lista', ai_tries = 3 where race_key = '2026-05-01|carrera datos';
+select id as post_dd from chronicle_posts where race_key = '2026-05-01|carrera datos' \gset
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+select admin_chronicle_ai_retry(:'post_dd');
+select set_config('request.jwt.claim.sub', '', false);
+reset role;
+select pg_temp.check((select (body #>> '{messages,0,content}') like '%DATOS ADICIONALES DE LA DIRECCIÓN%Pinchó a 10 km de meta y perdió 3 minutos%' and (body #>> '{system}') like '%DATOS ADICIONALES%' from net.calls order by id desc limit 1), 'direccion: volver a crear manda los datos extra, aunque estuviera como lista');
+select pg_temp.check((select ai_state = 'pendiente' and ai_tries = 1 from chronicle_posts where id = :'post_dd'), 'direccion: tras volver a crear queda pendiente de respuesta');
+select pg_temp.expect_fail($q$update chronicle_posts set admin_notes = repeat('x', 2001)$q$, 'direccion: los datos extra tienen un tope de 2000 letras');
+set role anon;
 set role anon;
 \echo TODAS LAS PRUEBAS SQL OK

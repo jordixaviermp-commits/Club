@@ -2435,7 +2435,7 @@ function chroPrompt(p, handles) {
 Usa SOLO los datos que te doy; si falta alguno, omítelo. Mantén el idioma de la crónica. Máximo 1.800 caracteres. Devuelve solo el texto del post.
 
 Carrera: ${p.race_name}${p.race_date ? ' (' + formatDate(p.race_date, false) + ')' : ''}
-Autor: ${runnerById(p.runner_id)?.name || 'un corredor del club'}
+Autor: ${runnerById(p.runner_id)?.name || 'un corredor del club'}${p.admin_notes ? `\nDatos adicionales de la dirección (incorpóralos al resumen, con rigor y sin inventar):\n${p.admin_notes}` : ''}
 (Añade aquí los datos y resultados de la carrera si los tienes.)
 Lo que cuenta el corredor (material para el resumen, no para citar):
 """
@@ -2456,8 +2456,11 @@ async function openChroPost(id) {
     ${done ? '' : p.ai_state === 'pendiente' ? '<p class="muted small">⏳ Claude está corrigiendo la crónica… ábrela otra vez en unos segundos.</p>'
       : p.ai_state === 'hecho' ? '<p class="muted small">✅ Corregida por Claude: revísala antes de publicar.</p>'
       : p.ai_state === 'error' ? '<p class="muted small">⚠️ No se pudo corregir sola. Puedes reintentarlo o copiar la petición y pasársela a Claude.</p>' : ''}
-    ${done || !('ai_state' in p) ? '' : `<button type="button" class="btn block" data-cro="retry">${ico('refresh')} Corregir otra vez con Claude</button>`}
+    ${done || !('ai_state' in p) || ('admin_notes' in p) ? '' : `<button type="button" class="btn block" data-cro="retry">${ico('refresh')} Corregir otra vez con Claude</button>`}
     ${done || (('ai_state' in p) && p.ai_state !== 'error') ? '' : `<button type="button" class="btn block ghost" data-cro="ai">${ico('share')} Copiar petición para Claude</button>`}
+    ${done || !('admin_notes' in p) ? '' : `<div class="chro-notes"><label>Añadir datos al post <small class="muted">(opcional)</small><textarea name="notes" rows="4" maxlength="2000" placeholder="Ej.: Fue primero hasta el km 70 y los primeros 20 min siguió en cabeza. A 10 km de meta pinchó y perdió 3 minutos.">${esc(p.admin_notes || '')}</textarea></label>
+      <button type="button" class="btn block" data-cro="regen">${ico('refresh')} Volver a crear con estos datos</button>
+      <p class="muted small" id="cro-wait" aria-live="polite"></p></div>`}
     <label>Texto final<textarea name="final" rows="9" maxlength="4000" ${done ? 'readonly' : ''}>${esc(p.final_text || '')}</textarea></label>
     ${sp.length ? `<fieldset class="chro-tags"><legend>Etiquetas</legend>${sp.map((h) => `<label class="check"><input type="checkbox" name="tag" value="${esc(h)}" checked> ${esc(h)}</label>`).join('')}</fieldset>` : '<p class="muted small">Sin patrocinadores guardados: añádelos en la lista de Crónicas.</p>'}
     <div class="dlg-actions"><button type="button" class="btn primary" data-cro="copy">${ico('clip')} Copiar texto + etiquetas</button>
@@ -2473,7 +2476,28 @@ async function openChroPost(id) {
       if (final() && !await confirmAction('Corregir otra vez', 'El texto final actual se <b>reemplazará</b> por una corrección nueva.', 'Sí, corregir otra vez', 'primary')) { openChroPost(id); return; }
       await run(async () => { await api.updateChroPost(id, { final_text: null }); await api.retryChroAi(id); await loadChroPosts(true); }, 'Pedida la corrección a Claude');
       render();
-    } else if (b.dataset.cro === 'ai') await copyText(chroPrompt(p, tags()), 'Petición copiada: pégala en Claude');
+    } else if (b.dataset.cro === 'regen') {
+      const wait = dlg.querySelector('#cro-wait'), ta = dlg.querySelector('textarea[name="final"]'), notes = dlg.querySelector('textarea[name="notes"]').value.trim(), prev = ta.value;
+      b.disabled = true; wait.innerHTML = '⏳ Claude está creando el post con esos datos… suele tardar unos segundos.';
+      try {
+        await api.updateChroPost(id, { admin_notes: notes || null, final_text: null });
+        await api.retryChroAi(id);
+        let np = null;
+        for (let i = 0; i < 25 && dlg.open; i++) {
+          await new Promise((r) => setTimeout(r, i ? 4000 : 2500));
+          try { await api.collectChroAi?.(); } catch { /* sin el SQL de IA */ }
+          const rows = await api.listChroPosts(); if (rows && S.chroPosts) S.chroPosts = { rows };
+          np = rows?.find((x) => x.id === id);
+          if (np && np.ai_state !== 'pendiente') break;
+        }
+        if (!dlg.open) return;
+        if (np) Object.assign(p, np);
+        if (np?.ai_state === 'hecho' && np.final_text) { ta.value = np.final_text; wait.innerHTML = `✅ Post creado con tus datos. <a href="#" data-cro="undo">Recuperar la versión anterior</a>`; dlg._prev = prev; }
+        else { ta.value = prev; wait.textContent = np?.ai_state === 'pendiente' ? '⏳ Claude aún no ha contestado: espera un momento y pulsa ↻ en la lista.' : '⚠️ No se pudo crear. Se ha dejado el texto anterior; prueba otra vez.'; }
+      } catch (e) { ta.value = prev; wait.textContent = '⚠️ ' + friendlyError(e); }
+      b.disabled = false;
+    } else if (b.dataset.cro === 'undo') { dlg.querySelector('textarea[name="final"]').value = dlg._prev || ''; dlg.querySelector('#cro-wait').textContent = 'Versión anterior recuperada.'; }
+    else if (b.dataset.cro === 'ai') await copyText(chroPrompt(p, tags()), 'Petición copiada: pégala en Claude');
     else if (b.dataset.cro === 'copy') await copyText(withTags(), 'Texto copiado');
     else if (b.dataset.cro === 'save') { dlg.onclick = null; dlg.close(); await run(async () => { await api.updateChroPost(id, { final_text: final() || null, status: 'lista' }); await loadChroPosts(true); }, 'Guardada como lista'); render(); }
     else if (b.dataset.cro === 'pub') {

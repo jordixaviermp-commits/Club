@@ -2932,3 +2932,8 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 /* v288 · Equipo: Resumen | Impacto en redes */
 .eq-sw { margin: .2rem 0 .8rem; } .eq-sw button svg { width: 16px; height: 16px; margin-right: .3rem; vertical-align: -3px; }
 .imp-pane h3 { margin-top: .8rem; }
+
+/* v289 · datos de la dirección para el post */
+.chro-notes { border: 1px dashed var(--line); border-radius: 14px; padding: .6rem .7rem; margin: .7rem 0; display: grid; gap: .5rem; }
+.chro-notes label small { display: inline; font-weight: 400; } .chro-notes .btn svg { width: 16px; height: 16px; margin-right: .3rem; vertical-align: -3px; }
+.chro-notes p { margin: 0; }
