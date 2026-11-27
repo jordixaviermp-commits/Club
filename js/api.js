@@ -976,7 +976,7 @@ export function demoApi(storage = globalThis.localStorage) {
     },
     async runnerChroniclesTeam(code) {
       const me = byCode(code), d = load(), by = new Map();
-      for (const x of d.chronicles || []) { const cur = by.get(x.race_key); const nm = d.runners.find((r) => r.id === x.runner_id)?.name || '?'; if (!cur || (x.runner_id === me.id && !cur.mine)) by.set(x.race_key, { key: x.race_key, by: nm, mine: x.runner_id === me.id || !!cur?.mine, at: x.done_at || null, pub: (d.chronicle_posts || []).some((p) => p.race_key === x.race_key && p.status === 'publicada'), pub_at: (d.chronicle_posts || []).filter((p) => p.race_key === x.race_key && p.status === 'publicada').map((p) => p.published_at || p.updated_at || null).filter(Boolean).sort().pop() || null, text: (d.chronicle_posts || []).find((p) => p.race_key === x.race_key && p.status === 'publicada')?.final_text || null }); else if (x.runner_id === me.id) cur.mine = true; }
+      for (const x of d.chronicles || []) { const cur = by.get(x.race_key); const nm = d.runners.find((r) => r.id === x.runner_id)?.name || '?'; if (!cur || (x.runner_id === me.id && !cur.mine)) by.set(x.race_key, { key: x.race_key, by: nm, mine: x.runner_id === me.id || !!cur?.mine, at: x.done_at || null, pub: (d.chronicle_posts || []).some((p) => p.race_key === x.race_key && p.status === 'publicada'), pub_at: (d.chronicle_posts || []).filter((p) => p.race_key === x.race_key && p.status === 'publicada').map((p) => p.published_at || p.updated_at || null).filter(Boolean).sort().pop() || null, text: (d.chronicle_posts || []).find((p) => p.race_key === x.race_key && p.status === 'publicada')?.final_text || null, url: (d.chronicle_posts || []).find((p) => p.race_key === x.race_key && p.status === 'publicada' && p.post_url)?.post_url || null }); else if (x.runner_id === me.id) cur.mine = true; }
       return clone([...by.values()]);
     },
     async runnerChronicleSend(code, c) {
@@ -1004,7 +1004,7 @@ export function demoApi(storage = globalThis.localStorage) {
       return (d.results || []).filter((x) => x.race_id === id && x.runner_id).map((x) => ({ runner_id: x.runner_id, name: x.runner_name || name(x.runner_id), category: x.category || null, position: x.position || null, general: x.general_position || null, time: x.time_seconds || null, dnf: !!x.dnf, me: x.runner_id === me.id })).sort((a, b) => (b.me - a.me) || a.name.localeCompare(b.name));
     },
     async runnerChroPosts(code) { const me = byCode(code); return (load().chronicle_posts || []).filter((x) => x.runner_id === me.id).map((x) => ({ key: x.race_key, name: x.race_name, body: x.body, status: x.status, photos: x.photos, final: ['lista', 'publicada'].includes(x.status) ? (x.final_text || null) : null, pub_at: x.published_at || null })); },
-    async listChroPosts() { requireAdmin(); return clone((load().chronicle_posts || []).slice().sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))); },
+    async listChroPosts() { requireAdmin(); return clone((load().chronicle_posts || []).map((x) => ({ post_url: null, ...x })).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))); },
     async getChroPhotos(id) { requireAdmin(); return clone((load().chronicle_photos || []).filter((x) => x.post_id === id).sort((a, b) => a.ord - b.ord)); },
     async updateChroPost(id, patch) {
       requireAdmin(); const d = load(), p = (d.chronicle_posts || []).find((x) => x.id === id);

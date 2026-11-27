@@ -3262,3 +3262,6 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .chro-why { margin: .4rem 0 0; min-height: 1.2em; font-size: var(--fs-3); color: var(--mt-todo, #a8650a); font-weight: 600; }
 .chro-why:empty { display: none; }
 .dlg-info p { margin: 0 0 .5rem; }
+/* v315 · compartir el post publicado */
+.ar-link { margin: 0 0 .4rem; } .ar-link a { display: inline-flex; align-items: center; gap: .4rem; font-weight: 600; color: var(--kpi); }
+.ar-link svg { width: 16px; height: 16px; flex: none; }
