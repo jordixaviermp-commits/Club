@@ -1353,11 +1353,11 @@ function myRacesCard(d) {
   // «al día»: resultados sin poner, crónicas sin pasar y pagos que ya tocan (carrera dentro de una semana), lo siguiente y la racha
   const ad = alDia(d, S.chron instanceof Set ? S.chron : null, today, S.myYear || new Date().getFullYear());
   S.payDue = new Set(ad.items.filter((x) => x.type === 'pay').map((x) => x.id));
-  const todoN = ad.total, pl = (n, a, b) => (n === 1 ? a : b);
-  const parts = [ad.counts.result ? `${ad.counts.result} resultado${pl(ad.counts.result, '', 's')}` : '', ad.counts.cron ? `${ad.counts.cron} crónica${pl(ad.counts.cron, '', 's')}` : '', ad.counts.pay ? `${ad.counts.pay} pago${pl(ad.counts.pay, '', 's')}` : ''].filter(Boolean);
-  const todoTxt = !parts.length ? 'todo al día' : parts.length === 1 ? `falta${pl(ad.total, '', 'n')} ${parts[0]}` : `${parts.slice(0, -1).join(', ')} y ${parts[parts.length - 1]}`;
+  const datosN = S.preview ? 0 : results.filter((x) => missingFields(x).length).length, todoN = ad.total + datosN, pl = (n, a, b) => (n === 1 ? a : b);
+  const parts = [ad.counts.result ? `${ad.counts.result} resultado${pl(ad.counts.result, '', 's')}` : '', ad.counts.cron ? `${ad.counts.cron} crónica${pl(ad.counts.cron, '', 's')}` : '', ad.counts.pay ? `${ad.counts.pay} pago${pl(ad.counts.pay, '', 's')}` : '', datosN ? `${datosN} ${pl(datosN, 'carrera sin datos', 'carreras sin datos')}` : ''].filter(Boolean);
+  const todoTxt = !parts.length ? 'todo al día' : parts.length === 1 ? `falta${pl(todoN, '', 'n')} ${parts[0]}` : `${parts.slice(0, -1).join(', ')} y ${parts[parts.length - 1]}`;
   const heroId = mineReg.filter((g) => g.date >= today && !g.suspended).sort((a, b) => a.date.localeCompare(b.date))[0]?.id;
-  const todoTo = ad.counts.result || !ad.total ? 'sec-after' : ad.counts.cron ? 'sec-after' : S.payDue.has(heroId) ? 'sec-hero' : 'sec-next';
+  const todoTo = 'sec-after';
   const sent = pastReg.filter((g) => g.my_result);        // ya puso su puesto: cuenta para el bono aunque la dirección aún no la haya pasado a resultados
   const upcoming = mineReg.filter((g) => g.date >= today && !g.suspended).sort((a, b) => a.date.localeCompare(b.date));
   const cancelled = mineReg.filter((g) => g.suspended).sort((a, b) => a.date.localeCompare(b.date));
@@ -1395,14 +1395,14 @@ function myRacesCard(d) {
     ${(() => { const n = ad.next, ageTxt = (x) => (x.age <= 7 ? `te ${7 - x.age === 1 ? 'queda 1 día' : `quedan ${7 - x.age} días`}` : `hace ${x.age} días`);
       const txt = !n ? (upcoming[0] ? `Estás al día. Lo próximo: <b>${esc(upcoming[0].name)}</b> · ${dleft(upcoming[0])}` : 'Estás al día.')
         : n.type === 'result' ? `Pon tu puesto en <b>${esc(n.name)}</b> · ${ageTxt(n)}` : n.type === 'cron' ? `Pasa la crónica de <b>${esc(n.name)}</b> · ${ageTxt(n)}` : `Marca el pago de <b>${esc(n.name)}</b> · ${n.in === 0 ? 'es hoy' : n.in === 1 ? 'es mañana' : `en ${n.in} días`}`;
-      const to = !n ? (upcoming[0] ? 'sec-hero' : 'sec-after') : n.type === 'result' ? 'sec-after' : n.type === 'cron' ? 'sec-after' : 'sec-next';
+      const to = !n ? (upcoming[0] ? 'sec-hero' : 'sec-after') : n.type === 'result' ? 'sec-after' : 'sec-after';
       return `<div class="sum-todo"><a href="#" class="sum-next${n ? ' has' : ' ok'}" data-act="goto-sec" data-to="${to}">${ico(n ? 'flag' : 'ok')}<span>${txt}</span>${ico('go')}</a>
         </div>`; })()}
     ${cancelled.length ? `<a href="#" class="canc-line" data-act="goto-sec" data-to="sec-canc">${ico('ban')}<span><b>${cancelled.length}</b> ${cancelled.length === 1 ? 'carrera suspendida' : 'carreras suspendidas'}</span>${ico('go')}</a>` : ''}
 
   </section>
 
-  ${afterRaceCard(d, { pending, noPos, sent, today })}
+  ${afterRaceCard(d, { pending, noPos, sent, today, ad, results, upcoming, datosN })}
 
 
   ${upcoming.length ? `<ul class="mini-list next-hero" id="sec-hero">${mrow(upcoming[0], { href: `${runnerHref('carrera')}/${upcoming[0].id}`, hero: true, pill: `${dleft(upcoming[0])}${myCat(upcoming[0]) ? ` · ${esc(myCat(upcoming[0]))}` : ''}`, edit: editMine(upcoming[0]), below: payChips(upcoming[0]) })}</ul>` : ''}
@@ -1415,10 +1415,6 @@ function myRacesCard(d) {
       : '<p class="empty small">No estás apuntado a ninguna. Búscalas en la pestaña Carreras.</p>'}
   </details>
 
-  ${(() => { const todo = results.filter((x) => missingFields(x).length);
-    return todo.length && !S.preview ? `<details class="card season-block"><summary><b>📝 Ayuda a completar tus carreras (${todo.length})</b></summary>
-      <p class="hint">Les faltan datos (provincia, distancia o formato). Si los sabes, tócalas y rellénalos: así todos tenemos el resumen completo.</p>
-      <ul class="mini-list">${todo.slice(0, 20).map((x) => miniRow(x, `<span class="badge-pend">${missingFields(x).map((k) => FIELD_LABELS[k]).join(', ')}</span>`, `${runnerHref('carrera')}/race_${x.race_id}`)).join('')}</ul></details>` : ''; })()}
 
   ${cancelled.length ? `<section class="card season-block canc-block" id="sec-canc">
     <h2 class="sec-h">Suspendidas <small>(${cancelled.length})</small></h2>
@@ -1533,22 +1529,25 @@ function raceDetail(key) {
 }
 
 /** «Después de la carrera»: resultado → crónica → publicada, una fila por carrera con su paso siguiente. Sustituye a los antiguos bloques sueltos. */
-function afterRaceCard(d, { pending, noPos, sent, today }) {
+function afterRaceCard(d, { pending, noPos, sent, today, ad, results, upcoming, datosN }) {
   const year = S.myYear || new Date().getFullYear(), hasChron = S.chron instanceof Set;
   const rows = new Map(), mk = (key, o) => { rows.set(key, { key, ...(rows.get(key) || {}), ...o }); };
   for (const g of pending) mk(postKeyOf(g), { kind: 'reg', id: g.id, name: g.name, date: g.date, end_date: g.end_date || null, place: g.place || '', res: 'pend', resHref: `#/resultado/reg_${g.id}`, leave: g.id, g });
   for (const r of noPos) mk(postKeyOf(r), { kind: 'race', id: r.race_id, name: r.name, date: r.date, end_date: r.end_date || null, place: r.place || '', res: 'pend', resHref: `#/resultado/race_${r.race_id}`, g: r });
   for (const g of sent) mk(postKeyOf(g), { kind: 'reg', id: g.id, name: g.name, date: g.date, end_date: g.end_date || null, place: g.place || '', res: g.my_result.dnf ? 'dnf' : 'sent', resHref: `#/resultado/reg_${g.id}`, g, txt: g.my_result.dnf ? 'Abandonó' : `${g.my_result.position}º${g.my_result.general_position ? ` · Gral. ${g.my_result.general_position}º` : ''}${g.my_result.time_seconds ? ' · ' + formatTime(g.my_result.time_seconds) : ''}` });
+  for (const it of (ad?.items || []).filter((x) => x.type === 'pay')) { const g = (upcoming || []).find((u) => u.id === it.id); if (g) mk(`${postKeyOf(g)}|pay`, { kind: 'reg', id: g.id, name: g.name, date: g.date, end_date: g.end_date || null, place: g.place || '', res: 'none', pay: true, payIn: it.in, g }); }
   if (hasChron) { const c = chronicleStatus(d, S.chron, d.today || today, year);
     for (const x of [...c.pending, ...c.done]) if (!rows.has(x.key)) mk(x.key, { ...x, res: 'done', resHref: `#/resultado/race_${x.id}` }); }
-  const list = [...rows.values()].map((r) => ({ ...r, cron: hasChron ? S.chron.has(r.key) : null, pub: !!S.chronBy?.get?.(r.key)?.pub }))
+  if (!S.preview) for (const x of (results || []).filter((r) => missingFields(r).length)) { const k = postKeyOf(x), cur = rows.get(k);
+    mk(k, { ...(cur ? {} : { kind: 'race', id: x.race_id, name: x.name, date: x.date, end_date: x.end_date || null, place: x.place || '', res: 'done', resHref: `#/resultado/race_${x.race_id}` }), miss: missingFields(x).map((f) => FIELD_LABELS[f]), missHref: `${runnerHref('carrera')}/race_${x.race_id}` }); }
+  const list = [...rows.values()].map((r) => ({ ...r, cron: hasChron && !r.pay ? S.chron.has(r.key) : null, pub: !!S.chronBy?.get?.(r.key)?.pub }))
     .map((r) => { if (r.res === 'done' && r.cron === false) { const dd = chroDataOf(r); if (dd && dd.missRes?.length) return { ...r, res: 'pend', resHref: dd.resHref }; } return r; })
-    .map((r) => ({ ...r, todo: r.res === 'pend' || r.cron === false }))
-    .sort((x, y) => y.date.localeCompare(x.date) || x.name.localeCompare(y.name, 'es'));
+    .map((r) => ({ ...r, todo: r.res === 'pend' || r.cron === false || !!r.pay || !!r.miss }))
+    .sort((x, y) => (!!x.pay - !!y.pay) || (x.pay ? x.date.localeCompare(y.date) : y.date.localeCompare(x.date)) || x.name.localeCompare(y.name, 'es'));
   if (!list.length) return '';
   const todo = list.filter((r) => r.todo), ok = list.filter((r) => !r.todo);
   const tab = S.afterTab === 'ok' && ok.length || !todo.length && ok.length ? 'ok' : 'todo', shown = tab === 'ok' ? ok : todo;
-  const pl = (n, a, b) => (n === 1 ? a : b);
+  const tasksN = (ad?.total || 0) + (datosN || 0);
   // cada carrera: nombre arriba y, debajo, dos casillas tocables (Resultado y Crónica) que dicen su estado y son el botón para hacerlo
   const task = (st, emo, label, sub, attrs) => { const tag = /href=/.test(attrs) ? 'a' : attrs ? 'button' : 'span';
     return `<${tag} class="ar-task st-${st}${tag === 'span' ? '' : ' tappable'}"${tag === 'button' ? ' type="button"' : ''} ${attrs}><span class="ar-ti">${st === 'ok' ? ico('check') : emo}</span><span class="ar-tt"><b>${label}</b><small>${sub}</small></span>${tag === 'span' ? '' : ico('go', 'ar-tgo')}</${tag}>`; };
@@ -1569,11 +1568,13 @@ function afterRaceCard(d, { pending, noPos, sent, today }) {
     if (dd && !dd.complete && !dd.missRes?.length) return task('todo', '✍️', 'Crónica', 'Completar datos', `href="${dd.raceHref}"`);
     return task('todo', '✍️', 'Crónica', 'Contar cómo te fue', `data-act="chro-write" data-key="${esc(r.key)}"`);
   };
+  const payTask = (r) => task('todo', '💶', 'Pago', 'Marcar como pagado', S.preview ? '' : `data-act="r-paid" data-id="${r.id}"`);
+  const datosTask = (r) => task('todo', '📝', 'Datos', `Falta: ${esc(r.miss.join(', '))}`, S.preview ? '' : `href="${r.missHref}"`);
   const rowHtml = (r) => {
-    const wk = r.res === 'pend' || r.cron === false ? weekChip(r.end_date || r.date, today) : '';
+    const wk = r.pay ? `<span class="wk-chip${r.payIn <= 2 ? ' soon' : ''}">${ico('clock', 't-i')}${r.payIn === 0 ? 'hoy' : `en ${r.payIn} ${r.payIn === 1 ? 'día' : 'días'}`}</span>` : r.res === 'pend' || r.cron === false ? weekChip(r.end_date || r.date, today) : '';
     const leave = r.res === 'pend' && r.leave && !S.preview ? `<button type="button" class="ar-leave" data-act="r-leave" data-id="${r.leave}">No fui</button>` : '';
     return `<li class="ar-row${r.todo ? ' todo' : ''}"><div class="ar-head"><a class="ar-name" href="${runnerHref('carrera')}/${r.kind === 'race' ? 'race_' + r.id : r.id}" aria-label="Abrir la carrera ${esc(r.name)}"><b>${esc(r.name)}</b><small>${esc(formatDate(r.date, false))}${r.place ? ' · ' + esc(r.place) : ''}</small></a>${leave}</div>${wk ? `<div class="ar-wk">${wk}</div>` : ''}
-      <div class="ar-tasks">${resTask(r)}${cronTask(r)}</div>${pubsLine(r)}</li>`;
+      <div class="ar-tasks">${r.res === 'none' ? '' : resTask(r)}${cronTask(r)}${r.pay ? payTask(r) : ''}${r.miss ? datosTask(r) : ''}</div>${r.pay ? '' : pubsLine(r)}</li>`;
   };
   // cuándo salió en redes: la historia (previa a la carrera) y la crónica, con su fecha
   const pubsLine = (r) => {
@@ -1587,9 +1588,9 @@ function afterRaceCard(d, { pending, noPos, sent, today }) {
     return chips.length ? `<div class="ar-pubs">${chips.join('')}</div>` : '';
   };
   return `<section class="card ar-card${todo.length ? ' has-pend' : ''}" id="sec-after"><details class="chro-det" data-open-key="after"${(S.open?.after ?? todo.length > 0) ? ' open' : ''}>
-    <summary class="ar-top"><span class="chro-ic">🏁</span><span class="ar-tw"><b class="chro-t">Resultados y crónicas</b><small>Pon tu resultado y cuenta cómo te fue</small></span>
-      <span class="chro-tag ${todo.length ? 'pend' : 'ok'}">${todo.length ? `${todo.length} por hacer` : 'Al día'}${ico('go')}</span></summary>
-    <div class="ar-tabs" role="tablist"><button type="button" role="tab" aria-selected="${tab === 'todo'}" class="${tab === 'todo' ? 'on' : ''}" data-act="after-tab" data-t="todo">Por hacer <b>${todo.length}</b></button><button type="button" role="tab" aria-selected="${tab === 'ok'}" class="${tab === 'ok' ? 'on' : ''}" data-act="after-tab" data-t="ok">Al día <b>${ok.length}</b></button></div>
+    <summary class="ar-top"><span class="chro-ic">🏁</span><span class="ar-tw"><b class="chro-t">Por hacer</b><small>Resultados, crónicas, pagos y datos</small></span>
+      <span class="chro-tag ${tasksN ? 'pend' : 'ok'}">${tasksN ? `${tasksN} ${tasksN === 1 ? 'tarea' : 'tareas'}` : 'Al día'}${ico('go')}</span></summary>
+    <div class="ar-tabs" role="tablist"><button type="button" role="tab" aria-selected="${tab === 'todo'}" class="${tab === 'todo' ? 'on' : ''}" data-act="after-tab" data-t="todo">Por hacer <b>${tasksN}</b></button><button type="button" role="tab" aria-selected="${tab === 'ok'}" class="${tab === 'ok' ? 'on' : ''}" data-act="after-tab" data-t="ok">Al día <b>${ok.length}</b></button></div>
     <p class="hint">${WEEK_RULE} ${CHRONICLE_RULE} Para la crónica <b>basta con 2 líneas y una foto</b>: los datos ya los tenemos y el resumen y la publicación los hacemos nosotros.</p>
     ${shown.length ? `<ul class="ar-list">${shown.map(rowHtml).join('')}</ul>` : `<p class="empty small">${tab === 'todo' ? 'No te falta nada. 🎉' : 'Aún no tienes carreras completas.'}</p>`}
   </details></section>`;
