@@ -1,5 +1,6 @@
 -- Fecha en que se publicó la crónica en redes (para enseñarla en «Resultados y crónicas» de Mi temporada).
--- DOS trozos cortos (se pueden repetir). Pégalos EN ORDEN.
+-- Además: el corredor ve el texto final de su crónica cuando ya está lista o publicada.
+-- TRES trozos cortos (se pueden repetir). Pégalos EN ORDEN.
 
 -- ===== TROZO 1: la columna, la marca automática y las ya publicadas =====
 alter table public.chronicle_posts add column if not exists published_at timestamptz;
@@ -34,3 +35,16 @@ begin
               from chronicles c join runners r on r.id = c.runner_id
              group by c.race_key) k), '[]'::jsonb);
 end $$;
+
+-- ===== TROZO 3: el corredor ve el texto final de su crónica (sustituye a una función que ya tienes) =====
+create or replace function public.runner_chronicle_posts(p_code text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare v_runner uuid;
+begin
+  select id into v_runner from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  return coalesce((select jsonb_agg(jsonb_build_object('key', race_key, 'name', race_name, 'body', body, 'status', status, 'photos', photos,
+                                                       'final', case when status in ('lista', 'publicada') then final_text end, 'pub_at', published_at) order by created_at desc)
+                     from chronicle_posts where runner_id = v_runner), '[]'::jsonb);
+end $$;
+grant execute on function public.runner_chronicle_posts(text) to anon, authenticated;

@@ -1677,7 +1677,9 @@ declare v_runner uuid;
 begin
   select id into v_runner from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
-  return coalesce((select jsonb_agg(jsonb_build_object('key', race_key, 'name', race_name, 'body', body, 'status', status, 'photos', photos) order by created_at desc) from chronicle_posts where runner_id = v_runner), '[]'::jsonb);
+  return coalesce((select jsonb_agg(jsonb_build_object('key', race_key, 'name', race_name, 'body', body, 'status', status, 'photos', photos,
+                                                       'final', case when status in ('lista', 'publicada') then final_text end, 'pub_at', published_at) order by created_at desc)
+                     from chronicle_posts where runner_id = v_runner), '[]'::jsonb);
 end $$;
 grant execute on function public.runner_chronicle_posts(text) to anon, authenticated;
 

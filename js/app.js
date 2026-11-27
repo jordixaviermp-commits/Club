@@ -1548,7 +1548,22 @@ function afterRaceCard(d, { pending, noPos, sent, today }) {
     const wk = r.res === 'pend' || r.cron === false ? weekChip(r.end_date || r.date, today) : '';
     const leave = r.res === 'pend' && r.leave && !S.preview ? `<button type="button" class="ar-leave" data-act="r-leave" data-id="${r.leave}">No fui</button>` : '';
     return `<li class="ar-row${r.todo ? ' todo' : ''}"><div class="ar-head"><a class="ar-name" href="${runnerHref('carrera')}/${r.kind === 'race' ? 'race_' + r.id : r.id}" aria-label="Abrir la carrera ${esc(r.name)}"><b>${esc(r.name)}</b><small>${esc(formatDate(r.date, false))}${r.place ? ' · ' + esc(r.place) : ''}</small></a>${leave}</div>${wk ? `<div class="ar-wk">${wk}</div>` : ''}
-      <div class="ar-tasks">${resTask(r)}${cronTask(r)}</div>${pubsLine(r)}</li>`;
+      <div class="ar-tasks">${resTask(r)}${cronTask(r)}</div>${pubsLine(r)}${moreBox(r)}</li>`;
+  };
+  // desplegable por carrera: qué resultado puso (categoría, general, tiempo) y el texto de su crónica
+  const moreBox = (r) => {
+    const reg = (d.registrations || []).find((g) => postKeyOf(g) === r.key), mine = (d.my_results || []).find((x) => postKeyOf(x) === r.key), res = mine || reg?.my_result || null;
+    const cat = res?.category || (reg?.entries || []).find((e) => e.runner_id === d.me?.id)?.category || '';
+    const post = S.myPosts && S.myPosts.get(r.key), text = post && String(post.final || post.body || '').trim();
+    const hasRes = !!(res && (res.position || res.dnf)), hasText = !!text;
+    if (!hasRes && !hasText) return '';
+    const cell = (label, val, sub = '') => `<div class="ar-cell"><small>${label}</small><b>${val}</b>${sub ? `<em>${esc(sub)}</em>` : ''}</div>`;
+    const gen = generalOf(res);
+    const resHtml = !hasRes ? '' : res.dnf ? `<div class="ar-sec"><h4>${ico('flag')}Mi resultado</h4><p class="ar-txt">Abandonó: cuenta como carrera hecha.</p></div>`
+      : `<div class="ar-sec"><h4>${ico('flag')}Mi resultado</h4><div class="ar-cells">${cell('Categoría', res.position ? `${res.position}º` : '—', cat)}${cell('General', gen ? `${gen}º` : '—', 'todas las categorías')}${cell('Tiempo', res.time_seconds ? formatTime(res.time_seconds) : '—', 'en carrera')}</div></div>`;
+    const stLabel = post?.status === 'publicada' ? 'Crónica publicada' : post?.status === 'lista' ? 'Crónica lista para publicar' : 'Mi crónica (en revisión)';
+    const cronHtml = !hasText ? '' : `<div class="ar-sec"><h4>${ico('pen')}${stLabel}${post?.status === 'publicada' && post.pub_at ? ` · ${dayMon(String(post.pub_at).slice(0, 10))}` : ''}</h4><p class="ar-txt">${esc(text)}</p></div>`;
+    return `<details class="ar-more" data-open-key="arm-${esc(r.key)}"${S.open?.['arm-' + r.key] ? ' open' : ''}><summary>${ico('chevd', 'ar-mchev')}<span>${hasRes && hasText ? 'Ver mi resultado y mi crónica' : hasRes ? 'Ver mi resultado' : 'Ver mi crónica'}</span></summary>${resHtml}${cronHtml}</details>`;
   };
   // cuándo salió en redes: la historia (previa a la carrera) y la crónica, con su fecha
   const pubsLine = (r) => {
