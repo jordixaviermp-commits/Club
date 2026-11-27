@@ -1148,7 +1148,7 @@ function viewRunnerNew() {
   const pv = racePreview(d);
   const others = isRace ? d.others || 0 : reg ? reg.entries.filter((e) => e.runner_id !== S.runnerData.me.id).length : 0;
   if (!S.fed && !editing) loadFed().then(() => updateSearch('rname'));
-  return frame(editing ? 'Editar mi carrera' : 'Añadir carrera', `
+  return frame(editing ? 'Editar mi carrera' : 'Añadir carrera', `<div class="ds2">
     <form class="stack rform" data-form="r-create">
       <details class="rform-help"><summary>${ico('info')}<span>${editing ? 'Qué puedes cambiar aquí' : 'Cómo se añade una carrera'}</span></summary>
         <p class="hint">${editing ? `Puedes corregir los datos de esta carrera porque la añadiste tú${isRace ? ' (aunque ya esté en resultados)' : ''}. Tu puesto lo cambias en «Cambiar mi resultado»; el de los demás lo pone cada uno.`
@@ -1175,7 +1175,7 @@ function viewRunnerNew() {
     </form>
     ${editing && !mineCreated ? '<p class="card hint">🗑️ Borrar la carrera solo puede hacerlo quien la añadió o la dirección del club.</p>' : editing ? (others
       ? `<p class="card hint">🗑️ No puedes borrarla: hay ${others} compañero${others === 1 ? '' : 's'} más ${isRace ? 'con resultado en ella' : 'apuntado' + (others === 1 ? '' : 's')}. Si hay que quitarla, pídeselo a la dirección del club.</p>`
-      : '<div class="wf-acts"><button class="btn danger ghost" data-act="r-delete-mine">🗑️ Borrar esta carrera</button></div>') : ''}`, { back: isRace ? runnerHref('mi') : runnerHref('') });
+      : '<div class="wf-acts"><button class="btn danger ghost" data-act="r-delete-mine">🗑️ Borrar esta carrera</button></div>') : ''}</div>`, { back: isRace ? runnerHref('mi') : runnerHref('') });
 }
 
 
@@ -1408,9 +1408,13 @@ function myRacesCard(d) {
       <a href="#" class="tile t-done" data-act="goto-sec" data-to="sec-cal" data-tab="hechas"><span class="t-n">${hechas.length}</span><span class="t-l">Hechas</span>${ico('ok', 't-ico')}<small>${days !== list.length ? `${days} días de competición` : 'con resultado'}</small></a>
       <a href="#" class="tile t-pend${todoN ? ' alert' : ''}" data-act="goto-sec" data-to="${todoTo}"><span class="t-n">${todoN}</span><span class="t-l">Por hacer</span>${ico('flag', 't-ico')}<small>${todoTxt}</small></a>
     </div>
-    ${(() => { const n = ad.next, ageTxt = (x) => (x.age <= 7 ? `te ${7 - x.age === 1 ? 'queda 1 día' : `quedan ${7 - x.age} días`}` : `hace ${x.age} días`);
+    ${(() => { const n = (() => { const its = ad.items || [], rank = { result: 0, cron: 1 };
+        const near = its.filter((x) => x.type !== 'pay' && x.age <= 7).sort((a, b) => rank[a.type] - rank[b.type] || b.age - a.age)[0];
+        const pay = its.filter((x) => x.type === 'pay').sort((a, b) => a.in - b.in)[0];
+        const late = its.filter((x) => x.type !== 'pay').sort((a, b) => a.age - b.age)[0];   // si no hay nada de esta semana, lo más reciente (no lo de hace meses)
+        return near || pay || late || null; })(), ageTxt = (x) => (x.age <= 7 ? `te ${7 - x.age === 1 ? 'queda 1 día' : `quedan ${7 - x.age} días`}` : `hace ${x.age} días`);
       const txt = !n ? (upcoming[0] ? `Estás al día. Lo próximo: <b>${esc(upcoming[0].name)}</b> · ${dleft(upcoming[0])}` : 'Estás al día.')
-        : n.type === 'result' ? `Pon tu puesto en <b>${esc(n.name)}</b> · ${ageTxt(n)}` : n.type === 'cron' ? `Pasa la crónica de <b>${esc(n.name)}</b> · ${ageTxt(n)}` : `Marca el pago de <b>${esc(n.name)}</b> · ${n.in === 0 ? 'es hoy' : n.in === 1 ? 'es mañana' : `en ${n.in} días`}`;
+        : n.type === 'result' ? `Pon tu puesto en <b>${esc(n.name)}</b> · ${ageTxt(n)}` : n.type === 'cron' ? (chroDataOf({ key: postKeyOf({ name: n.name, date: n.date }) })?.missRes?.length ? `Completa tu resultado en <b>${esc(n.name)}</b> · ${ageTxt(n)}` : `Pasa la crónica de <b>${esc(n.name)}</b> · ${ageTxt(n)}`) : `Marca el pago de <b>${esc(n.name)}</b> · ${n.in === 0 ? 'es hoy' : n.in === 1 ? 'es mañana' : `en ${n.in} días`}`;
       const to = !n ? (upcoming[0] ? 'sec-cal' : 'sec-after') : 'sec-after';
       return `<div class="sum-todo"><a href="#" class="sum-next${n ? ' has' : ' ok'}" data-act="goto-sec" data-to="${to}"${!n && upcoming[0] ? ' data-tab="prox"' : ''}>${ico(n ? 'flag' : 'ok')}<span>${txt}</span>${ico('go')}</a>
         </div>`; })()}
@@ -1542,7 +1546,7 @@ function afterRaceModel(d, { pending, noPos, sent, today, ad, results, upcoming,
   if (!S.preview) for (const x of (results || []).filter((r) => missingFields(r).length)) { const k = postKeyOf(x), cur = rows.get(k);
     mk(k, { ...(cur ? {} : { kind: 'race', id: x.race_id, name: x.name, date: x.date, end_date: x.end_date || null, place: x.place || '', res: 'done', resHref: `#/resultado/race_${x.race_id}` }), miss: missingFields(x).map((f) => FIELD_LABELS[f]), missHref: `${runnerHref('carrera')}/race_${x.race_id}` }); }
   const list = [...rows.values()].map((r) => ({ ...r, cron: hasChron && !r.pay ? S.chron.has(r.key) : null, pub: !!S.chronBy?.get?.(r.key)?.pub }))
-    .map((r) => { if (r.res === 'done' && r.cron === false) { const dd = chroDataOf(r); if (dd && dd.missRes?.length) return { ...r, res: 'pend', resHref: dd.resHref }; } return r; })
+    .map((r) => { if (r.res === 'done' && r.cron === false) { const dd = chroDataOf(r); if (dd && dd.missRes?.length) return { ...r, res: 'incomp', resHref: dd.resHref, missRes: dd.missRes }; } return r; })
     .map((r) => ({ ...r, todo: r.res === 'pend' || r.cron === false || !!r.pay || !!r.miss }))
     .sort((x, y) => (!!x.pay - !!y.pay) || (x.pay ? x.date.localeCompare(y.date) : y.date.localeCompare(x.date)) || x.name.localeCompare(y.name, 'es'));
   const todo = list.filter((r) => r.todo), ok = list.filter((r) => !r.todo);
@@ -1553,12 +1557,13 @@ function afterRaceModel(d, { pending, noPos, sent, today, ad, results, upcoming,
     return `<${tag} class="mt-chip st-${st}${tag === 'span' ? '' : ' tappable'}"${tag === 'button' ? ' type="button"' : ''} ${attrs}>${ico(st === 'ok' ? 'check' : ic)}<span>${text}</span></${tag}>`; };
   const resTask = (r) => {
     if (r.res === 'pend') return task('todo', 'flag', 'Poner resultado', S.preview ? '' : `href="${r.resHref}"`);
+    if (r.res === 'incomp') return task('todo', 'flag', 'Completar resultado', S.preview ? '' : `href="${r.resHref}" title="Falta: ${esc((r.missRes || []).join(', '))}"`);
     const sub = r.res === 'dnf' ? 'Abandonó' : r.txt ? esc(r.txt.split(' · ')[0]) : 'Resultado';
     return task('ok', 'flag', `${sub} · ver`, S.preview ? '' : `data-act="ar-open" data-t="res" data-key="${esc(r.key)}" aria-label="Ver mi resultado"`);
   };
   const cronTask = (r) => {
     if (r.cron === null) return '';
-    if (r.res === 'pend') return task('wait', 'pen', 'Crónica', '');
+    if (r.res === 'pend' || r.res === 'incomp') return task('wait', 'pen', 'Crónica', '');
     const post = S.myPosts && S.myPosts.get(r.key), by = S.chronBy?.get?.(r.key), open = S.preview ? '' : `data-act="ar-open" data-t="cron" data-key="${esc(r.key)}" aria-label="Ver la crónica"`;
     if (post && post.status === 'enviada') return task('ok', 'pen', 'Crónica en revisión', open);
     if (post && post.status === 'lista') return task('ok', 'pen', 'Crónica lista', open);
@@ -1572,7 +1577,7 @@ function afterRaceModel(d, { pending, noPos, sent, today, ad, results, upcoming,
   const payTask = (r) => task('todo', 'euro', 'Marcar pagado', S.preview ? '' : `data-act="r-paid" data-id="${r.id}"`);
   const datosTask = (r) => task('todo', 'pin', `Falta ${esc(r.miss.join(', '))}`, S.preview ? '' : `href="${r.missHref}"`);
   const whenTxt = (r) => { if (r.pay) return r.payIn === 0 ? 'hoy' : `en ${r.payIn} ${r.payIn === 1 ? 'día' : 'días'}`;
-    if (!(r.res === 'pend' || r.cron === false)) return '';
+    if (!(r.res === 'pend' || r.res === 'incomp' || r.cron === false)) return '';
     const n = Math.round((Date.parse(today + 'T12:00:00Z') - Date.parse(String(r.end_date || r.date).slice(0, 10) + 'T12:00:00Z')) / 864e5);
     return n < 0 ? '' : n < 7 ? `quedan ${7 - n} ${7 - n === 1 ? 'día' : 'días'}` : n === 7 ? 'último día' : 'pasó la semana'; };
   const rowHtml = (r, view = 'todo') => {
@@ -1798,7 +1803,7 @@ function runnerRegCard(g, opts = {}) {
         ${mine && !S.preview && !g.my_result ? (g.my_result ? ''
           : `<p class="row"><a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>
              <button class="btn ghost small" data-act="r-leave" data-id="${g.id}">No fui: borrarme</button></p>`) : ''}
-        ${!mine && g.date >= pastLimit() ? `<div class="row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
+        ${!mine && g.date >= pastLimit() ? `<div class="row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, me.category || '', 'Elige tu categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">La hice: apuntarme</button></div>` : ''}`}
       ${g.notes ? `<p class="notes">${esc(g.notes)}</p>` : ''}
       ${myPubLine(g)}
@@ -1812,7 +1817,7 @@ function runnerRegCard(g, opts = {}) {
              <button class="btn ghost small" data-act="r-ics" data-id="${g.id}" aria-label="Añadir al calendario del móvil" title="Añadir al calendario del móvil">${ico('calplus')}<span class="lab">Calendario</span></button>
              ${notesInRow ? `<button class="btn ghost small${noteOf(g) ? ' has-note' : ''}" data-act="note-edit" data-id="${g.id}" title="${noteOf(g) ? 'Editar mis notas' : 'Añadir una nota personal (hotel, coche…)'}" aria-label="${noteOf(g) ? 'Editar mis notas' : 'Añadir una nota personal (hotel, coche…)'}">${ico('pen')}<span class="lab">Notas</span></button>` : ''}</div>
            ${notesInRow && noteOf(g) ? `<button type="button" class="rc-note-line" data-act="note-edit" data-id="${g.id}">${ico('pen')}<span>${esc(noteOf(g))}</span></button>` : ''}`
-        : `<div class="row join-row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
+        : `<div class="row join-row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, me.category || '', 'Elige tu categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">Apuntarme</button></div>`}
     `;
     return raceFold(g, { key, id: key, mine: !!(mine && !g.suspended), open: !!opts.open, cls: opts.cls || '', noPast: !!opts.noPast, side: `${myPubChip(g)}${state}${payBadge(g, opts)}${carBadge(g)}<span class="rc-n" title="Inscritos del club" aria-label="${g.entries.length} del club inscrito${g.entries.length === 1 ? '' : 's'}">${ico('users')}${g.entries.length}</span>`, body, today });
@@ -5251,7 +5256,7 @@ function askChronicle(x, post, group = null) {
       : inGrace ? `<div class="grp-row wait"><span class="grp-n"><b>${esc(g.name)}</b><small>${esc(g.category || '')} · falta su resultado</small></span><span class="grp-v">${ico('clock')}aún lo puede poner él</span></div>`
       : `<div class="grp-row" data-rid="${esc(g.runner_id)}"><span class="grp-n"><b>${esc(g.name)}</b><small>${esc(g.category || '')} · falta su resultado</small></span><span class="grp-in"><input inputmode="numeric" data-grp="pos" placeholder="Puesto" aria-label="Puesto de ${esc(g.name)}" value="${g.position || ''}"><input inputmode="numeric" data-grp="gen" placeholder="General" aria-label="Puesto en la general de ${esc(g.name)}" value="${g.general || ''}"><input data-grp="time" placeholder="h:mm:ss" aria-label="Tiempo de ${esc(g.name)}" value="${g.time ? esc(formatTime(g.time)) : ''}"></span><label class="check grp-dnf"><input type="checkbox" data-grp="dnf"> 🚫 Abandonó (sin puesto ni tiempo)</label></div>`;
     const groupHtml = others.length ? `<fieldset class="chro-group"><legend>Resultados de tus compañeros</legend><p class="muted small">${lockedByGrace ? `Los 2 primeros días cada uno pone su resultado. Si siguen sin ponerlo, desde el <b>${esc(formatDate(openOn, false))}</b> podrás ponerlo tú y enviar la crónica con todo.` : 'Si falta el de alguno, ponlo tú: así cuenta para todos y el post sale completo.'}</p>${!inGrace && others.some((g) => !grpDone(g)) ? '<div class="grp-head"><span>Puesto</span><span>General</span><span>Tiempo</span></div>' : ''}${others.map(grpRow).join('')}</fieldset>` : '';
-    const slot = (i) => `<label class="chro-ph" data-slot="${i}">${ico('camera')}<span>Foto ${i + 1}${i ? ' (opcional)' : ''}</span><img alt="" hidden><input type="file" accept="image/*" data-chro-photo="${i}" hidden></label>`;
+    const slot = (i) => `<label class="chro-ph" data-slot="${i}">${ico('camera')}<span>Foto ${i + 1}${i ? ' (opcional)' : ' (necesaria)'}</span><img alt="" hidden><input type="file" accept="image/*" data-chro-photo="${i}" hidden></label>`;
     const blocked = !locked && data && !data.complete;
     const todo = blocked ? `<div class="chro-need"><p><b>Antes de escribirla falta completar:</b></p><ul>
         ${data.missRace.length ? `<li>${ico('flag')}<span>Datos de la carrera: <b>${esc(data.missRace.join(', '))}</b></span><a class="btn small" href="${data.raceHref}" data-chro-close>Completar</a></li>` : ''}
@@ -5265,6 +5270,7 @@ function askChronicle(x, post, group = null) {
       ${blocked ? '' : `<label>${locked ? 'Lo que contaste' : 'Cómo te fue <small class="muted">(2 líneas bastan)</small>'}<textarea name="body" rows="${locked ? 5 : 4}" minlength="${locked ? 0 : 20}" maxlength="1500" ${locked ? 'readonly' : 'required'} placeholder="Ej.: Salí fuerte pero sufrí en la última subida. Contento con las piernas y con el ambiente del equipo.">${esc(post?.body || '')}</textarea></label>`}
       ${blocked ? '' : groupHtml}
       ${locked || blocked ? '' : `<div class="chro-photos">${slot(0)}${slot(1)}</div>${post?.photos ? `<p class="muted small">Ya tienes ${post.photos} foto${post.photos === 1 ? '' : 's'} enviada${post.photos === 1 ? '' : 's'}; si eliges nuevas, las sustituyen.</p>` : '<p class="muted small">Sube 1 o 2 fotos, las mejores.</p>'}`}
+      ${locked || blocked ? '' : '<p class="chro-why" id="chro-why" aria-live="polite"></p>'}
       <div class="dlg-actions">${locked || blocked ? '' : '<button value="ok" class="btn primary" disabled>Enviar</button>'}<button value="" class="btn ghost" formnovalidate>${locked || blocked ? 'Cerrar' : 'Cancelar'}</button></div></form>`;
     const okBtn = dlg.querySelector('button[value="ok"]');
     const grpValues = () => [...dlg.querySelectorAll('.grp-row[data-rid]')].map((row) => {
@@ -5273,7 +5279,11 @@ function askChronicle(x, post, group = null) {
       const okRow = Number.isInteger(pos) && pos >= 1 && pos <= 999 && Number.isInteger(gen) && gen >= pos && gen <= 9999 && time != null;
       return { runner_id: row.dataset.rid, position: pos, general: gen, time, ok: okRow };
     });
-    const refresh = () => { if (okBtn) okBtn.disabled = !(dlg.querySelector('textarea[name="body"]').value.trim().length >= 20 && (photos.some(Boolean) || post?.photos) && !lockedByGrace && grpValues().every((g) => g.ok)); };
+    const refresh = () => { if (!okBtn) return;
+      const txtOk = dlg.querySelector('textarea[name="body"]').value.trim().length >= 20, phOk = photos.some(Boolean) || !!post?.photos, grpOk = grpValues().every((g) => g.ok);
+      okBtn.disabled = !(txtOk && phOk && !lockedByGrace && grpOk);
+      const need = [!txtOk ? 'tus 2 líneas' : '', !phOk ? 'la foto 1' : '', !grpOk ? 'los resultados de tus compañeros' : ''].filter(Boolean);
+      const why = dlg.querySelector('#chro-why'); if (why) why.textContent = lockedByGrace ? '' : need.length ? `Para enviar falta: ${need.join(', ')}.` : ''; };
     dlg.oninput = refresh;
     dlg.onclick = (ev) => { if (ev.target.closest('[data-chro-close]')) dlg.close(); };
     dlg.onchange = async (ev) => {
@@ -5891,12 +5901,19 @@ const actions = {
     if (!cat) { // la categoría es obligatoria: se elige aquí o en una ventana (si se apunta desde el buscador)
       if (sel) { sel.classList.add('needs'); sel.focus(); return toast('Elige tu categoría para apuntarte.', true); }
       const g = S.runnerData.registrations.find((x) => x.id === el.dataset.id);
-      cat = await askCategory(g?.name); if (!cat) return;
+      cat = await askCategory(g?.name, 'Apuntarme', S.runnerData?.me?.category || ''); if (!cat) return;
     }
     const gname = S.runnerData.registrations.find((x) => x.id === el.dataset.id)?.name;
     const ok = await run(async () => { await api.runnerJoin(S.code, el.dataset.id, cat); await loadRunner(); return true; }, '¡Apuntado!');
     if (ok && isPastReg(el.dataset.id)) { await chronicleReminder(gname); return go(resultHref(el.dataset.id)); }
-    render();
+    S.open = { ...(S.open || {}), [`rc-${el.dataset.id}`]: true };
+    const y = window.scrollY; render(); window.scrollTo(0, y);
+    if (!ok) return;
+    const key = `rc-${el.dataset.id}`; requestAnimationFrame(() => document.querySelector(`[data-open-key="${key}"]`)?.scrollIntoView({ block: 'center' }));
+    const v = await infoDialog('¡Apuntado!', `<p>Estás apuntado en <b>${esc(gname || 'la carrera')}</b> (${esc(cat)}).</p><p class="muted">Lo siguiente, si quieres hacerlo ya:</p>`,
+      [{ label: 'Marcar como pagada', value: 'paid', kind: 'primary' }, { label: 'Añadir al calendario', value: 'ics' }]);
+    if (v === 'paid') await actions['r-paid']({ dataset: { id: el.dataset.id } });
+    else if (v === 'ics') await actions['r-ics']({ dataset: { id: el.dataset.id } });
   },
   // «La hice y no salgo»: añadirse a una carrera que ya está en resultados y poner el puesto
   async 'r-join-race'(el) {
@@ -6541,7 +6558,14 @@ const forms = {
     if (!await confirmAction('Guardar resultado', `Vas a guardar: <b>${esc(txt)}</b>.<br>Si te equivocas, lo puedes cambiar después.`, 'Guardar', 'primary')) return;
     const ok = await run(async () => { await api.runnerReport(S.code, f.dataset.kind, f.dataset.id, position, cat, pod, time, general); await loadRunner(); return true; },
       position <= 3 ? `${medal(position)} ¡Enhorabuena! Resultado enviado` : 'Resultado enviado');
-    if (ok) go(runnerHref('mi'));
+    if (!ok) return;
+    go(runnerHref('mi'));
+    // es cuando más ganas hay de contarlo: se ofrece la crónica al momento si todavía no la ha pasado nadie
+    try { const g = f.dataset.kind === 'reg' ? S.runnerData.registrations.find((x) => x.id === f.dataset.id) : (S.runnerData.my_results || []).find((x) => x.race_id === f.dataset.id);
+      const key = g && postKeyOf(g);
+      if (key && S.chron instanceof Set && !S.chron.has(key) && !(S.myPosts && S.myPosts.get(key)) && chroDataOf({ key })?.complete) {
+        const v = await choose('¿Nos cuentas cómo te fue?', 'Con <b>2 líneas</b> y una foto vale: el resumen y el post los hacemos nosotros. Ahora te viene fresco.', [{ label: 'Contar cómo me fue', value: 'go', kind: 'primary' }]);
+        if (v === 'go') await actions['chro-write']({ dataset: { key } }); } } catch { /* sin crónica ahora: queda en «Por hacer» */ }
   },
   async 'tpl-upload'(f) {
     const file = f.file.files?.[0];
