@@ -1458,7 +1458,7 @@ function chroActs(x, isDone) {
   if (post) act = `<button class="btn small" data-act="chro-write" data-key="${esc(x.key)}">${ico('pen')}${post.status === 'enviada' ? 'Editar' : 'Ver'}</button>`;
   else if (!isDone && S.myPosts) {
     const data = chroDataOf(x);
-    if (!data || data.complete) act = `<button class="btn small primary" data-act="chro-write" data-key="${esc(x.key)}">${ico('pen')}Escribirla</button>`;
+    if (!data || data.complete) act = `<button class="btn small primary" data-act="chro-write" data-key="${esc(x.key)}">${ico('pen')}Contar cómo me fue</button>`;
     else if (data.missRes.length) act = `<a class="btn small primary" href="${data.resHref}">Poner mi resultado</a>`;
     else act = `<a class="btn small primary" href="${data.raceHref}">Completar datos</a>`;
   }
@@ -1504,7 +1504,8 @@ function chronicleCard(d) {
     <summary><span class="chro-ic">${ico('book')}</span><b class="chro-t">Crónicas${year === new Date().getFullYear() ? '' : ` <small class="muted">${year}</small>`}</b>
       <span class="chro-tag ${pend ? 'pend' : 'ok'}">${pend ? `${pend} ${plural(pend, 'pendiente', 'pendientes')}` : `${c.done.length} ${plural(c.done.length, 'pasada', 'pasadas')}`}${ico('go')}</span></summary>
     <div class="seg-sw chro-sw" role="tablist" aria-label="Crónicas o impacto en redes"><button type="button" role="tab" class="${tabImp ? '' : 'on'}" data-act="chro-tab" data-t="cro">Crónicas</button><button type="button" role="tab" class="${tabImp ? 'on' : ''}" data-act="chro-tab" data-t="imp">Impacto en redes</button></div>
-    ${tabImp ? impactPane() : `<p class="hint">${CHRONICLE_RULE} Cuando lo hayas enviado, márcala.</p>
+    ${tabImp ? impactPane() : `<p class="chro-intro">${ico('pen')}<span><b>Basta con 2 líneas y una foto.</b> Cuéntanos cómo te fue, sin hacer un resumen: los datos ya los tenemos y el resumen y la publicación los hacemos nosotros.</span></p>
+    <p class="hint">${CHRONICLE_RULE}</p>
     ${pend ? `<ul class="chro-list">${c.pending.map((x) => li(x, false)).join('')}</ul>` : '<p class="empty small">No te falta ninguna. 🎉</p>'}
     ${c.done.length ? `<details class="chro-done"${pend ? '' : ' open'}><summary>Pasadas (${c.done.length})</summary><ul class="chro-list">${c.done.map((x) => li(x, true)).join('')}</ul></details>` : ''}`}
   </details></section>`;
@@ -5046,21 +5047,22 @@ function askChronicle(x, post, group = null) {
       ? `<div class="grp-row ok"><span class="grp-n"><b>${esc(g.name)}</b><small>${esc(g.category || '')}</small></span><span class="grp-v">${g.dnf ? 'Abandonó' : `${g.position}º · ${g.general}º gral · ${esc(formatTime(g.time))}`}</span>${ico('check')}</div>`
       : inGrace ? `<div class="grp-row wait"><span class="grp-n"><b>${esc(g.name)}</b><small>${esc(g.category || '')} · falta su resultado</small></span><span class="grp-v">${ico('clock')}aún lo puede poner él</span></div>`
       : `<div class="grp-row" data-rid="${esc(g.runner_id)}"><span class="grp-n"><b>${esc(g.name)}</b><small>${esc(g.category || '')} · falta su resultado</small></span><span class="grp-in"><input inputmode="numeric" data-grp="pos" placeholder="Puesto" aria-label="Puesto de ${esc(g.name)}" value="${g.position || ''}"><input inputmode="numeric" data-grp="gen" placeholder="General" aria-label="Puesto en la general de ${esc(g.name)}" value="${g.general || ''}"><input data-grp="time" placeholder="h:mm:ss" aria-label="Tiempo de ${esc(g.name)}" value="${g.time ? esc(formatTime(g.time)) : ''}"></span><label class="check grp-dnf"><input type="checkbox" data-grp="dnf"> 🚫 Abandonó (sin puesto ni tiempo)</label></div>`;
-    const groupHtml = others.length ? `<fieldset class="chro-group"><legend>Resultados de los del club</legend><p class="muted small">${lockedByGrace ? `Los 2 primeros días cada uno pone su resultado. Si siguen sin ponerlo, desde el <b>${esc(formatDate(openOn, false))}</b> podrás ponerlo tú y enviar la crónica con todo.` : 'Si falta el de alguno, ponlo tú: así cuenta para todos y el post sale completo.'}</p>${!inGrace && others.some((g) => !grpDone(g)) ? '<div class="grp-head"><span>Puesto</span><span>General</span><span>Tiempo</span></div>' : ''}${others.map(grpRow).join('')}</fieldset>` : '';
+    const groupHtml = others.length ? `<fieldset class="chro-group"><legend>Resultados de tus compañeros</legend><p class="muted small">${lockedByGrace ? `Los 2 primeros días cada uno pone su resultado. Si siguen sin ponerlo, desde el <b>${esc(formatDate(openOn, false))}</b> podrás ponerlo tú y enviar la crónica con todo.` : 'Si falta el de alguno, ponlo tú: así cuenta para todos y el post sale completo.'}</p>${!inGrace && others.some((g) => !grpDone(g)) ? '<div class="grp-head"><span>Puesto</span><span>General</span><span>Tiempo</span></div>' : ''}${others.map(grpRow).join('')}</fieldset>` : '';
     const slot = (i) => `<label class="chro-ph" data-slot="${i}">${ico('camera')}<span>Foto ${i + 1}${i ? ' (opcional)' : ''}</span><img alt="" hidden><input type="file" accept="image/*" data-chro-photo="${i}" hidden></label>`;
     const blocked = !locked && data && !data.complete;
     const todo = blocked ? `<div class="chro-need"><p><b>Antes de escribirla falta completar:</b></p><ul>
         ${data.missRace.length ? `<li>${ico('flag')}<span>Datos de la carrera: <b>${esc(data.missRace.join(', '))}</b></span><a class="btn small" href="${data.raceHref}" data-chro-close>Completar</a></li>` : ''}
         ${data.missRes.length ? `<li>${ico('trophy')}<span>Tu resultado: <b>${esc(data.missRes.join(', '))}</b></span><a class="btn small" href="${data.resHref}" data-chro-close>Poner</a></li>` : ''}</ul>
-        <p class="muted small">Así el post sale completo, con tu puesto, tu tiempo y los datos de la carrera. Cuando lo tengas, vuelve y pulsa «Escribirla».</p></div>` : '';
-    dlg.innerHTML = `<form method="dialog" class="dlg chro-dlg"><h2>${ico('pen')} Mi crónica</h2><p><b>${esc(x.name)}</b> · ${esc(formatDate(x.date, false))}</p>
+        <p class="muted small">Así el post sale completo, con tu puesto, tu tiempo y los datos de la carrera. Cuando lo tengas, vuelve y pulsa «Contar cómo me fue».</p></div>` : '';
+    dlg.innerHTML = `<form method="dialog" class="dlg chro-dlg"><h2>${ico('pen')} Cuéntanos cómo te fue</h2><p><b>${esc(x.name)}</b> · ${esc(formatDate(x.date, false))}</p>
       ${locked ? `<p class="muted small">Ya la tiene la dirección (${esc((CHRO_ST[post.status] || [''])[0].toLowerCase())}): no se puede cambiar.</p>` : blocked ? todo
-        : `<p class="muted small">Cuenta <b>cómo lo has vivido</b>: sensaciones, el momento clave, a quién das las gracias. Esto lo añade la app solo:</p>
-        ${data?.chips.length ? `<p class="chro-data">${data.chips.map(([ic, t]) => `<span>${ico(ic)}${esc(t)}</span>`).join('')}</p>` : ''}`}
-      ${blocked ? '' : `<label>Tu crónica<textarea name="body" rows="9" minlength="${locked ? 0 : 20}" maxlength="3000" ${locked ? 'readonly' : 'required'} placeholder="Cómo te sentiste, qué tal las piernas, quién iba contigo, qué momento recordarás…">${esc(post?.body || '')}</textarea></label>`}
+        : `<p class="chro-lead"><b>No hace falta hacer una crónica.</b> Con <b>2 líneas</b> de cómo te fue, como se las contarías a un amigo, vale. Los datos ya los tenemos: <b>el resumen y el post los hacemos nosotros</b>.</p>
+        <div class="chro-how" aria-hidden="true"><div>${ico('pen')}<b>Tú</b><small>2 líneas y 1-2 fotos</small></div><i>›</i><div>${ico('star')}<b>Nosotros</b><small>resumen y post</small></div><i>›</i><div>${ico('share')}<b>Redes</b><small>del club</small></div></div>
+        ${data?.chips.length ? `<p class="chro-had">Esto ya lo tenemos:</p><p class="chro-data">${data.chips.map(([ic, t]) => `<span>${ico(ic)}${esc(t)}</span>`).join('')}</p>` : ''}`}
+      ${blocked ? '' : `<label>${locked ? 'Lo que contaste' : 'Cómo te fue <small class="muted">(2 líneas bastan)</small>'}<textarea name="body" rows="${locked ? 5 : 4}" minlength="${locked ? 0 : 20}" maxlength="1500" ${locked ? 'readonly' : 'required'} placeholder="Ej.: Salí fuerte pero sufrí en la última subida. Contento con las piernas y con el ambiente del equipo.">${esc(post?.body || '')}</textarea></label>`}
       ${blocked ? '' : groupHtml}
-      ${locked || blocked ? '' : `<div class="chro-photos">${slot(0)}${slot(1)}</div>${post?.photos ? `<p class="muted small">Ya tienes ${post.photos} foto${post.photos === 1 ? '' : 's'} enviada${post.photos === 1 ? '' : 's'}; si eliges nuevas, las sustituyen.</p>` : '<p class="muted small">Sube al menos 1 foto.</p>'}`}
-      <div class="dlg-actions">${locked || blocked ? '' : '<button value="ok" class="btn primary" disabled>Enviar a dirección</button>'}<button value="" class="btn ghost" formnovalidate>${locked || blocked ? 'Cerrar' : 'Cancelar'}</button></div></form>`;
+      ${locked || blocked ? '' : `<div class="chro-photos">${slot(0)}${slot(1)}</div>${post?.photos ? `<p class="muted small">Ya tienes ${post.photos} foto${post.photos === 1 ? '' : 's'} enviada${post.photos === 1 ? '' : 's'}; si eliges nuevas, las sustituyen.</p>` : '<p class="muted small">Sube 1 o 2 fotos, las mejores.</p>'}`}
+      <div class="dlg-actions">${locked || blocked ? '' : '<button value="ok" class="btn primary" disabled>Enviar</button>'}<button value="" class="btn ghost" formnovalidate>${locked || blocked ? 'Cerrar' : 'Cancelar'}</button></div></form>`;
     const okBtn = dlg.querySelector('button[value="ok"]');
     const grpValues = () => [...dlg.querySelectorAll('.grp-row[data-rid]')].map((row) => {
       if (row.querySelector('[data-grp="dnf"]').checked) return { runner_id: row.dataset.rid, dnf: true, ok: true };

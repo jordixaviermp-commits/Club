@@ -2918,3 +2918,13 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .res-line .wk-chip, .res-line .chip { margin-left: auto; }
 .rc-pubs { display: flex; flex-wrap: wrap; gap: .4rem; margin: .5rem 0 0; }
 .rc-pub.l { padding: .2rem .55rem; gap: .2rem; } .rc-pub.l b { font-size: 12px; margin-left: 2px; }
+
+/* v287 · la crónica es solo «cómo te fue» en 2 líneas */
+.chro-lead { margin: .5rem 0; font-size: var(--fs-3); line-height: 1.45; }
+.chro-how { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; gap: .3rem; margin: .6rem 0; padding: .5rem .4rem; border-radius: 14px; background: var(--accent-2); text-align: center; }
+.chro-how > div { display: grid; justify-items: center; gap: .05rem; min-width: 0; } .chro-how svg { width: 20px; height: 20px; color: var(--accent); }
+.chro-how b { font-size: var(--fs-3); } .chro-how small { font-size: 11px; color: var(--muted); line-height: 1.2; } .chro-how i { font-style: normal; color: var(--muted); font-size: 1.2rem; }
+.chro-had { margin: .5rem 0 0; font-size: var(--fs-2); color: var(--muted); font-weight: 600; }
+.chro-intro { display: flex; gap: .6rem; align-items: flex-start; margin: .5rem 0; padding: .6rem .7rem; border-radius: 12px; background: var(--accent-2); font-size: var(--fs-3); line-height: 1.4; }
+.chro-intro > svg { width: 20px; height: 20px; flex: none; color: var(--accent); margin-top: 1px; }
+.chro-dlg label small { display: inline; font-weight: 400; }
