@@ -3181,3 +3181,39 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .mt2 details > summary.mt-h { padding: 0; min-height: 36px; }
 .mt2 .cal-card .mrow-fold.hero .rc-date b, .mt2 .cal-card .mrow-fold.hero .rc-date i { color: var(--on-accent); }
 .mt2 .mt-seg + .mt-list, .mt2 .mt-seg + .empty { margin-top: 10px; }
+
+/* ===================== v311 · Carreras y Equipo: mismo sistema visual que Mi temporada (solo dentro de .ds2) ===================== */
+.ds2 { --ds-soft: #f4f7f8; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ds2 { --ds-soft: #1d2a33; } }
+:root[data-theme="dark"] .ds2 { --ds-soft: #1d2a33; }
+/* tarjetas: sin bordes ni barras de color, sombra suave */
+.ds2 .card:not(.next-team):not(.rcard) { border: 0; border-radius: 16px; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.ds2 .card:not(.next-team)::before { display: none; }
+/* títulos de sección y de tarjeta: sin barra de color */
+.ds2 h2.section::before, .ds2 .rs-card > h2::before { display: none; }
+.ds2 h2.section { font-size: 1.05rem; margin: 1rem 0 .5rem; color: var(--text); }
+.ds2 .rs-card > h2 { font-size: 1.05rem; color: var(--text); }
+.ds2 .rs-card > h2 > .ico { color: var(--muted); }
+/* fichas de carrera: borde fino a la izquierda con el color de la disciplina, sin sombra pesada */
+.ds2 details.rcard { border-top: 0; border-right: 0; border-bottom: 0; border-left: 4px solid var(--mc, var(--line)); border-radius: 16px; box-shadow: 0 1px 2px rgba(0,0,0,.06); margin-bottom: 8px; }
+:root .ds2 details.rcard.card { box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+/* cabeceras de mes: neutras */
+.ds2 .month-head { border: 0; background: var(--ds-soft); color: var(--text); border-radius: 12px; margin: 14px 0 8px; }
+.ds2 .month-head::before { display: none; }
+/* controles segmentados: el mismo aspecto en toda la app (fondo suave, la opción elegida en blanco) */
+.ds2 .seg-sw, .ds2 .rs-tabs { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; padding: 3px; border: 0; border-radius: 12px; background: var(--ds-soft); box-shadow: none; overflow: visible; }
+.ds2 .rs-tabs { display: grid; grid-auto-flow: unset; grid-template-columns: repeat(4, 1fr); }
+.ds2 .seg-sw button, .ds2 .rs-tabs button { border: 0; border-radius: 9px; background: none; color: var(--muted); box-shadow: none; font-weight: 600; min-height: 36px; }
+.ds2 .seg-sw button.on, .ds2 .rs-tabs button.on { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.14); }
+.ds2 .rs-tabs button.on .ico { color: var(--kpi); }
+.ds2 .eq-sw { display: grid; width: 100%; margin-bottom: 10px; }
+.ds2 .eq-title { display: none; }   /* repetía el título de la cabecera */
+.ds2 .eq-fbtn { border: 0; background: var(--ds-soft); border-radius: 12px; }
+/* récords: sin barra de color arriba */
+.ds2 .lead { border: 0; box-shadow: 0 1px 2px rgba(0,0,0,.06); border-radius: 16px; }
+.ds2 .lead::before { display: none; }
+/* barra de herramientas de Carreras */
+.ds2 .toolbar .icon-btn, .ds2 .toolbar .fbtn { border: 0; background: var(--card); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.ds2 .next-team.wk { outline: 0; box-shadow: 0 0 0 2px #ffd84d; }
+.ds2 .eq-mod h2, .ds2 .eq-months h2, .ds2 .eq-rank h2 { border-left: 0; padding-left: 0; font-size: 1.05rem; color: var(--text); }
+.ds2 .eq-sw button { white-space: nowrap; font-size: var(--fs-3); padding: 6px 8px; justify-content: center; }

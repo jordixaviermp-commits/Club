@@ -1903,6 +1903,7 @@ function viewRunnerHome() {
     `;
   return frame(runnerTitle(), `
     ${previewBanner()}
+    <div class="ds2">
     <div class="toolbar">
       ${searchBox('runner', 'Buscar…', { marquee: 'Buscar carrera, corredor, lugar…' })}
       <button class="btn primary add-btn" data-act="r-new" aria-label="Añadir una carrera que no está" title="Añadir una carrera que no está">＋</button>
@@ -1912,7 +1913,7 @@ function viewRunnerHome() {
     ${normalize(S.q.runner || '').length >= 2 ? '' : nextTeamBanner(d)}
     <div id="pulse-box">${S.regView === 'cal' || normalize(S.q.runner || '').length >= 2 ? '' : teamPulse(d)}</div>
     <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
-    ${body}`,
+    ${body}</div>`,
   { rtab: '', head: S.preview ? null : `<a class="hdr-pacing" href="ruta/" aria-label="Pacing y planificar ruta: viento, tiempo, vatios y nutrición" title="Pacing y planificar ruta"><i aria-hidden="true">⚡</i>Pacing${ico('go', 'hp-go')}</a>` });
 }
 
@@ -4767,11 +4768,11 @@ function viewTeam() {
   const t = S.team, tab = S.eqTab === 'imp' ? 'imp' : 'res';
   if (tab === 'imp' && S.runnerData) loadImpact();
   const sw = S.runnerData ? `<div class="seg-sw eq-sw" role="tablist" aria-label="Resumen del equipo o impacto en redes"><button type="button" role="tab" class="${tab === 'res' ? 'on' : ''}" aria-selected="${tab === 'res'}" data-act="eq-tab" data-t="res">${ico('bars')}Resumen</button><button type="button" role="tab" class="${tab === 'imp' ? 'on' : ''}" aria-selected="${tab === 'imp'}" data-act="eq-tab" data-t="imp">${ico('share')}Impacto en redes</button></div>` : '';
-  if (tab === 'imp' && S.runnerData) return frame('Impacto en redes', `${previewBanner()}${sw}<div class="imp-pane">${impactBody(S.runnerData)}</div>`, { rtab: 'equipo' });
-  if (!t) return frame('Resumen del equipo', `${previewBanner()}${sw}<p class="empty">Cargando…</p>`, { rtab: 'equipo' });
-  if (t.failed) return frame('Resumen del equipo', `${previewBanner()}${sw}<p class="card warn">${esc(t.failed)}</p>`, { rtab: 'equipo' });
-  return frame('Resumen del equipo', `${previewBanner()}${sw}<h2 class="eq-title">Resumen del equipo ${ico('bars')}</h2>
-    ${summaryBody(t.races, t.runners, { me: S.runnerData?.me?.id })}`, { rtab: 'equipo' });
+  if (tab === 'imp' && S.runnerData) return frame('Impacto en redes', `${previewBanner()}<div class="ds2">${sw}<div class="imp-pane">${impactBody(S.runnerData)}</div></div>`, { rtab: 'equipo' });
+  if (!t) return frame('Resumen del equipo', `${previewBanner()}<div class="ds2">${sw}<p class="empty">Cargando…</p></div>`, { rtab: 'equipo' });
+  if (t.failed) return frame('Resumen del equipo', `${previewBanner()}<div class="ds2">${sw}<p class="card warn">${esc(t.failed)}</p></div>`, { rtab: 'equipo' });
+  return frame('Resumen del equipo', `${previewBanner()}<div class="ds2">${sw}<h2 class="eq-title">Resumen del equipo ${ico('bars')}</h2>
+    ${summaryBody(t.races, t.runners, { me: S.runnerData?.me?.id })}</div>`, { rtab: 'equipo' });
 }
 
 async function loadTeam() {
