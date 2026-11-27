@@ -3217,3 +3217,12 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .ds2 .next-team.wk { outline: 0; box-shadow: 0 0 0 2px #ffd84d; }
 .ds2 .eq-mod h2, .ds2 .eq-months h2, .ds2 .eq-rank h2 { border-left: 0; padding-left: 0; font-size: 1.05rem; color: var(--text); }
 .ds2 .eq-sw button { white-space: nowrap; font-size: var(--fs-3); padding: 6px 8px; justify-content: center; }
+/* v312 · Federaciones y Contrato con el mismo sistema */
+.ds2 .fed-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; padding: 3px; border-radius: 12px; background: var(--ds-soft); margin-bottom: 8px; }
+.ds2 .fed-tabs .chip { min-height: 36px; padding: 6px 4px; border: 0; border-radius: 9px; background: none; color: var(--muted); font-weight: 600; box-shadow: none; justify-content: center; }
+.ds2 .fed-tabs .chip.on { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.14); }
+.ds2 .fed-row2 .chip, .ds2 .fed-mod select { border: 0; background: var(--card); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.ds2 .fed-row2 .chip.on { background: var(--accent-2); color: var(--tag-text); }
+.ds2 .card h3 { color: var(--text); }
+.ds2 .card h3 > .ico, .ds2 .card h3 > svg { color: var(--muted); }
+.ds2 .docs-block h2 { color: var(--text); } .ds2 .docs-block h2 .ico { color: var(--muted); }

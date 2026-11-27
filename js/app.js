@@ -2140,10 +2140,11 @@ const watchFrom = (r, note = '') => ({ name: r.name, date: r.date, end_date: r.e
 function viewRunnerContract() {
   return frame(runnerTitle(), `
     ${previewBanner()}
+    <div class="ds2">
     ${runnerBonusCard(S.runnerData)}
     ${myDocsCard()}
     ${clubLinksCard()}
-    ${licenseCard()}`,
+    ${licenseCard()}</div>`,
   { rtab: 'contrato' });
 }
 
@@ -2297,6 +2298,7 @@ function viewFed() {
   const updated = f.updated_at ? new Date(f.updated_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
   return frame('Federaciones', `
     ${runner ? previewBanner() : ''}
+    <div class="${runner ? 'ds2' : ''}">
     <div class="years fed-tabs" role="tablist">${[['all', 'Todas'], ['FCC', 'Catalana'], ['FAC', 'Aragonesa'], ['LIGA', 'Ligas']].map(([v, l]) =>
       `<button class="chip${fedFilter.source === v ? ' on' : ''}" role="tab" aria-selected="${fedFilter.source === v}" data-act="fed-source" data-v="${v}">${l}</button>`).join('')}</div>
     <div class="fed-row2">
@@ -2309,7 +2311,7 @@ function viewFed() {
       ? 'Si ya está en el club, pulsa «Apuntarme». Si no, «Añadir y apuntarme» la crea con los datos ya rellenados.'
       : 'Pulsa «Crear inscripción» para añadirla con nombre, fecha y lugar ya rellenados.'}</p>
     <p class="hint center">Datos de las webs de las federaciones${updated ? `, leídos el ${updated}` : ''}. Comprueba siempre los detalles en su web.</p>
-    ${fedLinks()}`, { ...opts, actions: `<span class="fed-total" title="${list.length} carrera${list.length === 1 ? '' : 's'} con estos filtros" aria-label="${list.length} carreras">${list.length}</span>` });
+    ${fedLinks()}</div>`, { ...opts, actions: `<span class="fed-total" title="${list.length} carrera${list.length === 1 ? '' : 's'} con estos filtros" aria-label="${list.length} carreras">${list.length}</span>` });
 }
 
 function draftRegistration(id) {
