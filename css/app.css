@@ -2980,3 +2980,28 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .circ-st { display: flex; gap: .4rem; align-items: flex-start; margin: 0; font-size: var(--fs-3); color: var(--muted); } .circ-st svg { width: 16px; height: 16px; flex: none; margin-top: 2px; }
 .circ-st.ok { color: var(--ok); font-weight: 600; } .circ-st.new { color: var(--accent); }
 .circ-chips { display: flex; flex-wrap: wrap; gap: .4rem; } .circ-chips .chip { font-size: var(--fs-3); } .circ-chips small { opacity: .7; font-weight: 400; }
+
+/* v299 · «Después de la carrera»: resultado → crónica → publicada */
+.ar-card { padding: .8rem .85rem; margin: 0 0 .8rem; border-color: var(--line); }
+.ar-card.has-pend { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 6%, var(--card)); }
+.ar-top { display: flex; align-items: center; gap: .5rem; margin-bottom: .5rem; } .ar-top h2 { margin: 0; font-size: var(--fs-5, 1.1rem); flex: 1; }
+.ar-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: .35rem; padding: .25rem; border-radius: 999px; background: color-mix(in srgb, var(--ink) 7%, var(--card)); margin-bottom: .6rem; }
+.ar-tabs button { min-height: 40px; border: 0; border-radius: 999px; background: transparent; font: inherit; font-weight: 600; color: var(--muted); cursor: pointer; }
+.ar-tabs button b { margin-left: .25rem; padding: 0 .45rem; border-radius: 999px; background: color-mix(in srgb, var(--ink) 12%, var(--card)); font-size: var(--fs-2); }
+.ar-tabs button.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 4px rgba(0,0,0,.18); } .ar-tabs button.on b { background: var(--accent); color: #fff; }
+.ar-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; }
+.ar-row { border: 1px solid var(--line); border-radius: var(--r-md, 14px); background: var(--card); padding: .6rem .7rem; display: grid; gap: .55rem; }
+.ar-row.todo { border-left: 4px solid var(--warn); }
+.ar-head { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; color: inherit; text-decoration: none; }
+.ar-name { display: grid; flex: 1; min-width: 0; } .ar-name b { overflow-wrap: anywhere; } .ar-name small { color: var(--muted); }
+.ar-steps { list-style: none; margin: 0; padding: 0; display: flex; align-items: flex-start; gap: .2rem; }
+.ar-s { flex: 1; min-width: 0; display: grid; justify-items: center; gap: .2rem; text-align: center; font-size: var(--fs-2); position: relative; }
+.ar-s + .ar-s::before { content: ''; position: absolute; top: 12px; right: 50%; width: 100%; height: 2px; background: var(--line); z-index: 0; }
+.ar-s.ok + .ar-s::before { background: var(--ok); }
+.ar-s i { z-index: 1; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; border: 2px solid var(--line); background: var(--card); } .ar-s i svg { width: 14px; height: 14px; }
+.ar-s.ok i { background: var(--ok); border-color: var(--ok); color: #fff; } .ar-s.todo i { border-color: var(--warn); } .ar-s.wait i { border-style: dashed; }
+.ar-s span { display: grid; line-height: 1.15; font-weight: 600; } .ar-s small { font-weight: 400; color: var(--muted); } .ar-s.wait span { color: var(--muted); font-weight: 500; }
+.ar-acts { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; } .ar-acts .btn.small { min-height: 38px; }
+.ar-note { display: flex; gap: .45rem; margin: .7rem 0 0; font-size: var(--fs-3); color: var(--muted); } .ar-note svg { width: 16px; height: 16px; flex: none; margin-top: 2px; }
+.ar-name .wk-chip { justify-self: start; margin-top: .3rem; }
+.ar-head .chro-go { flex: none; }
