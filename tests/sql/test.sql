@@ -1078,7 +1078,7 @@ reset role;
 select pg_temp.check((select ai_state = 'pendiente' and ai_req is not null and ai_tries = 1 from chronicle_posts where race_key = '2026-04-02|ia con clave'), 'ia: al enviar la crónica se manda a Claude');
 select pg_temp.check((select headers->>'x-api-key' = 'sk-test-123' and url = 'https://api.anthropic.com/v1/messages' and body->>'model' = 'claude-sonnet-5-5' and body::text like '%@patro_uno%' and body::text like '%Mi cronica con faltas%' from net.calls order by id desc limit 1), 'ia: petición con clave, modelo, texto y etiquetas');
 select pg_temp.check((select body::text not like '%Valorador Dos%' from net.calls order by id desc limit 1), 'ia: sin carrera en la base de datos solo viaja el nombre de pila');
-insert into net._http_response select ai_req, 200, '{"content":[{"type":"text","text":"Mi crónica corregida.\n\n@patro_uno @patro_dos"}]}', null from chronicle_posts where race_key = '2026-04-02|ia con clave';
+insert into net._http_response select ai_req, 200, '{"content":[{"type":"thinking","thinking":""},{"type":"text","text":"Mi crónica corregida.\n\n@patro_uno @patro_dos"}]}', null from chronicle_posts where race_key = '2026-04-02|ia con clave';
 set role anon;
 select pg_temp.expect_fail($q$select admin_chronicle_ai_collect()$q$, 'ia: el anónimo no recoge respuestas');
 select pg_temp.expect_fail($q$select chronicle_ai_queue('00000000-0000-0000-0000-000000000000')$q$, 'ia: el anónimo no manda peticiones');
@@ -1206,5 +1206,28 @@ select pg_temp.expect_fail($q$insert into media_mentions (race_key, race_name, r
 select set_config('request.jwt.claim.sub', '', false);
 reset role;
 set role anon;
+reset role;
+-- ===== Resultados cerrados al publicar =====
+insert into registrations (id, name, date) values ('20000000-0000-0000-0000-0000000000f1', 'Carrera Cerrada', current_date - 6);
+insert into registration_entries (registration_id, runner_id, category, self_position, self_general_position, self_time_seconds)
+  select '20000000-0000-0000-0000-0000000000f1', id, 'M40', case when code = 'codigo-valorador-dos-02' then 3 else null end, case when code = 'codigo-valorador-dos-02' then 9 else null end, case when code = 'codigo-valorador-dos-02' then 7000 else null end
+  from runners where code in ('codigo-valorador-uno-01', 'codigo-valorador-dos-02');
+select to_char(current_date - 6, 'YYYY-MM-DD') || '|carrera cerrada' as k_cer \gset
+set role anon;
+select runner_report_result('codigo-valorador-dos-02', 'reg', '20000000-0000-0000-0000-0000000000f1', 4, 'M40', null, 7100, false);
+select pg_temp.check(true, 'cerrado: antes de publicar se puede cambiar el resultado');
+reset role;
+insert into chronicle_posts (runner_id, race_key, race_name, body, status) select id, :'k_cer', 'Carrera Cerrada', 'texto', 'publicada' from runners where code = 'codigo-valorador-dos-02';
+insert into chronicles (runner_id, race_key) select id, :'k_cer' from runners where code = 'codigo-valorador-dos-02';
+set role anon;
+select pg_temp.expect_fail($q$select runner_report_result('codigo-valorador-dos-02', 'reg', '20000000-0000-0000-0000-0000000000f1', 2, 'M40', null, 7000, false)$q$, 'cerrado: publicada en redes, ya no se cambia el resultado');
+select pg_temp.expect_fail($q$select runner_report_result('codigo-valorador-dos-02', 'reg', '20000000-0000-0000-0000-0000000000f1', null, null, null, null, true)$q$, 'cerrado: ni siquiera marcando abandono');
+select pg_temp.expect_fail($q$select runner_set_general('codigo-valorador-dos-02', 'reg', '20000000-0000-0000-0000-0000000000f1', 12)$q$, 'cerrado: ni el puesto en la general');
+select runner_report_result('codigo-valorador-uno-01', 'reg', '20000000-0000-0000-0000-0000000000f1', 6, 'M40', null, 7300, false);
+select pg_temp.check(true, 'cerrado: quien aún no tenía resultado sí puede ponerlo');
+select pg_temp.expect_fail($q$select runner_report_result('codigo-valorador-uno-01', 'reg', '20000000-0000-0000-0000-0000000000f1', 5, 'M40', null, 7200, false)$q$, 'cerrado: y una vez puesto, ya queda cerrado');
+reset role;
+set role anon;
+select pg_temp.check((select (e->>'pub')::boolean from jsonb_array_elements(runner_chronicles_team('codigo-valorador-uno-01')) e where e->>'key' = :'k_cer'), 'cerrado: la app sabe qué carreras están publicadas');
 set role anon;
 \echo TODAS LAS PRUEBAS SQL OK

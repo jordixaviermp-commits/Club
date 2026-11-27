@@ -2960,3 +2960,6 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .md-race .md-h { display: grid; grid-template-columns: 28px 1fr; gap: .25rem .6rem; align-items: center; }
 .md-h .btn { grid-column: 2; justify-self: start; }
 .md-none { margin-left: 0; }
+
+/* v291 · resultado cerrado al publicar */
+.rc-lock { display: inline-flex; align-items: center; gap: .25rem; font-size: var(--fs-2); font-weight: 700; color: var(--muted); padding: .1rem .55rem; border-radius: 999px; background: var(--card); border: 1px solid var(--line); white-space: nowrap; }

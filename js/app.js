@@ -400,6 +400,9 @@ const myPub = (g) => {
   if (!hit && !manual && !res && !cron) return null;
   return { story: !!(hit || manual), date: hit?.publicada || null, res: !!res, cron, cronAt: cr?.at ? String(cr.at).slice(0, 10) : null, cronBy: cr && !cr.mine ? cr.by : null };
 };
+/** Resultado cerrado: ya se publicó la crónica de esta carrera en redes (para cambiar algo hay que pedir una corrección a la dirección). */
+const resultClosed = (g) => !!S.chronBy?.get?.(postKeyOf(g))?.pub;
+const lockTag = '<span class="rc-lock" title="Publicado en redes: el resultado está cerrado. Si hay un error, avisa a la dirección y lo corrige ella">🔒 Publicado en redes</span>';
 const myPubChip = (g) => { const p = myPub(g); if (!p) return '';
   const social = p.story || p.res ? `<span class="rc-pub" title="${p.story ? 'Historia publicada' + (p.date ? ' el ' + shortDate(p.date) : '') : ''}${p.story && p.res ? ' · ' : ''}${p.res ? 'Post de resultados publicado' : ''}" aria-label="Publicado en redes">${ico('camera')}${ico('check', 'rc-pub-ok')}${p.story && p.date ? `<small>${dayMon(p.date)}</small>` : ''}</span>` : '';
   const cron = p.cron ? `<span class="rc-pub" title="Crónica pasada${p.cronAt ? ' el ' + shortDate(p.cronAt) : ''}${p.cronBy ? ' por ' + esc(p.cronBy) : ''}" aria-label="Crónica pasada">${ico('pen')}${ico('check', 'rc-pub-ok')}${p.cronAt ? `<small>${dayMon(p.cronAt)}</small>` : ''}</span>` : '';
@@ -1088,6 +1091,10 @@ function viewRunnerReport(key) {
   if (!race) return frame('Mi resultado', '<p class="empty">No se encuentra esta carrera.</p>', { back });
   const cur = kind === 'reg' ? race.my_result : (race.position || race.dnf ? race : null); // resultado ya puesto (para cambiarlo)
   const cat = kind === 'reg' ? race.entries.find((e) => e.runner_id === d.me.id)?.category : race.category;
+  if (cur && resultClosed(race)) return frame('Mi resultado', `${previewBanner()}<div class="card stack"><h3 class="rname">${esc(race.name)}</h3>
+    <p>🔒 <b>Resultado cerrado.</b> La crónica de esta carrera ya se publicó en redes con los resultados del club, así que ya no se pueden cambiar desde aquí.</p>
+    <p class="muted small">Si hay algún error, <b>avisa a la dirección</b> y lo corrige ella.</p>
+    <a class="btn" href="${back}">Volver</a></div>`, { back });
   return frame(cur ? 'Cambiar mi resultado' : 'Mi resultado', `${previewBanner()}
     <form class="card stack" data-form="r-report" data-kind="${kind}" data-id="${id}">
       <div><h3 class="rname">${esc(race.name)}</h3><p class="muted">${when(race)}${place(race) ? ' · ' + esc(place(race)) : ''} · ${esc(modText(race))}</p></div>
@@ -1401,7 +1408,7 @@ function myRacesCard(d, afterSummary = () => '') {
       <span class="chro-tag ok">${sent.length}${ico('go')}</span></summary>
     <p class="hint">Lo que pones vale tal cual y ya cuenta para tu bono; nadie tiene que validarlo. Una semana después de la carrera pasa solo a la clasificación del equipo (se espera por si otros compañeros ponen también su resultado). Mientras tanto puedes cambiar el puesto o el tiempo.</p>
     <ul class="mini-list">${sent.map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, edit: editMine(g),
-      below: `<span class="badge-sent">${g.my_result.dnf ? 'Abandonó' : `${g.my_result.position}º${g.my_result.general_position ? ` · Gral. ${g.my_result.general_position}º` : ''}${g.my_result.time_seconds ? ' · ' + formatTime(g.my_result.time_seconds) : ''}`} · ya cuenta</span>${S.preview ? '' : `<a class="edit-btn" href="#/resultado/reg_${g.id}">${ico('pen')}Cambiar</a>`}` })).join('')}</ul>
+      below: `<span class="badge-sent">${g.my_result.dnf ? 'Abandonó' : `${g.my_result.position}º${g.my_result.general_position ? ` · Gral. ${g.my_result.general_position}º` : ''}${g.my_result.time_seconds ? ' · ' + formatTime(g.my_result.time_seconds) : ''}`} · ya cuenta</span>${S.preview ? '' : resultClosed(g) ? lockTag : `<a class="edit-btn" href="#/resultado/reg_${g.id}">${ico('pen')}Cambiar</a>`}` })).join('')}</ul>
   </details></section>` : ''}
 
   ${afterSummary()}
@@ -1700,7 +1707,7 @@ function runnerRegCard(g, opts = {}) {
     const body = `
       ${tools}${typeTag(g)}
       ${open || g.suspended ? '' : `${mine && g.my_result ? '' : `<p class="state-tag">${ico('flag', 't-i')}Ya disputada · pendiente de resultados ${weekChip(g.end_date || g.date, today)}</p>`}
-        ${mine && g.my_result ? `<p class="res-line">${ico('check', 't-i')}<span>Resultado: <b>${g.my_result.dnf ? 'abandonaste' : g.my_result.position + 'º'}</b></span>${S.preview ? '' : `<a href="#/resultado/reg_${g.id}">${ico('pen', 't-i')}Cambiar</a>`}${weekChip(g.end_date || g.date, today)}</p>` : ''}
+        ${mine && g.my_result ? `<p class="res-line">${ico('check', 't-i')}<span>Resultado: <b>${g.my_result.dnf ? 'abandonaste' : g.my_result.position + 'º'}</b></span>${S.preview ? '' : resultClosed(g) ? lockTag : `<a href="#/resultado/reg_${g.id}">${ico('pen', 't-i')}Cambiar</a>`}${resultClosed(g) ? '' : weekChip(g.end_date || g.date, today)}</p>` : ''}
         ${mine && !S.preview && !g.my_result ? (g.my_result ? ''
           : `<p class="row"><a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>
              <button class="btn ghost small" data-act="r-leave" data-id="${g.id}">No fui: borrarme</button></p>`) : ''}
@@ -1848,8 +1855,8 @@ function viewRunnerDoneRace(raceId) {
   const meId = S.runnerData.me.id;
   return frame('Carrera', `${previewBanner()}
     <article class="card race done-race ${modClass(r.modality)}">${raceHead(r)}${typeTag(r)}
-      ${my ? `<p class="joined-done">${my.dnf ? `🚫 Abandonaste esta carrera${S.preview ? '' : ` · <a href="#/resultado/race_${raceId}">✏️ Cambiar mi resultado</a>`}` : my.position ? `✓ Tu puesto: ${isPodium(my.position) ? medal(my.position) + ' ' : ''}${my.position}º${my.category ? ' · ' + esc(my.category) : ''}${my.self_reported ? ' · 📝 puesto por ti' : ''}
-          ${S.preview ? '' : ` · <a href="#/resultado/race_${raceId}">✏️ Cambiar mi resultado</a>`}`
+      ${my ? `<p class="joined-done">${my.dnf ? `🚫 Abandonaste esta carrera${S.preview ? '' : resultClosed(r) ? ` · ${lockTag}` : ` · <a href="#/resultado/race_${raceId}">✏️ Cambiar mi resultado</a>`}` : my.position ? `✓ Tu puesto: ${isPodium(my.position) ? medal(my.position) + ' ' : ''}${my.position}º${my.category ? ' · ' + esc(my.category) : ''}${my.self_reported ? ' · 📝 puesto por ti' : ''}
+          ${S.preview ? '' : resultClosed(r) ? ` · ${lockTag}` : ` · <a href="#/resultado/race_${raceId}">✏️ Cambiar mi resultado</a>`}`
         : `Corriste esta carrera. ${S.preview ? '' : `<a class="btn primary small" href="#/resultado/race_${raceId}">Poner mi puesto</a>`}`}</p>` : ''}
       ${team ? `<p class="count">🏁 ${team.results.length} del club${res.length ? ':' : ''}</p>
         ${res.length ? `<ol class="rank-mini">${res.map((x) => `<li class="${x.runner_id === meId ? 'me' : ''}"><span>${isPodium(x.position) ? medal(x.position) : x.position + 'º'}</span> ${esc(x.runner_name)}${x.category ? ` <small>${esc(x.category)}</small>` : ''}</li>`).join('')}</ol>` : ''}`

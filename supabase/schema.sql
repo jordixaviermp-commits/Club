@@ -1099,6 +1099,22 @@ end $$;
 -- Si tenía una petición de corrección pendiente de esa carrera, se retira: ya lo ha cambiado él.
 --  p_kind = 'reg': inscripción ya disputada en la que está apuntado (se copiará al pasar a resultados).
 --  p_kind = 'race': carrera ya en resultados en la que participó.
+create or replace function public.assert_result_open(p_kind text, p_id uuid, p_runner uuid)
+returns void language plpgsql stable security definer set search_path = public as $$
+declare v_key text; v_has boolean;
+begin
+  if p_kind = 'reg' then
+    select to_char(g.date, 'YYYY-MM-DD') || '|' || public.cron_name_key(g.name), (e.self_position is not null or e.self_dnf) into v_key, v_has
+      from registrations g join registration_entries e on e.registration_id = g.id where g.id = p_id and e.runner_id = p_runner;
+  else
+    select to_char(r.date, 'YYYY-MM-DD') || '|' || public.cron_name_key(r.name), (x.position is not null or x.dnf) into v_key, v_has
+      from races r join results x on x.race_id = r.id where r.id = p_id and x.runner_id = p_runner;
+  end if;
+  -- ya publicado en redes con su resultado: se cierra (si hay un error, lo corrige la dirección)
+  if coalesce(v_has, false) and exists (select 1 from chronicle_posts where race_key = v_key and status = 'publicada') then raise exception 'resultado_cerrado'; end if;
+end $$;
+revoke all on function public.assert_result_open(text, uuid, uuid) from public, anon, authenticated;
+
 create or replace function public.runner_report_result(p_code text, p_kind text, p_id uuid, p_position int,
                                                        p_category text, p_podium_type text, p_time int default null, p_dnf boolean default false)
 returns void language plpgsql security definer set search_path = public as $$
@@ -1118,6 +1134,7 @@ begin
       raise exception 'no_es_tuya' using errcode = '42501';
     end if;
     select self_position into v_old from registration_entries where registration_id = p_id and runner_id = v_runner;
+    perform public.assert_result_open('reg', p_id, v_runner);
     update registration_entries set self_position = v_pos, self_dnf = v_dnf, self_podium_type = v_pod, self_reported_at = now(), self_time_seconds = v_time,
            self_general_position = case when v_dnf then null else self_general_position end,
            category = coalesce(nullif(p_category, ''), category)
@@ -1131,6 +1148,7 @@ begin
       raise exception 'no_es_tuya' using errcode = '42501';
     end if;
     select position into v_old from results where race_id = p_id and runner_id = v_runner;
+    perform public.assert_result_open('race', p_id, v_runner);
     update results set position = v_pos, dnf = v_dnf, podium_type = coalesce(v_pod, 'suelta'), self_reported = true, time_seconds = v_time,
            general_position = case when v_dnf then null else general_position end,
            category = coalesce(nullif(p_category, ''), category)
@@ -1747,7 +1765,10 @@ begin
     else
       txt := null;
       begin
-        if resp.status_code = 200 then txt := nullif(trim(resp.content::jsonb->'content'->0->>'text'), ''); end if;
+        if resp.status_code = 200 then
+          select string_agg(b->>'text', E'\n') into txt from jsonb_array_elements(resp.content::jsonb->'content') b where b->>'type' = 'text';   -- puede venir un bloque de razonamiento antes del texto
+          txt := nullif(trim(txt), '');
+        end if;
       exception when others then txt := null;
       end;
       update chronicle_posts set ai_state = case when txt is null then 'error' else 'hecho' end,
@@ -1847,6 +1868,7 @@ begin
     raise exception 'tipo_no_valido';
   end if;
   if not found then raise exception 'no_es_tuya' using errcode = '42501'; end if;
+  perform public.assert_result_open(p_kind, p_id, v_runner);
   if p_general is not null and (v_pos is null or p_general < v_pos or p_general > 9999) then raise exception 'puesto_general_no_valido'; end if;
   if p_kind = 'reg' then
     update registration_entries set self_general_position = p_general where registration_id = p_id and runner_id = v_runner;
@@ -2048,11 +2070,12 @@ begin
   select id into v_runner from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
   return coalesce((
-    select jsonb_agg(jsonb_build_object('key', k.race_key, 'by', k.by_name, 'mine', k.mine, 'at', k.at) order by k.race_key)
+    select jsonb_agg(jsonb_build_object('key', k.race_key, 'by', k.by_name, 'mine', k.mine, 'at', k.at, 'pub', k.pub) order by k.race_key)
       from (select c.race_key,
                    (array_agg(r.name order by (c.runner_id = v_runner) desc, c.done_at))[1] as by_name,
                    bool_or(c.runner_id = v_runner) as mine,
-                   min(c.done_at) as at
+                   min(c.done_at) as at,
+                   exists (select 1 from chronicle_posts cp where cp.race_key = c.race_key and cp.status = 'publicada') as pub
               from chronicles c join runners r on r.id = c.runner_id
              group by c.race_key) k), '[]'::jsonb);
 end $$;
