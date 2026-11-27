@@ -1548,7 +1548,18 @@ function afterRaceCard(d, { pending, noPos, sent, today }) {
     const wk = r.res === 'pend' || r.cron === false ? weekChip(r.end_date || r.date, today) : '';
     const leave = r.res === 'pend' && r.leave && !S.preview ? `<button type="button" class="ar-leave" data-act="r-leave" data-id="${r.leave}">No fui</button>` : '';
     return `<li class="ar-row${r.todo ? ' todo' : ''}"><div class="ar-head"><a class="ar-name" href="${runnerHref('carrera')}/${r.kind === 'race' ? 'race_' + r.id : r.id}" aria-label="Abrir la carrera ${esc(r.name)}"><b>${esc(r.name)}</b><small>${esc(formatDate(r.date, false))}${r.place ? ' · ' + esc(r.place) : ''}</small></a>${leave}</div>${wk ? `<div class="ar-wk">${wk}</div>` : ''}
-      <div class="ar-tasks">${resTask(r)}${cronTask(r)}</div></li>`;
+      <div class="ar-tasks">${resTask(r)}${cronTask(r)}</div>${pubsLine(r)}</li>`;
+  };
+  // cuándo salió en redes: la historia (previa a la carrera) y la crónica, con su fecha
+  const pubsLine = (r) => {
+    const p = myPub({ name: r.name, date: r.date }), chips = [], day = (iso) => (iso ? ` · ${dayMon(String(iso).slice(0, 10))}` : '');
+    if (S.stories && !S.stories.none) {   // «sin publicar» solo en «Al día» y solo si la tarea de historias ya existía en esa fecha (si no, sería ruido en carreras antiguas)
+      if (p?.story) chips.push(`<span class="ar-pub ok" title="Historia publicada en Instagram">${ico('camera')}Historia publicada${day(p.date)}</span>`);
+      else if (tab === 'ok' && (!S.stories.desde || r.date >= S.stories.desde)) chips.push(`<span class="ar-pub">${ico('camera')}Historia sin publicar</span>`);
+    }
+    if (r.pub) chips.push(`<span class="ar-pub ok" title="Crónica publicada en redes">${ico('pen')}Crónica publicada${day(S.chronBy?.get?.(r.key)?.pub_at)}</span>`);
+    else if (r.cron) chips.push(`<span class="ar-pub">${ico('pen')}Crónica pasada${day(p?.cronAt)} · sin publicar</span>`);
+    return chips.length ? `<div class="ar-pubs">${chips.join('')}</div>` : '';
   };
   return `<section class="card ar-card${todo.length ? ' has-pend' : ''}" id="sec-after"><details class="chro-det" data-open-key="after"${(S.open?.after ?? todo.length > 0) ? ' open' : ''}>
     <summary class="ar-top"><span class="chro-ic">🏁</span><span class="ar-tw"><b class="chro-t">Resultados y crónicas</b><small>Pon tu resultado y cuenta cómo te fue</small></span>

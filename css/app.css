@@ -3041,3 +3041,7 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .ar-tabs { margin-bottom: .45rem; } .ar-tabs button { min-height: 34px; font-size: var(--fs-3); }
 .ar-card details[open] > summary { margin-bottom: .35rem; }
 @media (max-width: 379px) { .ar-tgo { display: none; } .ar-task { padding: .35rem .4rem; gap: .35rem; } }
+/* v303 · cuándo salió en redes */
+.ar-pubs { display: flex; flex-wrap: wrap; gap: .35rem; }
+.ar-pub { display: inline-flex; align-items: center; gap: .3rem; padding: .15rem .55rem; border-radius: 999px; font-size: .74rem; font-weight: 600; background: color-mix(in srgb, var(--ink) 7%, var(--card)); color: var(--muted); }
+.ar-pub svg { width: 13px; height: 13px; } .ar-pub.ok { background: color-mix(in srgb, var(--ok) 14%, var(--card)); color: var(--ok); }

@@ -306,6 +306,18 @@ alter table public.chronicle_posts add column if not exists ai_req bigint;   -- 
 alter table public.chronicle_posts add column if not exists ai_at timestamptz;
 alter table public.chronicle_posts add column if not exists ai_tries int not null default 0;
 alter table public.chronicle_posts add column if not exists ai_state text check (ai_state is null or ai_state in ('pendiente','hecho','error'));
+alter table public.chronicle_posts add column if not exists published_at timestamptz;   -- cuándo se publicó en redes (ver cambios/2026-12-10-fecha-publicacion.sql)
+create or replace function public.chronicle_posts_published_at()
+returns trigger language plpgsql as $$
+begin
+  if new.status = 'publicada' then
+    if tg_op = 'INSERT' or old.status is distinct from 'publicada' or new.published_at is null then new.published_at := coalesce(new.published_at, now()); end if;
+  else new.published_at := null; end if;
+  return new;
+end $$;
+drop trigger if exists chronicle_posts_published_at on public.chronicle_posts;
+create trigger chronicle_posts_published_at before insert or update of status on public.chronicle_posts
+  for each row execute function public.chronicle_posts_published_at();
 -- Presencia en medios de comunicación (solo dirección): en qué medio salió cada carrera y qué día
 create table if not exists public.media_mentions (
   id uuid primary key default gen_random_uuid(),
@@ -2091,12 +2103,13 @@ begin
   select id into v_runner from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
   return coalesce((
-    select jsonb_agg(jsonb_build_object('key', k.race_key, 'by', k.by_name, 'mine', k.mine, 'at', k.at, 'pub', k.pub) order by k.race_key)
+    select jsonb_agg(jsonb_build_object('key', k.race_key, 'by', k.by_name, 'mine', k.mine, 'at', k.at, 'pub', k.pub, 'pub_at', k.pub_at) order by k.race_key)
       from (select c.race_key,
                    (array_agg(r.name order by (c.runner_id = v_runner) desc, c.done_at))[1] as by_name,
                    bool_or(c.runner_id = v_runner) as mine,
                    min(c.done_at) as at,
-                   exists (select 1 from chronicle_posts cp where cp.race_key = c.race_key and cp.status = 'publicada') as pub
+                   exists (select 1 from chronicle_posts cp where cp.race_key = c.race_key and cp.status = 'publicada') as pub,
+                   (select max(cp.published_at) from chronicle_posts cp where cp.race_key = c.race_key and cp.status = 'publicada') as pub_at
               from chronicles c join runners r on r.id = c.runner_id
              group by c.race_key) k), '[]'::jsonb);
 end $$;

@@ -976,7 +976,7 @@ export function demoApi(storage = globalThis.localStorage) {
     },
     async runnerChroniclesTeam(code) {
       const me = byCode(code), d = load(), by = new Map();
-      for (const x of d.chronicles || []) { const cur = by.get(x.race_key); const nm = d.runners.find((r) => r.id === x.runner_id)?.name || '?'; if (!cur || (x.runner_id === me.id && !cur.mine)) by.set(x.race_key, { key: x.race_key, by: nm, mine: x.runner_id === me.id || !!cur?.mine, at: x.done_at || null, pub: (d.chronicle_posts || []).some((p) => p.race_key === x.race_key && p.status === 'publicada') }); else if (x.runner_id === me.id) cur.mine = true; }
+      for (const x of d.chronicles || []) { const cur = by.get(x.race_key); const nm = d.runners.find((r) => r.id === x.runner_id)?.name || '?'; if (!cur || (x.runner_id === me.id && !cur.mine)) by.set(x.race_key, { key: x.race_key, by: nm, mine: x.runner_id === me.id || !!cur?.mine, at: x.done_at || null, pub: (d.chronicle_posts || []).some((p) => p.race_key === x.race_key && p.status === 'publicada'), pub_at: (d.chronicle_posts || []).filter((p) => p.race_key === x.race_key && p.status === 'publicada').map((p) => p.published_at || p.updated_at || null).filter(Boolean).sort().pop() || null }); else if (x.runner_id === me.id) cur.mine = true; }
       return clone([...by.values()]);
     },
     async runnerChronicleSend(code, c) {
@@ -1008,7 +1008,7 @@ export function demoApi(storage = globalThis.localStorage) {
     async getChroPhotos(id) { requireAdmin(); return clone((load().chronicle_photos || []).filter((x) => x.post_id === id).sort((a, b) => a.ord - b.ord)); },
     async updateChroPost(id, patch) {
       requireAdmin(); const d = load(), p = (d.chronicle_posts || []).find((x) => x.id === id);
-      const was = p?.status; if (p) Object.assign(p, patch, { updated_at: new Date().toISOString() }); save();
+      const was = p?.status; if (p) Object.assign(p, patch, { updated_at: new Date().toISOString() }); if (p && patch.status === 'publicada' && was !== 'publicada') p.published_at = new Date().toISOString(); else if (p && patch.status && patch.status !== 'publicada') p.published_at = null; save();
       // publicada: si la inscripción ya se disputó y todos tienen resultado, pasa sola a Carreras hechas (como en la base de datos)
       if (p && patch.status === 'publicada' && was !== 'publicada') {
         const g = d.registrations.find((x) => !x.suspended && `${x.date}|${String(x.name).toLowerCase().replace(/\s+/g, ' ').trim()}` === p.race_key);
