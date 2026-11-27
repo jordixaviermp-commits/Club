@@ -428,3 +428,4 @@ Si algún día te paso una versión nueva de este archivo, se repite este mismo 
 - Circuitos: al crear una carrera «De un circuito», la app enseña los circuitos ya creados (con su nº de pruebas); si el nombre coincide (aunque cambien mayúsculas, tildes o espacios) avisa de que ya existe y se guarda con la escritura original; si es nuevo, avisa de que se creará y saldrá en las próximas pruebas.
 - Mi temporada: «Mis próximas inscripciones» lista todas las carreras apuntadas, también la que ya sale arriba como «Próxima cita».
 - Mi temporada: «Sin resultado», «Resultado enviado» y «Crónicas» se unen en un solo bloque «Después de la carrera»: una fila por carrera con sus pasos (resultado → crónica → publicada), un botón con lo siguiente por hacer y pestañas «Por hacer» / «Al día».
+- Mi temporada: «Después de la carrera» es desplegable (abierto si hay pendientes y cerrado si todo está al día; si lo cierras o abres tú, se respeta) para no ocupar todo el scroll.

@@ -1540,14 +1540,14 @@ function afterRaceCard(d, { pending, noPos, sent, today }) {
     return `<li class="ar-row${r.todo ? ' todo' : ''}"><a class="ar-head" href="${runnerHref('carrera')}/${r.kind === 'race' ? 'race_' + r.id : r.id}" aria-label="Abrir la carrera ${esc(r.name)}"><span class="ar-name"><b>${esc(r.name)}</b><small>${esc(formatDate(r.date, false))}${r.place ? ' · ' + esc(r.place) : ''}</small>${wk}</span>${ico('go', 'chro-go')}</a>
       <ol class="ar-steps">${resS}${cronS}${pubS}</ol>${act ? `<div class="ar-acts">${act}</div>` : ''}</li>`;
   };
-  return `<section class="card ar-card${todo.length ? ' has-pend' : ''}" id="sec-after">
-    <div class="ar-top"><span class="chro-ic">${ico('flag')}</span><h2>Después de la carrera</h2>
-      <span class="chro-tag ${todo.length ? 'pend' : 'ok'}">${todo.length ? `${todo.length} por hacer` : 'Todo al día'}</span></div>
+  return `<section class="card ar-card${todo.length ? ' has-pend' : ''}" id="sec-after"><details class="chro-det" data-open-key="after"${(S.open?.after ?? todo.length > 0) ? ' open' : ''}>
+    <summary class="ar-top"><span class="chro-ic">${ico('flag')}</span><b class="chro-t">Después de la carrera</b>
+      <span class="chro-tag ${todo.length ? 'pend' : 'ok'}">${todo.length ? `${todo.length} por hacer` : 'Todo al día'}${ico('go')}</span></summary>
     <div class="ar-tabs" role="tablist"><button type="button" role="tab" aria-selected="${tab === 'todo'}" class="${tab === 'todo' ? 'on' : ''}" data-act="after-tab" data-t="todo">Por hacer <b>${todo.length}</b></button><button type="button" role="tab" aria-selected="${tab === 'ok'}" class="${tab === 'ok' ? 'on' : ''}" data-act="after-tab" data-t="ok">Al día <b>${ok.length}</b></button></div>
     <p class="hint">${WEEK_RULE} ${CHRONICLE_RULE}</p>
     ${shown.length ? `<ul class="ar-list">${shown.map(rowHtml).join('')}</ul>` : `<p class="empty small">${tab === 'todo' ? 'No te falta nada. 🎉' : 'Aún no tienes carreras completas.'}</p>`}
     ${tab === 'todo' && todo.length ? `<p class="ar-note">${ico('pen')}<span><b>Basta con 2 líneas y una foto.</b> Los datos ya los tenemos: el resumen y la publicación los hacemos nosotros.</span></p>` : ''}
-  </section>`;
+  </details></section>`;
 }
 
 /** Barra de bonificación por zonas reales: pre-mínimo apagado (con la penalización), y un trozo por tramo (12–16, 17–21, 22 o más) con su importe debajo. */
