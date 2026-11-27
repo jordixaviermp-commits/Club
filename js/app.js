@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError, cleanWeb } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, disciplineKey, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   teamMoves, parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  directorBoard, raceImpact, alDia, tierRanges, nextTeamRace, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, projectLeagueRaces, WATCH_TBC, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, igHeadline, importantOf, IMPORTANT_KINDS, generalOf, uspacShift, USPAC_GROUPS, USPAC_NAMES, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
+  directorBoard, seasonRaces, mediaStats, MEDIA_KINDS, raceImpact, alDia, tierRanges, nextTeamRace, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, projectLeagueRaces, WATCH_TBC, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, igHeadline, importantOf, IMPORTANT_KINDS, generalOf, uspacShift, USPAC_GROUPS, USPAC_NAMES, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -289,7 +289,7 @@ async function loadStories() {
   }
   S.stories = log || { desde: null, byKey: new Map(), none: true };
   if (S.runnerData && !S.session?.isAdmin && ['', 'mi'].includes(parseRoute().view) && !S.draft && !searchActive()) render();
-  if ((['inscripciones', 'carreras', 'publicaciones', 'avisos', 'redes', ''].includes(parseRoute().view) && S.session?.isAdmin && !S.draft) || (S.runnerData && S.chroTab === 'imp' && !S.draft)) render();
+  if ((['inscripciones', 'carreras', 'publicaciones', 'avisos', 'redes', ''].includes(parseRoute().view) && S.session?.isAdmin && !S.draft) || (S.runnerData && S.eqTab === 'imp' && !S.draft)) render();
 }
 
 async function reload() {
@@ -396,12 +396,17 @@ function streakBoard(meId) {
 const myPub = (g) => {
   if (!g || (Array.isArray(g.entries) && !g.entries.some((e) => e.runner_id === S.runnerData?.me?.id))) return null;
   const hit = S.stories?.byKey?.get?.(postKeyOf(g)), manual = S.impact?.posted?.has?.(postKeyOf(g)), res = S.impact?.posted?.has?.(resKeyOf(g));
-  if (!hit && !manual && !res) return null;
-  return { story: !!(hit || manual), date: hit?.publicada || null, res: !!res };
+  const key = postKeyOf(g), cr = S.chronBy?.get?.(key), cron = !!(cr || (S.chron instanceof Set && S.chron.has(key)));
+  if (!hit && !manual && !res && !cron) return null;
+  return { story: !!(hit || manual), date: hit?.publicada || null, res: !!res, cron, cronAt: cr?.at ? String(cr.at).slice(0, 10) : null, cronBy: cr && !cr.mine ? cr.by : null };
 };
-const myPubChip = (g) => { const p = myPub(g); return p ? `<span class="rc-pub" title="${p.story ? 'Historia publicada' : ''}${p.story && p.res ? ' · ' : ''}${p.res ? 'Post de resultados publicado' : ''}" aria-label="Publicado en redes">${ico('camera')}${ico('check', 'rc-pub-ok')}</span>` : ''; };
+const myPubChip = (g) => { const p = myPub(g); if (!p) return '';
+  const social = p.story || p.res ? `<span class="rc-pub" title="${p.story ? 'Historia publicada' + (p.date ? ' el ' + shortDate(p.date) : '') : ''}${p.story && p.res ? ' · ' : ''}${p.res ? 'Post de resultados publicado' : ''}" aria-label="Publicado en redes">${ico('camera')}${ico('check', 'rc-pub-ok')}${p.story && p.date ? `<small>${dayMon(p.date)}</small>` : ''}</span>` : '';
+  const cron = p.cron ? `<span class="rc-pub" title="Crónica pasada${p.cronAt ? ' el ' + shortDate(p.cronAt) : ''}${p.cronBy ? ' por ' + esc(p.cronBy) : ''}" aria-label="Crónica pasada">${ico('pen')}${ico('check', 'rc-pub-ok')}${p.cronAt ? `<small>${dayMon(p.cronAt)}</small>` : ''}</span>` : '';
+  return social + cron; };
 const myPubLine = (g) => { const p = myPub(g); if (!p) return '';
-  return `<div class="rc-pubs">${p.story ? `<p><span class="rc-pub">${ico('camera')}${ico('check', 'rc-pub-ok')}</span>Historia publicada${p.date ? ' el ' + esc(shortDate(p.date)) : ''}: sale gracias a tu inscripción.</p>` : ''}${p.res ? `<p><span class="rc-pub">${ico('image')}${ico('check', 'rc-pub-ok')}</span>Post de resultados publicado.</p>` : ''}</div>`; };
+  const chip = (ic, label, when, title) => `<span class="rc-pub l" title="${esc(title)}">${ico(ic)}${ico('check', 'rc-pub-ok')}<b>${label}</b>${when ? `<small>${esc(when)}</small>` : ''}</span>`;
+  return `<div class="rc-pubs">${p.story ? chip('camera', 'Historia', p.date ? dayMon(p.date) : '', 'Historia publicada: sale gracias a tu inscripción') : ''}${p.res ? chip('image', 'Resultados', '', 'Post de resultados publicado') : ''}${p.cron ? chip('pen', 'Crónica', p.cronAt ? dayMon(p.cronAt) : '', `Crónica pasada${p.cronBy ? ' por ' + p.cronBy : ''}`) : ''}</div>`; };
 /** «Impacto en redes» del corredor: publicaciones del club y cifras de Instagram de 30 días. null = falta el SQL; undefined = sin cargar. */
 async function loadImpact() {
   if (S.impact !== undefined && S.impact !== 'loading') return;
@@ -447,7 +452,7 @@ const ADMIN_GROUP = { '': 'hoy', hoy: 'hoy', movimientos: 'hoy', avisos: 'hoy', 
   inscripciones: 'inscripciones', carreras: 'inscripciones', federaciones: 'inscripciones',
   corredores: 'corredores', contratos: 'corredores', computo: 'corredores', informe: 'corredores', bonos: 'corredores', corredor: 'corredores', docs: 'corredores',
   resumen: 'resumen', instagram: 'redes', dossier: 'redes', datos: 'hoy', temporada: 'resumen', memoria: 'hoy', vista: 'corredores', equipo: 'resumen',
-  redes: 'redes', semana: 'redes', publicaciones: 'redes', cronicas: 'redes' };
+  redes: 'redes', semana: 'redes', publicaciones: 'redes', cronicas: 'redes', medios: 'redes' };
 const SEC_OF = { hoy: 'hoy', inscripciones: 'car', corredores: 'eq', resumen: 'res', redes: 'red', '': 'car', federaciones: 'fed', mi: 'hoy', contrato: 'eq', equipo: 'res', noticias: 'hoy', carrera: 'car', nueva: 'car' };
 const icon = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
 // Menú de pie de página de los corredores (y de la vista previa de la dirección).
@@ -635,7 +640,7 @@ function render() {
       '': viewToday, hoy: viewToday, movimientos: viewMovements, mensajes: viewMessages, calidad: viewQuality, actividad: viewActivity,
       inscripciones: S.draft ? viewRegistrationEdit : viewRegistrations,
       carreras: S.draft ? viewRaceEdit : viewRaces,
-      resumen: viewSummary, temporada: viewSummary, memoria: viewMemoria, dossier: viewIgDossier, instagram: viewInstagram, redes: viewNetworks, cronicas: viewChronicles, corredores: viewRunners, contratos: viewContracts, computo: viewSeasonCount, informe: viewSeasonReport, publicaciones: viewPublications, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
+      resumen: viewSummary, temporada: viewSummary, memoria: viewMemoria, dossier: viewIgDossier, instagram: viewInstagram, redes: viewNetworks, cronicas: viewChronicles, medios: viewMedia, corredores: viewRunners, contratos: viewContracts, computo: viewSeasonCount, informe: viewSeasonReport, publicaciones: viewPublications, datos: viewData, federaciones: viewFed, bonos: viewBonus, avisos: viewAlerts, noticias: viewAdminNews, semana: viewWeek, historial: viewHistory, corredor: () => viewRunnerCard(parseRoute().id), docs: () => viewDocs(parseRoute().id),
       vista: () => (S.preview && S.runnerData ? runnerScreen(parseRoute().id || '') : viewRunners()),
       equipo: () => (S.preview ? viewTeam() : viewSummary()),
     }[view] || viewToday)();
@@ -1453,12 +1458,42 @@ function chroActs(x, isDone) {
   if (post) act = `<button class="btn small" data-act="chro-write" data-key="${esc(x.key)}">${ico('pen')}${post.status === 'enviada' ? 'Editar' : 'Ver'}</button>`;
   else if (!isDone && S.myPosts) {
     const data = chroDataOf(x);
-    if (!data || data.complete) act = `<button class="btn small primary" data-act="chro-write" data-key="${esc(x.key)}">${ico('pen')}Escribirla</button>`;
+    if (!data || data.complete) act = `<button class="btn small primary" data-act="chro-write" data-key="${esc(x.key)}">${ico('pen')}Contar cómo me fue</button>`;
     else if (data.missRes.length) act = `<a class="btn small primary" href="${data.resHref}">Poner mi resultado</a>`;
     else act = `<a class="btn small primary" href="${data.raceHref}">Completar datos</a>`;
   }
   return `<span class="chro-acts">${state}${act}</span>`;
 }
+/** «Impacto en redes» del corredor (pestaña de Equipo): cifras de Instagram del club y lo que han generado sus carreras. */
+function impactBody(d) {
+  const year = S.myYear || new Date().getFullYear();
+  if (!(S.chron instanceof Set)) return '<p class="empty small">Cargando…</p>';
+  const c = chronicleStatus(d, S.chron, d.today || todayISO(), year);
+    if (S.impact === undefined || S.impact === 'loading') return '<p class="empty small">Cargando…</p>';
+  if (S.impact === null) return '<p class="hint">Todavía no está activado: la dirección tiene que ejecutar un SQL en Supabase (<code>2026-11-20-impacto-redes.sql</code>).</p>';
+  const mineKeys = new Set([...(d.my_results || []).filter((r) => r.position || r.dnf).map(postKeyOf), ...(d.registrations || []).filter((g) => g.my_result).map(postKeyOf)]);   // carreras donde ya puso su puesto
+  const imp = raceImpact([...c.pending, ...c.done].sort((a, b) => b.date.localeCompare(a.date)), { posted: S.impact.posted, story: S.stories || null, chron: S.chron, mine: mineKeys });
+  const t = imp.totals, H = S.impact.ig, nf = (n) => Number(n || 0).toLocaleString('de-DE');
+  const okI = '<span class="imp-ok" aria-label="hecho">✓</span>', noI = '<span class="imp-no" aria-label="aún no">—</span>';
+  const rowHtml = (r) => {
+    const act = [!r.mine && !S.preview ? `<a class="btn small primary" href="${resultHref(r.id)}">Poner mi resultado</a>` : ''].filter(Boolean).join('');
+    return `<li><span class="imp-n"><b>${esc(r.name)}</b><small class="muted">${esc(formatDate(r.date, false))}</small></span>
+      <span class="imp-st"><span>📸 Historia ${r.story ? okI : noI}</span><span>🏁 Resultado ${r.mine ? okI : noI}</span><span>✍️ Crónica ${r.cro ? okI : noI}</span>${r.published ? '<span class="imp-pub">🖼️ publicado</span>' : ''}</span>${act ? `<span class="imp-act">${act}</span>` : ''}</li>`;
+  }
+  const todo = imp.rows.filter((r) => !r.mine || !r.cro).length;
+
+  return `${H && H.source ? `<h3>El club en Instagram <small class="muted">· ${esc(formatRange(H.from, H.to, false))}</small></h3>
+      <div class="imp-tiles ig"><div><b>${nf(H.views)}</b><span>visualizaciones</span></div>${H.viewers ? `<div><b>${nf(H.viewers)}</b><span>${H.viewersKind === 'unique' ? 'personas alcanzadas' : 'alcance al día'}</span></div>` : ''}<div><b>${nf(H.interactions)}</b><span>interacciones</span></div>${H.follows != null ? `<div><b>${H.follows > 0 ? '+' : ''}${nf(H.follows)}</b><span>${H.source === 'period' ? 'seguidores netos' : 'seguidores nuevos'}</span></div>` : ''}</div>
+      ${H.followers ? `<p class="imp-f">${ico('users')}<span><b>${nf(H.followers)}</b> seguidores en total</span></p>` : ''}`
+      : '<p class="muted small">Todavía no hay cifras de Instagram guardadas.</p>'}
+    <p class="hint">Son cifras de <b>todo el club</b>, no de cada persona: Instagram no dice qué publicación viene de qué carrera.</p>
+    <h3>Lo que han generado tus carreras</h3>
+    <div class="imp-tiles"><div><b>${t.stories}</b><span>historias <em>(solas)</em></span></div><div><b>${t.results}</b><span>tus resultados</span></div><div><b>${t.chronicles}</b><span>crónicas</span></div></div>
+    <p class="hint">Tú solo pones tu resultado y pasas la crónica: la historia sale sola al apuntarte, y con tu resultado el club publica los resultados y alimenta la estadística.</p>
+    <details class="imp-races" data-open-key="imp-races"${S.open?.['imp-races'] ? ' open' : ''}><summary>Mis carreras (${imp.rows.length})${todo ? ` · <b>${todo}</b> con algo por hacer` : ' · todo al día 🎉'}</summary>
+      <ul class="imp-list">${imp.rows.map(rowHtml).join('')}</ul></details>`;
+  }
+
 function chronicleCard(d) {
   if (!(S.chron instanceof Set)) return '';
   const year = S.myYear || new Date().getFullYear();
@@ -1468,38 +1503,11 @@ function chronicleCard(d) {
   const li = (x, isDone) => { const by = S.chronBy?.get(x.key), other = isDone && by && !by.mine;   // cualquiera puede deshacer una crónica (corregir): queda pendiente para todos
     return `<li class="chro-row"><span class="chro-name"><b>${esc(x.name)}</b><small class="muted">${esc(formatDate(x.date, false))}${x.place ? ' · ' + esc(x.place) : ''}${other ? ` · la pasó ${esc(by.by)}` : ''}</small></span>${S.preview ? '' : chroActs(x, isDone)}</li>`; };
   const pend = c.pending.length;
-  const tabImp = S.chroTab === 'imp';
-  if (tabImp) loadImpact();
-  const impactPane = () => {
-    if (S.impact === undefined || S.impact === 'loading') return '<p class="empty small">Cargando…</p>';
-    if (S.impact === null) return '<p class="hint">Todavía no está activado: la dirección tiene que ejecutar un SQL en Supabase (<code>2026-11-20-impacto-redes.sql</code>).</p>';
-    const mineKeys = new Set([...(d.my_results || []).filter((r) => r.position || r.dnf).map(postKeyOf), ...(d.registrations || []).filter((g) => g.my_result).map(postKeyOf)]);   // carreras donde ya puso su puesto
-    const imp = raceImpact([...c.pending, ...c.done].sort((a, b) => b.date.localeCompare(a.date)), { posted: S.impact.posted, story: S.stories || null, chron: S.chron, mine: mineKeys });
-    const t = imp.totals, H = S.impact.ig, nf = (n) => Number(n || 0).toLocaleString('de-DE');
-    const okI = '<span class="imp-ok" aria-label="hecho">✓</span>', noI = '<span class="imp-no" aria-label="aún no">—</span>';
-    const rowHtml = (r) => {
-      const act = [!r.mine && !S.preview ? `<a class="btn small primary" href="${resultHref(r.id)}">Poner mi resultado</a>` : ''].filter(Boolean).join('');
-      return `<li><span class="imp-n"><b>${esc(r.name)}</b><small class="muted">${esc(formatDate(r.date, false))}</small></span>
-        <span class="imp-st"><span>📸 Historia ${r.story ? okI : noI}</span><span>🏁 Resultado ${r.mine ? okI : noI}</span><span>✍️ Crónica ${r.cro ? okI : noI}</span>${r.published ? '<span class="imp-pub">🖼️ publicado</span>' : ''}</span>${act ? `<span class="imp-act">${act}</span>` : ''}</li>`;
-    };
-    const todo = imp.rows.filter((r) => !r.mine || !r.cro).length;
-
-    return `${H && H.source ? `<h3>El club en Instagram <small class="muted">· ${esc(formatRange(H.from, H.to, false))}</small></h3>
-        <div class="imp-tiles ig"><div><b>${nf(H.views)}</b><span>visualizaciones</span></div>${H.viewers ? `<div><b>${nf(H.viewers)}</b><span>${H.viewersKind === 'unique' ? 'personas alcanzadas' : 'alcance al día'}</span></div>` : ''}<div><b>${nf(H.interactions)}</b><span>interacciones</span></div>${H.follows != null ? `<div><b>${H.follows > 0 ? '+' : ''}${nf(H.follows)}</b><span>${H.source === 'period' ? 'seguidores netos' : 'seguidores nuevos'}</span></div>` : ''}</div>
-        ${H.followers ? `<p class="imp-f">${ico('users')}<span><b>${nf(H.followers)}</b> seguidores en total</span></p>` : ''}`
-        : '<p class="muted small">Todavía no hay cifras de Instagram guardadas.</p>'}
-      <p class="hint">Son cifras de <b>todo el club</b>, no de cada persona: Instagram no dice qué publicación viene de qué carrera.</p>
-      <h3>Lo que han generado tus carreras</h3>
-      <div class="imp-tiles"><div><b>${t.stories}</b><span>historias <em>(solas)</em></span></div><div><b>${t.results}</b><span>tus resultados</span></div><div><b>${t.chronicles}</b><span>crónicas</span></div></div>
-      <p class="hint">Tú solo pones tu resultado y pasas la crónica: la historia sale sola al apuntarte, y con tu resultado el club publica los resultados y alimenta la estadística.</p>
-      <details class="imp-races" data-open-key="imp-races"${S.open?.['imp-races'] ? ' open' : ''}><summary>Mis carreras (${imp.rows.length})${todo ? ` · <b>${todo}</b> con algo por hacer` : ' · todo al día 🎉'}</summary>
-        <ul class="imp-list">${imp.rows.map(rowHtml).join('')}</ul></details>`;
-  };
   return `<section class="card chro-card${pend ? ' has-pend' : ''}" id="sec-chro"><details class="chro-det" data-open-key="chro"${S.open?.chro ? ' open' : ''}>
     <summary><span class="chro-ic">${ico('book')}</span><b class="chro-t">Crónicas${year === new Date().getFullYear() ? '' : ` <small class="muted">${year}</small>`}</b>
       <span class="chro-tag ${pend ? 'pend' : 'ok'}">${pend ? `${pend} ${plural(pend, 'pendiente', 'pendientes')}` : `${c.done.length} ${plural(c.done.length, 'pasada', 'pasadas')}`}${ico('go')}</span></summary>
-    <div class="seg-sw chro-sw" role="tablist" aria-label="Crónicas o impacto en redes"><button type="button" role="tab" class="${tabImp ? '' : 'on'}" data-act="chro-tab" data-t="cro">Crónicas</button><button type="button" role="tab" class="${tabImp ? 'on' : ''}" data-act="chro-tab" data-t="imp">Impacto en redes</button></div>
-    ${tabImp ? impactPane() : `<p class="hint">${CHRONICLE_RULE} Cuando lo hayas enviado, márcala.</p>
+    ${`<p class="chro-intro">${ico('pen')}<span><b>Basta con 2 líneas y una foto.</b> Cuéntanos cómo te fue, sin hacer un resumen: los datos ya los tenemos y el resumen y la publicación los hacemos nosotros.</span></p>
+    <p class="hint">${CHRONICLE_RULE}</p>
     ${pend ? `<ul class="chro-list">${c.pending.map((x) => li(x, false)).join('')}</ul>` : '<p class="empty small">No te falta ninguna. 🎉</p>'}
     ${c.done.length ? `<details class="chro-done"${pend ? '' : ' open'}><summary>Pasadas (${c.done.length})</summary><ul class="chro-list">${c.done.map((x) => li(x, true)).join('')}</ul></details>` : ''}`}
   </details></section>`;
@@ -1672,11 +1680,12 @@ function runnerRegCard(g, opts = {}) {
     const open = g.date >= today;
     // una sola fila de herramientas con iconos: valorar, web, editar datos y suspender (antes eran cuatro filas con frases)
     const canSusp = !S.preview && g.date >= pastLimit();
-    const tools = `<div class="rc-tools">${open && !mine && !g.suspended && !S.preview ? starBtn(g, 'w-add-reg', ['id', g.id]) : ''}${g.url ? `<a class="rc-tool has-url" href="${esc(g.url)}" target="_blank" rel="noopener noreferrer" aria-label="Abrir la web de la carrera" title="Web de la carrera">${ico('link')}</a>`
+    const lead = `${open && !mine && !g.suspended && !S.preview ? starBtn(g, 'w-add-reg', ['id', g.id]) : ''}${g.url ? `<a class="rc-tool has-url" href="${esc(g.url)}" target="_blank" rel="noopener noreferrer" aria-label="Abrir la web de la carrera" title="Web de la carrera">${ico('link')}</a>`
       : open && !g.suspended && !S.preview ? `<button type="button" class="rc-tool no-url" data-act="r-web" data-id="${g.id}" aria-label="Sin web: pulsa para añadirla" title="Aún sin web: pulsa para añadirla (para todos)">${ico('link')}</button>` : ''}
       ${mine && !S.preview && !g.suspended && (open || !g.my_result) ? `<button type="button" class="rc-tool lab pay${mine.paid ? ' on' : ''}" data-act="r-paid" data-id="${g.id}" aria-label="${mine.paid ? 'Pagada: cambiar o quitar el pago' : 'Marcar como pagada'}" title="${mine.paid ? 'Pagada' : 'Marcar como pagada'}">${ico('euro')}<span>${mine.paid ? `${mine.paid_amount != null ? euros(mine.paid_amount) : 'Pagada'}` : 'Pagar'}</span>${mine.paid ? ico('check', 'pay-ok') : ''}</button>` : ''}
       ${carTool(g, !!mine)}
-      <span class="rc-tools-sp"></span>${!S.preview ? `<a class="rc-tool" href="#/editar/${g.id}" aria-label="Editar los datos de ${esc(g.name)}" title="Editar datos${g.mine_created ? ' (la añadiste tú)' : ''}">${ico('pen')}</a>` : ''}${canSusp ? (g.suspended
+      `;
+    const tools = `<div class="rc-tools">${lead}${lead.replace(/\s+/g, '') ? '<span class="rc-tools-sp"></span>' : ''}${!S.preview ? `<a class="rc-tool" href="#/editar/${g.id}" aria-label="Editar los datos de ${esc(g.name)}" title="Editar datos${g.mine_created ? ' (la añadiste tú)' : ''}">${ico('pen')}</a>` : ''}${canSusp ? (g.suspended
         ? `<button type="button" class="rc-tool" data-act="r-suspend" data-id="${g.id}" data-v="0" aria-label="Se vuelve a celebrar" title="Se vuelve a celebrar">${ico('check')}</button>`
         : `<button type="button" class="rc-tool susp" data-act="r-suspend" data-id="${g.id}" data-v="1" aria-label="Marcar como suspendida" title="Marcar como suspendida">${ico('ban')}</button>`) : ''}</div>`;
     const mates = g.entries.length ? `<div class="club-row"><span class="count">${ico('users')}${g.entries.length} del club</span><ul class="people">${g.entries.map((e) =>
@@ -1690,8 +1699,9 @@ function runnerRegCard(g, opts = {}) {
     ].filter(Boolean).join('');
     const body = `
       ${tools}${typeTag(g)}
-      ${open || g.suspended ? '' : `<p class="state-tag">${mine && g.my_result ? `${ico('check', 't-i')}Ya disputada · tu resultado está enviado` : `${ico('flag', 't-i')}Ya disputada · pendiente de resultados`} ${weekChip(g.end_date || g.date, today)}</p>
-        ${mine && !S.preview ? (g.my_result ? `<p class="mine-created">Tu resultado: ${g.my_result.dnf ? 'abandonaste' : g.my_result.position + 'º'} (enviado) · <a href="#/resultado/reg_${g.id}">${ico('pen', 't-i')}Cambiar</a></p>`
+      ${open || g.suspended ? '' : `${mine && g.my_result ? '' : `<p class="state-tag">${ico('flag', 't-i')}Ya disputada · pendiente de resultados ${weekChip(g.end_date || g.date, today)}</p>`}
+        ${mine && g.my_result ? `<p class="res-line">${ico('check', 't-i')}<span>Resultado: <b>${g.my_result.dnf ? 'abandonaste' : g.my_result.position + 'º'}</b></span>${S.preview ? '' : `<a href="#/resultado/reg_${g.id}">${ico('pen', 't-i')}Cambiar</a>`}${weekChip(g.end_date || g.date, today)}</p>` : ''}
+        ${mine && !S.preview && !g.my_result ? (g.my_result ? ''
           : `<p class="row"><a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>
              <button class="btn ghost small" data-act="r-leave" data-id="${g.id}">No fui: borrarme</button></p>`) : ''}
         ${!mine && g.date >= pastLimit() ? `<div class="row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
@@ -2425,7 +2435,7 @@ function chroPrompt(p, handles) {
 Usa SOLO los datos que te doy; si falta alguno, omítelo. Mantén el idioma de la crónica. Máximo 1.800 caracteres. Devuelve solo el texto del post.
 
 Carrera: ${p.race_name}${p.race_date ? ' (' + formatDate(p.race_date, false) + ')' : ''}
-Autor: ${runnerById(p.runner_id)?.name || 'un corredor del club'}
+Autor: ${runnerById(p.runner_id)?.name || 'un corredor del club'}${p.admin_notes ? `\nDatos adicionales de la dirección (incorpóralos al resumen, con rigor y sin inventar):\n${p.admin_notes}` : ''}
 (Añade aquí los datos y resultados de la carrera si los tienes.)
 Lo que cuenta el corredor (material para el resumen, no para citar):
 """
@@ -2446,8 +2456,11 @@ async function openChroPost(id) {
     ${done ? '' : p.ai_state === 'pendiente' ? '<p class="muted small">⏳ Claude está corrigiendo la crónica… ábrela otra vez en unos segundos.</p>'
       : p.ai_state === 'hecho' ? '<p class="muted small">✅ Corregida por Claude: revísala antes de publicar.</p>'
       : p.ai_state === 'error' ? '<p class="muted small">⚠️ No se pudo corregir sola. Puedes reintentarlo o copiar la petición y pasársela a Claude.</p>' : ''}
-    ${done || !('ai_state' in p) ? '' : `<button type="button" class="btn block" data-cro="retry">${ico('refresh')} Corregir otra vez con Claude</button>`}
+    ${done || !('ai_state' in p) || ('admin_notes' in p) ? '' : `<button type="button" class="btn block" data-cro="retry">${ico('refresh')} Corregir otra vez con Claude</button>`}
     ${done || (('ai_state' in p) && p.ai_state !== 'error') ? '' : `<button type="button" class="btn block ghost" data-cro="ai">${ico('share')} Copiar petición para Claude</button>`}
+    ${done || !('admin_notes' in p) ? '' : `<div class="chro-notes"><label>Añadir datos al post <small class="muted">(opcional)</small><textarea name="notes" rows="4" maxlength="2000" placeholder="Ej.: Fue primero hasta el km 70 y los primeros 20 min siguió en cabeza. A 10 km de meta pinchó y perdió 3 minutos.">${esc(p.admin_notes || '')}</textarea></label>
+      <button type="button" class="btn block" data-cro="regen">${ico('refresh')} Volver a crear con estos datos</button>
+      <p class="muted small" id="cro-wait" aria-live="polite"></p></div>`}
     <label>Texto final<textarea name="final" rows="9" maxlength="4000" ${done ? 'readonly' : ''}>${esc(p.final_text || '')}</textarea></label>
     ${sp.length ? `<fieldset class="chro-tags"><legend>Etiquetas</legend>${sp.map((h) => `<label class="check"><input type="checkbox" name="tag" value="${esc(h)}" checked> ${esc(h)}</label>`).join('')}</fieldset>` : '<p class="muted small">Sin patrocinadores guardados: añádelos en la lista de Crónicas.</p>'}
     <div class="dlg-actions"><button type="button" class="btn primary" data-cro="copy">${ico('clip')} Copiar texto + etiquetas</button>
@@ -2463,7 +2476,28 @@ async function openChroPost(id) {
       if (final() && !await confirmAction('Corregir otra vez', 'El texto final actual se <b>reemplazará</b> por una corrección nueva.', 'Sí, corregir otra vez', 'primary')) { openChroPost(id); return; }
       await run(async () => { await api.updateChroPost(id, { final_text: null }); await api.retryChroAi(id); await loadChroPosts(true); }, 'Pedida la corrección a Claude');
       render();
-    } else if (b.dataset.cro === 'ai') await copyText(chroPrompt(p, tags()), 'Petición copiada: pégala en Claude');
+    } else if (b.dataset.cro === 'regen') {
+      const wait = dlg.querySelector('#cro-wait'), ta = dlg.querySelector('textarea[name="final"]'), notes = dlg.querySelector('textarea[name="notes"]').value.trim(), prev = ta.value;
+      b.disabled = true; wait.innerHTML = '⏳ Claude está creando el post con esos datos… suele tardar unos segundos.';
+      try {
+        await api.updateChroPost(id, { admin_notes: notes || null, final_text: null });
+        await api.retryChroAi(id);
+        let np = null;
+        for (let i = 0; i < 25 && dlg.open; i++) {
+          await new Promise((r) => setTimeout(r, i ? 4000 : 2500));
+          try { await api.collectChroAi?.(); } catch { /* sin el SQL de IA */ }
+          const rows = await api.listChroPosts(); if (rows && S.chroPosts) S.chroPosts = { rows };
+          np = rows?.find((x) => x.id === id);
+          if (np && np.ai_state !== 'pendiente') break;
+        }
+        if (!dlg.open) return;
+        if (np) Object.assign(p, np);
+        if (np?.ai_state === 'hecho' && np.final_text) { ta.value = np.final_text; wait.innerHTML = `✅ Post creado con tus datos. <a href="#" data-cro="undo">Recuperar la versión anterior</a>`; dlg._prev = prev; }
+        else { ta.value = prev; wait.textContent = np?.ai_state === 'pendiente' ? '⏳ Claude aún no ha contestado: espera un momento y pulsa ↻ en la lista.' : '⚠️ No se pudo crear. Se ha dejado el texto anterior; prueba otra vez.'; }
+      } catch (e) { ta.value = prev; wait.textContent = '⚠️ ' + friendlyError(e); }
+      b.disabled = false;
+    } else if (b.dataset.cro === 'undo') { dlg.querySelector('textarea[name="final"]').value = dlg._prev || ''; dlg.querySelector('#cro-wait').textContent = 'Versión anterior recuperada.'; }
+    else if (b.dataset.cro === 'ai') await copyText(chroPrompt(p, tags()), 'Petición copiada: pégala en Claude');
     else if (b.dataset.cro === 'copy') await copyText(withTags(), 'Texto copiado');
     else if (b.dataset.cro === 'save') { dlg.onclick = null; dlg.close(); await run(async () => { await api.updateChroPost(id, { final_text: final() || null, status: 'lista' }); await loadChroPosts(true); }, 'Guardada como lista'); render(); }
     else if (b.dataset.cro === 'pub') {
@@ -2491,10 +2525,63 @@ function askSponsors(current) {
   });
 }
 
+// ======================================================================
+//  Medios de comunicación (dirección): en qué medio salió cada carrera y qué día
+// ======================================================================
+
+const MEDIA_LABEL = Object.fromEntries(MEDIA_KINDS);
+const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
+function mediaCsv(year) {
+  const rows = (S.data.media || []).filter((m) => yearOf(m.race_date) === year).sort((a, b) => a.race_date.localeCompare(b.race_date) || a.published_on.localeCompare(b.published_on));
+  return toCsv(rows.map((m) => [m.race_name, m.race_date, m.medium, MEDIA_LABEL[m.kind] || m.kind, m.published_on, m.url || '', m.notes || '']), ['Carrera', 'Fecha de la carrera', 'Medio', 'Tipo', 'Fecha de publicación', 'Enlace', 'Notas']);
+}
+/** Ventana para anotar (o cambiar) una aparición en medios. Devuelve los datos, 'del' para borrarla o null si cancela. */
+function askMedia(race, cur) {
+  return new Promise((resolve) => {
+    const dlg = document.getElementById('dialog'), known = [...new Set((S.data.media || []).map((m) => m.medium.trim()))].sort((a, b) => a.localeCompare(b, 'es'));
+    dlg.innerHTML = `<form method="dialog" class="dlg"><h2>${ico('share')} ${cur ? 'Cambiar la aparición' : 'Salió en medios'}</h2><p><b>${esc(race.name)}</b> · ${esc(formatDate(race.date, false))}</p>
+      <label>Medio<input name="medium" required maxlength="120" list="media-known" autocomplete="off" placeholder="Diario del Alto Aragón, Radio Monzón…" value="${esc(cur?.medium || '')}"><datalist id="media-known">${known.map((k) => `<option value="${esc(k)}">`).join('')}</datalist></label>
+      <div class="grid2"><label>Tipo<select name="kind">${MEDIA_KINDS.map(([k, l]) => `<option value="${k}"${(cur?.kind || 'prensa') === k ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+        <label>Día de publicación<input type="date" name="day" required min="${esc(race.date)}" value="${esc(cur?.published_on || (todayISO() >= race.date ? todayISO() : race.date))}"></label></div>
+      <label>Enlace <small class="muted">(opcional)</small><input name="url" type="text" inputmode="url" maxlength="500" placeholder="https://…" value="${esc(cur?.url || '')}"></label>
+      <label>Nota <small class="muted">(opcional)</small><input name="notes" maxlength="500" placeholder="Foto grande, entrevista, mención en portada…" value="${esc(cur?.notes || '')}"></label>
+      <div class="dlg-actions"><button value="ok" class="btn primary">Guardar</button>${cur ? '<button value="del" class="btn danger ghost" formnovalidate>Borrar</button>' : ''}<button value="" class="btn ghost" formnovalidate>Cancelar</button></div></form>`;
+    dlg.onclose = () => {
+      const v = dlg.returnValue; if (v === 'del') return resolve('del'); if (v !== 'ok') return resolve(null);
+      const f = (n) => dlg.querySelector(`[name="${n}"]`).value.trim();
+      resolve({ medium: f('medium'), kind: f('kind'), published_on: f('day'), url: cleanWebUrl(f('url')) || null, notes: f('notes') || null });
+    };
+    dlg.returnValue = '';
+    dlg.showModal(); dlg.querySelector('input[name="medium"]')?.focus();
+  });
+}
+const cleanWebUrl = (u) => { const t = String(u || '').trim(); if (!t) return ''; return /^https?:\/\//i.test(t) ? t : `https://${t}`; };
+
+function viewMedia() {
+  const head = (inner) => frame('Redes', `${netTabs('med')}${inner}`, { actions: S.data.media ? `<button class="icon-btn" data-act="media-csv" aria-label="Descargar la lista en CSV" title="Descargar CSV">${ico('download')}</button>` : '' });
+  if (S.data.media === null || S.data.media === undefined) return head('<p class="card warn">Aún no está activado: falta ejecutar en Supabase <code>supabase/cambios/2026-12-06-medios.sql</code> (1 trozo).</p>');
+  const years = availableYears(S.data.races); if (!years.includes(S.year)) S.year = years[0];
+  const year = S.year, today = todayISO(), races = seasonRaces(S.data.races, S.data.registrations, year, today), st = mediaStats(S.data.media, races, year);
+  const f = S.mediaF || 'all', by = new Map(); for (const m of st.rows) (by.get(m.race_key) || by.set(m.race_key, []).get(m.race_key)).push(m);
+  const list = races.filter((r) => (f === 'with' ? by.has(r.key) : f === 'without' ? !by.has(r.key) : true)).sort((a, b) => b.date.localeCompare(a.date));
+  const tile = (ic, label, val, sub = '') => `<div class="md-tile">${ico(ic)}<b>${val}</b><span>${label}</span>${sub ? `<em>${sub}</em>` : ''}</div>`;
+  const row = (m) => `<li><span class="md-k ${esc(m.kind)}">${esc(MEDIA_LABEL[m.kind] || m.kind)}</span><span class="md-n"><b>${esc(m.medium)}</b><small class="muted">${esc(formatDate(m.published_on, false))}${m.notes ? ' · ' + esc(m.notes) : ''}</small></span>${m.url ? `<a class="icon-btn" href="${esc(m.url)}" target="_blank" rel="noopener noreferrer" aria-label="Abrir la noticia en ${esc(hostOf(m.url) || 'la web')}" title="${esc(hostOf(m.url))}">${ico('ext')}</a>` : ''}<button type="button" class="icon-btn" data-act="media-edit" data-id="${esc(m.id)}" aria-label="Cambiar">${ico('pen')}</button></li>`;
+  const card = (r) => { const ms = by.get(r.key) || [];
+    return `<article class="card md-race${ms.length ? ' has' : ''}"><div class="md-h"><span class="md-ck">${ms.length ? ico('check') : ico('ban')}</span><span class="md-t"><b>${esc(r.name)}</b><small class="muted">${esc(formatDate(r.date, false))}${r.place ? ' · ' + esc(r.place) : ''}</small></span>
+      <button type="button" class="btn small${ms.length ? '' : ' primary'}" data-act="media-add" data-key="${esc(r.key)}">${ico('plus')}${ms.length ? 'Otra' : 'Salió en medios'}</button></div>
+      ${ms.length ? `<ul class="md-list">${ms.map(row).join('')}</ul>` : '<p class="muted small md-none">Sin apariciones en medios.</p>'}</article>`; };
+  return head(`${yearPicker(years)}
+    <div class="md-tiles">${tile('share', st.total === 1 ? 'aparición' : 'apariciones', st.total)}${tile('book', st.media === 1 ? 'medio' : 'medios', st.media)}${tile('flag', 'carreras con medios', `${st.coveredN}/${st.racesN}`, st.racesN ? `${st.pct} %` : '')}</div>
+    <div class="years md-f">${[['all', 'Todas'], ['with', `Con medios (${st.coveredN})`], ['without', `Sin medios (${st.racesN - st.coveredN})`]].map(([k, l]) => `<button class="chip${f === k ? ' on' : ''}" data-act="media-f" data-f="${k}">${l}</button>`).join('')}</div>
+    ${list.length ? list.map(card).join('') : `<p class="empty">${st.racesN ? 'Nada en esta lista.' : 'Aún no hay carreras en ' + year + '.'}</p>`}
+    ${st.byMedium.length ? `<h2 class="sec-h">${ico('bars')} Por medio <small>(${year})</small></h2><ol class="md-rank">${st.byMedium.map((x) => `<li><b>${esc(x.name)}</b><span>${x.n}</span></li>`).join('')}</ol>
+      <p class="muted small">${MEDIA_KINDS.filter(([k]) => st.byKind[k]).map(([k, l]) => `${l}: ${st.byKind[k]}`).join(' · ')}. La estadística completa sale también en la Memoria para patrocinadores.</p>` : '<p class="muted small">Cuando anotes apariciones saldrá aquí el resumen por medio, y en la Memoria para patrocinadores.</p>'}`);
+}
+
 function netTabs(on) {
   if (S.session?.isAdmin && !S.chroPosts) loadChroPosts();
   let pend = 0, due = 0; try { pend = socialPending(); due = pubDue(); } catch { /* sin datos aún */ }
-  return `<nav class="net-tabs no-print" aria-label="Redes">${[['panel', '📋', 'Panel', '#/redes', pend], ['cal', '📅', 'Calendario', '#/semana', 0], ['pub', '📸', 'Publicar', '#/publicaciones', due], ['cro', '✍️', 'Crónicas', '#/cronicas', chroPending()], ['ig', '📈', 'Instagram', '#/instagram', 0]]
+  return `<nav class="net-tabs no-print" aria-label="Redes">${[['panel', '📋', 'Panel', '#/redes', pend], ['cal', '📅', 'Calendario', '#/semana', 0], ['pub', '📸', 'Publicar', '#/publicaciones', due], ['cro', '✍️', 'Crónicas', '#/cronicas', chroPending()], ['med', '📰', 'Medios', '#/medios', 0], ['ig', '📈', 'Instagram', '#/instagram', 0]]
     .map(([k, i, l, h, n]) => `<a class="net-tab${on === k ? ' on' : ''}" href="${h}"><span aria-hidden="true">${i}</span><b>${l}</b>${n ? `<em>${n}</em>` : ''}</a>`).join('')}</nav>`;
 }
 
@@ -4021,6 +4108,13 @@ function viewMemoria() {
   if (g && (g.nDays || acc)) ch('redes', 'image', 'Presencia en redes', `Instagram @hinacoclubciclistamonzon${g.nDays ? ` · ${g.nDays} días de datos en ${year}` : ''}.`,
     `<div class="rp-kpis">${acc ? `<div class="rp-kpi"><b>${nf2(acc.followers)}</b><span>seguidores</span></div>` : ''}${g.nDays ? `<div class="rp-kpi"><b>${nf2(it.views)}</b><span>visualizaciones</span></div><div class="rp-kpi"><b>${nf2(it.interactions)}</b><span>interacciones</span></div>` : ''}${g.nDays && it.reachAvg ? `<div class="rp-kpi"><b>${nf2(it.reachAvg)}</b><span>alcance medio diario</span></div>` : ''}</div>`);
 
+  // Medios de comunicación (lo anota la dirección)
+  const mst = S.data.media ? mediaStats(S.data.media, seasonRaces(S.data.races, S.data.registrations, year, todayISO()), year) : null;
+  if (mst && mst.total) ch('medios', 'share', 'Presencia en medios', `<b>${plural(mst.total, 'aparición', 'apariciones')}</b> en <b>${plural(mst.media, 'medio')}</b>; ${mst.coveredN} de las ${mst.racesN} carreras (${mst.pct} %) tuvieron eco en los medios de comunicación.`,
+    `<div class="rp-kpis"><div class="rp-kpi"><b>${nfEs(mst.total)}</b><span>apariciones</span></div><div class="rp-kpi"><b>${nfEs(mst.media)}</b><span>medios</span></div><div class="rp-kpi"><b>${mst.coveredN}/${mst.racesN}</b><span>carreras con eco</span></div></div>
+    ${box('Por medio', `<ol class="rs-rank">${mst.byMedium.slice(0, 8).map((x, k) => `<li><span class="pos">${k + 1}</span><div><b>${esc(x.name)}</b></div><span class="rk-m">${x.n}</span></li>`).join('')}</ol>${MEDIA_KINDS.some(([k]) => mst.byKind[k]) ? `<p class="rp-note">${MEDIA_KINDS.filter(([k]) => mst.byKind[k]).map(([k, l]) => `${l}: ${mst.byKind[k]}`).join(' · ')}</p>` : ''}`)}
+    ${box('Una a una', `<div class="tp-scroll"><table class="tp-table"><thead><tr><th class="l">Día</th><th class="l">Medio</th><th class="l">Carrera</th></tr></thead><tbody>${[...mst.rows].reverse().map((m) => `<tr><td class="l nw">${Number(m.published_on.slice(8))} ${MES3[Number(m.published_on.slice(5, 7)) - 1]}</td><td class="l"><b>${esc(m.medium)}</b><br><small class="muted">${esc(MEDIA_LABEL[m.kind] || m.kind)}${m.url ? ' · ' + esc(hostOf(m.url)) : ''}</small></td><td class="l">${esc(m.race_name)}</td></tr>`).join('')}</tbody></table></div>`)}`);
+
   const num = (k) => String(k + 1).padStart(2, '0');
   return frame('Memoria de la temporada', `
     <div class="no-print">${yearPicker(years)}<div class="row-btns rp-actions"><button class="btn primary" data-act="print-report">🖨️ Imprimir o guardar PDF</button><a class="btn" href="#/resumen">‹ Resumen</a></div></div>
@@ -4559,10 +4653,13 @@ function viewSummary() {
 
 /** Resumen del equipo para los corredores (solo lectura). */
 function viewTeam() {
-  const t = S.team;
-  if (!t) return frame('Resumen del equipo', `${previewBanner()}<p class="empty">Cargando…</p>`, { rtab: 'equipo' });
-  if (t.failed) return frame('Resumen del equipo', `${previewBanner()}<p class="card warn">${esc(t.failed)}</p>`, { rtab: 'equipo' });
-  return frame('Resumen del equipo', `${previewBanner()}<h2 class="eq-title">Resumen del equipo ${ico('bars')}</h2>
+  const t = S.team, tab = S.eqTab === 'imp' ? 'imp' : 'res';
+  if (tab === 'imp' && S.runnerData) loadImpact();
+  const sw = S.runnerData ? `<div class="seg-sw eq-sw" role="tablist" aria-label="Resumen del equipo o impacto en redes"><button type="button" role="tab" class="${tab === 'res' ? 'on' : ''}" aria-selected="${tab === 'res'}" data-act="eq-tab" data-t="res">${ico('bars')}Resumen</button><button type="button" role="tab" class="${tab === 'imp' ? 'on' : ''}" aria-selected="${tab === 'imp'}" data-act="eq-tab" data-t="imp">${ico('share')}Impacto en redes</button></div>` : '';
+  if (tab === 'imp' && S.runnerData) return frame('Impacto en redes', `${previewBanner()}${sw}<div class="imp-pane">${impactBody(S.runnerData)}</div>`, { rtab: 'equipo' });
+  if (!t) return frame('Resumen del equipo', `${previewBanner()}${sw}<p class="empty">Cargando…</p>`, { rtab: 'equipo' });
+  if (t.failed) return frame('Resumen del equipo', `${previewBanner()}${sw}<p class="card warn">${esc(t.failed)}</p>`, { rtab: 'equipo' });
+  return frame('Resumen del equipo', `${previewBanner()}${sw}<h2 class="eq-title">Resumen del equipo ${ico('bars')}</h2>
     ${summaryBody(t.races, t.runners, { me: S.runnerData?.me?.id })}`, { rtab: 'equipo' });
 }
 
@@ -5039,21 +5136,22 @@ function askChronicle(x, post, group = null) {
       ? `<div class="grp-row ok"><span class="grp-n"><b>${esc(g.name)}</b><small>${esc(g.category || '')}</small></span><span class="grp-v">${g.dnf ? 'Abandonó' : `${g.position}º · ${g.general}º gral · ${esc(formatTime(g.time))}`}</span>${ico('check')}</div>`
       : inGrace ? `<div class="grp-row wait"><span class="grp-n"><b>${esc(g.name)}</b><small>${esc(g.category || '')} · falta su resultado</small></span><span class="grp-v">${ico('clock')}aún lo puede poner él</span></div>`
       : `<div class="grp-row" data-rid="${esc(g.runner_id)}"><span class="grp-n"><b>${esc(g.name)}</b><small>${esc(g.category || '')} · falta su resultado</small></span><span class="grp-in"><input inputmode="numeric" data-grp="pos" placeholder="Puesto" aria-label="Puesto de ${esc(g.name)}" value="${g.position || ''}"><input inputmode="numeric" data-grp="gen" placeholder="General" aria-label="Puesto en la general de ${esc(g.name)}" value="${g.general || ''}"><input data-grp="time" placeholder="h:mm:ss" aria-label="Tiempo de ${esc(g.name)}" value="${g.time ? esc(formatTime(g.time)) : ''}"></span><label class="check grp-dnf"><input type="checkbox" data-grp="dnf"> 🚫 Abandonó (sin puesto ni tiempo)</label></div>`;
-    const groupHtml = others.length ? `<fieldset class="chro-group"><legend>Resultados de los del club</legend><p class="muted small">${lockedByGrace ? `Los 2 primeros días cada uno pone su resultado. Si siguen sin ponerlo, desde el <b>${esc(formatDate(openOn, false))}</b> podrás ponerlo tú y enviar la crónica con todo.` : 'Si falta el de alguno, ponlo tú: así cuenta para todos y el post sale completo.'}</p>${!inGrace && others.some((g) => !grpDone(g)) ? '<div class="grp-head"><span>Puesto</span><span>General</span><span>Tiempo</span></div>' : ''}${others.map(grpRow).join('')}</fieldset>` : '';
+    const groupHtml = others.length ? `<fieldset class="chro-group"><legend>Resultados de tus compañeros</legend><p class="muted small">${lockedByGrace ? `Los 2 primeros días cada uno pone su resultado. Si siguen sin ponerlo, desde el <b>${esc(formatDate(openOn, false))}</b> podrás ponerlo tú y enviar la crónica con todo.` : 'Si falta el de alguno, ponlo tú: así cuenta para todos y el post sale completo.'}</p>${!inGrace && others.some((g) => !grpDone(g)) ? '<div class="grp-head"><span>Puesto</span><span>General</span><span>Tiempo</span></div>' : ''}${others.map(grpRow).join('')}</fieldset>` : '';
     const slot = (i) => `<label class="chro-ph" data-slot="${i}">${ico('camera')}<span>Foto ${i + 1}${i ? ' (opcional)' : ''}</span><img alt="" hidden><input type="file" accept="image/*" data-chro-photo="${i}" hidden></label>`;
     const blocked = !locked && data && !data.complete;
     const todo = blocked ? `<div class="chro-need"><p><b>Antes de escribirla falta completar:</b></p><ul>
         ${data.missRace.length ? `<li>${ico('flag')}<span>Datos de la carrera: <b>${esc(data.missRace.join(', '))}</b></span><a class="btn small" href="${data.raceHref}" data-chro-close>Completar</a></li>` : ''}
         ${data.missRes.length ? `<li>${ico('trophy')}<span>Tu resultado: <b>${esc(data.missRes.join(', '))}</b></span><a class="btn small" href="${data.resHref}" data-chro-close>Poner</a></li>` : ''}</ul>
-        <p class="muted small">Así el post sale completo, con tu puesto, tu tiempo y los datos de la carrera. Cuando lo tengas, vuelve y pulsa «Escribirla».</p></div>` : '';
-    dlg.innerHTML = `<form method="dialog" class="dlg chro-dlg"><h2>${ico('pen')} Mi crónica</h2><p><b>${esc(x.name)}</b> · ${esc(formatDate(x.date, false))}</p>
+        <p class="muted small">Así el post sale completo, con tu puesto, tu tiempo y los datos de la carrera. Cuando lo tengas, vuelve y pulsa «Contar cómo me fue».</p></div>` : '';
+    dlg.innerHTML = `<form method="dialog" class="dlg chro-dlg"><h2>${ico('pen')} Cuéntanos cómo te fue</h2><p><b>${esc(x.name)}</b> · ${esc(formatDate(x.date, false))}</p>
       ${locked ? `<p class="muted small">Ya la tiene la dirección (${esc((CHRO_ST[post.status] || [''])[0].toLowerCase())}): no se puede cambiar.</p>` : blocked ? todo
-        : `<p class="muted small">Cuenta <b>cómo lo has vivido</b>: sensaciones, el momento clave, a quién das las gracias. Esto lo añade la app solo:</p>
-        ${data?.chips.length ? `<p class="chro-data">${data.chips.map(([ic, t]) => `<span>${ico(ic)}${esc(t)}</span>`).join('')}</p>` : ''}`}
-      ${blocked ? '' : `<label>Tu crónica<textarea name="body" rows="9" minlength="${locked ? 0 : 20}" maxlength="3000" ${locked ? 'readonly' : 'required'} placeholder="Cómo te sentiste, qué tal las piernas, quién iba contigo, qué momento recordarás…">${esc(post?.body || '')}</textarea></label>`}
+        : `<p class="chro-lead"><b>No hace falta hacer una crónica.</b> Con <b>2 líneas</b> de cómo te fue, como se las contarías a un amigo, vale. Los datos ya los tenemos: <b>el resumen y el post los hacemos nosotros</b>.</p>
+        <div class="chro-how" aria-hidden="true"><div>${ico('pen')}<b>Tú</b><small>2 líneas y 1-2 fotos</small></div><i>›</i><div>${ico('star')}<b>Nosotros</b><small>resumen y post</small></div><i>›</i><div>${ico('share')}<b>Redes</b><small>del club</small></div></div>
+        ${data?.chips.length ? `<p class="chro-had">Esto ya lo tenemos:</p><p class="chro-data">${data.chips.map(([ic, t]) => `<span>${ico(ic)}${esc(t)}</span>`).join('')}</p>` : ''}`}
+      ${blocked ? '' : `<label>${locked ? 'Lo que contaste' : 'Cómo te fue <small class="muted">(2 líneas bastan)</small>'}<textarea name="body" rows="${locked ? 5 : 4}" minlength="${locked ? 0 : 20}" maxlength="1500" ${locked ? 'readonly' : 'required'} placeholder="Ej.: Salí fuerte pero sufrí en la última subida. Contento con las piernas y con el ambiente del equipo.">${esc(post?.body || '')}</textarea></label>`}
       ${blocked ? '' : groupHtml}
-      ${locked || blocked ? '' : `<div class="chro-photos">${slot(0)}${slot(1)}</div>${post?.photos ? `<p class="muted small">Ya tienes ${post.photos} foto${post.photos === 1 ? '' : 's'} enviada${post.photos === 1 ? '' : 's'}; si eliges nuevas, las sustituyen.</p>` : '<p class="muted small">Sube al menos 1 foto.</p>'}`}
-      <div class="dlg-actions">${locked || blocked ? '' : '<button value="ok" class="btn primary" disabled>Enviar a dirección</button>'}<button value="" class="btn ghost" formnovalidate>${locked || blocked ? 'Cerrar' : 'Cancelar'}</button></div></form>`;
+      ${locked || blocked ? '' : `<div class="chro-photos">${slot(0)}${slot(1)}</div>${post?.photos ? `<p class="muted small">Ya tienes ${post.photos} foto${post.photos === 1 ? '' : 's'} enviada${post.photos === 1 ? '' : 's'}; si eliges nuevas, las sustituyen.</p>` : '<p class="muted small">Sube 1 o 2 fotos, las mejores.</p>'}`}
+      <div class="dlg-actions">${locked || blocked ? '' : '<button value="ok" class="btn primary" disabled>Enviar</button>'}<button value="" class="btn ghost" formnovalidate>${locked || blocked ? 'Cerrar' : 'Cancelar'}</button></div></form>`;
     const okBtn = dlg.querySelector('button[value="ok"]');
     const grpValues = () => [...dlg.querySelectorAll('.grp-row[data-rid]')].map((row) => {
       if (row.querySelector('[data-grp="dnf"]').checked) return { runner_id: row.dataset.rid, dnf: true, ok: true };
@@ -5701,6 +5799,21 @@ const actions = {
     render();
   },
   'cro-filter'(el) { S.chroF = el.dataset.f; render(); },
+  'media-f'(el) { S.mediaF = el.dataset.f; render(); },
+  'media-csv'() { download(`monzon-medios-${S.year}.csv`, mediaCsv(S.year), 'text/csv;charset=utf-8'); },
+  async 'media-add'(el) {
+    const r = seasonRaces(S.data.races, S.data.registrations, S.year, todayISO()).find((x) => x.key === el.dataset.key); if (!r) return;
+    const v = await askMedia(r, null); if (!v || v === 'del') return;
+    await run(async () => { await api.saveMedia({ race_key: r.key, race_name: r.name, race_date: r.date, ...v }); await reload(); }, '📰 Aparición anotada');
+    render();
+  },
+  async 'media-edit'(el) {
+    const m = (S.data.media || []).find((x) => x.id === el.dataset.id); if (!m) return;
+    const v = await askMedia({ name: m.race_name, date: m.race_date }, m); if (!v) return;
+    if (v === 'del') { if (!await confirmAction('Borrar la aparición', `Se quitará <b>${esc(m.medium)}</b> de «${esc(m.race_name)}».`, 'Sí, borrar')) return; await run(async () => { await api.deleteMedia(m.id); await reload(); }, 'Aparición borrada'); }
+    else await run(async () => { await api.saveMedia({ id: m.id, ...v }); await reload(); }, 'Aparición guardada');
+    render();
+  },
   async 'cro-refresh'() { await loadChroPosts(true); render(); },
   async 'cro-open'(el) { await openChroPost(el.dataset.id); },
   async 'cro-sponsors'() {
@@ -5969,7 +6082,7 @@ const actions = {
       `Guardado: ${changes.length} ${changes.length === 1 ? 'puesto' : 'puestos'}`);
     if (ok) render();
   },
-  'chro-tab'(el) { S.chroTab = el.dataset.t === 'imp' ? 'imp' : 'cro'; S.open = { ...(S.open || {}), chro: true }; render(); },
+  'eq-tab'(el) { S.eqTab = el.dataset.t === 'imp' ? 'imp' : 'res'; render(); },
   async 'r-suspend'(el) {
     const susp = el.dataset.v === '1', g = (S.runnerData?.registrations || []).find((x) => x.id === el.dataset.id);
     if (!await confirmAction(susp ? 'Carrera suspendida' : 'Se vuelve a celebrar',
@@ -6451,7 +6564,7 @@ document.addEventListener('visibilitychange', async () => {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['chro-write', 'r-web', 'note-edit', 'car-open', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
+const RUNNER_ACTIONS = new Set(['chro-write', 'eq-tab', 'r-web', 'note-edit', 'car-open', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
 // los enlaces de la ventana emergente (p. ej. las carreras de un compañero) cierran la ventana al navegar
 document.getElementById('dialog').addEventListener('click', (ev) => { if (ev.target.closest('a[href^="#/"]')) ev.currentTarget.close(); });
 $app.addEventListener('click', (ev) => {
@@ -6690,7 +6803,10 @@ document.addEventListener('click', (ev) => {
 });
 {
   let queued = false;
-  const run = () => { queued = false; foldHints(document.getElementById('app')); iconize(document.getElementById('app')); document.querySelectorAll('dialog[open]').forEach((d) => { foldHints(d); iconize(d); }); };
+  let tabSeen = '';   // la pestaña de Redes activa se ve entera (se desplaza hasta ella una vez al cambiar)
+  const run = () => { queued = false; foldHints(document.getElementById('app')); iconize(document.getElementById('app'));
+    const nt = document.querySelector('.net-tabs .net-tab.on'); if (nt && tabSeen !== nt.getAttribute('href')) { tabSeen = nt.getAttribute('href'); nt.scrollIntoView?.({ inline: 'center', block: 'nearest' }); }
+    document.querySelectorAll('dialog[open]').forEach((d) => { foldHints(d); iconize(d); }); };
   new MutationObserver(() => { if (!queued) { queued = true; queueMicrotask(run); } }).observe(document.body, { childList: true, subtree: true });
   run();
   window.addEventListener('beforeprint', () => document.querySelectorAll('details.tip, p.tip-body[data-tip-key]').forEach((d) => { if (d.tagName === 'P') { d.dataset.wasHidden = d.hidden ? '1' : ''; d.hidden = false; } else { d.dataset.wasOpen = d.open ? '1' : ''; d.open = true; } }));

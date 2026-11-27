@@ -694,6 +694,7 @@ select pg_temp.expect_fail($q$select runner_chronicle_set('$$ || :'crcode' || $$
 select pg_temp.check((select (e->>'mine')::boolean from jsonb_array_elements(runner_chronicles_team(:'crcode')) e where e->>'key' = '2026-11-08|vii btt') and (select not (e->>'mine')::boolean from jsonb_array_elements(runner_chronicles_team(:'crcode2')) e where e->>'key' = '2026-11-08|vii btt'), 'crónicas: la que pasó un compañero la ve como pasada (y no es suya)');
 select pg_temp.check((select e->>'by' from jsonb_array_elements(runner_chronicles_team(:'crcode2')) e where e->>'key' = '2026-11-08|vii btt') = :'crname', 'crónicas: se sabe quién la pasó');
 select pg_temp.expect_fail($q$select runner_chronicles_team('codigo-falso')$q$, 'crónicas: enlace falso no lee las del equipo');
+select pg_temp.check((select (e->>'at') is not null from jsonb_array_elements(runner_chronicles_team(:'crcode')) e where e->>'key' = '2026-11-08|vii btt'), 'crónicas: se sabe el día en que se pasó');
 select pg_temp.expect_fail('select * from chronicles', 'crónicas: anon no lee la tabla');
 reset role;
 set role authenticated;
@@ -1175,6 +1176,35 @@ select promote_registration('20000000-0000-0000-0000-0000000000d1');
 select set_config('request.jwt.claim.sub', '', false);
 reset role;
 select pg_temp.check((select count(*) = 2 and bool_and(dnf) and bool_and(position is null) from results where race_id = (select id from races where name = 'Carrera Abandono')), 'abandono: pasa a resultados como abandono, sin puesto');
+set role anon;
+reset role;
+-- ===== Datos de la dirección en la crónica =====
+insert into vault.decrypted_secrets values ('anthropic_key', 'sk-test-123') on conflict do nothing;
+update chronicle_posts set admin_notes = 'Pinchó a 10 km de meta y perdió 3 minutos', status = 'lista', ai_tries = 3 where race_key = '2026-05-01|carrera datos';
+select id as post_dd from chronicle_posts where race_key = '2026-05-01|carrera datos' \gset
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+select admin_chronicle_ai_retry(:'post_dd');
+select set_config('request.jwt.claim.sub', '', false);
+reset role;
+select pg_temp.check((select (body #>> '{messages,0,content}') like '%DATOS ADICIONALES DE LA DIRECCIÓN%Pinchó a 10 km de meta y perdió 3 minutos%' and (body #>> '{system}') like '%DATOS ADICIONALES%' from net.calls order by id desc limit 1), 'direccion: volver a crear manda los datos extra, aunque estuviera como lista');
+select pg_temp.check((select ai_state = 'pendiente' and ai_tries = 1 from chronicle_posts where id = :'post_dd'), 'direccion: tras volver a crear queda pendiente de respuesta');
+select pg_temp.expect_fail($q$update chronicle_posts set admin_notes = repeat('x', 2001)$q$, 'direccion: los datos extra tienen un tope de 2000 letras');
+set role anon;
+reset role;
+-- ===== Medios de comunicación =====
+set role anon;
+select pg_temp.expect_fail($q$select count(*) from media_mentions$q$, 'medios: el anónimo no lee');
+select pg_temp.expect_fail($q$insert into media_mentions (race_key, race_name, race_date, medium, published_on) values ('2026-03-01|x', 'X', '2026-03-01', 'Diario', '2026-03-03')$q$, 'medios: el anónimo no escribe');
+reset role;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+insert into media_mentions (race_key, race_name, race_date, medium, kind, published_on, url) values ('2026-03-01|carrera medios', 'Carrera Medios', '2026-03-01', 'Diario del Alto Aragón', 'prensa', '2026-03-03', 'https://example.com/noticia');
+select pg_temp.check((select count(*) = 1 and bool_and(kind = 'prensa') from media_mentions), 'medios: dirección anota una aparición');
+select pg_temp.expect_fail($q$insert into media_mentions (race_key, race_name, race_date, medium, kind, published_on) values ('2026-03-01|y', 'Y', '2026-03-01', 'Radio', 'podcast', '2026-03-03')$q$, 'medios: el tipo tiene que ser uno de la lista');
+select pg_temp.expect_fail($q$insert into media_mentions (race_key, race_name, race_date, medium, published_on) values ('2026-03-01|y', 'Y', '2026-03-01', '   ', '2026-03-03')$q$, 'medios: el medio no puede estar vacío');
+select set_config('request.jwt.claim.sub', '', false);
+reset role;
 set role anon;
 set role anon;
 \echo TODAS LAS PRUEBAS SQL OK

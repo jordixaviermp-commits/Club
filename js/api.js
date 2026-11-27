@@ -5,8 +5,8 @@ import { streakCount, newCode, todayISO, pastLimit, numDays, yearOf, SUBTYPES, p
 
 /** Demo: «corrige» una crónica ordenando espacios y poniendo mayúscula y punto (la corrección real la hace Claude desde la base de datos). */
 const demoPolish = (t) => { const x = String(t).trim().replace(/\s+/g, ' '); return x.charAt(0).toUpperCase() + x.slice(1) + (/[.!?]$/.test(x) ? '' : '.'); };
-const TABLES = ['runners', 'registrations', 'registration_entries', 'races', 'results', 'settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests', 'social_posts', 'chronicles'];
-const OPTIONAL = new Set(['settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests', 'social_posts', 'chronicles']); // tablas que pueden faltar si aún no se ha ejecutado su SQL
+const TABLES = ['runners', 'registrations', 'registration_entries', 'races', 'results', 'settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests', 'social_posts', 'chronicles', 'media_mentions'];
+const OPTIONAL = new Set(['settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests', 'social_posts', 'chronicles', 'media_mentions']); // tablas que pueden faltar si aún no se ha ejecutado su SQL
 
 /** Mensajes de error comprensibles. */
 export function friendlyError(e) {
@@ -83,6 +83,7 @@ function nest(data) {
     corrections: data.correction_requests || null,
     socialPosts: data.social_posts || null,       // null = falta el SQL de redes
     chronicles: data.chronicles || null,          // null = falta el SQL de crónicas
+    media: data.media_mentions || null,           // null = falta el SQL de medios
   };
 }
 
@@ -121,6 +122,8 @@ export function supabaseApi(url, key) {
         ...(r.contract ? { contract: r.contract } : {}) }))));
     },
     async updateRunner(id, patch) { ok(await sb.from('runners').update(patch).eq('id', id)); },
+    async saveMedia(row) { const { id, ...r } = row; if (id) ok(await sb.from('media_mentions').update(r).eq('id', id)); else ok(await sb.from('media_mentions').insert(r)); },
+    async deleteMedia(id) { ok(await sb.from('media_mentions').delete().eq('id', id)); },
     async saveSetting(key, value) { ok(await sb.from('settings').upsert({ key, value })); },
     async listDocuments() {
       return ok(await sb.from('runner_documents').select('id,runner_id,year,title,filename,mime,size,created_at').order('year', { ascending: false }));
@@ -476,7 +479,7 @@ export function demoApi(storage = globalThis.localStorage) {
     async signOut() { admin = false; try { storage.removeItem(DEMO_KEY + '-admin'); } catch { /* nada */ } },
     async resetDemo() { mem = demoSeed(); save(); },
 
-    async loadAll() { requireAdmin(); autoPromote(); const { runner_watch, ...d } = load(); return clone(nest({ circuit_podiums: [], announcements: [], announcement_replies: [], correction_requests: [], social_posts: [], chronicles: [], ...d })); },
+    async loadAll() { requireAdmin(); autoPromote(); const { runner_watch, ...d } = load(); return clone(nest({ circuit_podiums: [], announcements: [], announcement_replies: [], correction_requests: [], social_posts: [], chronicles: [], media_mentions: [], ...d })); },
     async autoPromote() { requireAdmin(); return autoPromote(); },
     async adminMovements(limit = 300) {
       requireAdmin(); const d = load(), nm = Object.fromEntries(d.runners.map((r) => [r.id, r.name])), out = [];
@@ -508,6 +511,8 @@ export function demoApi(storage = globalThis.localStorage) {
       save();
     },
     async updateRunner(id, patch) { requireAdmin(); Object.assign(load().runners.find((r) => r.id === id), patch); save(); },
+    async saveMedia(row) { requireAdmin(); const d = load(); d.media_mentions = d.media_mentions || []; if (row.id) { const m = d.media_mentions.find((x) => x.id === row.id); if (m) Object.assign(m, row); } else d.media_mentions.push({ ...row, id: 'mm-' + Math.random().toString(36).slice(2, 10), created_at: new Date().toISOString() }); save(); },
+    async deleteMedia(id) { requireAdmin(); const d = load(); d.media_mentions = (d.media_mentions || []).filter((x) => x.id !== id); save(); },
     async listDocuments() { requireAdmin(); return clone((load().documents || []).map(({ b64, ...m }) => m)); },
     async uploadDocument(runnerId, year, title, filename, mime, b64) {
       requireAdmin(); const d = load(); d.documents = d.documents || [];
@@ -967,7 +972,7 @@ export function demoApi(storage = globalThis.localStorage) {
     },
     async runnerChroniclesTeam(code) {
       const me = byCode(code), d = load(), by = new Map();
-      for (const x of d.chronicles || []) { const cur = by.get(x.race_key); const nm = d.runners.find((r) => r.id === x.runner_id)?.name || '?'; if (!cur || (x.runner_id === me.id && !cur.mine)) by.set(x.race_key, { key: x.race_key, by: nm, mine: x.runner_id === me.id || !!cur?.mine }); else if (x.runner_id === me.id) cur.mine = true; }
+      for (const x of d.chronicles || []) { const cur = by.get(x.race_key); const nm = d.runners.find((r) => r.id === x.runner_id)?.name || '?'; if (!cur || (x.runner_id === me.id && !cur.mine)) by.set(x.race_key, { key: x.race_key, by: nm, mine: x.runner_id === me.id || !!cur?.mine, at: x.done_at || null }); else if (x.runner_id === me.id) cur.mine = true; }
       return clone([...by.values()]);
     },
     async runnerChronicleSend(code, c) {
@@ -981,7 +986,7 @@ export function demoApi(storage = globalThis.localStorage) {
       }
       let p = d.chronicle_posts.find((x) => x.runner_id === me.id && x.race_key === c.key);
       if (p && p.status !== 'enviada') throw new Error('ya_en_proceso');
-      if (!p) { p = { id: 'cp-' + Math.random().toString(36).slice(2, 10), runner_id: me.id, race_key: c.key, race_name: c.name || 'Carrera', race_date: c.date || null, status: 'enviada', final_text: null, photos: 0, created_at: new Date().toISOString() }; d.chronicle_posts.push(p); }
+      if (!p) { p = { id: 'cp-' + Math.random().toString(36).slice(2, 10), runner_id: me.id, race_key: c.key, race_name: c.name || 'Carrera', race_date: c.date || null, status: 'enviada', final_text: null, admin_notes: null, photos: 0, created_at: new Date().toISOString() }; d.chronicle_posts.push(p); }
       p.body = String(c.body).trim(); p.updated_at = new Date().toISOString();
       if (c.p1 || c.p2) { d.chronicle_photos = d.chronicle_photos.filter((x) => x.post_id !== p.id); [c.p1, c.p2].filter(Boolean).forEach((data, i) => d.chronicle_photos.push({ post_id: p.id, ord: i + 1, data })); }
       p.photos = d.chronicle_photos.filter((x) => x.post_id === p.id).length;
@@ -999,7 +1004,7 @@ export function demoApi(storage = globalThis.localStorage) {
     async getChroPhotos(id) { requireAdmin(); return clone((load().chronicle_photos || []).filter((x) => x.post_id === id).sort((a, b) => a.ord - b.ord)); },
     async updateChroPost(id, patch) { requireAdmin(); const p = (load().chronicle_posts || []).find((x) => x.id === id); if (p) Object.assign(p, patch, { updated_at: new Date().toISOString() }); save(); },
     async collectChroAi() { requireAdmin(); return 0; },
-    async retryChroAi(id) { requireAdmin(); const p = (load().chronicle_posts || []).find((x) => x.id === id); if (p) { p.final_text = demoPolish(p.body); p.ai_state = 'hecho'; save(); } },
+    async retryChroAi(id) { requireAdmin(); const p = (load().chronicle_posts || []).find((x) => x.id === id); if (p) { p.final_text = demoPolish(p.body) + (p.admin_notes ? ' ' + demoPolish(p.admin_notes) : ''); p.ai_state = 'hecho'; save(); } },
     async deleteChroPhotos(id) { requireAdmin(); const d = load(); d.chronicle_photos = (d.chronicle_photos || []).filter((x) => x.post_id !== id); const p = (d.chronicle_posts || []).find((x) => x.id === id); if (p) p.photos = 0; save(); },
     async runnerSetChronicle(code, key, done) {
       const me = byCode(code), d = load(); d.chronicles = (d.chronicles || []).filter((x) => (done ? !(x.runner_id === me.id && x.race_key === key) : x.race_key !== key));   // deshacer = pendiente para todos

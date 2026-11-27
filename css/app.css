@@ -2906,3 +2906,57 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .rr-fields[hidden] { display: none !important; }
 .dnf-check { flex-wrap: wrap; } .dnf-check input { flex: none; width: 22px; height: 22px; } .dnf-check small { flex-basis: 100%; padding-left: 1.7rem; }
 .dnf-check { flex-wrap: nowrap; } .dnf-check span { display: grid; gap: .1rem; } .dnf-check small { padding-left: 0; flex-basis: auto; }
+
+/* v285 · checks de historia y crónica con su día */
+.rc-pub small { font-size: 11px; font-weight: 700; margin-left: 3px; white-space: nowrap; }
+.rc-side:has(.rc-pub) { flex-wrap: wrap; }
+
+/* v286 · tarjeta de carrera disputada más compacta */
+.res-line { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .7rem; margin: .5rem 0 0; font-size: var(--fs-3); color: var(--muted); }
+.res-line b { color: var(--text); } .res-line svg { width: 16px; height: 16px; color: var(--ok); vertical-align: -3px; margin-right: .25rem; }
+.res-line a { font-weight: 600; white-space: nowrap; } .res-line a svg { color: inherit; }
+.res-line .wk-chip, .res-line .chip { margin-left: auto; }
+.rc-pubs { display: flex; flex-wrap: wrap; gap: .4rem; margin: .5rem 0 0; }
+.rc-pub.l { padding: .2rem .55rem; gap: .2rem; } .rc-pub.l b { font-size: 12px; margin-left: 2px; }
+
+/* v287 · la crónica es solo «cómo te fue» en 2 líneas */
+.chro-lead { margin: .5rem 0; font-size: var(--fs-3); line-height: 1.45; }
+.chro-how { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; gap: .3rem; margin: .6rem 0; padding: .5rem .4rem; border-radius: 14px; background: var(--accent-2); text-align: center; }
+.chro-how > div { display: grid; justify-items: center; gap: .05rem; min-width: 0; } .chro-how svg { width: 20px; height: 20px; color: var(--accent); }
+.chro-how b { font-size: var(--fs-3); } .chro-how small { font-size: 11px; color: var(--muted); line-height: 1.2; } .chro-how i { font-style: normal; color: var(--muted); font-size: 1.2rem; }
+.chro-had { margin: .5rem 0 0; font-size: var(--fs-2); color: var(--muted); font-weight: 600; }
+.chro-intro { display: flex; gap: .6rem; align-items: flex-start; margin: .5rem 0; padding: .6rem .7rem; border-radius: 12px; background: var(--accent-2); font-size: var(--fs-3); line-height: 1.4; }
+.chro-intro > svg { width: 20px; height: 20px; flex: none; color: var(--accent); margin-top: 1px; }
+.chro-dlg label small { display: inline; font-weight: 400; }
+
+/* v288 · Equipo: Resumen | Impacto en redes */
+.eq-sw { margin: .2rem 0 .8rem; } .eq-sw button svg { width: 16px; height: 16px; margin-right: .3rem; vertical-align: -3px; }
+.imp-pane h3 { margin-top: .8rem; }
+
+/* v289 · datos de la dirección para el post */
+.chro-notes { border: 1px dashed var(--line); border-radius: 14px; padding: .6rem .7rem; margin: .7rem 0; display: grid; gap: .5rem; }
+.chro-notes label small { display: inline; font-weight: 400; } .chro-notes .btn svg { width: 16px; height: 16px; margin-right: .3rem; vertical-align: -3px; }
+.chro-notes p { margin: 0; }
+
+/* v290 · medios de comunicación */
+.net-tabs { display: flex; overflow-x: auto; scrollbar-width: none; gap: .3rem; padding-bottom: 2px; }
+.net-tabs::-webkit-scrollbar { display: none; } .net-tab { flex: 1 0 58px; min-width: 58px; }
+.md-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; margin: .6rem 0; }
+.md-tile { display: grid; justify-items: center; gap: .1rem; padding: .6rem .3rem; border-radius: 14px; background: var(--accent-2); text-align: center; }
+.md-tile svg { width: 18px; height: 18px; color: var(--accent); } .md-tile b { font-size: var(--fs-6); line-height: 1.1; } .md-tile span { font-size: var(--fs-2); color: var(--muted); line-height: 1.2; } .md-tile em { font-style: normal; font-size: var(--fs-2); font-weight: 700; color: var(--ok); }
+.md-f { margin: .3rem 0 .6rem; } .md-f .chip { padding-left: .7rem; padding-right: .7rem; font-size: var(--fs-3); }
+.md-race { margin-bottom: .6rem; } .md-race .md-h { display: flex; align-items: center; gap: .6rem; }
+.md-ck { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--card); border: 1.5px solid var(--line); color: var(--muted); flex: none; } .md-ck svg { width: 16px; height: 16px; }
+.md-race.has .md-ck { background: color-mix(in srgb, var(--ok) 16%, var(--card)); border-color: var(--ok); color: var(--ok); }
+.md-t { display: grid; flex: 1; min-width: 0; } .md-t small { overflow-wrap: anywhere; }
+.md-h .btn svg { width: 14px; height: 14px; margin-right: .2rem; vertical-align: -2px; }
+.md-none { margin: .3rem 0 0 2.4rem; } .md-list { list-style: none; margin: .5rem 0 0; padding: 0; display: grid; gap: .4rem; }
+.md-list li { display: flex; align-items: center; gap: .5rem; padding: .4rem .5rem; border-radius: 10px; background: var(--bg); }
+.md-n { display: grid; flex: 1; min-width: 0; } .md-n b { overflow-wrap: anywhere; }
+.md-k { font-size: var(--fs-1); font-weight: 800; text-transform: uppercase; letter-spacing: .03em; padding: .1rem .45rem; border-radius: 8px; background: var(--accent-2); color: var(--accent); flex: none; }
+.md-list .icon-btn { width: 36px; height: 36px; flex: none; }
+.md-rank { list-style: none; margin: .4rem 0; padding: 0; display: grid; gap: .3rem; } .md-rank li { display: flex; justify-content: space-between; gap: .6rem; padding: .4rem .7rem; border-radius: 10px; background: var(--card); border: 1px solid var(--line); } .md-rank span { font-weight: 800; }
+
+.md-race .md-h { display: grid; grid-template-columns: 28px 1fr; gap: .25rem .6rem; align-items: center; }
+.md-h .btn { grid-column: 2; justify-self: start; }
+.md-none { margin-left: 0; }
