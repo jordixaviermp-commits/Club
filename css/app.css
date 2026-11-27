@@ -3053,3 +3053,7 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .dlg-info .dlg-body { display: grid; gap: .6rem; max-height: 60vh; overflow: auto; }
 .ar-sub { margin: 0; color: var(--muted); font-size: var(--fs-3); }
 .ar-task[data-act="ar-open"] { cursor: pointer; }
+/* v306 · Mi temporada fase 1: año único arriba y «Mis números» plegado */
+.sum-card .years { display: flex; gap: .4rem; margin: .1rem 0 .65rem; flex-wrap: wrap; }
+.nums-block .pod-row, .nums-block .my-line, .nums-block .imp-det { margin-top: .5rem; }
+.nums-block .desp-t small { display: block; }
