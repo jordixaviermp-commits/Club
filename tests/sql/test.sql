@@ -1230,6 +1230,7 @@ reset role;
 set role anon;
 select pg_temp.check((select (e->>'pub')::boolean from jsonb_array_elements(runner_chronicles_team('codigo-valorador-uno-01')) e where e->>'key' = :'k_cer'), 'cerrado: la app sabe qué carreras están publicadas');
 select pg_temp.check((select (e->>'pub_at') is not null from jsonb_array_elements(runner_chronicles_team('codigo-valorador-uno-01')) e where e->>'key' = :'k_cer'), 'crónicas del equipo: devuelve cuándo se publicó');
+select pg_temp.check((select (e->>'pub') = 'true' and e ? 'text' from jsonb_array_elements(runner_chronicles_team('codigo-valorador-uno-01')) e where e->>'key' = :'k_cer'), 'crónicas del equipo: incluye el campo del texto publicado');
 reset role;
 -- ===== Pasar a resultados conserva el puesto en la general =====
 insert into registrations (id, name, date) values ('20000000-0000-0000-0000-0000000000e1', 'Carrera General', current_date - 9);

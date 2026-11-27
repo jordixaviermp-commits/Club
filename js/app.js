@@ -1506,6 +1506,27 @@ function impactBody(d) {
       <ul class="imp-list">${imp.rows.map(rowHtml).join('')}</ul></details>`;
   }
 
+/** Ventana flotante informativa (misma caja que las demás): título, contenido libre y botones. Devuelve el valor del botón pulsado o null. */
+function infoDialog(title, html, options = []) {
+  return new Promise((resolve) => {
+    const dlg = document.getElementById('dialog');
+    dlg.innerHTML = `<form method="dialog" class="dlg dlg-info"><h2>${esc(title)}</h2><div class="dlg-body">${html}</div>
+      <div class="dlg-actions">${options.map((o, i) => `<button value="${i}" class="btn ${o.kind || ''}">${esc(o.label)}</button>`).join('')}<button value="" class="btn ghost">Cerrar</button></div></form>`;
+    dlg.onclose = () => { const v = dlg.returnValue; resolve(v === '' ? null : options[Number(v)]?.value ?? null); };
+    dlg.returnValue = ''; dlg.showModal();
+  });
+}
+/** Lo que se enseña al tocar «Resultado» o «Crónica» de una carrera: mi resultado y el texto de la crónica. */
+function raceDetail(key) {
+  const d = S.runnerData; if (!d) return null;
+  const reg = (d.registrations || []).find((g) => postKeyOf(g) === key), mine = (d.my_results || []).find((x) => postKeyOf(x) === key), res = mine || reg?.my_result || null;
+  let race = mine || reg;
+  if (!race && S.chron instanceof Set) { const c = chronicleStatus(d, S.chron, d.today || todayISO(), Number(key.slice(0, 4))); race = [...c.pending, ...c.done].find((x) => x.key === key) || null; }
+  const post = S.myPosts && S.myPosts.get(key), by = S.chronBy?.get?.(key);
+  return { race, res, cat: res?.category || (reg?.entries || []).find((e) => e.runner_id === d.me?.id)?.category || '', post, by, pub: !!by?.pub, pubAt: by?.pub_at || post?.pub_at || null,
+    text: String((post && (post.final || post.body)) || by?.text || '').trim(), mineText: !!post, closed: reg ? resultClosed(reg) : false, regId: reg?.id || null, raceId: mine?.race_id || null };
+}
+
 /** «Después de la carrera»: resultado → crónica → publicada, una fila por carrera con su paso siguiente. Sustituye a los antiguos bloques sueltos. */
 function afterRaceCard(d, { pending, noPos, sent, today }) {
   const year = S.myYear || new Date().getFullYear(), hasChron = S.chron instanceof Set;
@@ -1529,16 +1550,15 @@ function afterRaceCard(d, { pending, noPos, sent, today }) {
   const resTask = (r) => {
     if (r.res === 'pend') return task('todo', '🏁', 'Resultado', 'Ponerlo', S.preview ? '' : `href="${r.resHref}"`);
     const sub = r.res === 'dnf' ? 'Abandonó' : r.txt ? esc(r.txt.split(' · ')[0]) : 'Puesto';
-    if (r.kind === 'reg' && r.g?.my_result && !S.preview && !resultClosed(r.g)) return task('ok', '🏁', 'Resultado', `${sub} · cambiar`, `href="${r.resHref}"`);
-    return task('ok', '🏁', 'Resultado', sub, '');
+    return task('ok', '🏁', 'Resultado', `${sub} · ver`, S.preview ? '' : `data-act="ar-open" data-t="res" data-key="${esc(r.key)}"`);
   };
   const cronTask = (r) => {
     if (r.cron === null) return '';
     if (r.res === 'pend') return task('wait', '✍️', 'Crónica', 'Tras el resultado', '');
-    const post = S.myPosts && S.myPosts.get(r.key), by = S.chronBy?.get?.(r.key);
-    if (post && post.status === 'enviada') return task('ok', '✍️', 'Crónica', 'En revisión · editar', S.preview ? '' : `data-act="chro-write" data-key="${esc(r.key)}"`);
-    if (post && post.status === 'lista') return task('ok', '✍️', 'Crónica', 'Lista · ver', S.preview ? '' : `data-act="chro-write" data-key="${esc(r.key)}"`);
-    if (r.cron) return task('ok', '✍️', 'Crónica', r.pub ? 'Publicada' : by && !by.mine ? `La pasó ${esc(by.by)}` : 'Pasada', '');
+    const post = S.myPosts && S.myPosts.get(r.key), by = S.chronBy?.get?.(r.key), open = S.preview ? '' : `data-act="ar-open" data-t="cron" data-key="${esc(r.key)}"`;
+    if (post && post.status === 'enviada') return task('ok', '✍️', 'Crónica', 'En revisión · ver', open);
+    if (post && post.status === 'lista') return task('ok', '✍️', 'Crónica', 'Lista · ver', open);
+    if (r.cron) return task('ok', '✍️', 'Crónica', `${r.pub ? 'Publicada' : by && !by.mine ? `La pasó ${esc(by.by)}` : 'Pasada'} · ver`, open);
     if (S.preview) return task('todo', '✍️', 'Crónica', 'Pendiente', '');
     const dd = chroDataOf(r);
     if (dd && !dd.complete && !dd.missRes?.length) return task('todo', '✍️', 'Crónica', 'Completar datos', `href="${dd.raceHref}"`);
@@ -1548,22 +1568,7 @@ function afterRaceCard(d, { pending, noPos, sent, today }) {
     const wk = r.res === 'pend' || r.cron === false ? weekChip(r.end_date || r.date, today) : '';
     const leave = r.res === 'pend' && r.leave && !S.preview ? `<button type="button" class="ar-leave" data-act="r-leave" data-id="${r.leave}">No fui</button>` : '';
     return `<li class="ar-row${r.todo ? ' todo' : ''}"><div class="ar-head"><a class="ar-name" href="${runnerHref('carrera')}/${r.kind === 'race' ? 'race_' + r.id : r.id}" aria-label="Abrir la carrera ${esc(r.name)}"><b>${esc(r.name)}</b><small>${esc(formatDate(r.date, false))}${r.place ? ' · ' + esc(r.place) : ''}</small></a>${leave}</div>${wk ? `<div class="ar-wk">${wk}</div>` : ''}
-      <div class="ar-tasks">${resTask(r)}${cronTask(r)}</div>${pubsLine(r)}${moreBox(r)}</li>`;
-  };
-  // desplegable por carrera: qué resultado puso (categoría, general, tiempo) y el texto de su crónica
-  const moreBox = (r) => {
-    const reg = (d.registrations || []).find((g) => postKeyOf(g) === r.key), mine = (d.my_results || []).find((x) => postKeyOf(x) === r.key), res = mine || reg?.my_result || null;
-    const cat = res?.category || (reg?.entries || []).find((e) => e.runner_id === d.me?.id)?.category || '';
-    const post = S.myPosts && S.myPosts.get(r.key), text = post && String(post.final || post.body || '').trim();
-    const hasRes = !!(res && (res.position || res.dnf)), hasText = !!text;
-    if (!hasRes && !hasText) return '';
-    const cell = (label, val, sub = '') => `<div class="ar-cell"><small>${label}</small><b>${val}</b>${sub ? `<em>${esc(sub)}</em>` : ''}</div>`;
-    const gen = generalOf(res);
-    const resHtml = !hasRes ? '' : res.dnf ? `<div class="ar-sec"><h4>${ico('flag')}Mi resultado</h4><p class="ar-txt">Abandonó: cuenta como carrera hecha.</p></div>`
-      : `<div class="ar-sec"><h4>${ico('flag')}Mi resultado</h4><div class="ar-cells">${cell('Categoría', res.position ? `${res.position}º` : '—', cat)}${cell('General', gen ? `${gen}º` : '—', 'todas las categorías')}${cell('Tiempo', res.time_seconds ? formatTime(res.time_seconds) : '—', 'en carrera')}</div></div>`;
-    const stLabel = post?.status === 'publicada' ? 'Crónica publicada' : post?.status === 'lista' ? 'Crónica lista para publicar' : 'Mi crónica (en revisión)';
-    const cronHtml = !hasText ? '' : `<div class="ar-sec"><h4>${ico('pen')}${stLabel}${post?.status === 'publicada' && post.pub_at ? ` · ${dayMon(String(post.pub_at).slice(0, 10))}` : ''}</h4><p class="ar-txt">${esc(text)}</p></div>`;
-    return `<details class="ar-more" data-open-key="arm-${esc(r.key)}"${S.open?.['arm-' + r.key] ? ' open' : ''}><summary>${ico('chevd', 'ar-mchev')}<span>${hasRes && hasText ? 'Ver mi resultado y mi crónica' : hasRes ? 'Ver mi resultado' : 'Ver mi crónica'}</span></summary>${resHtml}${cronHtml}</details>`;
+      <div class="ar-tasks">${resTask(r)}${cronTask(r)}</div>${pubsLine(r)}</li>`;
   };
   // cuándo salió en redes: la historia (previa a la carrera) y la crónica, con su fecha
   const pubsLine = (r) => {
@@ -5878,6 +5883,27 @@ const actions = {
     if (!ok) return;
     S.rdraft = null; S.team = null; await chronicleReminder(S.runnerData.my_results?.find((x) => x.race_id === el.dataset.id)?.name); go(resultHref(el.dataset.id));
   },
+  async 'ar-open'(el) {
+    const k = el.dataset.key, t = el.dataset.t, x = raceDetail(k); if (!x?.race) return;
+    const cell = (label, val, sub = '') => `<div class="ar-cell"><small>${label}</small><b>${val}</b>${sub ? `<em>${esc(sub)}</em>` : ''}</div>`;
+    const ttl = `${x.race.name} · ${formatDate(x.race.date, false)}`;
+    if (t === 'res') {
+      const res = x.res, gen = generalOf(res);
+      const body = res?.dnf ? '<p class="ar-txt">Abandonó. Cuenta como carrera hecha.</p>'
+        : `<div class="ar-cells">${cell('Categoría', res?.position ? `${res.position}º` : '—', x.cat)}${cell('General', gen ? `${gen}º` : '—', 'todas las categorías')}${cell('Tiempo', res?.time_seconds ? formatTime(res.time_seconds) : '—', 'en carrera')}</div>`;
+      const note = x.closed ? '<p class="hint">Está publicado en redes: el resultado está cerrado. Si hay un error, avisa a la dirección.</p>' : '';
+      const href = x.regId ? `#/resultado/reg_${x.regId}` : x.raceId ? `#/resultado/race_${x.raceId}` : '';
+      const v = await infoDialog(`🏁 Mi resultado`, `<p class="ar-sub">${esc(ttl)}</p>${body}${note}`, !x.closed && href ? [{ label: 'Cambiar resultado', value: 'go', kind: 'primary' }] : []);
+      if (v === 'go') location.hash = href;
+      return;
+    }
+    const st = x.pub ? `Publicada en redes${x.pubAt ? ` el ${formatDate(String(x.pubAt).slice(0, 10), false)}` : ''}` : x.post?.status === 'lista' ? 'Lista para publicar' : x.post?.status === 'enviada' ? 'En revisión' : x.by && !x.by.mine ? 'Pasada por un compañero' : 'Pasada';
+    const who = x.by && !x.by.mine ? `<p class="ar-sub">La pasó <b>${esc(x.by.by)}</b></p>` : '';
+    const body = x.text ? `<p class="ar-txt">${esc(x.text)}</p>` : `<p class="empty small">${x.pub ? 'El texto publicado no está disponible todavía.' : 'Aún no hay texto publicado de esta crónica.'}</p>`;
+    const canEdit = x.mineText && x.post?.status === 'enviada';
+    const v = await infoDialog(`✍️ Crónica`, `<p class="ar-sub">${esc(ttl)} · <b>${esc(st)}</b></p>${who}${body}`, canEdit ? [{ label: 'Editar mi crónica', value: 'edit', kind: 'primary' }] : []);
+    if (v === 'edit') await actions['chro-write']({ dataset: { key: k } });
+  },
   async 'chro-write'(el) {
     const c = chronicleStatus(S.runnerData, S.chron, S.runnerData.today || todayISO(), S.myYear || new Date().getFullYear());
     const x = [...c.pending, ...c.done].find((y) => y.key === el.dataset.key); if (!x) return;
@@ -6659,7 +6685,7 @@ document.addEventListener('visibilitychange', async () => {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['chro-write', 'after-tab', 'eq-tab', 'circuit-pick', 'r-web', 'note-edit', 'car-open', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
+const RUNNER_ACTIONS = new Set(['chro-write', 'ar-open', 'after-tab', 'eq-tab', 'circuit-pick', 'r-web', 'note-edit', 'car-open', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
 // los enlaces de la ventana emergente (p. ej. las carreras de un compañero) cierran la ventana al navegar
 document.getElementById('dialog').addEventListener('click', (ev) => { if (ev.target.closest('a[href^="#/"]')) ev.currentTarget.close(); });
 $app.addEventListener('click', (ev) => {
