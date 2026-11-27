@@ -3250,3 +3250,15 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .ds2.adm .seg2 > .on b { background: var(--accent); color: var(--on-accent); }
 .ds2.adm .modbar .chip.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 .ds2.adm .modbar .chip.on b, .ds2.adm .modbar .chip.on .n { background: rgba(255,255,255,.2); color: inherit; }
+
+/* v314 · «Añadir carrera»: bloques en el sistema nuevo (sin un color por bloque) */
+.ds2 .fsec { --sc: var(--accent); border: 0; border-radius: 16px; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.ds2 .fsec-h, .ds2 .fsec-d[open] > summary.fsec-h { background: none; border-bottom: 0; }
+.ds2 .fsec-d[open] > summary.fsec-h { border-bottom: 1px solid var(--line); }
+.ds2 .fsec-n { background: var(--ds-soft); color: var(--text); }
+.ds2 .fsec-h .ico { color: var(--muted); }
+.ds2 .rform .btn.big-save { border-radius: 14px; }
+/* crónica: lo que falta para poder enviar */
+.chro-why { margin: .4rem 0 0; min-height: 1.2em; font-size: var(--fs-3); color: var(--mt-todo, #a8650a); font-weight: 600; }
+.chro-why:empty { display: none; }
+.dlg-info p { margin: 0 0 .5rem; }
