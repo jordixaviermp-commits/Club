@@ -3041,3 +3041,14 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .ar-tabs { margin-bottom: .45rem; } .ar-tabs button { min-height: 34px; font-size: var(--fs-3); }
 .ar-card details[open] > summary { margin-bottom: .35rem; }
 @media (max-width: 379px) { .ar-tgo { display: none; } .ar-task { padding: .35rem .4rem; gap: .35rem; } }
+/* v303 · cuándo salió en redes */
+.ar-pubs { display: flex; flex-wrap: wrap; gap: .35rem; }
+.ar-pub { display: inline-flex; align-items: center; gap: .3rem; padding: .15rem .55rem; border-radius: 999px; font-size: .74rem; font-weight: 600; background: color-mix(in srgb, var(--ink) 7%, var(--card)); color: var(--muted); }
+.ar-pub svg { width: 13px; height: 13px; } .ar-pub.ok { background: color-mix(in srgb, var(--ok) 14%, var(--card)); color: var(--ok); }
+/* v304 · detalle desplegable de resultado y crónica */
+.ar-more > summary { list-style: none; display: flex; align-items: center; gap: .35rem; min-height: 36px; padding: .1rem .2rem; cursor: pointer; font-size: var(--fs-3); font-weight: 600; color: var(--accent); border-top: 1px dashed var(--line); } .ar-more > summary::-webkit-details-marker { display: none; }
+.ar-more .ar-mchev { width: 16px; height: 16px; transition: transform .15s; } .ar-more[open] .ar-mchev { transform: rotate(180deg); }
+.ar-sec { padding: .35rem 0 .1rem; } .ar-sec h4 { margin: 0 0 .3rem; font-size: var(--fs-3); display: flex; align-items: center; gap: .35rem; } .ar-sec h4 svg { width: 15px; height: 15px; }
+.ar-cells { display: grid; grid-template-columns: repeat(3, 1fr); gap: .35rem; }
+.ar-cell { display: grid; gap: .05rem; padding: .35rem .45rem; border-radius: 10px; background: color-mix(in srgb, var(--ink) 5%, var(--card)); min-width: 0; text-align: center; } .ar-cell small { color: var(--muted); font-size: .7rem; } .ar-cell b { font-size: 1.05rem; } .ar-cell em { font-style: normal; font-size: .68rem; color: var(--muted); overflow-wrap: anywhere; }
+.ar-txt { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-3); line-height: 1.4; max-height: 22rem; overflow: auto; padding: .45rem .55rem; border-radius: 10px; background: color-mix(in srgb, var(--ink) 4%, var(--card)); }
