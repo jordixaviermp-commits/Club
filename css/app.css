@@ -2910,3 +2910,11 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 /* v285 · checks de historia y crónica con su día */
 .rc-pub small { font-size: 11px; font-weight: 700; margin-left: 3px; white-space: nowrap; }
 .rc-side:has(.rc-pub) { flex-wrap: wrap; }
+
+/* v286 · tarjeta de carrera disputada más compacta */
+.res-line { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .7rem; margin: .5rem 0 0; font-size: var(--fs-3); color: var(--muted); }
+.res-line b { color: var(--text); } .res-line svg { width: 16px; height: 16px; color: var(--ok); vertical-align: -3px; margin-right: .25rem; }
+.res-line a { font-weight: 600; white-space: nowrap; } .res-line a svg { color: inherit; }
+.res-line .wk-chip, .res-line .chip { margin-left: auto; }
+.rc-pubs { display: flex; flex-wrap: wrap; gap: .4rem; margin: .5rem 0 0; }
+.rc-pub.l { padding: .2rem .55rem; gap: .2rem; } .rc-pub.l b { font-size: 12px; margin-left: 2px; }

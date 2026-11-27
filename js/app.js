@@ -405,7 +405,8 @@ const myPubChip = (g) => { const p = myPub(g); if (!p) return '';
   const cron = p.cron ? `<span class="rc-pub" title="Crónica pasada${p.cronAt ? ' el ' + shortDate(p.cronAt) : ''}${p.cronBy ? ' por ' + esc(p.cronBy) : ''}" aria-label="Crónica pasada">${ico('pen')}${ico('check', 'rc-pub-ok')}${p.cronAt ? `<small>${dayMon(p.cronAt)}</small>` : ''}</span>` : '';
   return social + cron; };
 const myPubLine = (g) => { const p = myPub(g); if (!p) return '';
-  return `<div class="rc-pubs">${p.story ? `<p><span class="rc-pub">${ico('camera')}${ico('check', 'rc-pub-ok')}</span>Historia publicada${p.date ? ' el ' + esc(shortDate(p.date)) : ''}: sale gracias a tu inscripción.</p>` : ''}${p.res ? `<p><span class="rc-pub">${ico('image')}${ico('check', 'rc-pub-ok')}</span>Post de resultados publicado.</p>` : ''}${p.cron ? `<p><span class="rc-pub">${ico('pen')}${ico('check', 'rc-pub-ok')}</span>Crónica pasada${p.cronAt ? ' el ' + esc(shortDate(p.cronAt)) : ''}${p.cronBy ? ' por ' + esc(p.cronBy) : ''}.</p>` : ''}</div>`; };
+  const chip = (ic, label, when, title) => `<span class="rc-pub l" title="${esc(title)}">${ico(ic)}${ico('check', 'rc-pub-ok')}<b>${label}</b>${when ? `<small>${esc(when)}</small>` : ''}</span>`;
+  return `<div class="rc-pubs">${p.story ? chip('camera', 'Historia', p.date ? dayMon(p.date) : '', 'Historia publicada: sale gracias a tu inscripción') : ''}${p.res ? chip('image', 'Resultados', '', 'Post de resultados publicado') : ''}${p.cron ? chip('pen', 'Crónica', p.cronAt ? dayMon(p.cronAt) : '', `Crónica pasada${p.cronBy ? ' por ' + p.cronBy : ''}`) : ''}</div>`; };
 /** «Impacto en redes» del corredor: publicaciones del club y cifras de Instagram de 30 días. null = falta el SQL; undefined = sin cargar. */
 async function loadImpact() {
   if (S.impact !== undefined && S.impact !== 'loading') return;
@@ -1676,11 +1677,12 @@ function runnerRegCard(g, opts = {}) {
     const open = g.date >= today;
     // una sola fila de herramientas con iconos: valorar, web, editar datos y suspender (antes eran cuatro filas con frases)
     const canSusp = !S.preview && g.date >= pastLimit();
-    const tools = `<div class="rc-tools">${open && !mine && !g.suspended && !S.preview ? starBtn(g, 'w-add-reg', ['id', g.id]) : ''}${g.url ? `<a class="rc-tool has-url" href="${esc(g.url)}" target="_blank" rel="noopener noreferrer" aria-label="Abrir la web de la carrera" title="Web de la carrera">${ico('link')}</a>`
+    const lead = `${open && !mine && !g.suspended && !S.preview ? starBtn(g, 'w-add-reg', ['id', g.id]) : ''}${g.url ? `<a class="rc-tool has-url" href="${esc(g.url)}" target="_blank" rel="noopener noreferrer" aria-label="Abrir la web de la carrera" title="Web de la carrera">${ico('link')}</a>`
       : open && !g.suspended && !S.preview ? `<button type="button" class="rc-tool no-url" data-act="r-web" data-id="${g.id}" aria-label="Sin web: pulsa para añadirla" title="Aún sin web: pulsa para añadirla (para todos)">${ico('link')}</button>` : ''}
       ${mine && !S.preview && !g.suspended && (open || !g.my_result) ? `<button type="button" class="rc-tool lab pay${mine.paid ? ' on' : ''}" data-act="r-paid" data-id="${g.id}" aria-label="${mine.paid ? 'Pagada: cambiar o quitar el pago' : 'Marcar como pagada'}" title="${mine.paid ? 'Pagada' : 'Marcar como pagada'}">${ico('euro')}<span>${mine.paid ? `${mine.paid_amount != null ? euros(mine.paid_amount) : 'Pagada'}` : 'Pagar'}</span>${mine.paid ? ico('check', 'pay-ok') : ''}</button>` : ''}
       ${carTool(g, !!mine)}
-      <span class="rc-tools-sp"></span>${!S.preview ? `<a class="rc-tool" href="#/editar/${g.id}" aria-label="Editar los datos de ${esc(g.name)}" title="Editar datos${g.mine_created ? ' (la añadiste tú)' : ''}">${ico('pen')}</a>` : ''}${canSusp ? (g.suspended
+      `;
+    const tools = `<div class="rc-tools">${lead}${lead.replace(/\s+/g, '') ? '<span class="rc-tools-sp"></span>' : ''}${!S.preview ? `<a class="rc-tool" href="#/editar/${g.id}" aria-label="Editar los datos de ${esc(g.name)}" title="Editar datos${g.mine_created ? ' (la añadiste tú)' : ''}">${ico('pen')}</a>` : ''}${canSusp ? (g.suspended
         ? `<button type="button" class="rc-tool" data-act="r-suspend" data-id="${g.id}" data-v="0" aria-label="Se vuelve a celebrar" title="Se vuelve a celebrar">${ico('check')}</button>`
         : `<button type="button" class="rc-tool susp" data-act="r-suspend" data-id="${g.id}" data-v="1" aria-label="Marcar como suspendida" title="Marcar como suspendida">${ico('ban')}</button>`) : ''}</div>`;
     const mates = g.entries.length ? `<div class="club-row"><span class="count">${ico('users')}${g.entries.length} del club</span><ul class="people">${g.entries.map((e) =>
@@ -1694,8 +1696,9 @@ function runnerRegCard(g, opts = {}) {
     ].filter(Boolean).join('');
     const body = `
       ${tools}${typeTag(g)}
-      ${open || g.suspended ? '' : `<p class="state-tag">${mine && g.my_result ? `${ico('check', 't-i')}Ya disputada · tu resultado está enviado` : `${ico('flag', 't-i')}Ya disputada · pendiente de resultados`} ${weekChip(g.end_date || g.date, today)}</p>
-        ${mine && !S.preview ? (g.my_result ? `<p class="mine-created">Tu resultado: ${g.my_result.dnf ? 'abandonaste' : g.my_result.position + 'º'} (enviado) · <a href="#/resultado/reg_${g.id}">${ico('pen', 't-i')}Cambiar</a></p>`
+      ${open || g.suspended ? '' : `${mine && g.my_result ? '' : `<p class="state-tag">${ico('flag', 't-i')}Ya disputada · pendiente de resultados ${weekChip(g.end_date || g.date, today)}</p>`}
+        ${mine && g.my_result ? `<p class="res-line">${ico('check', 't-i')}<span>Resultado: <b>${g.my_result.dnf ? 'abandonaste' : g.my_result.position + 'º'}</b></span>${S.preview ? '' : `<a href="#/resultado/reg_${g.id}">${ico('pen', 't-i')}Cambiar</a>`}${weekChip(g.end_date || g.date, today)}</p>` : ''}
+        ${mine && !S.preview && !g.my_result ? (g.my_result ? ''
           : `<p class="row"><a class="btn primary small" href="#/resultado/reg_${g.id}">Poner mi resultado</a>
              <button class="btn ghost small" data-act="r-leave" data-id="${g.id}">No fui: borrarme</button></p>`) : ''}
         ${!mine && g.date >= pastLimit() ? `<div class="row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, '', 'Elige tu categoría')}
