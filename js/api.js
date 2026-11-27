@@ -12,6 +12,7 @@ const OPTIONAL = new Set(['settings', 'circuit_podiums', 'announcements', 'annou
 export function friendlyError(e) {
   const msg = String(e?.message || e || '');
   if (/enlace_no_valido/.test(msg)) return 'Este enlace ya no es válido. Pide uno nuevo a la dirección del club.';
+  if (/resultado_cerrado/.test(msg)) return 'Este resultado ya está cerrado porque se publicó en redes. Si hay algún error, avisa a la dirección y lo corrige ella.';
   if (/resultado_ya_puesto/.test(msg)) return 'Para poder cambiar tu resultado falta activarlo en la base de datos. Avisa a la dirección del club.';
   if (/puesto_general_no_valido/.test(msg)) return 'El puesto en la general no puede ser menor que el de tu categoría (y llega hasta 9999). Revísalo o déjalo vacío.';
   if (/puesto_no_valido/.test(msg)) return 'Pon un puesto válido (1, 2, 3…).';
@@ -772,6 +773,9 @@ export function demoApi(storage = globalThis.localStorage) {
     },
     async runnerReport(code, kind, id, position, category, podiumType, timeSeconds, generalPosition, dnf = false) {
       const me = byCode(code); const d = load();
+      const pubKeys = new Set((d.chronicle_posts || []).filter((x) => x.status === 'publicada').map((x) => x.race_key));
+      const closed = (() => { if (kind === 'reg') { const g = d.registrations.find((x) => x.id === id), e = d.registration_entries.find((x) => x.registration_id === id && x.runner_id === me.id); return !!(g && e && (e.self_position || e.self_dnf) && pubKeys.has(`${g.date}|${String(g.name).toLowerCase().replace(/\s+/g, ' ').trim()}`)); } const r = d.races.find((x) => x.id === id), x = d.results.find((y) => y.race_id === id && y.runner_id === me.id); return !!(r && x && (x.position || x.dnf) && pubKeys.has(`${r.date}|${String(r.name).toLowerCase().replace(/\s+/g, ' ').trim()}`)); })();
+      if (closed) throw new Error('resultado_cerrado');
       if (dnf) { position = null; timeSeconds = null; generalPosition = null; }
       else if (!Number.isInteger(position) || position < 1) throw new Error('puesto_no_valido');
       if (generalPosition != null && (!Number.isInteger(generalPosition) || generalPosition < position || generalPosition > 9999)) throw new Error('puesto_general_no_valido');
@@ -972,7 +976,7 @@ export function demoApi(storage = globalThis.localStorage) {
     },
     async runnerChroniclesTeam(code) {
       const me = byCode(code), d = load(), by = new Map();
-      for (const x of d.chronicles || []) { const cur = by.get(x.race_key); const nm = d.runners.find((r) => r.id === x.runner_id)?.name || '?'; if (!cur || (x.runner_id === me.id && !cur.mine)) by.set(x.race_key, { key: x.race_key, by: nm, mine: x.runner_id === me.id || !!cur?.mine, at: x.done_at || null }); else if (x.runner_id === me.id) cur.mine = true; }
+      for (const x of d.chronicles || []) { const cur = by.get(x.race_key); const nm = d.runners.find((r) => r.id === x.runner_id)?.name || '?'; if (!cur || (x.runner_id === me.id && !cur.mine)) by.set(x.race_key, { key: x.race_key, by: nm, mine: x.runner_id === me.id || !!cur?.mine, at: x.done_at || null, pub: (d.chronicle_posts || []).some((p) => p.race_key === x.race_key && p.status === 'publicada') }); else if (x.runner_id === me.id) cur.mine = true; }
       return clone([...by.values()]);
     },
     async runnerChronicleSend(code, c) {
