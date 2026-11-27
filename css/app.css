@@ -2963,3 +2963,8 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 
 /* v291 · resultado cerrado al publicar */
 .rc-lock { display: inline-flex; align-items: center; gap: .25rem; font-size: var(--fs-2); font-weight: 700; color: var(--muted); padding: .1rem .55rem; border-radius: 999px; background: var(--card); border: 1px solid var(--line); white-space: nowrap; }
+
+/* v292 · las crónicas pasadas abren su carrera */
+.chro-link { display: flex; align-items: center; gap: .4rem; flex: 1; min-width: 0; color: inherit; text-decoration: none; }
+.chro-link .chro-name { flex: 1; } .chro-go { width: 16px; height: 16px; flex: none; color: var(--muted); }
+.chro-row { align-items: center; }
