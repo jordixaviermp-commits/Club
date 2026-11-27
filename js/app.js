@@ -627,7 +627,7 @@ function frame(title, body, { back, actions = '', rtab = null, noSearch = false,
       ${back ? `<a class="back" href="${back}" aria-label="Volver">‹</a>` : rtab !== null && !S.preview && S.runnerData?.me ? `<button type="button" class="logo-btn" data-act="profile" aria-label="Mi perfil: aspecto, turnos y cambiar de persona" title="Mi perfil"><img class="logo" src="icons/logo.png" alt=""></button>` : '<img class="logo" src="icons/logo.png" alt="">'}
       ${head ? head : rtab !== null && !S.preview && S.runnerData?.me?.name && title === runnerTitle() ? `<h1 class="greet" aria-label="${esc(title)}" title="${esc(title)}"><span>${esc(title)}</span></h1>` : `<h1>${esc(title)}</h1>`}${actions}${(admin && rtab === null && !back && S.data) || rtab !== null ? (noSearch ? '' : searchButton()) + accidentButton() : ''}${rtab !== null ? newsBell() : ''}
     </header>
-    <main>${body}</main>
+    <main${admin && rtab === null && view !== 'memoria' ? ' class="ds2 adm"' : ''}>${body}</main>
     ${tabs}`;
 }
 
@@ -2695,8 +2695,8 @@ function viewMedia() {
 function netTabs(on) {
   if (S.session?.isAdmin && !S.chroPosts) loadChroPosts();
   let pend = 0, due = 0; try { pend = socialPending(); due = pubDue(); } catch { /* sin datos aún */ }
-  return `<nav class="net-tabs no-print" aria-label="Redes">${[['panel', '📋', 'Panel', '#/redes', pend], ['cal', '📅', 'Calendario', '#/semana', 0], ['pub', '📸', 'Publicar', '#/publicaciones', due], ['cro', '✍️', 'Crónicas', '#/cronicas', chroPending()], ['med', '📰', 'Medios', '#/medios', 0], ['ig', '📈', 'Instagram', '#/instagram', 0]]
-    .map(([k, i, l, h, n]) => `<a class="net-tab${on === k ? ' on' : ''}" href="${h}"><span aria-hidden="true">${i}</span><b>${l}</b>${n ? `<em>${n}</em>` : ''}</a>`).join('')}</nav>`;
+  return `<nav class="net-tabs no-print" aria-label="Redes">${[['panel', 'list', 'Panel', '#/redes', pend], ['cal', 'cal', 'Calendario', '#/semana', 0], ['pub', 'camera', 'Publicar', '#/publicaciones', due], ['cro', 'pen', 'Crónicas', '#/cronicas', chroPending()], ['med', 'file', 'Medios', '#/medios', 0], ['ig', 'bars', 'Instagram', '#/instagram', 0]]
+    .map(([k, i, l, h, n]) => `<a class="net-tab${on === k ? ' on' : ''}" href="${h}"><span aria-hidden="true">${ico(i)}</span><b>${l}</b>${n ? `<em>${n}</em>` : ''}</a>`).join('')}</nav>`;
 }
 
 /** Dirección: carreras de los próximos días con quién va, para avisar al encargado de redes (cláusula 8). */
