@@ -3057,3 +3057,5 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .sum-card .years { display: flex; gap: .4rem; margin: .1rem 0 .65rem; flex-wrap: wrap; }
 .nums-block .pod-row, .nums-block .my-line, .nums-block .imp-det { margin-top: .5rem; }
 .nums-block .desp-t small { display: block; }
+/* v307 · «Por hacer»: resultados, crónicas, pagos y datos en una sola lista */
+.ar-tasks { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
