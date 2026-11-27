@@ -3059,3 +3059,10 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .nums-block .desp-t small { display: block; }
 /* v307 · «Por hacer»: resultados, crónicas, pagos y datos en una sola lista */
 .ar-tasks { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+/* v308 · Mi calendario: Próximas / Hechas en una sola tarjeta */
+.cal-card { padding: .8rem .85rem; margin: 0 0 .8rem; }
+.cal-card details > summary { list-style: none; cursor: pointer; min-height: 44px; } .cal-card details > summary::-webkit-details-marker { display: none; }
+.cal-card details[open] > summary { margin-bottom: .5rem; }
+.cal-card .ar-top .desp-chev { flex: none; transition: transform .15s; } .cal-card details[open] .ar-top .desp-chev { transform: rotate(180deg); }
+.cal-pay { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin: 0 0 .4rem; }
+.cal-card .mini-list { margin-top: .5rem; }
