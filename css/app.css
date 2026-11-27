@@ -2928,3 +2928,7 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .chro-intro { display: flex; gap: .6rem; align-items: flex-start; margin: .5rem 0; padding: .6rem .7rem; border-radius: 12px; background: var(--accent-2); font-size: var(--fs-3); line-height: 1.4; }
 .chro-intro > svg { width: 20px; height: 20px; flex: none; color: var(--accent); margin-top: 1px; }
 .chro-dlg label small { display: inline; font-weight: 400; }
+
+/* v288 · Equipo: Resumen | Impacto en redes */
+.eq-sw { margin: .2rem 0 .8rem; } .eq-sw button svg { width: 16px; height: 16px; margin-right: .3rem; vertical-align: -3px; }
+.imp-pane h3 { margin-top: .8rem; }
