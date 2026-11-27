@@ -53,7 +53,7 @@ const KIT_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 const KIT_FIELDS = [['jersey', 'kit_jersey', 'Maillot'], ['bibs', 'kit_bibs', 'Culot'], ['socks', 'kit_socks', 'Calcetines']];
 function kitRow() {
   const k = S.myKit; if (!k || !KIT_FIELDS.some(([f]) => k[f])) return '';
-  return `<li class="prof-row"><span class="pi">${ico('shirt')}</span><span class="pt"><b>Mi ropa</b></span><span class="kit-chips">${KIT_FIELDS.filter(([f]) => k[f]).map(([f, , l]) => `<span class="kit-chip" title="${l}"><small>${l}</small><b>${esc(k[f])}</b></span>`).join('')}</span></li>`;
+  return `<li class="prof-row"><span class="pi">${ico('shirt')}</span><span class="pt"><b>${S.preview ? 'Ropa' : 'Mi ropa'}</b></span><span class="kit-chips">${KIT_FIELDS.filter(([f]) => k[f]).map(([f, , l]) => `<span class="kit-chip" title="${l}"><small>${l}</small><b>${esc(k[f])}</b></span>`).join('')}</span></li>`;
 }
 /** Línea compacta «Mi ropa» para Mi temporada (mismas pastillas que el menú del escudo). */
 function kitStrip() {
@@ -68,11 +68,11 @@ function profileHtml() {
     ${st.length ? `<div class="prof-stats">${st.map(([ic, n, l]) => `<span title="${l}">${ico(ic)}<b>${n}</b><small>${l}</small></span>`).join('')}</div>` : ''}
     <ul class="prof-list">
       ${row('sun', 'Aspecto', '')}<li class="prof-seg-row">${themeSeg()}</li>
-      ${S.shiftOn ? row('clock', 'Mis turnos', `<select data-prof="shift" aria-label="Mi escamot"><option value="">Sin turnos</option>${USPAC_GROUPS.map((g) => `<option value="${g}"${S.myShift === g ? ' selected' : ''}>Escamot ${g.slice(1)}</option>`).join('')}</select>`, 'en tu calendario') : ''}
+      ${S.shiftOn && S.preview ? row('clock', 'Turnos', `<span class="muted">${S.myShift ? 'Escamot ' + S.myShift.slice(1) : 'Sin turnos'}</span>`, 'en su calendario') : S.shiftOn ? row('clock', 'Mis turnos', `<select data-prof="shift" aria-label="Mi escamot"><option value="">Sin turnos</option>${USPAC_GROUPS.map((g) => `<option value="${g}"${S.myShift === g ? ' selected' : ''}>Escamot ${g.slice(1)}</option>`).join('')}</select>`, 'en tu calendario') : ''}
       ${kitRow()}
-      <li class="prof-row tap"><button type="button" data-prof="link"><span class="pi">${ico('link')}</span><span class="pt"><b>Copiar mi enlace</b><small>para entrar desde otro móvil</small></span>${ico('go', 'pg')}</button></li>
+      ${S.preview ? '' : `<li class="prof-row tap"><button type="button" data-prof="link"><span class="pi">${ico('link')}</span><span class="pt"><b>Copiar mi enlace</b><small>para entrar desde otro móvil</small></span>${ico('go', 'pg')}</button></li>`}
     </ul>
-    <footer class="prof-foot"><small class="muted">v${esc(VERSION.slice(1))}</small><button type="button" class="prof-out" data-prof="forget">${ico('logout')}No soy ${esc((me?.name || 'esta persona').split(' ')[0])}</button></footer></form>`;
+    <footer class="prof-foot"><small class="muted">v${esc(VERSION.slice(1))}</small>${S.preview ? '<small class="muted">Vista previa: solo lectura</small>' : `<button type="button" class="prof-out" data-prof="forget">${ico('logout')}No soy ${esc((me?.name || 'esta persona').split(' ')[0])}</button>`}</footer></form>`;
 }
 function openProfile() { const dlg = document.getElementById('dialog'); dlg.innerHTML = profileHtml(); if (!dlg.open) dlg.showModal(); }
 {
@@ -624,7 +624,7 @@ function frame(title, body, { back, actions = '', rtab = null, noSearch = false,
   return `
     ${api.mode === 'demo' ? `<div class="demo-bar">Modo demostración: datos de prueba guardados solo en este móvil.</div>` : ''}
     <header class="top">
-      ${back ? `<a class="back" href="${back}" aria-label="Volver">‹</a>` : rtab !== null && !S.preview && S.runnerData?.me ? `<button type="button" class="logo-btn" data-act="profile" aria-label="Mi perfil: aspecto, turnos y cambiar de persona" title="Mi perfil"><img class="logo" src="icons/logo.png" alt=""></button>` : '<img class="logo" src="icons/logo.png" alt="">'}
+      ${back ? `<a class="back" href="${back}" aria-label="Volver">‹</a>` : rtab !== null && S.runnerData?.me ? `<button type="button" class="logo-btn" data-act="profile" aria-label="${S.preview ? 'Perfil de este corredor: aspecto, ropa y turnos' : 'Mi perfil: aspecto, turnos y cambiar de persona'}" title="Mi perfil"><img class="logo" src="icons/logo.png" alt=""></button>` : '<img class="logo" src="icons/logo.png" alt="">'}
       ${head ? head : rtab !== null && !S.preview && S.runnerData?.me?.name && title === runnerTitle() ? `<h1 class="greet" aria-label="${esc(title)}" title="${esc(title)}"><span>${esc(title)}</span></h1>` : `<h1>${esc(title)}</h1>`}${actions}${(admin && rtab === null && !back && S.data) || rtab !== null ? (noSearch ? '' : searchButton()) + accidentButton() : ''}${rtab !== null ? newsBell() : ''}
     </header>
     <main${admin && rtab === null && view !== 'memoria' ? ' class="ds2 adm"' : ''}>${body}</main>
@@ -2004,7 +2004,7 @@ function viewRunnerMine() {
     <div class="mt2">${S.preview ? '' : miTabs('mi')}
     ${myRacesCard(d)}</div>
     ${installHint()}
-    ${S.preview ? `<p class="center"></p>` : ''}${themeLineIfPreview()}${versionLine()}`,
+    ${versionLine()}`,
   { rtab: 'mi' });
 }
 
@@ -5764,7 +5764,8 @@ async function runnerDo(choice, r) {
     const view = await run(() => api.runnerView(r.code));
     if (!view) return;
     S.preview = { name: r.name, sqlOk: Array.isArray(view.my_results) }; S.previewCode = r.code;
-    S.runnerData = view; S.myOpen = true; await loadNews(); await loadChron();
+    S.myKit = null; S.myShift = null; S.shiftOn = false;   // lo del corredor anterior no se arrastra
+    S.runnerData = view; S.myOpen = true; await loadNews(); await loadChron(); await loadKit(); await loadShift();
     go('#/vista');
   } else if (choice === 'open') {
     await api.signOut(); S.session = null; S.data = null; go('#/c/' + r.code);
