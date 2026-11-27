@@ -3005,3 +3005,12 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .ar-note { display: flex; gap: .45rem; margin: .7rem 0 0; font-size: var(--fs-3); color: var(--muted); } .ar-note svg { width: 16px; height: 16px; flex: none; margin-top: 2px; }
 .ar-name .wk-chip { justify-self: start; margin-top: .3rem; }
 .ar-head .chro-go { flex: none; }
+/* v300 · «Después de la carrera» desplegable */
+.ar-card details > summary { list-style: none; cursor: pointer; margin: 0; min-height: 44px; } .ar-card details > summary::-webkit-details-marker { display: none; }
+.ar-card details[open] > summary { margin-bottom: .5rem; }
+.ar-top .chro-t { flex: 1; font-size: var(--fs-5, 1.1rem); }
+.ar-top .chro-tag svg { transition: transform .15s; } .ar-card details[open] .ar-top .chro-tag svg { transform: rotate(90deg); }
+.ar-top .chro-t { font-size: 1rem; min-width: 0; } .ar-top .chro-tag { flex: none; white-space: nowrap; }
+.ar-top .chro-ic { flex: none; }
+.ar-top .chro-t { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.15; }
+@media (max-width: 340px) { .ar-top .chro-ic { display: none; } }
