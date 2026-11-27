@@ -2452,15 +2452,21 @@ ${p.body}
 """`;
 }
 
+/** Vídeo de cierre con los patrocinadores: va siempre al final del carrusel, después de las fotos de los corredores. */
+const SPONSOR_CLOSE = 'img/cierre-patrocinadores.mp4';
 async function openChroPost(id) {
   const p = S.chroPosts?.rows?.find((x) => x.id === id); if (!p) return;
   const dlg = document.getElementById('dialog'), sp = sponsorHandles();
   let photos = [];
   if (p.photos) { try { photos = await api.getChroPhotos(id); } catch { photos = []; } }
   const done = p.status === 'publicada';
+  const canShareFiles = !!(navigator.share && navigator.canShare?.({ files: [new File([new Blob(['x'])], 'a.jpg', { type: 'image/jpeg' })] }));
   dlg.innerHTML = `<form method="dialog" class="dlg chro-dlg"><h2>${esc(p.race_name)}</h2>
     <p class="muted small">${esc(runnerById(p.runner_id)?.name || 'Corredor')}${p.race_date ? ' · ' + esc(formatDate(p.race_date, false)) : ''} · <span class="chro-st ${CHRO_ST[p.status][1]}">${esc(CHRO_ST[p.status][0])}</span></p>
-    ${photos.length ? `<div class="chro-photos">${photos.map((x) => `<figure><img src="${esc(x.data)}" alt="Foto ${x.ord}"><a class="btn small" href="${esc(x.data)}" download="cronica-${esc(p.race_key.slice(0, 10))}-${x.ord}.jpg">${ico('down')} Descargar</a></figure>`).join('')}</div>` : `<p class="muted small">${done ? 'Fotos ya borradas del servidor.' : 'Esta crónica no trae fotos.'}</p>`}
+    ${done ? '<p class="muted small">Fotos ya borradas del servidor.</p>' : `<p class="muted small chro-order">${ico('layers')}<span>Orden del carrusel: <b>primero las fotos de los corredores</b> y <b>al final el cierre de patrocinadores</b>.</span></p>
+    <div class="chro-photos chro-car">${photos.map((x, i) => `<figure><span class="chro-n">${i + 1}</span><img src="${esc(x.data)}" alt="Foto ${i + 1}"><a class="btn small" href="${esc(x.data)}" download="${String(i + 1).padStart(2, '0')}-foto-${esc(p.race_key.slice(0, 10))}.jpg">${ico('down')} Descargar</a></figure>`).join('')}
+      <figure class="chro-close"><span class="chro-n">${photos.length + 1}</span><video src="${SPONSOR_CLOSE}#t=0.4" preload="metadata" muted playsinline controls aria-label="Cierre de patrocinadores"></video><a class="btn small" href="${SPONSOR_CLOSE}" download="${String(photos.length + 1).padStart(2, '0')}-cierre-patrocinadores.mp4">${ico('down')} Descargar</a></figure></div>
+    ${canShareFiles ? `<button type="button" class="btn block" data-cro="share">${ico('share')} Compartir todo en orden</button>` : ''}`}
     <details class="chro-orig"><summary>Texto original</summary><p>${esc(p.body).replace(/\n/g, '<br>')}</p></details>
     ${done ? '' : p.ai_state === 'pendiente' ? '<p class="muted small">⏳ Claude está corrigiendo la crónica… ábrela otra vez en unos segundos.</p>'
       : p.ai_state === 'hecho' ? '<p class="muted small">✅ Corregida por Claude: revísala antes de publicar.</p>'
@@ -2504,6 +2510,16 @@ async function openChroPost(id) {
         if (np?.ai_state === 'hecho' && np.final_text) { ta.value = np.final_text; wait.innerHTML = `✅ Post creado con tus datos. <a href="#" data-cro="undo">Recuperar la versión anterior</a>`; dlg._prev = prev; }
         else { ta.value = prev; wait.textContent = np?.ai_state === 'pendiente' ? '⏳ Claude aún no ha contestado: espera un momento y pulsa ↻ en la lista.' : '⚠️ No se pudo crear. Se ha dejado el texto anterior; prueba otra vez.'; }
       } catch (e) { ta.value = prev; wait.textContent = '⚠️ ' + friendlyError(e); }
+      b.disabled = false;
+    } else if (b.dataset.cro === 'share') {
+      b.disabled = true;
+      try {
+        const files = [];
+        for (const [i, x] of photos.entries()) files.push(new File([await (await fetch(x.data)).blob()], `${String(i + 1).padStart(2, '0')}-foto-${p.race_key.slice(0, 10)}.jpg`, { type: 'image/jpeg' }));
+        files.push(new File([await (await fetch(SPONSOR_CLOSE)).blob()], `${String(photos.length + 1).padStart(2, '0')}-cierre-patrocinadores.mp4`, { type: 'video/mp4' }));
+        if (!navigator.canShare({ files })) throw new Error('no_compartir');
+        await navigator.share({ files });
+      } catch (e) { if (e?.name !== 'AbortError') toast('Tu móvil no deja compartirlas juntas: descárgalas una a una, en orden.', true); }
       b.disabled = false;
     } else if (b.dataset.cro === 'undo') { dlg.querySelector('textarea[name="final"]').value = dlg._prev || ''; dlg.querySelector('#cro-wait').textContent = 'Versión anterior recuperada.'; }
     else if (b.dataset.cro === 'ai') await copyText(chroPrompt(p, tags()), 'Petición copiada: pégala en Claude');
