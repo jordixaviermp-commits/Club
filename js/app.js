@@ -618,7 +618,7 @@ function frame(title, body, { back, actions = '', rtab = null, noSearch = false,
   const admin = S.session?.isAdmin;
   const tabs = rtab !== null
     ? `<nav class="tabs">${RUNNER_TABS.map(([v, label, d]) =>
-      `<a href="${runnerHref(v)}" class="${v === rtab ? 'on' : ''}">${icon(d)}${v === 'mi' && !S.preview && watchUrgent() ? `<b class="tab-n" title="Plazo de inscripción a punto de cerrarse">${watchUrgent()}</b>` : ''}<span>${label}</span></a>`).join('')}</nav>`
+      `<a href="${runnerHref(v)}" class="${v === rtab ? 'on' : ''}">${icon(d)}${v === 'mi' && !S.preview ? `${(() => { const n = myTaskCount(); return n ? `<b class="tab-n todo" title="${n} ${n === 1 ? 'tarea por hacer' : 'tareas por hacer'} en Mi temporada" aria-label="${n} tareas por hacer">${n > 9 ? '9+' : n}</b>` : ''; })()}${watchUrgent() ? '<i class="tab-dot" title="Plazo de inscripción a punto de cerrarse"></i>' : ''}` : ''}<span>${label}</span></a>`).join('')}</nav>`
     : admin ? `<nav class="tabs">${ADMIN_TABS.map(([v, label, d]) =>
       `<a href="#/${v}" class="${(ADMIN_GROUP[view] || 'hoy') === v ? 'on' : ''}">${icon(d)}${v === 'redes' && S.data && socialPending() ? `<b class="tab-n">${socialPending()}</b>` : ''}${v === 'hoy' && S.data && todayCount() ? `<b class="tab-n">${todayCount()}</b>` : ''}<span>${label}</span></a>`).join('')}</nav>` : '';
   return `
@@ -1342,6 +1342,12 @@ function payChips(g) {
   return `${e.joined_on ? `<span class="ins-chip">${ico('check')}Inscrito ${dayMon(e.joined_on)}</span>` : ''}${S.preview ? `<span class="pay-chip${e.paid ? ' on' : ''}">${chip}</span>` : `<button type="button" class="pay-chip${e.paid ? ' on' : ''}" data-act="r-paid" data-id="${g.id}">${chip}</button>`}`;
 }
 
+/** Tareas que le faltan al corredor (la misma cuenta que el recuadro «Por hacer» de Mi temporada): resultados, crónicas, pagos y datos. Sirve para el globo de la pestaña. */
+function myTaskCount() {
+  const d = S.runnerData; if (!d?.my_results || !d.me || !d.registrations || S.preview) return 0;
+  const ad = alDia(d, S.chron instanceof Set ? S.chron : null, d.today || todayISO(), S.myYear || new Date().getFullYear());
+  return ad.total + d.my_results.filter((x) => missingFields(x).length).length;
+}
 function myRacesCard(d) {
   const results = d.my_results;
   if (!results) return ''; // base de datos aún sin actualizar

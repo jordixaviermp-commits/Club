@@ -3265,3 +3265,6 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 /* v315 · compartir el post publicado */
 .ar-link { margin: 0 0 .4rem; } .ar-link a { display: inline-flex; align-items: center; gap: .4rem; font-weight: 600; color: var(--kpi); }
 .ar-link svg { width: 16px; height: 16px; flex: none; }
+/* v316 · globo de tareas en la pestaña Mi temporada: naranja = por hacer; el punto rojo es un plazo de inscripción que cierra */
+.tab-n.todo { background: var(--warn); color: #2b1d00; }
+.tabs a .tab-dot { position: absolute; top: 4px; left: calc(50% - 14px); width: 9px; height: 9px; border-radius: 50%; background: var(--bad-2); box-shadow: 0 0 0 2px var(--card); }
