@@ -1523,30 +1523,39 @@ function afterRaceCard(d, { pending, noPos, sent, today }) {
   const todo = list.filter((r) => r.todo), ok = list.filter((r) => !r.todo);
   const tab = S.afterTab === 'ok' && ok.length || !todo.length && ok.length ? 'ok' : 'todo', shown = tab === 'ok' ? ok : todo;
   const pl = (n, a, b) => (n === 1 ? a : b);
-  const step = (cls, label, sub = '') => `<li class="ar-s ${cls}"><i>${cls === 'ok' ? ico('check') : cls === 'todo' ? '' : ico('lock')}</i><span>${label}${sub ? `<small>${esc(sub)}</small>` : ''}</span></li>`;
+  // cada carrera: nombre arriba y, debajo, dos casillas tocables (Resultado y Crónica) que dicen su estado y son el botón para hacerlo
+  const task = (st, emo, label, sub, attrs) => { const tag = /href=/.test(attrs) ? 'a' : attrs ? 'button' : 'span';
+    return `<${tag} class="ar-task st-${st}${tag === 'span' ? '' : ' tappable'}"${tag === 'button' ? ' type="button"' : ''} ${attrs}><span class="ar-ti">${st === 'ok' ? ico('check') : emo}</span><span class="ar-tt"><b>${label}</b><small>${sub}</small></span>${tag === 'span' ? '' : ico('go', 'ar-tgo')}</${tag}>`; };
+  const resTask = (r) => {
+    if (r.res === 'pend') return task('todo', '🏁', 'Resultado', 'Ponerlo', S.preview ? '' : `href="${r.resHref}"`);
+    const sub = r.res === 'dnf' ? 'Abandonó' : r.txt ? esc(r.txt.split(' · ')[0]) : 'Puesto';
+    if (r.kind === 'reg' && r.g?.my_result && !S.preview && !resultClosed(r.g)) return task('ok', '🏁', 'Resultado', `${sub} · cambiar`, `href="${r.resHref}"`);
+    return task('ok', '🏁', 'Resultado', sub, '');
+  };
+  const cronTask = (r) => {
+    if (r.cron === null) return '';
+    if (r.res === 'pend') return task('wait', '✍️', 'Crónica', 'Tras el resultado', '');
+    const post = S.myPosts && S.myPosts.get(r.key), by = S.chronBy?.get?.(r.key);
+    if (post && post.status === 'enviada') return task('ok', '✍️', 'Crónica', 'En revisión · editar', S.preview ? '' : `data-act="chro-write" data-key="${esc(r.key)}"`);
+    if (post && post.status === 'lista') return task('ok', '✍️', 'Crónica', 'Lista · ver', S.preview ? '' : `data-act="chro-write" data-key="${esc(r.key)}"`);
+    if (r.cron) return task('ok', '✍️', 'Crónica', r.pub ? 'Publicada' : by && !by.mine ? `La pasó ${esc(by.by)}` : 'Pasada', '');
+    if (S.preview) return task('todo', '✍️', 'Crónica', 'Pendiente', '');
+    const dd = chroDataOf(r);
+    if (dd && !dd.complete && !dd.missRes?.length) return task('todo', '✍️', 'Crónica', 'Completar datos', `href="${dd.raceHref}"`);
+    return task('todo', '✍️', 'Crónica', 'Contar cómo te fue', `data-act="chro-write" data-key="${esc(r.key)}"`);
+  };
   const rowHtml = (r) => {
-    const resS = r.res === 'pend' ? step('todo', 'Resultado') : step('ok', r.res === 'dnf' ? 'Abandonó' : 'Resultado', r.txt || '');
-    const cronS = r.cron === null ? '' : step(r.cron ? 'ok' : r.res === 'pend' ? 'wait' : 'todo', 'Crónica');
-    const pubS = r.cron === null || !r.cron ? '' : step(r.pub ? 'ok' : 'wait', 'Publicada');
-    let act = '';
-    if (!S.preview) {
-      if (r.res === 'pend') act = `<a class="btn primary small" href="${r.resHref}">${ico('flag')}Poner mi resultado</a>${r.leave ? `<button type="button" class="btn ghost small" data-act="r-leave" data-id="${r.leave}">No fui: borrarme</button>` : ''}`;
-      else {
-        act = r.cron === null ? '' : chroActs(r, r.cron);
-        if (r.kind === 'reg' && r.g?.my_result) act += resultClosed(r.g) ? lockTag : `<a class="edit-btn" href="${r.resHref}">${ico('pen')}Cambiar resultado</a>`;
-      }
-    }
     const wk = r.res === 'pend' || r.cron === false ? weekChip(r.end_date || r.date, today) : '';
-    return `<li class="ar-row${r.todo ? ' todo' : ''}"><a class="ar-head" href="${runnerHref('carrera')}/${r.kind === 'race' ? 'race_' + r.id : r.id}" aria-label="Abrir la carrera ${esc(r.name)}"><span class="ar-name"><b>${esc(r.name)}</b><small>${esc(formatDate(r.date, false))}${r.place ? ' · ' + esc(r.place) : ''}</small>${wk}</span>${ico('go', 'chro-go')}</a>
-      <ol class="ar-steps">${resS}${cronS}${pubS}</ol>${act ? `<div class="ar-acts">${act}</div>` : ''}</li>`;
+    const leave = r.res === 'pend' && r.leave && !S.preview ? `<button type="button" class="ar-leave" data-act="r-leave" data-id="${r.leave}">No fui</button>` : '';
+    return `<li class="ar-row${r.todo ? ' todo' : ''}"><div class="ar-head"><a class="ar-name" href="${runnerHref('carrera')}/${r.kind === 'race' ? 'race_' + r.id : r.id}" aria-label="Abrir la carrera ${esc(r.name)}"><b>${esc(r.name)}</b><small>${esc(formatDate(r.date, false))}${r.place ? ' · ' + esc(r.place) : ''}</small></a>${leave}</div>${wk ? `<div class="ar-wk">${wk}</div>` : ''}
+      <div class="ar-tasks">${resTask(r)}${cronTask(r)}</div></li>`;
   };
   return `<section class="card ar-card${todo.length ? ' has-pend' : ''}" id="sec-after"><details class="chro-det" data-open-key="after"${(S.open?.after ?? todo.length > 0) ? ' open' : ''}>
-    <summary class="ar-top"><span class="chro-ic">${ico('flag')}</span><b class="chro-t">Después de la carrera</b>
-      <span class="chro-tag ${todo.length ? 'pend' : 'ok'}">${todo.length ? `${todo.length} por hacer` : 'Todo al día'}${ico('go')}</span></summary>
+    <summary class="ar-top"><span class="chro-ic">🏁</span><span class="ar-tw"><b class="chro-t">Resultados y crónicas</b><small>Pon tu resultado y cuenta cómo te fue</small></span>
+      <span class="chro-tag ${todo.length ? 'pend' : 'ok'}">${todo.length ? `${todo.length} por hacer` : 'Al día'}${ico('go')}</span></summary>
     <div class="ar-tabs" role="tablist"><button type="button" role="tab" aria-selected="${tab === 'todo'}" class="${tab === 'todo' ? 'on' : ''}" data-act="after-tab" data-t="todo">Por hacer <b>${todo.length}</b></button><button type="button" role="tab" aria-selected="${tab === 'ok'}" class="${tab === 'ok' ? 'on' : ''}" data-act="after-tab" data-t="ok">Al día <b>${ok.length}</b></button></div>
-    <p class="hint">${WEEK_RULE} ${CHRONICLE_RULE}</p>
+    <p class="hint">${WEEK_RULE} ${CHRONICLE_RULE} Para la crónica <b>basta con 2 líneas y una foto</b>: los datos ya los tenemos y el resumen y la publicación los hacemos nosotros.</p>
     ${shown.length ? `<ul class="ar-list">${shown.map(rowHtml).join('')}</ul>` : `<p class="empty small">${tab === 'todo' ? 'No te falta nada. 🎉' : 'Aún no tienes carreras completas.'}</p>`}
-    ${tab === 'todo' && todo.length ? `<p class="ar-note">${ico('pen')}<span><b>Basta con 2 líneas y una foto.</b> Los datos ya los tenemos: el resumen y la publicación los hacemos nosotros.</span></p>` : ''}
   </details></section>`;
 }
 
