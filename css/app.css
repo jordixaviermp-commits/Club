@@ -3014,3 +3014,30 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .ar-top .chro-ic { flex: none; }
 .ar-top .chro-t { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.15; }
 @media (max-width: 340px) { .ar-top .chro-ic { display: none; } }
+
+/* v302 · «Resultados y crónicas»: filas compactas con dos casillas tocables */
+.ar-top .chro-ic { font-size: 1.35rem; line-height: 1; }
+.ar-tw { flex: 1; min-width: 0; display: grid; line-height: 1.2; } .ar-tw .chro-t { font-size: 1.05rem; } .ar-tw small { color: var(--muted); font-size: var(--fs-2); }
+.ar-list { gap: .45rem; }
+.ar-row { padding: .5rem .55rem; gap: .4rem; border-radius: 12px; }
+.ar-head { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+.ar-head .ar-name { flex: 1 1 140px; min-width: 0; display: flex; align-items: baseline; gap: .4rem; flex-wrap: wrap; color: inherit; text-decoration: none; }
+.ar-head .ar-name b { font-size: var(--fs-3); } .ar-head .ar-name small { color: var(--muted); font-size: var(--fs-2); }
+.ar-head .wk-chip { margin: 0; font-size: .72rem; padding: .1rem .45rem; }
+.ar-leave { border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 999px; padding: .15rem .6rem; font: inherit; font-size: var(--fs-2); min-height: 30px; cursor: pointer; }
+.ar-tasks { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; }
+.ar-task { display: flex; align-items: center; gap: .4rem; min-height: 50px; padding: .35rem .5rem; border-radius: 10px; border: 1.5px solid var(--line); background: var(--card); color: inherit; text-decoration: none; font: inherit; text-align: left; min-width: 0; }
+.ar-task.tappable { cursor: pointer; }
+.ar-ti { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: .95rem; } .ar-ti svg { width: 15px; height: 15px; }
+.ar-tt { display: grid; min-width: 0; flex: 1; line-height: 1.15; } .ar-tt b { font-size: var(--fs-3); } .ar-tt small { font-size: .74rem; overflow-wrap: anywhere; }
+.ar-tgo { flex: none; width: 16px; height: 16px; opacity: .7; }
+.ar-task.st-todo { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--card)); } .ar-task.st-todo small { color: var(--accent); font-weight: 700; }
+.ar-task.st-ok { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); background: color-mix(in srgb, var(--ok) 7%, var(--card)); } .ar-task.st-ok .ar-ti { background: var(--ok); color: #fff; } .ar-task.st-ok small { color: var(--muted); }
+.ar-task.st-wait { border-style: dashed; opacity: .65; } .ar-task.st-wait small { color: var(--muted); }
+.ar-head .ar-name { display: grid; gap: 0; flex: 1; } .ar-head .ar-name b { font-size: 1rem; line-height: 1.2; }
+.ar-wk { margin-top: -.15rem; } .ar-wk .wk-chip { margin: 0; font-size: .72rem; padding: .05rem .45rem; }
+.ar-task.st-todo { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--card)); } .ar-task.st-todo small { color: color-mix(in srgb, var(--warn) 70%, var(--ink)); }
+.ar-task.st-todo .ar-ti { background: var(--warn); color: #fff; }
+.ar-tabs { margin-bottom: .45rem; } .ar-tabs button { min-height: 34px; font-size: var(--fs-3); }
+.ar-card details[open] > summary { margin-bottom: .35rem; }
+@media (max-width: 379px) { .ar-tgo { display: none; } .ar-task { padding: .35rem .4rem; gap: .35rem; } }
