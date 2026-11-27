@@ -173,26 +173,47 @@ const racePreview = (d) => [
 ];
 const fsec = (n, icon, title, body, color = '#1f6fd1') => `<section class="fsec" style="--sc:${color}"><h3 class="fsec-h"><span class="fsec-n">${n}</span>${ico(icon)}<span>${title}</span></h3><div class="fsec-b">${body}</div></section>`;
 /** Fichas para elegir una opción (en vez de un desplegable): un toque y queda marcada. Son «radio» ocultos, así que todo lo demás funciona igual. */
-const radioChips = (attr, field, options, cur, { required = false, extra = '' } = {}) => `<div class="chips-pick" role="radiogroup">${options.map(([v, l, cls = '', extra = '']) =>
-  `<label class="cpick ${cls}"><input type="radio" name="${attr.replace('data-', '')}-${field}" ${attr}="${field}" value="${esc(v)}"${v === (cur ?? '') ? ' checked' : ''}${required ? ' required' : ''}${extra}><span>${l}</span></label>`).join('')}</div>`;
+const radioChips = (attr, field, options, cur, { required = false, extra = '' } = {}) => `<div class="chips-pick" role="radiogroup">${options.map(([v, l, cls = '', optExtra = '']) =>
+  `<label class="cpick ${cls}"><input type="radio" name="${attr.replace('data-', '')}-${field}" ${attr}="${field}" value="${esc(v)}"${v === (cur ?? '') ? ' checked' : ''}${required ? ' required' : ''}${extra}${optExtra}><span>${l}</span></label>`).join('')}</div>`;
 const modalityChips = (d, attr) => radioChips(attr, 'modality', MODALITIES.map((m) => [m, `${MOD_ICON[m] || '🏁'} ${esc(m)}`, modClass(m)]), d.modality);
 const RACE_TYPE_SHORT = { suelta: 'Carrera normal', campeonato: 'Campeonato', circuito: 'De un circuito (Copa, Open…)' };
 const detailInputs = (d, attr) => `${SUBTYPES[d.modality] ? `<div class="disc-field"><span class="flabel">Disciplina de ${esc(d.modality)} <b class="req">obligatoria</b></span>${radioChips(attr, 'subtype', SUBTYPES[d.modality].map((x) => [x, esc(x)]), d.subtype, { required: true })}
       <small class="hint">Así el resumen y los gráficos del equipo reparten las carreras por disciplina.</small></div>` : ''}
     <label class="flabel-l">Distancia (km)<input type="number" inputmode="decimal" step="0.1" min="0.1" max="1000" ${attr}="km" value="${esc(d.km ?? '')}" placeholder="85"></label>`;
-/** Nombres de circuitos ya usados (para sugerirlos y no escribirlos de dos maneras). */
-function circuitNames() {
+/** Circuitos ya creados en el club (salen de sus carreras e inscripciones): [{name, n}] con cuántas pruebas lleva cada uno. */
+const normCirc = (x) => normalize(String(x || '')).replace(/[^a-z0-9]/g, '');
+function circuitCatalog() {
   const src = S.data && !S.preview ? [...S.data.races, ...S.data.registrations, ...(S.data.circuitPodiums || [])]
     : [...(S.runnerData?.registrations || []), ...(S.runnerData?.my_results || []), ...(S.runnerData?.circuits || []), ...(Array.isArray(S.team?.races) ? S.team.races : [])];
   const seen = new Map();
-  for (const x of [...src, ...(S.fed?.races || [])]) { const c = String(x.circuit || '').trim(); if (c && !seen.has(normalize(c))) seen.set(normalize(c), c); }
-  return [...seen.values()].sort((a, b) => a.localeCompare(b, 'es'));
+  for (const x of [...src, ...(S.fed?.races || [])]) {
+    const c = String(x.circuit || '').trim(); if (!c) continue;
+    const k = normCirc(c), cur = seen.get(k) || { name: c, keys: new Set() };
+    if (x.date && x.name) cur.keys.add(postKeyOf(x));
+    seen.set(k, cur);
+  }
+  return [...seen.values()].map((c) => ({ name: c.name, n: c.keys.size })).sort((a, b) => b.n - a.n || a.name.localeCompare(b.name, 'es'));
+}
+const circuitNames = () => circuitCatalog().map((c) => c.name).sort((a, b) => a.localeCompare(b, 'es'));
+/** Nombre del circuito tal y como ya está creado (misma escritura para todas sus pruebas); si es nuevo, tal cual lo escribió. */
+const canonCircuit = (name) => { const v = cleanName(name); return circuitCatalog().find((c) => normCirc(c.name) === normCirc(v))?.name || v; };
+/** Ayuda bajo la casilla del circuito: si ya existe, lo dice; si se le parece, lo sugiere; si es nuevo, avisa de que se creará. */
+function circuitAssist(value) {
+  const cat = circuitCatalog(), v = String(value || '').trim(), key = normCirc(v), pl = (n) => `${n} prueba${n === 1 ? '' : 's'}`;
+  const chips = (l) => `<div class="circ-chips">${l.map((c) => `<button type="button" class="chip" data-act="circuit-pick" data-v="${esc(c.name)}">${esc(c.name)} <small>${pl(c.n)}</small></button>`).join('')}</div>`;
+  if (!cat.length) return `<p class="circ-st new">${ico('plus')}<span>Aún no hay ningún circuito creado: este se creará al guardar la carrera y saldrá en las próximas pruebas.</span></p>`;
+  const exact = key && cat.find((c) => normCirc(c.name) === key);
+  if (exact) return `<p class="circ-st ok">${ico('check')}<span>Circuito ya creado: <b>${esc(exact.name)}</b> · ${pl(exact.n)}.${exact.name !== v ? ` Se guardará como «${esc(exact.name)}».` : ''}</span></p>`;
+  const near = key ? cat.filter((c) => normCirc(c.name).includes(key) || key.includes(normCirc(c.name))) : [];
+  if (near.length) return `<p class="circ-st"><span>¿Es uno de estos?</span></p>${chips(near.slice(0, 6))}<p class="circ-st new">${ico('plus')}<span>Si no, se creará un circuito nuevo con ese nombre.</span></p>`;
+  if (v) return `<p class="circ-st new">${ico('plus')}<span>Circuito nuevo: se creará al guardar esta carrera y saldrá en las próximas pruebas.</span></p>`;
+  return `<p class="circ-st"><span>Circuitos ya creados, toca para elegir:</span></p>${chips(cat.slice(0, 8))}`;
 }
 const circuitList = () => `<datalist id="dl-circuit">${circuitNames().map((c) => `<option value="${esc(c)}">`).join('')}</datalist>`;
 /** Campos «Tipo de carrera» de los formularios. `attr` = data-f (dirección) o data-rf (corredor). */
 const typeFields = (d, attr) => `
     <div class="disc-field"><span class="flabel">Tipo de carrera</span>${radioChips(attr, 'race_type', RACE_TYPES.map((t) => [t.id, esc(RACE_TYPE_SHORT[t.id] || t.label)]), d.race_type || 'suelta', { extra: ' data-retype' })}</div>
-    ${d.race_type === 'circuito' ? `<label>Nombre del circuito<input ${attr}="circuit" list="dl-circuit" value="${esc(d.circuit || '')}" placeholder="Copa Aragón XCM" maxlength="120" required autocomplete="off"></label>${circuitList()}
+    ${d.race_type === 'circuito' ? `<label>Nombre del circuito<input ${attr}="circuit" list="dl-circuit" value="${esc(d.circuit || '')}" placeholder="Copa Aragón XCM" maxlength="120" required autocomplete="off"></label>${circuitList()}<div class="circ-assist" data-circ-assist>${circuitAssist(d.circuit)}</div>
       <p class="hint">Escríbelo igual en todas sus pruebas. El podio en la <b>general final</b> de la liga da el <b>plus de bonificación</b> (carreras extra para la bonificación, no para el mínimo).</p>` : ''}
     ${d.race_type === 'campeonato' ? '<p class="hint">Los podios de esta carrera se guardarán como podios de campeonato.</p>' : ''}`;
 const scopeLabel = (id) => (CIRCUIT_SCOPES.find((x) => x.id === id) || CIRCUIT_SCOPES[0]).label.toLowerCase();
@@ -5601,7 +5622,7 @@ function draftPayload() {
   const base = { id: d.id, name: cleanName(d.name), date: d.date, place: cleanName(d.place), province: cleanName(d.province),
     country: cleanName(d.country), modality: d.modality, notes: String(d.notes || '').trim(),
     end_date: d.multi && d.end_date ? d.end_date : null,
-    race_type: d.race_type || 'suelta', circuit: d.race_type === 'circuito' ? cleanName(d.circuit) : null,
+    race_type: d.race_type || 'suelta', circuit: d.race_type === 'circuito' ? canonCircuit(d.circuit) : null,
     suspended: d.kind === 'reg' && !!d.suspended,
     subtype: SUBTYPES[d.modality]?.includes(d.subtype) ? d.subtype : null, km: parseKm(d.km), url: cleanWeb(d.url),
     elevation: parseElev(d.elevation), price: parsePrice(d.price) };
@@ -5633,7 +5654,7 @@ async function setMyDetails(id, d) {
 }
 async function setMyRaceType(id, d) {
   if (!S.runnerData?.circuits) return; // base de datos sin el cambio de circuitos
-  try { await api.runnerSetType(S.code, id, d.race_type || 'suelta', d.race_type === 'circuito' ? cleanName(d.circuit) : null); } catch (e) { console.warn(e); }
+  try { await api.runnerSetType(S.code, id, d.race_type || 'suelta', d.race_type === 'circuito' ? canonCircuit(d.circuit) : null); } catch (e) { console.warn(e); }
 }
 
 /** Acciones sobre un corredor (enlace, vista previa, cambiar nombre, descargar datos, borrar). */
@@ -5826,6 +5847,11 @@ const actions = {
   },
   'cro-filter'(el) { S.chroF = el.dataset.f; render(); },
   'media-f'(el) { S.mediaF = el.dataset.f; render(); },
+  'circuit-pick'(el) {
+    const inp = $app.querySelector('input[data-rf="circuit"], input[data-f="circuit"]'); if (!inp) return;
+    inp.value = el.dataset.v; (S.rdraft && inp.dataset.rf ? S.rdraft : S.draft).circuit = el.dataset.v;
+    const box = $app.querySelector('[data-circ-assist]'); if (box) box.innerHTML = circuitAssist(el.dataset.v);
+  },
   'media-csv'() { download(`monzon-medios-${S.year}.csv`, mediaCsv(S.year), 'text/csv;charset=utf-8'); },
   async 'media-add'(el) {
     const r = seasonRaces(S.data.races, S.data.registrations, S.year, todayISO()).find((x) => x.key === el.dataset.key); if (!r) return;
@@ -6358,7 +6384,7 @@ const forms = {
       const ok = await run(async () => {
         await api.runnerUpdateRace(S.code, d.id, { name, date: d.date, end_date: d.multi ? d.end_date : null, place: cleanName(d.place),
           province: cleanName(d.province), country: d.country, modality: d.modality, notes: d.notes || '',
-          race_type: d.race_type || 'suelta', circuit: d.race_type === 'circuito' ? cleanName(d.circuit) : null, subtype, km: parseKm(d.km), elevation: parseElev(d.elevation) ?? '', price: parsePrice(d.price) ?? '' });
+          race_type: d.race_type || 'suelta', circuit: d.race_type === 'circuito' ? canonCircuit(d.circuit) : null, subtype, km: parseKm(d.km), elevation: parseElev(d.elevation) ?? '', price: parsePrice(d.price) ?? '' });
         await loadRunner(); if (S.team) await loadTeam(); return true;
       }, 'Carrera actualizada');
       if (ok) { S.rdraft = null; go(runnerHref('mi')); }
@@ -6590,7 +6616,7 @@ document.addEventListener('visibilitychange', async () => {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['chro-write', 'eq-tab', 'r-web', 'note-edit', 'car-open', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
+const RUNNER_ACTIONS = new Set(['chro-write', 'eq-tab', 'circuit-pick', 'r-web', 'note-edit', 'car-open', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
 // los enlaces de la ventana emergente (p. ej. las carreras de un compañero) cierran la ventana al navegar
 document.getElementById('dialog').addEventListener('click', (ev) => { if (ev.target.closest('a[href^="#/"]')) ev.currentTarget.close(); });
 $app.addEventListener('click', (ev) => {
@@ -6632,6 +6658,7 @@ $app.addEventListener('input', (ev) => {
   }
   if (t.dataset.rf && S.rdraft) {
     S.rdraft[t.dataset.rf] = t.value;
+    if (t.dataset.rf === 'circuit') { const box = $app.querySelector('[data-circ-assist]'); if (box) box.innerHTML = circuitAssist(t.value); }
     if (t.dataset.rf === 'name' && !S.rdraft.subtype) {
       const g = guessSubtype(t.value, S.rdraft.modality);
       if (g) { S.rdraft.subtype = g; const sel = [...$app.querySelectorAll('input[data-rf="subtype"]')].find((x) => x.value === g); if (sel) sel.checked = true; }
@@ -6656,6 +6683,7 @@ $app.addEventListener('input', (ev) => {
     if (box) box.innerHTML = raceDupes(t.value);
   }
   if (t.dataset.f) S.draft[t.dataset.f] = t.value;
+  if (t.dataset.f === 'circuit') { const box = $app.querySelector('[data-circ-assist]'); if (box) box.innerHTML = circuitAssist(t.value); }
   if (t.dataset.stage) {
     S.draft.stages[Number(t.dataset.stage)] = t.value;
     for (const el of $app.querySelectorAll(`[data-stage-label="${t.dataset.stage}"]`)) el.textContent = t.value || `Etapa ${Number(t.dataset.stage) + 1}`;

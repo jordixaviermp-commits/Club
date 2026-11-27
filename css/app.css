@@ -2974,3 +2974,9 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .chro-car { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); }
 .chro-car figure { position: relative; } .chro-n { position: absolute; top: 6px; left: 6px; z-index: 1; min-width: 22px; height: 22px; padding: 0 5px; display: grid; place-items: center; border-radius: 999px; background: var(--text); color: var(--card); font-size: 12px; font-weight: 800; }
 .chro-close video { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 12px; border: 1px solid var(--line); background: #5eb5ff; }
+
+/* v297 · circuitos ya creados */
+.circ-assist { margin: .3rem 0 .5rem; display: grid; gap: .4rem; }
+.circ-st { display: flex; gap: .4rem; align-items: flex-start; margin: 0; font-size: var(--fs-3); color: var(--muted); } .circ-st svg { width: 16px; height: 16px; flex: none; margin-top: 2px; }
+.circ-st.ok { color: var(--ok); font-weight: 600; } .circ-st.new { color: var(--accent); }
+.circ-chips { display: flex; flex-wrap: wrap; gap: .4rem; } .circ-chips .chip { font-size: var(--fs-3); } .circ-chips small { opacity: .7; font-weight: 400; }
