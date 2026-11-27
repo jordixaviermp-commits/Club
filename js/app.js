@@ -1245,10 +1245,10 @@ const ico = (k, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-h
 /** Medalla de podio dibujada (sin emoji): círculo oro / plata / bronce con el puesto. */
 const medalBadge = (p) => `<i class="medal m${p}" aria-label="Puesto ${p}">${p}</i>`;
 /** Fila de carrera de Mi temporada: nombre y etiqueta («en 2 días · M40»), fecha en negrita · lugar y modalidad; flecha › a la derecha. */
-const mrow = (g, { below = '', end = '', hero = false, side = '' } = {}) => {
+const mrow = (g, { below = '', end = '', hero = false, side = '', noDue = false } = {}) => {
   // Mi temporada usa la misma ficha desplegable que Carreras: al abrirla sale ya toda la información, sin otro menú
   const badge = hero ? '<span class="hero-badge">Próxima cita</span>' : '';
-  const due = g.entries && S.payDue?.has(g.id);   // pago que ya toca (la carrera es dentro de una semana): en rojo, como la casilla de Pendientes
+  const due = !noDue && g.entries && S.payDue?.has(g.id);   // pago que ya toca (la carrera es dentro de una semana): en rojo, como la casilla de Pendientes
   if (g.entries) return `<li class="mrow-fold${hero ? ' hero' : ''}${due ? ' pay-due' : ''}">${badge}${due ? `<span class="due-badge">${ico('euro')}Pagar</span>` : ''}${runnerRegCard(g, { cls: hero ? 'hero' : '', noPast: true, notes: true })}</li>`;
   // carrera ya disputada con mi resultado (la ficha de «resultados» + lo mío)
   const me = S.runnerData?.me?.id, race = S.team?.races?.find((x) => x.id === g.race_id), count = (race?.results || []).length;
@@ -1385,7 +1385,8 @@ function myRacesCard(d) {
   const dleft = (g) => { const n = Math.round((new Date(g.date + 'T12:00:00Z') - new Date(today + 'T12:00:00Z')) / 864e5);
     return n === 0 ? 'hoy' : n === 1 ? 'mañana' : `en ${n} días`; };
   return `
-  <section class="card sum-card"><div class="sum-head"><h2>Mis carreras ${S.myYear}</h2>${ico('trophy', 'sum-trophy')}</div>
+  <section class="card sum-card"><div class="sum-head"><h2>Temporada ${S.myYear}</h2>${ico('trophy', 'sum-trophy')}</div>
+    ${years.length > 1 ? `<div class="years">${years.map((y) => `<button class="chip${y === S.myYear ? ' on' : ''}" data-act="my-year" data-y="${y}">${y}</button>`).join('')}</div>` : ''}
     <div class="tiles">
       <a href="#" class="tile t-next" data-act="goto-sec" data-to="sec-next"><span class="t-n">${upTile.length}</span><span class="t-l">Próximas</span>${ico('cal', 't-ico')}<small>${upSub}</small></a>
       <a href="#" class="tile t-done" data-act="goto-sec" data-to="sec-done"><span class="t-n">${list.length + sent.filter((g) => yearOf(g.date) === S.myYear).length}</span><span class="t-l">Hechas</span>${ico('ok', 't-ico')}<small>${days !== list.length ? `${days} días de competición` : 'con resultado'}</small></a>
@@ -1396,22 +1397,9 @@ function myRacesCard(d) {
         : n.type === 'result' ? `Pon tu puesto en <b>${esc(n.name)}</b> · ${ageTxt(n)}` : n.type === 'cron' ? `Pasa la crónica de <b>${esc(n.name)}</b> · ${ageTxt(n)}` : `Marca el pago de <b>${esc(n.name)}</b> · ${n.in === 0 ? 'es hoy' : n.in === 1 ? 'es mañana' : `en ${n.in} días`}`;
       const to = !n ? (upcoming[0] ? 'sec-hero' : 'sec-after') : n.type === 'result' ? 'sec-after' : n.type === 'cron' ? 'sec-after' : 'sec-next';
       return `<div class="sum-todo"><a href="#" class="sum-next${n ? ' has' : ' ok'}" data-act="goto-sec" data-to="${to}">${ico(n ? 'flag' : 'ok')}<span>${txt}</span>${ico('go')}</a>
-        <div class="sum-meta">${ad.streak ? (() => { const me = streakRows().find((x) => x.id === d.me.id); return `<a class="sum-streak" href="${runnerHref('equipo')}" title="Carreras seguidas con tu resultado puesto y tu crónica pasada. Toca para ver la clasificación del club.">🔥 <b>${ad.streak}</b> ${pl(ad.streak, 'carrera seguida', 'carreras seguidas')} al día${me ? ` · <b>${me.pos}º</b> del club` : ''}</a>`; })() : ''}</div></div>`; })()}
+        </div>`; })()}
     ${cancelled.length ? `<a href="#" class="canc-line" data-act="goto-sec" data-to="sec-canc">${ico('ban')}<span><b>${cancelled.length}</b> ${cancelled.length === 1 ? 'carrera suspendida' : 'carreras suspendidas'}</span>${ico('go')}</a>` : ''}
-    ${(() => { const sentYear = sent.filter((g) => yearOf(g.date) === S.myYear).map((g) => ({ position: g.my_result.position, time_seconds: g.my_result.time_seconds, general_position: g.my_result.general_position, race_type: g.race_type, podium_type: g.my_result.podium_type })), allMine = [...list, ...sentYear];   // los enviados también cuentan
-      const pod = [1, 2, 3].map((k) => allMine.filter((x) => x.position === k).length), NAMES = [['Oro', 'Oros'], ['Plata', 'Platas'], ['Bronce', 'Bronces']];
-      // una sola línea pequeña: tiempo en carrera y, al lado, km de viaje (ida y vuelta, aprox.)
-      // una sola fila: las horas encima de la bici con el maillot (lo que más se ve) y, al lado, los km totales de esas carreras
-      const myTime = allMine.reduce((n, r) => n + (Number(r.time_seconds) || 0), 0), myKm = list.reduce((n, r) => n + (Number(r.km) || 0), 0) + sent.filter((g) => yearOf(g.date) === S.myYear).reduce((n, g) => n + (Number(g.km) || 0), 0);
-      const mySpeed = avgSpeed([...list, ...sent.filter((g) => yearOf(g.date) === S.myYear).map((g) => ({ km: g.km, time_seconds: g.my_result.time_seconds }))]);   // tiempo por km
-      const road = myTime || myKm ? `<p class="my-line">${myTime ? `<span title="Tiempo total en carrera" aria-label="Tiempo total en carrera">${ico('timer')}<b>${formatTime(myTime, true)}</b></span>` : ''}${myKm ? `<span title="Kilómetros totales de las carreras que has hecho" aria-label="Kilómetros totales en carrera">${ico('ruler')}<b>${kmText(Math.round(myKm))}</b></span>` : ''}${mySpeed.pace ? `<span title="Tiempo por km: por cada km de carrera tardas de media ${paceText(mySpeed.pace)} (${kmText(Math.round(mySpeed.km))} en ${formatTime(mySpeed.sec, true)}; carreras con distancia y tiempo)" aria-label="Tiempo por kilómetro">${ico('route')}<b>${paceText(mySpeed.pace)}</b></span>` : ''}</p>` : '';
-      // más estadísticas: clasificación general y podios importantes (campeonatos, circuitos y top 3 absoluto)
-      const gens = allMine.map((x) => generalOf(x)).filter(Boolean), imp = importantOf(allMine.map((x) => ({ race: x, res: x })));
-      const genRow = gens.length || imp.length ? `<div class="pod-row gen-row" aria-label="En la general y podios importantes ${S.myYear}">${gens.length ? `<b class="pod-title">En la general:</b><span class="pod-pill gen" title="Mejor puesto en la clasificación general">${ico('flag')}mejor ${Math.min(...gens)}º</span>${gens.filter((g) => g <= 3).length ? `<span class="pod-pill gen">${gens.filter((g) => g <= 3).length} ${gens.filter((g) => g <= 3).length === 1 ? 'podio' : 'podios'}</span>` : ''}<span class="pod-pill gen">${gens.filter((g) => g <= 10).length} top 10</span>` : ''}</div>` : '';
-      const IMP_L = { campeonato: 'Campeonato', circuito: 'Circuito', general: 'General', absoluto: 'Absoluto' };
-      const impBlock = imp.length ? `<details class="imp-det" data-open-key="imp"${S.open?.imp ? ' open' : ''}><summary><span class="pod-pill imp" title="Toca para ver cuáles son">${ico('star')}${imp.length} ${imp.length === 1 ? 'podio importante' : 'podios importantes'}${ico('chevd')}</span></summary>
-        <ul class="imp-list">${imp.map((x) => `<li>${medalBadge(x.position && x.position <= 3 ? x.position : x.general)}<span><b>${esc(x.race.name)}</b><small>${x.kinds.map((k) => IMP_L[k] + (k === 'absoluto' ? ` (general ${x.general}.º)` : '')).join(' · ')}${x.race.date ? ` · ${formatDate(x.race.date, false)}` : ''}</small></span></li>`).join('')}</ul></details>` : '';
-      return (pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}"><i class="medal m${i + 1}"></i>${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : '') + genRow + impBlock + road; })()}
+
   </section>
 
   ${afterRaceCard(d, { pending, noPos, sent, today })}
@@ -1423,7 +1411,7 @@ function myRacesCard(d) {
     <summary><span class="desp-t">Mis próximas inscripciones <small>(${(() => { const by = new Map(); for (const g of upcoming) by.set(yearOf(g.date), (by.get(yearOf(g.date)) || 0) + 1); return by.size > 1 || (by.size === 1 && !by.has(S.myYear)) ? [...by].sort((x, y) => x[0] - y[0]).map(([y, n]) => `${n} de ${y}`).join(' + ') : upcoming.length; })()})</small></span>${ico('chevd', 'desp-chev')}
       ${upcoming.length ? `<span class="desp-sub">${payLineInline(upcoming)}${upcoming.some((g) => S.payDue.has(g.id)) ? `<span class="due">${upcoming.filter((g) => S.payDue.has(g.id)).length} por pagar ya</span>` : ''}</span>` : ''}</summary>
     <p class="hint">Carreras a las que estás apuntado y que aún no se han corrido. <b>Toca una</b> para abrirla: ves quién va, puedes borrarte y, si la añadiste tú, editarla.</p>
-    ${upcoming.length ? `<ul class="mini-list">${upcoming.map((g) => mrow(g, { href: `${runnerHref('carrera')}/${g.id}`, pill: `${dleft(g)}${myCat(g) ? ` · ${esc(myCat(g))}` : ''}`, edit: editMine(g), below: payChips(g) })).join('')}</ul>`
+    ${upcoming.length ? `<ul class="mini-list">${upcoming.map((g, i) => mrow(g, { noDue: i === 0, href: `${runnerHref('carrera')}/${g.id}`, pill: `${dleft(g)}${myCat(g) ? ` · ${esc(myCat(g))}` : ''}`, edit: editMine(g), below: payChips(g) })).join('')}</ul>`
       : '<p class="empty small">No estás apuntado a ninguna. Búscalas en la pestaña Carreras.</p>'}
   </details>
 
@@ -1440,10 +1428,27 @@ function myRacesCard(d) {
 
   <details class="card season-block done-block desp" id="sec-done" data-open-key="done"${S.open?.done ? ' open' : ''}>
     <summary><span class="desp-t">Carreras hechas ${S.myYear} <small>${list.length} ${list.length === 1 ? 'finalizada' : 'finalizadas'}${days !== list.length ? ` · ${days} jornadas` : ''}</small></span>${ico('chevd', 'desp-chev')}</summary>
-    ${years.length > 1 ? `<div class="years">${years.map((y) => `<button class="chip${y === S.myYear ? ' on' : ''}" data-act="my-year" data-y="${y}">${y}</button>`).join('')}</div>` : ''}
     ${list.length ? `<ul class="mini-list">${list.map(row).join('')}</ul>`
       : `<p class="empty small">Todavía no hay carreras tuyas con resultado en ${S.myYear}.</p>`}
     <p class="hint">Si falta alguna carrera o un puesto, díselo a la dirección del club.${!S.preview ? ' Los datos de cada carrera los puede corregir cualquiera (botón «Editar datos»); borrar solo quien la añadió.' : ''}</p>
+  </details>
+
+  <details class="card season-block nums-block desp" id="sec-nums" data-open-key="nums"${S.open?.nums ? ' open' : ''}>
+    <summary><span class="desp-t">Mis números ${S.myYear} <small>podios, general, tiempo y km</small></span>${ico('chevd', 'desp-chev')}</summary>
+    ${(() => { const sentYear = sent.filter((g) => yearOf(g.date) === S.myYear).map((g) => ({ position: g.my_result.position, time_seconds: g.my_result.time_seconds, general_position: g.my_result.general_position, race_type: g.race_type, podium_type: g.my_result.podium_type })), allMine = [...list, ...sentYear];   // los enviados también cuentan
+      const pod = [1, 2, 3].map((k) => allMine.filter((x) => x.position === k).length), NAMES = [['Oro', 'Oros'], ['Plata', 'Platas'], ['Bronce', 'Bronces']];
+      // una sola línea pequeña: tiempo en carrera y, al lado, km de viaje (ida y vuelta, aprox.)
+      // una sola fila: las horas encima de la bici con el maillot (lo que más se ve) y, al lado, los km totales de esas carreras
+      const myTime = allMine.reduce((n, r) => n + (Number(r.time_seconds) || 0), 0), myKm = list.reduce((n, r) => n + (Number(r.km) || 0), 0) + sent.filter((g) => yearOf(g.date) === S.myYear).reduce((n, g) => n + (Number(g.km) || 0), 0);
+      const mySpeed = avgSpeed([...list, ...sent.filter((g) => yearOf(g.date) === S.myYear).map((g) => ({ km: g.km, time_seconds: g.my_result.time_seconds }))]);   // tiempo por km
+      const road = myTime || myKm ? `<p class="my-line">${myTime ? `<span title="Tiempo total en carrera" aria-label="Tiempo total en carrera">${ico('timer')}<b>${formatTime(myTime, true)}</b></span>` : ''}${myKm ? `<span title="Kilómetros totales de las carreras que has hecho" aria-label="Kilómetros totales en carrera">${ico('ruler')}<b>${kmText(Math.round(myKm))}</b></span>` : ''}${mySpeed.pace ? `<span title="Tiempo por km: por cada km de carrera tardas de media ${paceText(mySpeed.pace)} (${kmText(Math.round(mySpeed.km))} en ${formatTime(mySpeed.sec, true)}; carreras con distancia y tiempo)" aria-label="Tiempo por kilómetro">${ico('route')}<b>${paceText(mySpeed.pace)}</b></span>` : ''}</p>` : '';
+      // más estadísticas: clasificación general y podios importantes (campeonatos, circuitos y top 3 absoluto)
+      const gens = allMine.map((x) => generalOf(x)).filter(Boolean), imp = importantOf(allMine.map((x) => ({ race: x, res: x })));
+      const genRow = gens.length || imp.length ? `<div class="pod-row gen-row" aria-label="En la general y podios importantes ${S.myYear}">${gens.length ? `<b class="pod-title">En la general:</b><span class="pod-pill gen" title="Mejor puesto en la clasificación general">${ico('flag')}mejor ${Math.min(...gens)}º</span>${gens.filter((g) => g <= 3).length ? `<span class="pod-pill gen">${gens.filter((g) => g <= 3).length} ${gens.filter((g) => g <= 3).length === 1 ? 'podio' : 'podios'}</span>` : ''}<span class="pod-pill gen">${gens.filter((g) => g <= 10).length} top 10</span>` : ''}</div>` : '';
+      const IMP_L = { campeonato: 'Campeonato', circuito: 'Circuito', general: 'General', absoluto: 'Absoluto' };
+      const impBlock = imp.length ? `<details class="imp-det" data-open-key="imp"${S.open?.imp ? ' open' : ''}><summary><span class="pod-pill imp" title="Toca para ver cuáles son">${ico('star')}${imp.length} ${imp.length === 1 ? 'podio importante' : 'podios importantes'}${ico('chevd')}</span></summary>
+        <ul class="imp-list">${imp.map((x) => `<li>${medalBadge(x.position && x.position <= 3 ? x.position : x.general)}<span><b>${esc(x.race.name)}</b><small>${x.kinds.map((k) => IMP_L[k] + (k === 'absoluto' ? ` (general ${x.general}.º)` : '')).join(' · ')}${x.race.date ? ` · ${formatDate(x.race.date, false)}` : ''}</small></span></li>`).join('')}</ul></details>` : '';
+      return (pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}"><i class="medal m${i + 1}"></i>${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : '') + genRow + impBlock + road; })()}
   </details>`;
 }
 
@@ -1972,7 +1977,6 @@ function viewRunnerMine() {
     ${previewBanner()}
     ${S.preview ? '' : miTabs('mi')}
     ${myRacesCard(d)}
-    ${kitStrip()}
     ${installHint()}
     ${S.preview ? `<p class="center"></p>` : ''}${themeLineIfPreview()}${versionLine()}`,
   { rtab: 'mi' });
