@@ -1540,7 +1540,7 @@ function afterRaceCard(d, { pending, noPos, sent, today }) {
     return `<li class="ar-row${r.todo ? ' todo' : ''}"><a class="ar-head" href="${runnerHref('carrera')}/${r.kind === 'race' ? 'race_' + r.id : r.id}" aria-label="Abrir la carrera ${esc(r.name)}"><span class="ar-name"><b>${esc(r.name)}</b><small>${esc(formatDate(r.date, false))}${r.place ? ' · ' + esc(r.place) : ''}</small>${wk}</span>${ico('go', 'chro-go')}</a>
       <ol class="ar-steps">${resS}${cronS}${pubS}</ol>${act ? `<div class="ar-acts">${act}</div>` : ''}</li>`;
   };
-  return `<section class="card ar-card${todo.length ? ' has-pend' : ''}" id="sec-after"><details class="chro-det" data-open-key="after"${S.open?.after ? ' open' : ''}>
+  return `<section class="card ar-card${todo.length ? ' has-pend' : ''}" id="sec-after"><details class="chro-det" data-open-key="after"${(S.open?.after ?? todo.length > 0) ? ' open' : ''}>
     <summary class="ar-top"><span class="chro-ic">${ico('flag')}</span><b class="chro-t">Después de la carrera</b>
       <span class="chro-tag ${todo.length ? 'pend' : 'ok'}">${todo.length ? `${todo.length} por hacer` : 'Todo al día'}${ico('go')}</span></summary>
     <div class="ar-tabs" role="tablist"><button type="button" role="tab" aria-selected="${tab === 'todo'}" class="${tab === 'todo' ? 'on' : ''}" data-act="after-tab" data-t="todo">Por hacer <b>${todo.length}</b></button><button type="button" role="tab" aria-selected="${tab === 'ok'}" class="${tab === 'ok' ? 'on' : ''}" data-act="after-tab" data-t="ok">Al día <b>${ok.length}</b></button></div>
