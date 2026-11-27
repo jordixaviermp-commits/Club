@@ -1258,5 +1258,16 @@ select set_config('request.jwt.claim.sub', '', false);
 reset role;
 select pg_temp.check(not exists (select 1 from registrations where name = 'Carrera Publicada Sola') and (select count(*) = 2 from results where race_id = (select id from races where name = 'Carrera Publicada Sola')), 'publicada: con todos los resultados pasa sola a Carreras hechas');
 select pg_temp.check(exists (select 1 from registrations where name = 'Carrera Incompleta') and not exists (select 1 from races where name = 'Carrera Incompleta'), 'publicada: si falta un resultado, no pasa y sigue como inscripción');
+-- ===== Publicada: no se vuelve a pedir nada a Claude =====
+select count(*) as n_ant from net.calls \gset
+update chronicle_posts set status = 'publicada', ai_tries = 0 where race_key = '2026-05-01|carrera datos';
+select id as post_pub from chronicle_posts where race_key = '2026-05-01|carrera datos' \gset
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+select admin_chronicle_ai_retry(:'post_pub');
+select set_config('request.jwt.claim.sub', '', false);
+reset role;
+select pg_temp.check((select count(*) = :n_ant from net.calls), 'publicada: volver a crear no llama a Claude (no gasta)');
+set role anon;
 set role anon;
 \echo TODAS LAS PRUEBAS SQL OK
