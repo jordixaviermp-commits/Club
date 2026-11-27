@@ -173,8 +173,8 @@ const racePreview = (d) => [
 ];
 const fsec = (n, icon, title, body, color = '#1f6fd1') => `<section class="fsec" style="--sc:${color}"><h3 class="fsec-h"><span class="fsec-n">${n}</span>${ico(icon)}<span>${title}</span></h3><div class="fsec-b">${body}</div></section>`;
 /** Fichas para elegir una opción (en vez de un desplegable): un toque y queda marcada. Son «radio» ocultos, así que todo lo demás funciona igual. */
-const radioChips = (attr, field, options, cur, { required = false, extra = '' } = {}) => `<div class="chips-pick" role="radiogroup">${options.map(([v, l, cls = '', extra = '']) =>
-  `<label class="cpick ${cls}"><input type="radio" name="${attr.replace('data-', '')}-${field}" ${attr}="${field}" value="${esc(v)}"${v === (cur ?? '') ? ' checked' : ''}${required ? ' required' : ''}${extra}><span>${l}</span></label>`).join('')}</div>`;
+const radioChips = (attr, field, options, cur, { required = false, extra = '' } = {}) => `<div class="chips-pick" role="radiogroup">${options.map(([v, l, cls = '', optExtra = '']) =>
+  `<label class="cpick ${cls}"><input type="radio" name="${attr.replace('data-', '')}-${field}" ${attr}="${field}" value="${esc(v)}"${v === (cur ?? '') ? ' checked' : ''}${required ? ' required' : ''}${extra}${optExtra}><span>${l}</span></label>`).join('')}</div>`;
 const modalityChips = (d, attr) => radioChips(attr, 'modality', MODALITIES.map((m) => [m, `${MOD_ICON[m] || '🏁'} ${esc(m)}`, modClass(m)]), d.modality);
 const RACE_TYPE_SHORT = { suelta: 'Carrera normal', campeonato: 'Campeonato', circuito: 'De un circuito (Copa, Open…)' };
 const detailInputs = (d, attr) => `${SUBTYPES[d.modality] ? `<div class="disc-field"><span class="flabel">Disciplina de ${esc(d.modality)} <b class="req">obligatoria</b></span>${radioChips(attr, 'subtype', SUBTYPES[d.modality].map((x) => [x, esc(x)]), d.subtype, { required: true })}
