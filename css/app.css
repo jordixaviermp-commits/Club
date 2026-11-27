@@ -2937,3 +2937,26 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .chro-notes { border: 1px dashed var(--line); border-radius: 14px; padding: .6rem .7rem; margin: .7rem 0; display: grid; gap: .5rem; }
 .chro-notes label small { display: inline; font-weight: 400; } .chro-notes .btn svg { width: 16px; height: 16px; margin-right: .3rem; vertical-align: -3px; }
 .chro-notes p { margin: 0; }
+
+/* v290 · medios de comunicación */
+.net-tabs { display: flex; overflow-x: auto; scrollbar-width: none; gap: .3rem; padding-bottom: 2px; }
+.net-tabs::-webkit-scrollbar { display: none; } .net-tab { flex: 1 0 58px; min-width: 58px; }
+.md-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; margin: .6rem 0; }
+.md-tile { display: grid; justify-items: center; gap: .1rem; padding: .6rem .3rem; border-radius: 14px; background: var(--accent-2); text-align: center; }
+.md-tile svg { width: 18px; height: 18px; color: var(--accent); } .md-tile b { font-size: var(--fs-6); line-height: 1.1; } .md-tile span { font-size: var(--fs-2); color: var(--muted); line-height: 1.2; } .md-tile em { font-style: normal; font-size: var(--fs-2); font-weight: 700; color: var(--ok); }
+.md-f { margin: .3rem 0 .6rem; } .md-f .chip { padding-left: .7rem; padding-right: .7rem; font-size: var(--fs-3); }
+.md-race { margin-bottom: .6rem; } .md-race .md-h { display: flex; align-items: center; gap: .6rem; }
+.md-ck { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--card); border: 1.5px solid var(--line); color: var(--muted); flex: none; } .md-ck svg { width: 16px; height: 16px; }
+.md-race.has .md-ck { background: color-mix(in srgb, var(--ok) 16%, var(--card)); border-color: var(--ok); color: var(--ok); }
+.md-t { display: grid; flex: 1; min-width: 0; } .md-t small { overflow-wrap: anywhere; }
+.md-h .btn svg { width: 14px; height: 14px; margin-right: .2rem; vertical-align: -2px; }
+.md-none { margin: .3rem 0 0 2.4rem; } .md-list { list-style: none; margin: .5rem 0 0; padding: 0; display: grid; gap: .4rem; }
+.md-list li { display: flex; align-items: center; gap: .5rem; padding: .4rem .5rem; border-radius: 10px; background: var(--bg); }
+.md-n { display: grid; flex: 1; min-width: 0; } .md-n b { overflow-wrap: anywhere; }
+.md-k { font-size: var(--fs-1); font-weight: 800; text-transform: uppercase; letter-spacing: .03em; padding: .1rem .45rem; border-radius: 8px; background: var(--accent-2); color: var(--accent); flex: none; }
+.md-list .icon-btn { width: 36px; height: 36px; flex: none; }
+.md-rank { list-style: none; margin: .4rem 0; padding: 0; display: grid; gap: .3rem; } .md-rank li { display: flex; justify-content: space-between; gap: .6rem; padding: .4rem .7rem; border-radius: 10px; background: var(--card); border: 1px solid var(--line); } .md-rank span { font-weight: 800; }
+
+.md-race .md-h { display: grid; grid-template-columns: 28px 1fr; gap: .25rem .6rem; align-items: center; }
+.md-h .btn { grid-column: 2; justify-self: start; }
+.md-none { margin-left: 0; }

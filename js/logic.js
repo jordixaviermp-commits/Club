@@ -466,6 +466,35 @@ export function icsEvent(g, now = new Date()) {
 // ---------- Publicaciones en redes (control de la dirección) ----------
 
 /** Clave del aviso previo de una carrera y de la publicación de sus resultados (no cambian al pasar a resultados). */
+// ======================================================================
+//  Presencia en medios de comunicación (dirección anota dónde salió cada carrera)
+// ======================================================================
+
+export const MEDIA_KINDS = [['prensa', 'Prensa'], ['radio', 'Radio'], ['tv', 'TV'], ['web', 'Web'], ['otro', 'Otro']];
+/** Carreras del club de un año (con resultados o ya disputadas sin pasar a resultados), sin repetir: [{key, name, date, place}] por fecha. */
+export function seasonRaces(races, registrations, year, today) {
+  const out = new Map();
+  for (const r of races || []) if (yearOf(r.date) === year) out.set(postKeyOf(r), { key: postKeyOf(r), name: r.name, date: r.date, place: r.place || '' });
+  for (const g of registrations || []) {
+    if (yearOf(g.date) !== year || g.suspended || g.date >= today || !(g.entries || []).length) continue;
+    if (!out.has(postKeyOf(g))) out.set(postKeyOf(g), { key: postKeyOf(g), name: g.name, date: g.date, place: g.place || '' });
+  }
+  return [...out.values()].sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name, 'es'));
+}
+/** Estadística de medios de un año: apariciones, medios distintos, por tipo y por mes, y qué carreras tienen medios y cuáles no. */
+export function mediaStats(mentions, raceList, year) {
+  const rows = (mentions || []).filter((m) => yearOf(m.race_date) === year).sort((a, b) => b.published_on.localeCompare(a.published_on));
+  const byMediumMap = new Map();   // el nombre que se queda es la primera forma escrita
+  for (const m of [...rows].reverse()) { const k = normalize(m.medium); const cur = byMediumMap.get(k) || { name: m.medium.trim(), n: 0 }; cur.n++; byMediumMap.set(k, cur); }
+  const byKind = Object.fromEntries(MEDIA_KINDS.map(([k]) => [k, rows.filter((m) => m.kind === k).length]));
+  const byMonth = Array.from({ length: 12 }, (_, i) => rows.filter((m) => Number(String(m.published_on).slice(5, 7)) === i + 1).length);
+  const keys = new Set(rows.map((m) => m.race_key)), covered = (raceList || []).filter((r) => keys.has(r.key));
+  const uncovered = (raceList || []).filter((r) => !keys.has(r.key));
+  const racesN = (raceList || []).length;
+  return { total: rows.length, media: byMediumMap.size, byMedium: [...byMediumMap.values()].sort((a, b) => b.n - a.n || a.name.localeCompare(b.name, 'es')), byKind, byMonth,
+    coveredN: covered.length, racesN, pct: racesN ? Math.round((covered.length / racesN) * 100) : 0, uncovered, rows };
+}
+
 export const postKeyOf = (g) => `${g.date}|${normalize(g.name)}`;
 export const resKeyOf = (g) => 'res|' + postKeyOf(g);
 /** Día en que se publica la historia previa (automática): dos días antes de la carrera. */

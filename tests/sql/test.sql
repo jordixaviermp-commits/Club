@@ -1191,5 +1191,20 @@ select pg_temp.check((select (body #>> '{messages,0,content}') like '%DATOS ADIC
 select pg_temp.check((select ai_state = 'pendiente' and ai_tries = 1 from chronicle_posts where id = :'post_dd'), 'direccion: tras volver a crear queda pendiente de respuesta');
 select pg_temp.expect_fail($q$update chronicle_posts set admin_notes = repeat('x', 2001)$q$, 'direccion: los datos extra tienen un tope de 2000 letras');
 set role anon;
+reset role;
+-- ===== Medios de comunicación =====
+set role anon;
+select pg_temp.expect_fail($q$select count(*) from media_mentions$q$, 'medios: el anónimo no lee');
+select pg_temp.expect_fail($q$insert into media_mentions (race_key, race_name, race_date, medium, published_on) values ('2026-03-01|x', 'X', '2026-03-01', 'Diario', '2026-03-03')$q$, 'medios: el anónimo no escribe');
+reset role;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+insert into media_mentions (race_key, race_name, race_date, medium, kind, published_on, url) values ('2026-03-01|carrera medios', 'Carrera Medios', '2026-03-01', 'Diario del Alto Aragón', 'prensa', '2026-03-03', 'https://example.com/noticia');
+select pg_temp.check((select count(*) = 1 and bool_and(kind = 'prensa') from media_mentions), 'medios: dirección anota una aparición');
+select pg_temp.expect_fail($q$insert into media_mentions (race_key, race_name, race_date, medium, kind, published_on) values ('2026-03-01|y', 'Y', '2026-03-01', 'Radio', 'podcast', '2026-03-03')$q$, 'medios: el tipo tiene que ser uno de la lista');
+select pg_temp.expect_fail($q$insert into media_mentions (race_key, race_name, race_date, medium, published_on) values ('2026-03-01|y', 'Y', '2026-03-01', '   ', '2026-03-03')$q$, 'medios: el medio no puede estar vacío');
+select set_config('request.jwt.claim.sub', '', false);
+reset role;
+set role anon;
 set role anon;
 \echo TODAS LAS PRUEBAS SQL OK

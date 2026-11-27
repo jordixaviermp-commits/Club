@@ -306,6 +306,21 @@ alter table public.chronicle_posts add column if not exists ai_req bigint;   -- 
 alter table public.chronicle_posts add column if not exists ai_at timestamptz;
 alter table public.chronicle_posts add column if not exists ai_tries int not null default 0;
 alter table public.chronicle_posts add column if not exists ai_state text check (ai_state is null or ai_state in ('pendiente','hecho','error'));
+-- Presencia en medios de comunicación (solo dirección): en qué medio salió cada carrera y qué día
+create table if not exists public.media_mentions (
+  id uuid primary key default gen_random_uuid(),
+  race_key text not null check (length(race_key) between 3 and 200),   -- «AAAA-MM-DD|nombre normalizado»: no cambia cuando la inscripción pasa a resultados
+  race_name text not null check (length(race_name) <= 200),
+  race_date date not null,
+  medium text not null check (length(btrim(medium)) between 1 and 120),
+  kind text not null default 'prensa' check (kind in ('prensa', 'radio', 'tv', 'web', 'otro')),
+  published_on date not null,
+  url text check (url is null or length(url) <= 500),
+  notes text check (notes is null or length(notes) <= 500),
+  created_at timestamptz not null default now()
+);
+create index if not exists media_mentions_race_idx on public.media_mentions (race_key);
+alter table public.media_mentions enable row level security;
 alter table public.chronicle_posts enable row level security;
 alter table public.chronicle_photos enable row level security;
 
@@ -386,16 +401,16 @@ $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['runners','registrations','registration_entries','races','results','settings','runner_documents','contract_templates','ig_snapshots','chronicles','circuit_podiums','announcements','change_log','announcement_replies','correction_requests','social_posts','chronicle_posts','chronicle_photos'] loop
+  foreach t in array array['runners','registrations','registration_entries','races','results','settings','runner_documents','contract_templates','ig_snapshots','chronicles','circuit_podiums','announcements','change_log','announcement_replies','correction_requests','social_posts','chronicle_posts','chronicle_photos','media_mentions'] loop
     execute format('drop policy if exists admin_all on public.%I', t);
     execute format('create policy admin_all on public.%I for all to authenticated using (public.is_admin()) with check (public.is_admin())', t);
   end loop;
 end $$;
 
 revoke all on public.runners, public.registrations, public.registration_entries,
-              public.races, public.results, public.admins, public.settings, public.runner_documents, public.contract_templates, public.ig_snapshots, public.chronicles, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts, public.chronicle_posts, public.chronicle_photos from anon, public;
+              public.races, public.results, public.admins, public.settings, public.runner_documents, public.contract_templates, public.ig_snapshots, public.chronicles, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts, public.chronicle_posts, public.chronicle_photos, public.media_mentions from anon, public;
 grant select, insert, update, delete on public.runners, public.registrations,
-              public.registration_entries, public.races, public.results, public.settings, public.runner_documents, public.contract_templates, public.ig_snapshots, public.chronicles, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts, public.chronicle_posts, public.chronicle_photos to authenticated;
+              public.registration_entries, public.races, public.results, public.settings, public.runner_documents, public.contract_templates, public.ig_snapshots, public.chronicles, public.circuit_podiums, public.announcements, public.change_log, public.announcement_replies, public.correction_requests, public.social_posts, public.chronicle_posts, public.chronicle_photos, public.media_mentions to authenticated;
 revoke all on public.admins from authenticated;
 
 -- ---------- Funciones de dirección (respetan la seguridad de arriba) ---

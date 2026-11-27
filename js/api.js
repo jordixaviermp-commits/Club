@@ -5,8 +5,8 @@ import { streakCount, newCode, todayISO, pastLimit, numDays, yearOf, SUBTYPES, p
 
 /** Demo: «corrige» una crónica ordenando espacios y poniendo mayúscula y punto (la corrección real la hace Claude desde la base de datos). */
 const demoPolish = (t) => { const x = String(t).trim().replace(/\s+/g, ' '); return x.charAt(0).toUpperCase() + x.slice(1) + (/[.!?]$/.test(x) ? '' : '.'); };
-const TABLES = ['runners', 'registrations', 'registration_entries', 'races', 'results', 'settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests', 'social_posts', 'chronicles'];
-const OPTIONAL = new Set(['settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests', 'social_posts', 'chronicles']); // tablas que pueden faltar si aún no se ha ejecutado su SQL
+const TABLES = ['runners', 'registrations', 'registration_entries', 'races', 'results', 'settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests', 'social_posts', 'chronicles', 'media_mentions'];
+const OPTIONAL = new Set(['settings', 'circuit_podiums', 'announcements', 'announcement_replies', 'correction_requests', 'social_posts', 'chronicles', 'media_mentions']); // tablas que pueden faltar si aún no se ha ejecutado su SQL
 
 /** Mensajes de error comprensibles. */
 export function friendlyError(e) {
@@ -83,6 +83,7 @@ function nest(data) {
     corrections: data.correction_requests || null,
     socialPosts: data.social_posts || null,       // null = falta el SQL de redes
     chronicles: data.chronicles || null,          // null = falta el SQL de crónicas
+    media: data.media_mentions || null,           // null = falta el SQL de medios
   };
 }
 
@@ -121,6 +122,8 @@ export function supabaseApi(url, key) {
         ...(r.contract ? { contract: r.contract } : {}) }))));
     },
     async updateRunner(id, patch) { ok(await sb.from('runners').update(patch).eq('id', id)); },
+    async saveMedia(row) { const { id, ...r } = row; if (id) ok(await sb.from('media_mentions').update(r).eq('id', id)); else ok(await sb.from('media_mentions').insert(r)); },
+    async deleteMedia(id) { ok(await sb.from('media_mentions').delete().eq('id', id)); },
     async saveSetting(key, value) { ok(await sb.from('settings').upsert({ key, value })); },
     async listDocuments() {
       return ok(await sb.from('runner_documents').select('id,runner_id,year,title,filename,mime,size,created_at').order('year', { ascending: false }));
@@ -476,7 +479,7 @@ export function demoApi(storage = globalThis.localStorage) {
     async signOut() { admin = false; try { storage.removeItem(DEMO_KEY + '-admin'); } catch { /* nada */ } },
     async resetDemo() { mem = demoSeed(); save(); },
 
-    async loadAll() { requireAdmin(); autoPromote(); const { runner_watch, ...d } = load(); return clone(nest({ circuit_podiums: [], announcements: [], announcement_replies: [], correction_requests: [], social_posts: [], chronicles: [], ...d })); },
+    async loadAll() { requireAdmin(); autoPromote(); const { runner_watch, ...d } = load(); return clone(nest({ circuit_podiums: [], announcements: [], announcement_replies: [], correction_requests: [], social_posts: [], chronicles: [], media_mentions: [], ...d })); },
     async autoPromote() { requireAdmin(); return autoPromote(); },
     async adminMovements(limit = 300) {
       requireAdmin(); const d = load(), nm = Object.fromEntries(d.runners.map((r) => [r.id, r.name])), out = [];
@@ -508,6 +511,8 @@ export function demoApi(storage = globalThis.localStorage) {
       save();
     },
     async updateRunner(id, patch) { requireAdmin(); Object.assign(load().runners.find((r) => r.id === id), patch); save(); },
+    async saveMedia(row) { requireAdmin(); const d = load(); d.media_mentions = d.media_mentions || []; if (row.id) { const m = d.media_mentions.find((x) => x.id === row.id); if (m) Object.assign(m, row); } else d.media_mentions.push({ ...row, id: 'mm-' + Math.random().toString(36).slice(2, 10), created_at: new Date().toISOString() }); save(); },
+    async deleteMedia(id) { requireAdmin(); const d = load(); d.media_mentions = (d.media_mentions || []).filter((x) => x.id !== id); save(); },
     async listDocuments() { requireAdmin(); return clone((load().documents || []).map(({ b64, ...m }) => m)); },
     async uploadDocument(runnerId, year, title, filename, mime, b64) {
       requireAdmin(); const d = load(); d.documents = d.documents || [];
