@@ -636,7 +636,7 @@ function frame(title, body, { back, actions = '', rtab = null, noSearch = false,
   const admin = S.session?.isAdmin;
   const tabs = rtab !== null
     ? `<nav class="tabs">${RUNNER_TABS.map(([v, label, d]) =>
-      `<a href="${runnerHref(v)}" class="${v === rtab ? 'on' : ''}">${icon(d)}${v === 'mi' && !S.preview ? `${(() => { const n = myTaskCount(); const u = myUrgent(); return n ? `<b class="tab-n todo${u ? ' urgent' : ''}" title="${n} ${n === 1 ? 'tarea por hacer' : 'tareas por hacer'} en Mi temporada${u ? ' · hay algo urgente' : ''}" aria-label="${n} tareas por hacer${u ? ', hay algo urgente' : ''}">${n > 9 ? '9+' : n}</b>` : u ? `<b class="tab-n todo urgent" title="Tienes una carrera muy pronto" aria-label="Tienes una carrera muy pronto">!</b>` : ''; })()}${watchUrgent() ? '<i class="tab-dot" title="Plazo de inscripción a punto de cerrarse"></i>' : ''}` : ''}<span>${label}</span></a>`).join('')}</nav>`
+      `<a href="${runnerHref(v)}" class="${v === rtab ? 'on' : ''}">${icon(d)}${v === 'mi' && !S.preview ? `${(() => { const n = myTaskCount(); const u = myUrgent(); return n ? `<b class="tab-n todo${u ? ' urgent' : ''}" title="${n} ${n === 1 ? 'tarea pendiente' : 'tareas pendientes'} en Mi temporada${u ? ' · hay algo urgente' : ''}" aria-label="${n} tareas pendientes${u ? ', hay algo urgente' : ''}">${n > 9 ? '9+' : n}</b>` : u ? `<b class="tab-n todo urgent" title="Tienes una carrera muy pronto" aria-label="Tienes una carrera muy pronto">!</b>` : ''; })()}${watchUrgent() ? '<i class="tab-dot" title="Plazo de inscripción a punto de cerrarse"></i>' : ''}` : ''}<span>${label}</span></a>`).join('')}</nav>`
     : admin ? `<nav class="tabs">${ADMIN_TABS.map(([v, label, d]) =>
       `<a href="#/${v}" class="${(ADMIN_GROUP[view] || 'hoy') === v ? 'on' : ''}">${icon(d)}${v === 'redes' && S.data && socialPending() ? `<b class="tab-n">${socialPending()}</b>` : ''}${v === 'hoy' && S.data && todayCount() ? `<b class="tab-n">${todayCount()}</b>` : ''}<span>${label}</span></a>`).join('')}</nav>` : '';
   return `
@@ -1363,7 +1363,7 @@ function payChips(g) {
   return `${e.joined_on ? `<span class="ins-chip">${ico('check')}Inscrito ${dayMon(e.joined_on)}</span>` : ''}${S.preview ? `<span class="pay-chip${e.paid ? ' on' : ''}">${chip}</span>` : `<button type="button" class="pay-chip${e.paid ? ' on' : ''}" data-act="r-paid" data-id="${g.id}">${chip}</button>`}`;
 }
 
-/** Tareas que le faltan al corredor (la misma cuenta que el recuadro «Por hacer» de Mi temporada): resultados, crónicas, pagos y datos. Sirve para el globo de la pestaña. */
+/** Tareas que le faltan al corredor (la misma cuenta que el recuadro «Pendiente» de Mi temporada): resultados, crónicas, pagos y datos. Sirve para el globo de la pestaña. */
 /** Avisos de «X te ha marcado como su pareja» de carreras en las que también estás: cuentan como algo por hacer. */
 function pairInviteCount(d) {
   if (S.preview || !S.pairInvites?.length || !d?.me) return 0;
@@ -1474,7 +1474,7 @@ function myRacesCard(d) {
     const pod = [1, 2, 3].map((k) => all.filter((x) => x.position === k).length), km = all.reduce((n, x) => n + (Number(x.km) || 0), 0), N = [['oro', 'oros'], ['plata', 'platas'], ['bronce', 'bronces']];
     return [...pod.map((n, i) => (n ? `${n} ${N[i][n === 1 ? 0 : 1]}` : '')), km ? kmText(Math.round(km)) : ''].filter(Boolean).join(' · '); })();
   const upYears = (() => { const by = new Map(); for (const g of upcoming) by.set(yearOf(g.date), (by.get(yearOf(g.date)) || 0) + 1); return by.size > 1 || (by.size === 1 && !by.has(S.myYear)) ? [...by].sort((x, y) => x[0] - y[0]).map(([y, n]) => `${n} de ${y}`).join(' + ') : ''; })();
-  const calendar = `<section class="card cal-card" id="sec-cal"><details class="chro-det" data-open-key="cal"${(S.open?.cal ?? true) ? ' open' : ''}>
+  const calendar = `<section class="card cal-card" id="sec-cal"><details class="chro-det" data-open-key="cal"${S.open?.cal ? ' open' : ''}>
     <summary class="mt-h"><h2>Mi calendario</h2><small class="mt-hs peek">${upcoming.length ? `${upcoming.length} próxima${upcoming.length === 1 ? '' : 's'} · ${hechas.length} hecha${hechas.length === 1 ? '' : 's'}` : `${hechas.length} hecha${hechas.length === 1 ? '' : 's'} · ninguna próxima`}</small><button type="button" class="mt-info" data-act="mt-info" data-k="cal" aria-label="Cómo funciona «Mi calendario»" title="Cómo funciona">${ico('info')}</button>${ico('chevd', 'mt-chev')}</summary>
     <div class="mt-seg sm" role="tablist"><button type="button" role="tab" aria-selected="${calTab === 'prox'}" class="${calTab === 'prox' ? 'on' : ''}" data-act="cal-tab" data-t="prox">Próximas <b>${upcoming.length}</b></button><button type="button" role="tab" aria-selected="${calTab === 'hechas'}" class="${calTab === 'hechas' ? 'on' : ''}" data-act="cal-tab" data-t="hechas">Hechas <b>${hechas.length}</b></button></div>
     ${calTab === 'prox'
@@ -1488,7 +1488,7 @@ function myRacesCard(d) {
     <div class="tiles">
       <a href="#" class="tile t-next" data-act="goto-sec" data-to="sec-cal" data-tab="prox"><span class="t-n">${upcoming.length}</span><span class="t-l">Próximas</span>${ico('cal', 't-ico')}<small>${upSub}</small></a>
       <a href="#" class="tile t-done" data-act="goto-sec" data-to="sec-cal" data-tab="hechas"><span class="t-n">${hechas.length}</span><span class="t-l">Hechas</span>${ico('ok', 't-ico')}<small>${days !== list.length ? `${days} días de competición` : 'con resultado'}</small></a>
-      <a href="#" class="tile t-pend${todoN ? ' alert' : ''}${ar.urgentN ? ' urgent' : ''}" data-act="goto-sec" data-to="${todoTo}"><span class="t-n">${todoN}</span><span class="t-l">Por hacer</span>${ico('flag', 't-ico')}<small>${todoTxt}</small></a>
+      <a href="#" class="tile t-pend${todoN ? ' alert' : ''}${ar.urgentN ? ' urgent' : ''}" data-act="goto-sec" data-to="${todoTo}"><span class="t-n">${todoN}</span><span class="t-l">Pendiente</span>${ico('flag', 't-ico')}<small>${todoTxt}</small></a>
     </div>
     ${nextHero(upcoming[0], { dleft, myCat, due: upcoming[0] && S.payDue.has(upcoming[0].id) })}
     ${(() => { const n = (() => { const its = ad.items || [], rank = { result: 0, cron: 1 };
@@ -1687,14 +1687,14 @@ function afterRaceModel(d, { pending, noPos, sent, today, ad, results, upcoming,
   const todo = [...todo0].sort((a, b) => lightRank(rowLight(a)) - lightRank(rowLight(b)));   // lo más urgente primero
   return { list, todo, ok, tasksN, rowHtml, urgentN: todo0.filter((r) => rowLight(r) === 'red').length };
 }
-/** «Por hacer»: la única lista de tareas (resultados, crónicas, pagos y datos). Abierta si hay algo por hacer. */
+/** «Pendiente»: la única lista de tareas (resultados, crónicas, pagos y datos). Abierta si hay algo por hacer. */
 function afterRaceCard(m) {
   if (!m.list.length) return '';
   const { tasksN, rowHtml } = m;
   const todo = m.todo.filter((r) => !(r.pay && r.id === m.heroId));   // el pago de la próxima carrera ya está en su tarjeta de arriba
   const heroOnly = m.todo.length > 0 && todo.length === 0;
-  return `<section class="card ar-card ${m.urgentN ? 'st-red' : tasksN ? 'st-todo' : 'st-ok'}" id="sec-after"><details class="chro-det" data-open-key="after"${(S.open?.after ?? todo.length > 0) ? ' open' : ''}>
-    <summary class="mt-h"><h2>Por hacer</h2><span class="mt-cnt ${tasksN ? 'todo' : 'ok'}">${tasksN || 'Al día'}</span>${m.peek && tasksN ? `<small class="mt-hs peek">${esc(m.peek.replace(/<[^>]+>/g, ''))}</small>` : ''}<button type="button" class="mt-info" data-act="mt-info" data-k="todo" aria-label="Cómo funciona «Por hacer»" title="Cómo funciona">${ico('info')}</button>${ico('chevd', 'mt-chev')}</summary>
+  return `<section class="card ar-card ${m.urgentN ? 'st-red' : tasksN ? 'st-todo' : 'st-ok'}" id="sec-after"><details class="chro-det" data-open-key="after"${(S.open?.after ?? true) ? ' open' : ''}>
+    <summary class="mt-h"><h2>Pendiente</h2><span class="mt-cnt ${tasksN ? 'todo' : 'ok'}">${tasksN || 'Al día'}</span>${m.peek && tasksN ? `<small class="mt-hs peek">${esc(m.peek.replace(/<[^>]+>/g, ''))}</small>` : ''}<button type="button" class="mt-info" data-act="mt-info" data-k="todo" aria-label="Cómo funciona «Pendiente»" title="Cómo funciona">${ico('info')}</button>${ico('chevd', 'mt-chev')}</summary>
     ${todo.length ? `<ul class="mt-list">${todo.map((r) => rowHtml(r, 'todo')).join('')}</ul>` : heroOnly ? '<p class="empty small">Solo falta marcar el pago de tu próxima carrera: lo tienes arriba, en su tarjeta.</p>' : '<p class="empty small">No te falta nada. 🎉</p>'}
   </details></section>`;
 }
@@ -6474,7 +6474,7 @@ const actions = {
   'eq-tab'(el) { S.eqTab = el.dataset.t === 'imp' ? 'imp' : 'res'; render(); },
   async 'mt-info'(el) {
     if (el.dataset.k === 'cal') return choose('Mi calendario', '<b>Próximas</b>: las carreras a las que estás apuntado; la primera es tu próxima cita. Toca una para abrirla: ves quién va, marcas el pago, añades una nota o te borras.<br><br><b>Hechas</b>: las de esta temporada con tu resultado. Toca «ver» para ver tu resultado o la crónica, y el nombre para la ficha completa. Si falta alguna carrera o un puesto, díselo a la dirección.', [{ label: 'Entendido', value: true, kind: 'primary' }]);
-    return choose('Por hacer', `Todo lo que te falta, carrera a carrera: <b>naranja</b> = por hacer, <b>verde</b> = hecho, <b>punteado</b> = espera a lo anterior.<br><br><b>Semáforo:</b> 🔴 <b>urgente</b> = la carrera es dentro de 2 días o menos (o el pago sin marcar y faltan 3), o quedan 2 días o menos del plazo de una semana para el resultado y la crónica; 🟠 <b>pronto</b> = de 3 a 7 días; 🟢 <b>tranquilo</b> = más de 7 días o ya hecho.<br><br>${WEEK_RULE}<br><br>${CHRONICLE_RULE} Para la crónica <b>basta con 2 líneas y una foto</b>: los datos ya los tenemos y el resumen y la publicación los hacemos nosotros.`, [{ label: 'Entendido', value: true, kind: 'primary' }]);
+    return choose('Pendiente', `Todo lo que te falta, carrera a carrera: <b>naranja</b> = por hacer, <b>verde</b> = hecho, <b>punteado</b> = espera a lo anterior.<br><br><b>Semáforo:</b> 🔴 <b>urgente</b> = la carrera es dentro de 2 días o menos (o el pago sin marcar y faltan 3), o quedan 2 días o menos del plazo de una semana para el resultado y la crónica; 🟠 <b>pronto</b> = de 3 a 7 días; 🟢 <b>tranquilo</b> = más de 7 días o ya hecho.<br><br>${WEEK_RULE}<br><br>${CHRONICLE_RULE} Para la crónica <b>basta con 2 líneas y una foto</b>: los datos ya los tenemos y el resumen y la publicación los hacemos nosotros.`, [{ label: 'Entendido', value: true, kind: 'primary' }]);
   },
   async 'stages-edit'(el) {
     const kind = el.dataset.kind, id = el.dataset.id, admin = el.dataset.admin === '1';
@@ -6840,7 +6840,7 @@ const forms = {
       const key = g && postKeyOf(g);
       if (key && S.chron instanceof Set && !S.chron.has(key) && !(S.myPosts && S.myPosts.get(key)) && chroDataOf({ key })?.complete) {
         const v = await choose('¿Nos cuentas cómo te fue?', 'Con <b>2 líneas</b> y una foto vale: el resumen y el post los hacemos nosotros. Ahora te viene fresco.', [{ label: 'Contar cómo me fue', value: 'go', kind: 'primary' }]);
-        if (v === 'go') await actions['chro-write']({ dataset: { key } }); } } catch { /* sin crónica ahora: queda en «Por hacer» */ }
+        if (v === 'go') await actions['chro-write']({ dataset: { key } }); } } catch { /* sin crónica ahora: queda en «Pendiente» */ }
   },
   async 'tpl-upload'(f) {
     const file = f.file.files?.[0];
