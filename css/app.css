@@ -3100,3 +3100,4 @@ button.stg-pair { cursor: pointer; } .stg-pair .ico { width: 16px; height: 16px;
 .stg-fields.res3 { grid-template-columns: 1fr 1fr; }
 .stg-ar { flex: 1 1 100%; color: var(--muted); font-size: var(--fs-2); } .stg-ar b { color: inherit; font-weight: 600; }
 .stg-pairs { display: grid; gap: .25rem; margin: .4rem 0; }
+.stg-inv { display: grid; gap: .4rem; padding: .55rem .65rem; margin: .4rem 0; border-radius: 12px; border: 1.5px solid var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--card)); } .stg-inv p { display: flex; gap: .4rem; margin: 0; align-items: flex-start; } .stg-inv .ico { width: 16px; height: 16px; flex: none; margin-top: 3px; } .stg-inv .row { display: flex; gap: .4rem; flex-wrap: wrap; }

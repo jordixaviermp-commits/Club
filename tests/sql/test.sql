@@ -1304,6 +1304,29 @@ select pg_temp.expect_fail($q$select runner_set_pair('codigo-valorador-dos-02', 
 select runner_set_pair('codigo-valorador-uno-01', 'reg', '30000000-0000-0000-0000-0000000000e5', '');
 select pg_temp.check((select jsonb_array_length(runner_pairs('codigo-valorador-uno-01')) = 0), 'pareja: vacío la quita');
 reset role;
+-- pareja del club: invitación, aceptar copia los resultados, rechazar no copia nada
+select id as v_uno from runners where code = 'codigo-valorador-uno-01' \gset
+select id as v_dos from runners where code = 'codigo-valorador-dos-02' \gset
+insert into registration_entries (registration_id, runner_id, category) values ('30000000-0000-0000-0000-0000000000e5', :'v_dos', 'M40');
+select key from (select 'k') s, lateral (select to_char(date, 'YYYY-MM-DD') || '|' || cron_name_key(name) as key from registrations where id = '30000000-0000-0000-0000-0000000000e5') q \gset
+set role anon;
+select runner_set_pair('codigo-valorador-uno-01', 'reg', '30000000-0000-0000-0000-0000000000e5', null, :'v_dos');
+select pg_temp.check((select runner_pairs('codigo-valorador-uno-01')->0->>'partner' is not null and runner_pairs('codigo-valorador-uno-01')->0->>'partner_id' = :'v_dos'), 'pareja club: se guarda con el compañero del club (usa su nombre)');
+select pg_temp.expect_fail($q$select runner_set_pair('codigo-valorador-uno-01', 'reg', '30000000-0000-0000-0000-0000000000e5', null, '00000000-0000-0000-0000-00000000dead')$q$, 'pareja club: un compañero que no existe no vale');
+select pg_temp.check((select jsonb_array_length(runner_pair_invites('codigo-valorador-dos-02')) = 1 and runner_pair_invites('codigo-valorador-dos-02')->0->>'from_id' = :'v_uno' and (runner_pair_invites('codigo-valorador-dos-02')->0->>'stages')::int = 1), 'pareja club: el compañero ve la invitación y cuántas etapas trae');
+select pg_temp.check((select jsonb_array_length(runner_stage_results('codigo-valorador-dos-02')) = 0), 'pareja club: sin aceptar no se le carga nada');
+select pg_temp.expect_fail($q$select runner_answer_pair('codigo-valorador-dos-02', :'key', '00000000-0000-0000-0000-00000000dead', true)$q$, 'pareja club: no hay invitación de ese corredor');
+select runner_answer_pair('codigo-valorador-dos-02', :'key', :'v_uno', true);
+select pg_temp.check((select jsonb_array_length(runner_stage_results('codigo-valorador-dos-02')) = 1 and (runner_stage_results('codigo-valorador-dos-02')->0->>'position')::int = 3), 'pareja club: al aceptar se copian los resultados de la pareja');
+select pg_temp.check((select runner_pairs('codigo-valorador-dos-02')->0->>'status' = 'confirmada' and runner_pairs('codigo-valorador-uno-01')->0->>'status' = 'confirmada'), 'pareja club: queda confirmada para los dos');
+select pg_temp.check((select jsonb_array_length(runner_pair_invites('codigo-valorador-dos-02')) = 0), 'pareja club: la invitación desaparece');
+reset role;
+update race_pairs set partner_status = null where runner_id = :'v_uno';
+delete from race_pairs where runner_id = :'v_dos'; delete from stage_results where runner_id = :'v_dos';
+set role anon;
+select runner_answer_pair('codigo-valorador-dos-02', :'key', :'v_uno', false);
+select pg_temp.check((select runner_pairs('codigo-valorador-uno-01')->0->>'status' = 'rechazada' and jsonb_array_length(runner_stage_results('codigo-valorador-dos-02')) = 0), 'pareja club: al rechazar no se copia nada y el otro lo ve');
+reset role;
 -- las etapas se guardan siempre por orden de día
 select stages_apply('reg', '30000000-0000-0000-0000-0000000000e5', stages_clean(jsonb_build_array(jsonb_build_object('name', 'B', 'date', (current_date + 1)::text), jsonb_build_object('name', 'A', 'date', (current_date - 1)::text)), current_date - 1, current_date + 2));
 select pg_temp.check((select stage_info->0->>'name' = 'A' and stage_info->1->>'name' = 'B' from registrations where id = '30000000-0000-0000-0000-0000000000e5'), 'etapas: se guardan ordenadas por día');

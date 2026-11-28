@@ -300,6 +300,10 @@ create table if not exists public.race_pairs (
   updated_at timestamptz not null default now(),
   primary key (race_key, runner_id)
 );
+alter table public.race_pairs add column if not exists partner_id uuid references public.runners(id) on delete set null;
+alter table public.race_pairs add column if not exists partner_status text;
+alter table public.race_pairs drop constraint if exists race_pairs_status_check;
+alter table public.race_pairs add constraint race_pairs_status_check check (partner_status is null or partner_status in ('confirmada', 'rechazada'));
 alter table public.race_pairs enable row level security;
 alter table public.stage_results enable row level security;
 
@@ -804,9 +808,9 @@ begin
 end $$;
 grant execute on function public.runner_stage_results(text) to anon, authenticated;
 
-create or replace function public.runner_set_pair(p_code text, p_kind text, p_id uuid, p_partner text)
+create or replace function public.runner_set_pair(p_code text, p_kind text, p_id uuid, p_partner text, p_partner_id uuid default null)
 returns void language plpgsql security definer set search_path = public as $$
-declare v_runner uuid; v_date date; v_name text; v_key text; v_p text := left(btrim(coalesce(p_partner, '')), 60);
+declare v_runner uuid; v_date date; v_name text; v_key text; v_p text := left(btrim(coalesce(p_partner, '')), 60); v_pn text;
 begin
   select id into v_runner from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
@@ -818,13 +822,19 @@ begin
     if not exists (select 1 from results where race_id = p_id and runner_id = v_runner) then raise exception 'no_es_tuya' using errcode = '42501'; end if;
   else raise exception 'tipo_no_valido'; end if;
   if v_date is null then raise exception 'no_existe'; end if;
+  if p_partner_id is not null then                                                                      -- compañero del club: se usa su nombre
+    if p_partner_id = v_runner then raise exception 'datos_no_validos'; end if;
+    select left(name, 60) into v_pn from runners where id = p_partner_id;
+    if v_pn is null then raise exception 'datos_no_validos'; end if;
+    v_p := v_pn;
+  end if;
   perform public.assert_result_open(p_kind, p_id, v_runner);
   v_key := to_char(v_date, 'YYYY-MM-DD') || '|' || public.cron_name_key(v_name);
   if v_p = '' then delete from race_pairs where race_key = v_key and runner_id = v_runner;
-  else insert into race_pairs (race_key, runner_id, partner) values (v_key, v_runner, v_p)
-       on conflict (race_key, runner_id) do update set partner = excluded.partner, updated_at = now(); end if;
+  else insert into race_pairs (race_key, runner_id, partner, partner_id, partner_status) values (v_key, v_runner, v_p, p_partner_id, null)
+       on conflict (race_key, runner_id) do update set partner = excluded.partner, partner_id = excluded.partner_id, partner_status = null, updated_at = now(); end if;
 end $$;
-grant execute on function public.runner_set_pair(text, text, uuid, text) to anon, authenticated;
+grant execute on function public.runner_set_pair(text, text, uuid, text, uuid) to anon, authenticated;
 
 create or replace function public.runner_pairs(p_code text)
 returns jsonb language plpgsql stable security definer set search_path = public as $$
@@ -832,9 +842,53 @@ declare v_runner uuid;
 begin
   select id into v_runner from runners where code = p_code;
   if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
-  return coalesce((select jsonb_agg(jsonb_build_object('key', race_key, 'partner', partner)) from race_pairs where runner_id = v_runner), '[]'::jsonb);
+  return coalesce((select jsonb_agg(jsonb_build_object('key', race_key, 'partner', partner, 'partner_id', partner_id, 'status', partner_status)) from race_pairs where runner_id = v_runner), '[]'::jsonb);
 end $$;
 grant execute on function public.runner_pairs(text) to anon, authenticated;
+
+create or replace function public.runner_pair_invites(p_code text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare v_runner uuid;
+begin
+  select id into v_runner from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  return coalesce((select jsonb_agg(jsonb_build_object('key', rp.race_key, 'from_id', rp.runner_id, 'from_name', r.name,
+                     'stages', (select count(*) from stage_results sr where sr.race_key = rp.race_key and sr.runner_id = rp.runner_id)))
+                     from race_pairs rp join runners r on r.id = rp.runner_id
+                    where rp.partner_id = v_runner and rp.partner_status is null
+                      and not exists (select 1 from race_pairs m where m.race_key = rp.race_key and m.runner_id = v_runner and m.partner_status = 'confirmada')), '[]'::jsonb);
+end $$;
+grant execute on function public.runner_pair_invites(text) to anon, authenticated;
+
+create or replace function public.runner_answer_pair(p_code text, p_key text, p_from uuid, p_accept boolean)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_runner uuid; v_kind text; v_id uuid; v_fname text;
+begin
+  select id into v_runner from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  select 'reg', g.id into v_kind, v_id from registrations g join registration_entries e on e.registration_id = g.id and e.runner_id = v_runner
+   where to_char(g.date, 'YYYY-MM-DD') || '|' || public.cron_name_key(g.name) = p_key limit 1;
+  if v_id is null then
+    select 'race', g.id into v_kind, v_id from races g join results x on x.race_id = g.id and x.runner_id = v_runner
+     where to_char(g.date, 'YYYY-MM-DD') || '|' || public.cron_name_key(g.name) = p_key limit 1;
+  end if;
+  if v_id is null then raise exception 'no_es_tuya' using errcode = '42501'; end if;                    -- solo quien también está en la carrera
+  select r.name into v_fname from race_pairs rp join runners r on r.id = rp.runner_id
+   where rp.race_key = p_key and rp.runner_id = p_from and rp.partner_id = v_runner;
+  if v_fname is null then raise exception 'no_existe'; end if;
+  if not coalesce(p_accept, false) then
+    update race_pairs set partner_status = 'rechazada', updated_at = now() where race_key = p_key and runner_id = p_from;
+    return;
+  end if;
+  perform public.assert_result_open(v_kind, v_id, v_runner);
+  update race_pairs set partner_status = 'confirmada', updated_at = now() where race_key = p_key and runner_id = p_from;
+  insert into race_pairs (race_key, runner_id, partner, partner_id, partner_status) values (p_key, v_runner, left(v_fname, 60), p_from, 'confirmada')
+  on conflict (race_key, runner_id) do update set partner = excluded.partner, partner_id = excluded.partner_id, partner_status = 'confirmada', updated_at = now();
+  insert into stage_results (race_key, runner_id, stage, position, general_position, time_seconds)
+    select p_key, v_runner, stage, position, general_position, time_seconds from stage_results where race_key = p_key and runner_id = p_from
+  on conflict (race_key, runner_id, stage) do nothing;                                                   -- no pisa lo que ya hubiera puesto
+end $$;
+grant execute on function public.runner_answer_pair(text, text, uuid, boolean) to anon, authenticated;
 
 -- Borrar un corredor. Su historial se conserva con su nombre;
 -- con p_anonymize = true el nombre del historial se sustituye (derecho de supresión).
@@ -2548,7 +2602,7 @@ grant execute on function public.runner_set_registration_url(text, uuid, text), 
                           public.runner_update_race(text, uuid, jsonb), public.runner_delete_race(text, uuid), public.runner_set_suspended(text, uuid, boolean),
                           public.runner_report_result(text, text, uuid, int, text, text, int, boolean),
                           public.runner_documents_list(text), public.runner_get_document(text, uuid), public.runner_contract_template(text), public.runner_get_contract_template(text),
-                          public.runner_team(text), public.runner_set_stages(text, text, uuid, jsonb), public.runner_set_stage_result(text, text, uuid, int, int, int, int), public.runner_stage_results(text), public.runner_set_pair(text, text, uuid, text), public.runner_pairs(text), public.runner_streaks(text), public.runner_team_moves(text), public.runner_notes_list(text), public.runner_note_set(text, uuid, text), public.runner_chronicles(text), public.runner_chronicles_team(text), public.runner_social_impact(text), public.runner_cars(text), public.runner_car_save(text, uuid, int, text, text, text), public.runner_car_delete(text, uuid), public.runner_car_join(text, uuid), public.runner_car_leave(text, uuid), public.runner_set_general(text, text, uuid, int), public.runner_generals(text), public.runner_my_kit(text), public.runner_my_shift(text), public.runner_set_my_shift(text, text), public.runner_shift_info(text), public.runner_chronicle_set(text, text, boolean), public.runner_chronicle_send(text, text, text, date, text, text, text, text, uuid, jsonb), public.runner_race_group(text, text, uuid), public.runner_chronicle_posts(text),
+                          public.runner_team(text), public.runner_set_stages(text, text, uuid, jsonb), public.runner_set_stage_result(text, text, uuid, int, int, int, int), public.runner_stage_results(text), public.runner_set_pair(text, text, uuid, text, uuid), public.runner_pairs(text), public.runner_pair_invites(text), public.runner_answer_pair(text, text, uuid, boolean), public.runner_streaks(text), public.runner_team_moves(text), public.runner_notes_list(text), public.runner_note_set(text, uuid, text), public.runner_chronicles(text), public.runner_chronicles_team(text), public.runner_social_impact(text), public.runner_cars(text), public.runner_car_save(text, uuid, int, text, text, text), public.runner_car_delete(text, uuid), public.runner_car_join(text, uuid), public.runner_car_leave(text, uuid), public.runner_set_general(text, text, uuid, int), public.runner_generals(text), public.runner_my_kit(text), public.runner_my_shift(text), public.runner_set_my_shift(text, text), public.runner_shift_info(text), public.runner_chronicle_set(text, text, boolean), public.runner_chronicle_send(text, text, text, date, text, text, text, text, uuid, jsonb), public.runner_race_group(text, text, uuid), public.runner_chronicle_posts(text),
                           public.runner_leave(text, uuid), public.runner_set_paid(text, uuid, boolean, numeric, date), public.runner_join_race(text, uuid, text),
                           public.runner_set_race_type(text, uuid, text, text), public.runner_propose_circuit(text, text, int, int, text),
                           public.runner_cancel_circuit(text, uuid), public.runner_news(text), public.runner_set_race_details(text, uuid, text, numeric), public.runner_complete_race(text, text, uuid, jsonb), public.auto_promote_registrations(),
