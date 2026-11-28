@@ -163,7 +163,7 @@ const typeTag = (x) => {
 /** Campos «Disciplina» (según la modalidad: obligatoria en BTT y Carretera) y «Distancia» de los formularios. `attr` = data-f (dirección) o data-rf (corredor). */
 /** Sección numerada de un formulario (cabecera de color con icono) para que se encuentre cada cosa de un vistazo. */
 /** Sección plegable de un formulario: título con su resumen a la derecha; se abre al tocar (y recuerda si estaba abierta). */
-const fsecD = (key, n, icon, title, preview, body, color, openDefault = false) => `<details class="fsec fsec-d" style="--sc:${color}" data-open-key="${key}"${S.open?.[key] ? ' open' : ''}><summary class="fsec-h"><span class="fsec-n">${n}</span>${ico(icon)}<span class="fsec-tx"><span class="fsec-t">${title}</span><span class="fsec-p">${preview ? esc(preview) : ''}</span></span>${ico('chevd', 'fsec-chev')}</summary><div class="fsec-b">${body}</div></details>`;
+const fsecD = (key, n, icon, title, preview, body, color, openDefault = false, mark = null) => `<details class="fsec fsec-d" style="--sc:${color}" data-open-key="${key}"${(S.open?.[key] ?? openDefault) ? ' open' : ''}><summary class="fsec-h"><span class="fsec-n">${n}</span>${ico(icon)}<span class="fsec-tx"><span class="fsec-t">${title}</span><span class="fsec-p">${preview ? esc(preview) : ''}</span></span>${mark !== null ? `<span class="fsec-mk ${mark}" data-mk>${mark === 'ok' ? '✓' : mark === 'todo' ? 'Falta' : ''}</span>` : ''}${ico('chevd', 'fsec-chev')}</summary><div class="fsec-b">${body}</div></details>`;
 /** Resumen de una línea de cada sección del formulario de carrera (lo que se ve con la sección plegada). */
 const racePreview = (d) => [
   d.name,
@@ -171,6 +171,22 @@ const racePreview = (d) => [
   [d.modality, d.subtype, d.km ? kmText(d.km) : ''].filter(Boolean).join(' · '),
   [d.elevation ? elevText(d.elevation) : '', d.price !== '' && d.price != null ? (Number(d.price) === 0 ? 'Gratis' : `${d.price} €`) : '', d.url ? 'con web' : ''].filter(Boolean).join(' · '),
 ];
+/** Qué le falta al formulario de carrera: una marca por sección (✓ completa, «Falta» obligatoria sin rellenar, vacía = opcional). */
+const formMarks = (d, editing) => {
+  const nameOk = cleanName(d.name).length >= 3, dateOk = !!d.date && (!d.multi || !!d.end_date), typeOk = !SUBTYPES[d.modality] || !!d.subtype, catOk = editing || !!d.category;
+  return [nameOk ? 'ok' : 'todo', dateOk ? 'ok' : 'todo', typeOk ? 'ok' : 'todo', '', editing ? '' : catOk ? 'ok' : 'todo'];
+};
+const formMissing = (d, editing) => { const m = formMarks(d, editing), L = ['el nombre', 'la fecha', 'la disciplina', '', 'tu categoría']; return m.map((x, i) => (x === 'todo' ? { sec: `rf${i + 1}`, txt: L[i] } : null)).filter(Boolean); };
+/** Pone al día las marcas y los resúmenes del formulario de carrera mientras se escribe. */
+function refreshRaceForm() {
+  const d = S.rdraft; if (!d || !$app.querySelector('.rform')) return;
+  const mk = formMarks(d, !!d.id), pv = racePreview(d);
+  for (let i = 1; i <= 5; i++) {
+    const sec = $app.querySelector(`[data-open-key="rf${i}"]`); if (!sec) continue;
+    const m = sec.querySelector('[data-mk]'); if (m) { m.className = `fsec-mk ${mk[i - 1] || ''}`; m.textContent = mk[i - 1] === 'ok' ? '✓' : mk[i - 1] === 'todo' ? 'Falta' : ''; }
+    const pe = sec.querySelector('.fsec-p'); if (pe && i <= 4) pe.textContent = pv[i - 1] || '';
+  }
+}
 const fsec = (n, icon, title, body, color = '#1f6fd1') => `<section class="fsec" style="--sc:${color}"><h3 class="fsec-h"><span class="fsec-n">${n}</span>${ico(icon)}<span>${title}</span></h3><div class="fsec-b">${body}</div></section>`;
 /** Fichas para elegir una opción (en vez de un desplegable): un toque y queda marcada. Son «radio» ocultos, así que todo lo demás funciona igual. */
 const radioChips = (attr, field, options, cur, { required = false, extra = '' } = {}) => `<div class="chips-pick" role="radiogroup">${options.map(([v, l, cls = '', optExtra = '']) =>
@@ -1117,7 +1133,7 @@ const isPastReg = (id) => { const g = S.runnerData?.registrations.find((x) => x.
 /** Pantalla para poner el resultado: de una inscripción (reg_) o de una carrera ya en resultados (race_). */
 const resultHref = (id) => (S.runnerData?.registrations.some((g) => g.id === id) ? `#/resultado/reg_${id}` : `#/resultado/race_${id}`);
 const emptyRunnerDraft = (pre = {}) => ({ name: '', date: '', multi: false, end_date: '', place: '', province: '', country: DEFAULT_COUNTRY,
-  modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', category: '', url: '', elevation: '', price: '', ...pre });
+  modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', category: '', url: '', elevation: '', price: '', paid: false, pair: false, partner: '', partner_id: '', ...pre });
 
 /** «Gral. 12º»: el puesto en la clasificación general (todas las categorías), si se conoce. */
 const genTag = (g) => (g ? `<small class="gen-tag" title="Puesto en la general (todas las categorías)">Gral. ${g}º</small>` : '');
@@ -1163,31 +1179,35 @@ function viewRunnerNew() {
   const editing = !!d.id, isRace = d.kind === 'race';
   const reg = editing && !isRace ? S.runnerData.registrations.find((x) => x.id === d.id) : null;
   const mineCreated = editing && (isRace ? !!(S.runnerData.my_results || []).find((x) => x.race_id === d.id)?.mine_created : !!reg?.mine_created);
-  const pv = racePreview(d);
+  const pv = racePreview(d), mk = formMarks(d, editing);
   const others = isRace ? d.others || 0 : reg ? reg.entries.filter((e) => e.runner_id !== S.runnerData.me.id).length : 0;
   if (!S.fed && !editing) loadFed().then(() => updateSearch('rname'));
   return frame(editing ? 'Editar mi carrera' : 'Añadir carrera', `<div class="ds2">
-    <form class="stack rform" data-form="r-create">
+    <form class="stack rform" data-form="r-create" novalidate>
       <details class="rform-help"><summary>${ico('info')}<span>${editing ? 'Qué puedes cambiar aquí' : 'Cómo se añade una carrera'}</span></summary>
         <p class="hint">${editing ? `Puedes corregir los datos de esta carrera porque la añadiste tú${isRace ? ' (aunque ya esté en resultados)' : ''}. Tu puesto lo cambias en «Cambiar mi resultado»; el de los demás lo pone cada uno.`
           : 'Escribe el nombre: si ya existe en el club o en el calendario de las federaciones te saldrá aquí debajo, para no duplicarla.<br>¿Se te olvidó apuntar una carrera que ya hiciste? Añádela igual con su fecha (desde el 1 de enero del año pasado) y luego pon tu resultado.'}</p></details>
       ${fsecD('rf1', 1, 'flag', 'Qué carrera es', pv[0], `<label class="flabel-l">Nombre de la carrera<input data-rf="name" value="${esc(d.name)}" required minlength="3" maxlength="120" autocomplete="off"></label>
-        <div id="dup-list">${editing ? '' : dupSuggestions(d.name, S.runnerData.registrations, true)}</div>`, '#1f6fd1', !editing)}
+        <div id="dup-list">${editing ? '' : dupSuggestions(d.name, S.runnerData.registrations, true)}</div>`, '#1f6fd1', !editing, mk[0])}
       ${fsecD('rf2', 2, 'cal', 'Cuándo y dónde', pv[1], `<label class="flabel-l">${d.multi ? 'Primer día' : 'Fecha'}<input type="date" data-rf="date" value="${esc(d.date)}" min="${pastLimit()}"${isRace ? ` max="${todayISO()}"` : ''} required></label>
         <label class="check"><input type="checkbox" data-rf-multi ${d.multi ? 'checked' : ''}> Carrera de varios días (por etapas)</label>
         ${d.multi ? `<label class="flabel-l">Último día<input type="date" data-rf="end_date" value="${esc(d.end_date)}" min="${esc(d.date || pastLimit())}" required></label>` : ''}
         <label class="flabel-l">Lugar<input data-rf="place" value="${esc(d.place)}" maxlength="120" placeholder="Ciudad o pueblo"></label>
         <div class="grid2"><label class="flabel-l">Provincia<input data-rf="province" list="dl-prov" value="${esc(d.province)}" autocomplete="off"></label>
-          ${editing ? `<label class="flabel-l">País<input data-rf="country" list="dl-country" value="${esc(d.country || '')}" maxlength="60"></label>` : '<span></span>'}</div>`, '#0f9d8a', !editing)}
+          ${editing ? `<label class="flabel-l">País<input data-rf="country" list="dl-country" value="${esc(d.country || '')}" maxlength="60"></label>` : '<span></span>'}</div>`, '#0f9d8a', false, mk[1])}
       ${fsecD('rf3', 3, 'bars', 'Qué tipo de carrera es', pv[2], `<div class="disc-field"><span class="flabel">Modalidad</span>${modalityChips(d, 'data-rf')}</div>
         ${detailInputs(d, 'data-rf')}
-        ${S.runnerData.circuits ? typeFields(d, 'data-rf') : ''}`, '#e07800', !editing)}
+        ${S.runnerData.circuits ? typeFields(d, 'data-rf') : ''}`, '#e07800', false, mk[2])}
       ${fsecD('rf4', 4, 'mountain', 'Más datos (opcionales)', pv[3], `<div class="grid2"><label class="flabel-l">Desnivel positivo (m)<input type="text" inputmode="numeric" data-rf="elevation" value="${esc(d.elevation ?? '')}" maxlength="6" placeholder="1200" autocomplete="off"></label>
         <label class="flabel-l">Precio inscripción (€)<input type="text" inputmode="decimal" data-rf="price" value="${esc(d.price ?? '')}" maxlength="8" placeholder="25" autocomplete="off"></label></div>
         ${isRace ? '' : `<label class="flabel-l">Web de la carrera<input type="text" inputmode="url" data-rf="url" value="${esc(d.url || '')}" maxlength="500" placeholder="https://…" autocomplete="off"></label>`}
         <p class="hint">Los ven todos los corredores y salen en las estadísticas del club (metros de subida, coste de competir…). Si no los sabes, déjalos vacíos: cualquier compañero podrá completarlos después. Para el precio, 0 = gratis.</p>`, '#2f6fd6')}
       ${fsecD('rf5', 5, 'users', editing ? 'Notas' : 'Tú', editing ? (d.notes ? 'con notas' : '') : d.category, editing ? `<label class="flabel-l">Notas<textarea data-rf="notes" rows="2" maxlength="500">${esc(d.notes || '')}</textarea></label>`
-        : `<label class="flabel-l">Tu categoría${catSelect('data-rf="category" required', d.category, 'Elige tu categoría')}</label>`, '#8e44ad', !editing)}
+        : `<label class="flabel-l">Tu categoría${catSelect('data-rf="category" required', d.category, 'Elige tu categoría')}</label>
+          <label class="check"><input type="checkbox" data-rf-paid ${d.paid ? 'checked' : ''}> Ya la he pagado${parsePrice(d.price) ? ` (${esc(String(d.price))} €)` : ''}</label>
+          <label class="check"><input type="checkbox" data-rf-pair ${d.pair ? 'checked' : ''}> La hago por parejas</label>
+          ${d.pair ? `${(S.team?.runners || []).filter((r) => r.id !== S.runnerData?.me?.id).length ? `<label class="flabel-l">Tu compañero o compañera<select data-rf="partner_id"><option value="">Otra persona (no es del club)</option>${(S.team.runners || []).filter((r) => r.id !== S.runnerData?.me?.id).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')).map((r) => `<option value="${esc(r.id)}"${r.id === d.partner_id ? ' selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>` : ''}
+            ${d.partner_id ? '' : `<label class="flabel-l">Nombre del compañero<input data-rf="partner" value="${esc(d.partner || '')}" maxlength="60" placeholder="Nombre (aunque no sea del club)" autocomplete="off"></label>`}` : ''}`, '#8e44ad', false, mk[4])}
       <button class="btn primary big-save">${editing ? 'Guardar cambios' : 'Añadir y apuntarme'}</button>
       <p class="hint">${editing ? 'Cualquier corredor puede corregir estos datos; cada cambio queda anotado con tu nombre en el historial de la dirección.' : 'La dirección del club podrá corregirla o borrarla si hace falta.'}</p>
     </form>
@@ -2095,17 +2115,26 @@ const rutaCard = () => `<a class="card ruta-card" href="ruta/">${ico('route', 'r
 
 /** La próxima carrera del equipo, bien resaltada: que se vea la semana en la que compite el club aunque quien mira no participe. */
 function nextTeamBanner(d) {
-  const today = d.today || todayISO(), g = nextTeamRace(d.registrations, today);
-  if (!g) return '';
-  const n = daysTo(g.date), going = d.registrations && (g.entries || []).some((e) => e.runner_id === d.me.id), live = g.date <= today;
-  const wk = live || n <= 7, light = preLight(live ? 0 : n), names = g.entries.map((e) => e.name.split(' ')[0]), shown = names.slice(0, 6);
-  const dot = light === 'red' ? '🔴 ' : light === 'amber' ? '🟠 ' : '';   // semáforo, igual que la próxima carrera de Mi temporada
-  return `<section class="card next-team lt-${light}${wk ? ' wk' : ''} compact" aria-label="Próxima carrera del equipo">
-    <p class="nt-k">${wk ? `${dot || ico('flag')}Esta semana compite el equipo` : `${ico('flag')}Próxima carrera del equipo`}</p>
+  const today = d.today || todayISO(), last = (g) => g.end_date || g.date;
+  const all = (d.registrations || []).filter((g) => !g.suspended && (g.entries || []).length && last(g) >= today)
+    .sort((a, b) => a.date.localeCompare(b.date) || (b.entries.length - a.entries.length) || String(a.name).localeCompare(String(b.name), 'es'));
+  if (!all.length) return '';
+  const week = all.filter((g) => g.date <= today || daysTo(g.date) <= 7);
+  const card = (g, solo) => {
+    const n = daysTo(g.date), going = (g.entries || []).some((e) => e.runner_id === d.me.id), live = g.date <= today;
+    const wk = live || n <= 7, light = preLight(live ? 0 : n), names = g.entries.map((e) => e.name.split(' ')[0]), shown = names.slice(0, 6);
+    const dot = light === 'red' ? '🔴 ' : light === 'amber' ? '🟠 ' : '';   // semáforo, igual que la próxima carrera de Mi temporada
+    return `<section class="card next-team lt-${light}${wk ? ' wk' : ''} compact" aria-label="Próxima carrera del equipo">
+    <p class="nt-k">${wk ? `${dot || ico('flag')}${solo ? 'Esta semana compite el equipo' : 'Esta semana'}` : `${ico('flag')}Próxima carrera del equipo`}</p>
     <div class="nt-head">${raceTile(g, { mine: !!going })}<div class="rh-main"><h2 class="nt-n">${esc(g.name)}</h2><p class="rh-sub">${esc(raceSub(g))}</p><p class="rc-meta">${raceMeta(g)}</p></div>
       <div class="rc-side"><span class="nt-pill nt-when">${live ? 'En curso' : daysToText(n)}</span><span class="nt-pill">${g.entries.length} del club</span></div></div>
     <p class="nt-people">${shown.map(esc).join(' · ')}${names.length > shown.length ? ` · +${names.length - shown.length}` : ''}</p>
     <div class="nt-foot"><span class="nt-me${going ? ' on' : ''}">${going ? `${ico('check')}Tú vas` : 'Tú no estás apuntado'}</span><button type="button" class="btn nt-btn" data-act="goto-sec" data-to="rc-${esc(g.id)}">${going ? 'Ver carrera' : 'Apuntarme'}</button></div></section>`;
+  };
+  if (week.length < 2) return card(week[0] || all[0], true);
+  // varias carreras del equipo esta semana: se deslizan de lado y se ve un trozo de la siguiente
+  return `<div class="nt-deck" role="region" aria-label="Carreras del equipo esta semana"><p class="nt-deck-k">${ico('flag')}<span>Esta semana compite el equipo: <b>${week.length}</b></span><small>desliza →</small></p>
+    <div class="nt-track" tabindex="0">${week.map((g) => card(g, false)).join('')}</div></div>`;
 }
 
 function viewRunnerHome() {
@@ -6759,8 +6788,13 @@ const forms = {
   async 'r-create'() {
     const d = S.rdraft;
     const name = cleanName(d.name);
-    if (d.multi && !d.end_date) return toast('Falta el último día.', true);
-    if (!d.id && !d.category) return toast('Elige tu categoría para apuntarte.', true);
+    const miss = formMissing(d, !!d.id);
+    if (miss.length) {   // abre la primera sección que falta, para que se vea qué hay que rellenar
+      const sec = $app.querySelector(`[data-open-key="${miss[0].sec}"]`); if (sec) { sec.open = true; (S.open ||= {})[miss[0].sec] = true; sec.scrollIntoView({ block: 'center', behavior: 'smooth' }); sec.querySelector('input:not([type=radio]):not([type=checkbox]), select')?.focus({ preventScroll: true }); }
+      return toast(`Falta ${miss.map((x) => x.txt).join(', ').replace(/, ([^,]*)$/, ' y $1')}.`, true);
+    }
+    if (d.date < pastLimit()) return toast('Esa fecha es demasiado antigua: solo se pueden añadir carreras desde el 1 de enero del año pasado.', true);
+    if (d.multi && d.end_date < d.date) return toast('El último día no puede ser anterior al primero.', true);
     if (d.race_type === 'circuito' && !cleanName(d.circuit)) return toast('Falta el nombre del circuito.', true);
     if (String(d.elevation ?? '').trim() !== '' && parseElev(d.elevation) === null) return toast('El desnivel tiene que ser un número entre 1 y 10 000 metros.', true);
     if (String(d.price ?? '').trim() !== '' && parsePrice(d.price) === null) return toast('El precio tiene que ser un número entre 0 y 10 000 euros (0 = gratis).', true);
@@ -6811,6 +6845,16 @@ const forms = {
       if (d.watchId) { await api.runnerWatchDelete(S.code, d.watchId).catch(() => {}); await loadWatch(); }   // ya no está «por valorar»
       await loadRunner(); return newId || true;
     }, past ? 'Carrera añadida: ahora pon tu resultado' : 'Carrera añadida y te has apuntado');
+    if (id && typeof id === 'string') {   // lo que se marcó en «Tú»: pagada y por parejas
+      if (d.paid) await api.runnerSetPaid(S.code, id, true, parsePrice(d.price) ?? null, todayISO()).catch((e) => toast(friendlyError(e), true));
+      if (d.pair && (d.partner_id || String(d.partner || '').trim())) await api.runnerSetPair(S.code, 'reg', id, d.partner_id ? '' : String(d.partner).trim(), d.partner_id || null).catch((e) => toast(friendlyError(e), true));
+      await loadRunner(); await loadStageResults().catch(() => {});
+      if (d.multi) {   // carrera de varios días: se ofrecen ya las etapas (una por día, para completar)
+        const g = (S.runnerData?.registrations || []).find((x) => x.id === id);
+        const list = g ? await askStages({ ...g }) : null;
+        if (list && list.length) await run(async () => { await api.runnerSetStages(S.code, 'reg', id, list); await loadRunner(); return true; }, 'Etapas guardadas');
+      }
+    }
     if (id) { S.rdraft = null; S.q.runner = ''; go(past ? resultHref(id) : '#/'); }
   },
   async 'r-report'(f) {
@@ -7058,6 +7102,7 @@ $app.addEventListener('input', (ev) => {
       if (g) { S.rdraft.subtype = g; const sel = [...$app.querySelectorAll('input[data-rf="subtype"]')].find((x) => x.value === g); if (sel) sel.checked = true; }
     }
     if (t.dataset.rf === 'name') updateSearch('rname');
+    refreshRaceForm();
     return;
   }
   if (!S.draft) return;
@@ -7115,6 +7160,9 @@ $app.addEventListener('change', async (ev) => {
     if (d) { d.race_type = t.value; render(); $app.querySelector('[list="dl-circuit"]')?.focus(); }
     return;
   }
+  if ('rfPaid' in t.dataset && S.rdraft) { S.rdraft.paid = t.checked; return; }
+  if ('rfPair' in t.dataset && S.rdraft) { S.rdraft.pair = t.checked; if (t.checked && !S.team) await ensureTeamQuiet(); render(); return; }
+  if (t.dataset.rf === 'partner_id' && S.rdraft) { S.rdraft.partner_id = t.value; if (t.value) S.rdraft.partner = ''; render(); return; }
   if ('rfMulti' in t.dataset && S.rdraft) {
     S.rdraft.multi = t.checked; if (!t.checked) S.rdraft.end_date = ''; render(); return;
   }
