@@ -2098,9 +2098,10 @@ function nextTeamBanner(d) {
   const today = d.today || todayISO(), g = nextTeamRace(d.registrations, today);
   if (!g) return '';
   const n = daysTo(g.date), going = d.registrations && (g.entries || []).some((e) => e.runner_id === d.me.id), live = g.date <= today;
-  const wk = live || n <= 7, names = g.entries.map((e) => e.name.split(' ')[0]), shown = names.slice(0, 6);
-  return `<section class="card next-team${wk ? ' wk' : ''} compact" aria-label="Próxima carrera del equipo">
-    <p class="nt-k">${wk ? `${ico('flag')}Esta semana compite el equipo` : `${ico('flag')}Próxima carrera del equipo`}</p>
+  const wk = live || n <= 7, light = preLight(live ? 0 : n), names = g.entries.map((e) => e.name.split(' ')[0]), shown = names.slice(0, 6);
+  const dot = light === 'red' ? '🔴 ' : light === 'amber' ? '🟠 ' : '';   // semáforo, igual que la próxima carrera de Mi temporada
+  return `<section class="card next-team lt-${light}${wk ? ' wk' : ''} compact" aria-label="Próxima carrera del equipo">
+    <p class="nt-k">${wk ? `${dot || ico('flag')}Esta semana compite el equipo` : `${ico('flag')}Próxima carrera del equipo`}</p>
     <div class="nt-head">${raceTile(g, { mine: !!going })}<div class="rh-main"><h2 class="nt-n">${esc(g.name)}</h2><p class="rh-sub">${esc(raceSub(g))}</p><p class="rc-meta">${raceMeta(g)}</p></div>
       <div class="rc-side"><span class="nt-pill nt-when">${live ? 'En curso' : daysToText(n)}</span><span class="nt-pill">${g.entries.length} del club</span></div></div>
     <p class="nt-people">${shown.map(esc).join(' · ')}${names.length > shown.length ? ` · +${names.length - shown.length}` : ''}</p>

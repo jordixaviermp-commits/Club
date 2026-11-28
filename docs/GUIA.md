@@ -463,3 +463,4 @@ Si algún día te paso una versión nueva de este archivo, se repite este mismo 
 - Mi temporada: el recuadro «Por hacer» pasa a llamarse **«Pendiente»** (título, casilla de arriba y ventana de ayuda).
 - Mi temporada: las tarjetas de «Hechas» y de «Pendiente» muestran una flecha (›) y se abren enteras al tocarlas (ficha de la carrera en pantalla aparte); los botones de dentro (resultado, crónica, datos) siguen funcionando.
 - Notas: el botón de «Notas» de la ficha de la carrera lleva ahora un icono de **libreta** (antes era un lápiz, igual que «Editar datos» y se confundían).
+- Carreras: la tarjeta «Esta semana compite el equipo» / «Próxima carrera del equipo» usa el mismo **semáforo** que la próxima carrera de Mi temporada: aro rojo y 🔴 si es dentro de 2 días o menos (o en curso), aro naranja y 🟠 de 3 a 7 días, sin aro si falta más. La cuenta atrás cambia de color con el estado.
