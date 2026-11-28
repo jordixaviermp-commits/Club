@@ -454,8 +454,9 @@ async function loadShift() {
 }
 /** Mis resultados por etapa: clave «carrera|n» → {position, time}. Sin el SQL de etapas queda vacío. */
 async function loadStageResults() {
-  S.myStages = new Map();
-  try { const l = await api.runnerStageResults(S.code || S.previewCode); for (const x of Array.isArray(l) ? l : []) S.myStages.set(`${x.key}|${x.stage}`, { position: x.position, time: x.time }); } catch { /* sin el SQL de resultados por etapa */ }
+  S.myStages = new Map(); S.myPairs = new Map();
+  try { const l = await api.runnerStageResults(S.code || S.previewCode); for (const x of Array.isArray(l) ? l : []) S.myStages.set(`${x.key}|${x.stage}`, { position: x.position, general: x.general ?? null, time: x.time }); } catch { /* sin el SQL de resultados por etapa */ }
+  try { const l = await api.runnerPairs(S.code || S.previewCode); for (const x of Array.isArray(l) ? l : []) S.myPairs.set(x.key, x.partner); } catch { /* sin el SQL de parejas */ }
 }
 async function loadRunner() {
   if (!S.session?.isAdmin) api.runnerPing?.(S.code).catch(() => {});   // actividad: última vez que abrió la app
@@ -1753,38 +1754,53 @@ function stagesBlock(g, kind = 'reg', { admin = false, mine = false } = {}) {
   if (!g?.end_date || g.end_date <= g.date) return '';
   const st = Array.isArray(g.stage_info) ? g.stage_info : [], tot = stageTotals(st), canEdit = admin || !S.preview;
   const dayName = (iso) => `${new Date(iso + 'T12:00:00Z').toLocaleDateString('es-ES', { weekday: 'short', timeZone: 'UTC' }).replace('.', '')} ${dayMon(iso)}`;
-  const today = todayISO(), canRes = mine && !admin && !S.preview;
+  const today = todayISO(), canRes = mine && !admin && !S.preview, partner = mine ? S.myPairs?.get(postKeyOf(g)) : null;
+  const pairLine = mine && !admin ? (canRes ? `<button type="button" class="stg-pair${partner ? ' set' : ''}" data-act="pair-edit" data-kind="${kind}" data-id="${g.id}">${ico('users')}<span>${partner ? `Por parejas · con <b>${esc(partner)}</b>` : 'Individual · ¿por parejas?'}</span></button>` : partner ? `<p class="stg-pair set">${ico('users')}<span>Por parejas · con <b>${esc(partner)}</b></span></p>` : '') : '';
   const row = (x, i) => {
     const r = S.myStages?.get(`${postKeyOf(g)}|${i + 1}`), done = x.date <= today;
-    const txt = r ? [r.position ? `${r.position}º` : '', r.time ? formatTime(r.time) : ''].filter(Boolean).join(' · ') : '';
+    const txt = r ? [r.position ? `${r.position}º cat.` : '', r.general ? `${r.general}º gral.` : '', r.time ? formatTime(r.time) : ''].filter(Boolean).join(' · ') : '';
     const chip = canRes && done ? `<button type="button" class="stg-res${r ? ' set' : ''}" data-act="stage-res" data-kind="${kind}" data-id="${g.id}" data-n="${i + 1}">${ico(r ? 'check' : 'plus')}${r ? esc(txt) : 'Mi resultado'}</button>` : (mine && r ? `<span class="stg-res set">${esc(txt)}</span>` : '');
     return `<li><span class="stg-n"><b>${esc(x.name)}</b><small>${esc(dayName(x.date))}</small></span><span class="stg-d">${x.km ? esc(kmText(x.km)) : '—'}${x.elevation ? ` · ${esc(elevText(x.elevation))}` : ''}</span>${chip}</li>`;
   };
   return `<div class="stg"><div class="stg-h">${ico('layers')}<b>Etapas</b><small>${st.length ? `${st.length} etapa${st.length === 1 ? '' : 's'}${tot.km ? ` · ${esc(kmText(tot.km))}` : ''}${tot.elevation ? ` · ${esc(elevText(tot.elevation))}` : ''}` : `${numDays(g.date, g.end_date)} días`}</small>
     ${canEdit ? `<button type="button" class="btn small ghost" data-act="stages-edit" data-kind="${kind}" data-id="${g.id}"${admin ? ' data-admin="1"' : ''}>${ico('pen')}${st.length ? 'Cambiar' : 'Poner las etapas'}</button>` : ''}</div>
+    ${pairLine}
     ${st.length ? `<ul class="stg-list">${st.map((x, i) => row(x, i)).join('')}</ul>` : '<p class="stg-empty">Sin datos por etapa: ponlas con su día, km y desnivel y cada una tendrá su historia.</p>'}</div>`;
 }
 /** Ventana para poner mi puesto y mi tiempo en una etapa. Devuelve {position, time}, {position:null,time:null} para quitarlos, o null si cancela. */
-function askStageResult(t, st, n, cur) {
+function askStageResult(t, st, n, cur, partner) {
   return new Promise((resolve) => {
-    const dlg = document.getElementById('dialog');
-    dlg.innerHTML = `<form method="dialog" class="dlg stg-dlg"><h2>${ico('flag')} Mi resultado</h2><p><b>${esc(st.name || 'Etapa ' + n)}</b> · ${esc(t.name)}</p>
-      <label>Puesto en la etapa<input name="pos" inputmode="numeric" maxlength="3" value="${esc(cur?.position ?? '')}" placeholder="—" autocomplete="off"></label>
+    const dlg = document.getElementById('dialog'), num = (v) => { const s = String(v).trim(); return s === '' ? null : /^\d{1,4}$/.test(s) && Number(s) >= 1 ? Number(s) : NaN; };
+    dlg.innerHTML = `<form method="dialog" class="dlg stg-dlg"><h2>${ico('flag')} Mi resultado</h2><p><b>${esc(st.name || 'Etapa ' + n)}</b> · ${esc(t.name)}${partner ? `<br><small class="muted">Por parejas, con ${esc(partner)}: pon los datos de la pareja.</small>` : ''}</p>
+      <div class="stg-fields res3"><label>Puesto en tu categoría<input name="pos" inputmode="numeric" maxlength="4" value="${esc(cur?.position ?? '')}" placeholder="—" autocomplete="off"></label>
+        <label>Puesto en la general<input name="gen" inputmode="numeric" maxlength="4" value="${esc(cur?.general ?? '')}" placeholder="—" autocomplete="off"></label></div>
       <label>Tiempo (h:mm:ss)<input name="time" inputmode="text" maxlength="9" value="${esc(cur?.time ? formatTime(cur.time) : '')}" placeholder="2:15:40" autocomplete="off"></label>
-      <p class="muted small">Pon lo que sepas: basta con el puesto o con el tiempo.</p>
+      <p class="muted small">Pon lo que sepas: basta con uno de los tres.</p>
       <div class="dlg-actions"><button value="ok" class="btn primary">Guardar</button>${cur ? '<button value="clear" class="btn danger ghost" formnovalidate>Quitar</button>' : ''}<button value="" class="btn ghost" formnovalidate>Cancelar</button></div></form>`;
+    const read = () => { const f = dlg.querySelector('form'), tm = f.time.value.trim(); return { position: num(f.pos.value), general: num(f.gen.value), time: tm ? parseTime(tm) : null, tm }; };
     dlg.querySelector('form').addEventListener('submit', (ev) => {
       if (ev.submitter?.value !== 'ok') return;
-      const f = dlg.querySelector('form'), pos = f.pos.value.trim(), tm = f.time.value.trim();
-      const bad = (pos && !(Number(pos) >= 1 && Number(pos) <= 999 && Number.isInteger(Number(pos)))) || (tm && !(parseTime(tm) >= 1 && parseTime(tm) <= 86400)) || (!pos && !tm);
-      if (bad) { ev.preventDefault(); toast(!pos && !tm ? 'Pon el puesto o el tiempo.' : 'Revisa el puesto (1–999) y el tiempo (por ejemplo 2:15:40).', true); }
+      const r = read(), bad = Number.isNaN(r.position) || Number.isNaN(r.general) || (r.tm && !(r.time >= 1 && r.time <= 86400)), empty = r.position == null && r.general == null && !r.tm;
+      if (bad || empty) { ev.preventDefault(); toast(empty && !bad ? 'Pon al menos un dato.' : 'Revisa los puestos y el tiempo (por ejemplo 2:15:40).', true); }
     });
     dlg.onclose = () => {
-      if (dlg.returnValue === 'clear') return resolve({ position: null, time: null });
+      if (dlg.returnValue === 'clear') return resolve({ position: null, general: null, time: null });
       if (dlg.returnValue !== 'ok') return resolve(null);
-      const f = dlg.querySelector('form'), pos = f.pos.value.trim(), tm = f.time.value.trim();
-      resolve({ position: pos ? Number(pos) : null, time: tm ? parseTime(tm) : null });
+      const r = read(); resolve({ position: r.position, general: r.general, time: r.time });
     };
+    dlg.returnValue = ''; dlg.showModal();
+  });
+}
+/** Ventana para decir con quién se ha hecho una carrera por parejas. Devuelve el nombre, '' para quitarlo (individual) o null si cancela. */
+function askPair(t, cur) {
+  return new Promise((resolve) => {
+    const dlg = document.getElementById('dialog');
+    dlg.innerHTML = `<form method="dialog" class="dlg stg-dlg"><h2>${ico('users')} Por parejas</h2><p><b>${esc(t.name)}</b></p>
+      <label>Tu compañero o compañera<input name="p" maxlength="60" value="${esc(cur || '')}" placeholder="Nombre (aunque no sea del club)" autocomplete="off"></label>
+      <p class="muted small">Si la hicisteis en pareja, los puestos y el tiempo que pongas son los de la pareja.</p>
+      <div class="dlg-actions"><button value="ok" class="btn primary">Guardar</button>${cur ? '<button value="clear" class="btn danger ghost" formnovalidate>Era individual</button>' : ''}<button value="" class="btn ghost" formnovalidate>Cancelar</button></div></form>`;
+    dlg.querySelector('form').addEventListener('submit', (ev) => { if (ev.submitter?.value === 'ok' && !dlg.querySelector('[name=p]').value.trim()) { ev.preventDefault(); toast('Pon el nombre de tu compañero.', true); } });
+    dlg.onclose = () => { if (dlg.returnValue === 'clear') return resolve(''); if (dlg.returnValue !== 'ok') return resolve(null); resolve(dlg.querySelector('[name=p]').value.trim()); };
     dlg.returnValue = ''; dlg.showModal();
   });
 }
@@ -6368,8 +6384,16 @@ const actions = {
     const t = kind === 'reg' ? S.runnerData?.registrations?.find((x) => x.id === id) : (S.team?.races || []).find((x) => x.id === id) || (S.runnerData?.my_results || []).find((x) => x.race_id === id);
     const st = t?.stage_info?.[n - 1]; if (!st) return;
     const base = { ...t, name: t.name, date: t.date }, cur = S.myStages?.get(`${postKeyOf(base)}|${n}`) || null;
-    const r = await askStageResult(base, st, n, cur); if (r === null) return;
-    const ok = await run(async () => { await api.runnerSetStageResult(S.code, kind, id, n, r.position, r.time); await loadStageResults(); if (kind === 'race') { S.team = null; await loadTeam(); } return true; }, r.position == null && r.time == null ? 'Resultado quitado' : 'Resultado de la etapa guardado');
+    const r = await askStageResult(base, st, n, cur, S.myPairs?.get(postKeyOf(base))); if (r === null) return;
+    const ok = await run(async () => { await api.runnerSetStageResult(S.code, kind, id, n, r.position, r.general, r.time); await loadStageResults(); if (kind === 'race') { S.team = null; await loadTeam(); } return true; }, r.position == null && r.general == null && r.time == null ? 'Resultado quitado' : 'Resultado de la etapa guardado');
+    if (ok) render();
+  },
+  async 'pair-edit'(el) {
+    const kind = el.dataset.kind, id = el.dataset.id;
+    const t = kind === 'reg' ? S.runnerData?.registrations?.find((x) => x.id === id) : (S.team?.races || []).find((x) => x.id === id) || (S.runnerData?.my_results || []).find((x) => x.race_id === id);
+    if (!t) return;
+    const base = { ...t, name: t.name, date: t.date }, name = await askPair(base, S.myPairs?.get(postKeyOf(base))); if (name === null) return;
+    const ok = await run(async () => { await api.runnerSetPair(S.code, kind, id, name); await loadStageResults(); return true; }, name ? 'Guardado: por parejas' : 'Marcada como individual');
     if (ok) render();
   },
   'cal-tab'(el) { S.calTab = el.dataset.t === 'hechas' ? 'hechas' : 'prox'; render(); },
@@ -6861,7 +6885,7 @@ document.addEventListener('visibilitychange', async () => {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['stages-edit', 'stage-res', 'chro-write', 'ar-open', 'cal-tab', 'eq-tab', 'circuit-pick', 'r-web', 'note-edit', 'car-open', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
+const RUNNER_ACTIONS = new Set(['stages-edit', 'stage-res', 'pair-edit', 'chro-write', 'ar-open', 'cal-tab', 'eq-tab', 'circuit-pick', 'r-web', 'note-edit', 'car-open', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
 // los enlaces de la ventana emergente (p. ej. las carreras de un compañero) cierran la ventana al navegar
 document.getElementById('dialog').addEventListener('click', (ev) => { if (ev.target.closest('a[href^="#/"]')) ev.currentTarget.close(); });
 $app.addEventListener('click', (ev) => {

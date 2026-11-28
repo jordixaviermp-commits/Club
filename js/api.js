@@ -324,7 +324,9 @@ export function supabaseApi(url, key) {
     async resolveCorrection(id, accept, reply) { ok(await sb.rpc('resolve_correction', { p_id: id, p_accept: !!accept, p_reply: reply || null })); },
     async runnerSetDetails(code, id, subtype, km) { ok(await sb.rpc('runner_set_race_details', { p_code: code, p_id: id, p_subtype: subtype || null, p_km: parseKm(km) })); },
     async runnerSetStages(code, kind, id, stages) { ok(await sb.rpc('runner_set_stages', { p_code: code, p_kind: kind, p_id: id, p_stages: stages })); },
-    async runnerSetStageResult(code, kind, id, stage, position, time) { ok(await sb.rpc('runner_set_stage_result', { p_code: code, p_kind: kind, p_id: id, p_stage: stage, p_position: position, p_time: time })); },
+    async runnerSetStageResult(code, kind, id, stage, position, general, time) { ok(await sb.rpc('runner_set_stage_result', { p_code: code, p_kind: kind, p_id: id, p_stage: stage, p_position: position, p_general: general, p_time: time })); },
+    async runnerSetPair(code, kind, id, partner) { ok(await sb.rpc('runner_set_pair', { p_code: code, p_kind: kind, p_id: id, p_partner: partner || '' })); },
+    async runnerPairs(code) { return ok(await sb.rpc('runner_pairs', { p_code: code })) || []; },
     async runnerStageResults(code) { return ok(await sb.rpc('runner_stage_results', { p_code: code })) || []; },
     async adminSetStages(kind, id, stages) { ok(await sb.rpc('admin_set_stages', { p_kind: kind, p_id: id, p_stages: stages })); },
     async runnerSetType(code, id, type, circuit) { ok(await sb.rpc('runner_set_race_type', { p_code: code, p_id: id, p_type: type, p_circuit: circuit || null })); },
@@ -1108,7 +1110,7 @@ export function demoApi(storage = globalThis.localStorage) {
       if (kind === 'race' && !(d.results || []).some((x) => x.race_id === id && x.runner_id === me.id)) throw new Error('no_es_tuya');
       applyStages(t, stages, kind === 'race'); save();
     },
-    async runnerSetStageResult(code, kind, id, stage, position, time) {
+    async runnerSetStageResult(code, kind, id, stage, position, general, time) {
       const me = byCode(code), d = load(), t = kind === 'reg' ? d.registrations.find((x) => x.id === id) : d.races.find((x) => x.id === id);
       if (!t) throw new Error('no_existe');
       const mine = kind === 'reg' ? (d.registration_entries || []).some((e) => e.registration_id === id && e.runner_id === me.id) : (d.results || []).some((x) => x.race_id === id && x.runner_id === me.id);
@@ -1116,14 +1118,24 @@ export function demoApi(storage = globalThis.localStorage) {
       const st = t.stage_info?.[stage - 1];
       if (!st) throw new Error('datos_no_validos');
       if (st.date > todayISO()) throw new Error('etapa_futura');
-      if ((position != null && (position < 1 || position > 999)) || (time != null && (time < 1 || time > 86400))) throw new Error('datos_no_validos');
+      if ((position != null && (position < 1 || position > 9999)) || (general != null && (general < 1 || general > 9999)) || (time != null && (time < 1 || time > 86400))) throw new Error('datos_no_validos');
       const key = `${t.date}|${normalize(t.name)}`; d.stage_results = (d.stage_results || []).filter((x) => !(x.key === key && x.runner_id === me.id && x.stage === stage));
-      if (position != null || time != null) d.stage_results.push({ key, runner_id: me.id, stage, position: position ?? null, time: time ?? null });
+      if (position != null || general != null || time != null) d.stage_results.push({ key, runner_id: me.id, stage, position: position ?? null, general: general ?? null, time: time ?? null });
       save();
     },
     async runnerStageResults(code) {
-      const me = byCode(code), d = load(); return (d.stage_results || []).filter((x) => x.runner_id === me.id).map((x) => ({ key: x.key, stage: x.stage, position: x.position, time: x.time }));
+      const me = byCode(code), d = load(); return (d.stage_results || []).filter((x) => x.runner_id === me.id).map((x) => ({ key: x.key, stage: x.stage, position: x.position, general: x.general ?? null, time: x.time }));
     },
+    async runnerSetPair(code, kind, id, partner) {
+      const me = byCode(code), d = load(), t = kind === 'reg' ? d.registrations.find((x) => x.id === id) : d.races.find((x) => x.id === id);
+      if (!t) throw new Error('no_existe');
+      const mine = kind === 'reg' ? (d.registration_entries || []).some((e) => e.registration_id === id && e.runner_id === me.id) : (d.results || []).some((x) => x.race_id === id && x.runner_id === me.id);
+      if (!mine) throw new Error('no_es_tuya');
+      const key = `${t.date}|${normalize(t.name)}`, p = String(partner || '').trim().slice(0, 60); d.race_pairs = (d.race_pairs || []).filter((x) => !(x.key === key && x.runner_id === me.id));
+      if (p) d.race_pairs.push({ key, runner_id: me.id, partner: p });
+      save();
+    },
+    async runnerPairs(code) { const me = byCode(code), d = load(); return (d.race_pairs || []).filter((x) => x.runner_id === me.id).map((x) => ({ key: x.key, partner: x.partner })); },
     async adminSetStages(kind, id, stages) {
       requireAdmin(); const d = load(), t = kind === 'reg' ? d.registrations.find((x) => x.id === id) : d.races.find((x) => x.id === id);
       if (!t) throw new Error('no_existe'); applyStages(t, stages, kind === 'race'); save();
