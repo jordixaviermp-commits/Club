@@ -1371,7 +1371,7 @@ function nextHero(g, { dleft, myCat, due }) {
   const days = g.end_date && g.end_date > g.date ? numDays(g.date, g.end_date) : 0;
   return `<div class="nx-hero${soon ? ' soon' : ''}"><a class="nx-main" href="${runnerHref('carrera')}/${g.id}">
       <span class="nx-date"><b>${day}</b><small>${esc(mon)}</small></span>
-      <span class="nx-txt"><small class="nx-k">🏁 Próxima carrera <em>${esc(left)}</em></small><b class="nx-n">${esc(g.name)}</b>
+      <span class="nx-txt"><small class="nx-k">🏁 Próxima · <em>${esc(left)}</em></small><b class="nx-n">${esc(g.name)}</b>
         <small class="nx-p">${esc(where)}${days ? ` · ${days} días` : ''}</small>${what ? `<small class="nx-p">${esc(what)}${cat ? ` · ${esc(cat)}` : ''}</small>` : ''}</span>${ico('go', 'nx-go')}</a>
     <div class="nx-chips"><span class="nx-chip">${ico('users')}${mates ? `Con ${mates} del club` : 'Solo tú del club'}</span>
       ${e ? (e.paid ? `<span class="nx-chip ok">${ico('euro')}Pagada</span>` : S.preview ? `<span class="nx-chip todo">${ico('euro')}Sin pagar</span>` : `<button type="button" class="nx-chip todo${due ? ' due' : ''}" data-act="r-paid" data-id="${g.id}">${ico('euro')}${due ? 'Marcar pago' : 'Sin pagar'}</button>`) : ''}</div></div>`;
@@ -1459,7 +1459,7 @@ function myRacesCard(d) {
 
   </section>
 
-  ${afterRaceCard({ ...ar, peek: todoTxt })}
+  ${afterRaceCard({ ...ar, peek: todoTxt, heroId: upcoming[0]?.id })}
 
 
   ${calendar}
@@ -1638,10 +1638,12 @@ function afterRaceModel(d, { pending, noPos, sent, today, ad, results, upcoming,
 /** «Por hacer»: la única lista de tareas (resultados, crónicas, pagos y datos). Abierta si hay algo por hacer. */
 function afterRaceCard(m) {
   if (!m.list.length) return '';
-  const { todo, tasksN, rowHtml } = m;
-  return `<section class="card ar-card" id="sec-after"><details class="chro-det" data-open-key="after"${(S.open?.after ?? todo.length > 0) ? ' open' : ''}>
+  const { tasksN, rowHtml } = m;
+  const todo = m.todo.filter((r) => !(r.pay && r.id === m.heroId));   // el pago de la próxima carrera ya está en su tarjeta de arriba
+  const heroOnly = m.todo.length > 0 && todo.length === 0;
+  return `<section class="card ar-card ${tasksN ? 'st-todo' : 'st-ok'}" id="sec-after"><details class="chro-det" data-open-key="after"${(S.open?.after ?? todo.length > 0) ? ' open' : ''}>
     <summary class="mt-h"><h2>Por hacer</h2><span class="mt-cnt ${tasksN ? 'todo' : 'ok'}">${tasksN || 'Al día'}</span>${m.peek && tasksN ? `<small class="mt-hs peek">${esc(m.peek.replace(/<[^>]+>/g, ''))}</small>` : ''}<button type="button" class="mt-info" data-act="mt-info" data-k="todo" aria-label="Cómo funciona «Por hacer»" title="Cómo funciona">${ico('info')}</button>${ico('chevd', 'mt-chev')}</summary>
-    ${todo.length ? `<ul class="mt-list">${todo.map((r) => rowHtml(r, 'todo')).join('')}</ul>` : '<p class="empty small">No te falta nada. 🎉</p>'}
+    ${todo.length ? `<ul class="mt-list">${todo.map((r) => rowHtml(r, 'todo')).join('')}</ul>` : heroOnly ? '<p class="empty small">Solo falta marcar el pago de tu próxima carrera: lo tienes arriba, en su tarjeta.</p>' : '<p class="empty small">No te falta nada. 🎉</p>'}
   </details></section>`;
 }
 

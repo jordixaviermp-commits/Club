@@ -3130,3 +3130,26 @@ button.stg-pair { cursor: pointer; } .stg-pair .ico { width: 16px; height: 16px;
 .mt2 > .mi-seg a { min-height: 34px; padding: 4px 6px; border-radius: 8px; font-size: var(--fs-3); }
 .mt2 > .mi-seg a .ico { width: 16px; height: 16px; }
 .mt2 > .mi-seg .seg-dot { top: 3px; right: 6px; width: 8px; height: 8px; }
+
+/* Mi temporada: más color */
+.mt2 { --mt-blue: #0a7fa6; --mt-blue-bg: #e2f1f7; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .mt2 { --mt-blue: #5cc3e6; --mt-blue-bg: #13303d; } }
+:root[data-theme="dark"] .mt2 { --mt-blue: #5cc3e6; --mt-blue-bg: #13303d; }
+.mt2 .sum-card .tile { position: relative; }
+.mt2 .sum-card .tile .t-ico { display: block; position: absolute; top: 8px; right: 8px; width: 18px; height: 18px; opacity: .9; }
+.mt2 .sum-card .tile.t-next { background: var(--mt-blue-bg); } .mt2 .sum-card .tile.t-next .t-n, .mt2 .sum-card .tile.t-next .t-ico { color: var(--mt-blue); }
+.mt2 .sum-card .tile.t-done { background: var(--mt-ok-bg); } .mt2 .sum-card .tile.t-done .t-n, .mt2 .sum-card .tile.t-done .t-ico { color: var(--ok); }
+.mt2 .sum-card .tile.t-pend { background: var(--mt-ok-bg); } .mt2 .sum-card .tile.t-pend .t-n, .mt2 .sum-card .tile.t-pend .t-ico { color: var(--ok); }
+.mt2 .sum-card .tile.t-pend.alert { background: var(--mt-todo-bg); } .mt2 .sum-card .tile.t-pend.alert .t-n, .mt2 .sum-card .tile.t-pend.alert .t-ico { color: var(--mt-todo); }
+/* tarjeta de la próxima carrera: más fuerte, con el azul del club */
+.mt2 .nx-hero { background: linear-gradient(135deg, #1d4a63, #0a7fa6); border: 0; color: #fff; box-shadow: 0 4px 14px rgba(10,127,166,.28); }
+.mt2 .nx-main, .mt2 .nx-n { color: #fff; } .mt2 .nx-k, .mt2 .nx-p, .mt2 .nx-go { color: rgba(255,255,255,.82); }
+.mt2 .nx-k em, .mt2 .nx-hero.soon .nx-k em { color: #ffd37a; }
+.mt2 .nx-date { background: #fff; color: #1d4a63; } .mt2 .nx-hero.soon .nx-date { background: #ffd37a; color: #6b3f00; }
+.mt2 .nx-chip { background: rgba(255,255,255,.16); color: #fff; } .mt2 .nx-chip.ok { background: rgba(255,255,255,.9); color: var(--ok); }
+.mt2 button.nx-chip.todo { background: #ffd37a; color: #5a3500; border: 0; } .mt2 button.nx-chip.todo.due { box-shadow: 0 0 0 2px rgba(255,255,255,.7); }
+/* cada sección con su franja de color */
+.mt2 .sum-card, .mt2 .ar-card, .mt2 .cal-card, .mt2 .nums-block { position: relative; overflow: hidden; }
+.mt2 .card.ar-card::before, .mt2 .card.cal-card::before, .mt2 .card.nums-block::before { display: block; content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; }
+.mt2 .card.ar-card.st-todo::before { background: var(--mt-todo); } .mt2 .card.ar-card.st-ok::before { background: var(--ok); }
+.mt2 .card.ar-card.st-todo { background: color-mix(in srgb, var(--mt-todo) 6%, var(--card)); } .mt2 .card.cal-card::before { background: var(--mt-blue); } .mt2 .card.nums-block::before { background: var(--ok); }
