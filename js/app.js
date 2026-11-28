@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError, cleanWeb } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, disciplineKey, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   teamMoves, parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  directorBoard, defaultStages, cleanStages, stageTotals, seasonRaces, mediaStats, MEDIA_KINDS, raceImpact, alDia, tierRanges, nextTeamRace, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, projectLeagueRaces, WATCH_TBC, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, igHeadline, importantOf, IMPORTANT_KINDS, generalOf, uspacShift, USPAC_GROUPS, USPAC_NAMES, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
+  preLight, postLight, lightRank, directorBoard, defaultStages, cleanStages, stageTotals, seasonRaces, mediaStats, MEDIA_KINDS, raceImpact, alDia, tierRanges, nextTeamRace, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, projectLeagueRaces, WATCH_TBC, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, igHeadline, importantOf, IMPORTANT_KINDS, generalOf, uspacShift, USPAC_GROUPS, USPAC_NAMES, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -241,7 +241,7 @@ const raceMeta = (x) => [`<span class="rc-dis">${esc(x.modality === 'Otra' ? 'Ca
   x.km ? `${ico('ruler')}${esc(kmText(x.km))}` : '', x.elevation ? `${ico('mountain')}${esc(elevText(x.elevation))}` : '',
   x.price !== null && x.price !== undefined && x.price !== '' ? (Number(x.price) === 0 ? 'Gratis' : esc(euros(x.price))) : ''].filter(Boolean).map((y) => `<span class="rc-mi">${y}</span>`).join(' ');/** Cuenta atrás con color: rojo hasta 7 días, ámbar hasta 30. Solo para carreras que aún no se han corrido. */
 const raceCd = (x, today = todayISO()) => { if (x.suspended || x.date < today) return ''; const n = daysTo(x.date);
-  return `<span class="rc-cd${n <= 7 ? ' now' : n <= 30 ? ' soon' : ''}">${n <= 0 ? 'hoy' : n === 1 ? 'mañana' : n < 100 ? `en ${n} d` : `en ${Math.round(n / 30)} m`}</span>`; };
+  return `<span class="rc-cd${n <= 2 ? ' now' : n <= 7 ? ' soon' : ''}">${n <= 0 ? 'hoy' : n === 1 ? 'mañana' : n < 100 ? `en ${n} d` : `en ${Math.round(n / 30)} m`}</span>`; };
 /** Cabecera de una casilla de carrera (se usa en todas las listas). */
 /** Nombres con una palabra muy larga (MEGATAMPANADA): se achican un punto en vez de partirse a mitad de palabra. */
 const nameFit = (n) => { const m = Math.max(0, ...String(n).split(/[\s\-–/]+/).map((w) => w.length)); return m >= 16 ? ' xlong' : m >= 11 ? ' long' : ''; };
@@ -636,7 +636,7 @@ function frame(title, body, { back, actions = '', rtab = null, noSearch = false,
   const admin = S.session?.isAdmin;
   const tabs = rtab !== null
     ? `<nav class="tabs">${RUNNER_TABS.map(([v, label, d]) =>
-      `<a href="${runnerHref(v)}" class="${v === rtab ? 'on' : ''}">${icon(d)}${v === 'mi' && !S.preview ? `${(() => { const n = myTaskCount(); return n ? `<b class="tab-n todo" title="${n} ${n === 1 ? 'tarea por hacer' : 'tareas por hacer'} en Mi temporada" aria-label="${n} tareas por hacer">${n > 9 ? '9+' : n}</b>` : ''; })()}${watchUrgent() ? '<i class="tab-dot" title="Plazo de inscripción a punto de cerrarse"></i>' : ''}` : ''}<span>${label}</span></a>`).join('')}</nav>`
+      `<a href="${runnerHref(v)}" class="${v === rtab ? 'on' : ''}">${icon(d)}${v === 'mi' && !S.preview ? `${(() => { const n = myTaskCount(); const u = myUrgent(); return n ? `<b class="tab-n todo${u ? ' urgent' : ''}" title="${n} ${n === 1 ? 'tarea por hacer' : 'tareas por hacer'} en Mi temporada${u ? ' · hay algo urgente' : ''}" aria-label="${n} tareas por hacer${u ? ', hay algo urgente' : ''}">${n > 9 ? '9+' : n}</b>` : u ? `<b class="tab-n todo urgent" title="Tienes una carrera muy pronto" aria-label="Tienes una carrera muy pronto">!</b>` : ''; })()}${watchUrgent() ? '<i class="tab-dot" title="Plazo de inscripción a punto de cerrarse"></i>' : ''}` : ''}<span>${label}</span></a>`).join('')}</nav>`
     : admin ? `<nav class="tabs">${ADMIN_TABS.map(([v, label, d]) =>
       `<a href="#/${v}" class="${(ADMIN_GROUP[view] || 'hoy') === v ? 'on' : ''}">${icon(d)}${v === 'redes' && S.data && socialPending() ? `<b class="tab-n">${socialPending()}</b>` : ''}${v === 'hoy' && S.data && todayCount() ? `<b class="tab-n">${todayCount()}</b>` : ''}<span>${label}</span></a>`).join('')}</nav>` : '';
   return `
@@ -1267,7 +1267,7 @@ const mrow = (g, { below = '', end = '', hero = false, side = '', noDue = false,
   // Mi temporada usa la misma ficha desplegable que Carreras: al abrirla sale ya toda la información, sin otro menú
   const badge = hero ? '<span class="hero-badge">Próxima cita</span>' : '';
   const due = !noDue && g.entries && S.payDue?.has(g.id);   // pago que ya toca (la carrera es dentro de una semana): en rojo, como la casilla de Pendientes
-  if (g.entries && link) { const m = myEntry(g); return `<li class="mrow-fold mlink${due ? ' pay-due' : ''}">${due ? `<span class="due-badge">${ico('euro')}Pagar</span>` : ''}${raceLink(g, { href, mine: !!(m && !g.suspended), side: `${myPubChip(g)}${payBadge(g, { notes: true })}${carBadge(g)}<span class="rc-n" title="Inscritos del club" aria-label="${g.entries.length} del club inscrito${g.entries.length === 1 ? '' : 's'}">${ico('users')}${g.entries.length}</span>` })}</li>`; }
+  if (g.entries && link) { const m = myEntry(g); return `<li class="mrow-fold mlink lt-${g.suspended ? 'none' : raceLightOf(g)}${due ? ' pay-due' : ''}">${due ? `<span class="due-badge">${ico('euro')}Pagar</span>` : ''}${raceLink(g, { href, mine: !!(m && !g.suspended), side: `${myPubChip(g)}${payBadge(g, { notes: true })}${carBadge(g)}<span class="rc-n" title="Inscritos del club" aria-label="${g.entries.length} del club inscrito${g.entries.length === 1 ? '' : 's'}">${ico('users')}${g.entries.length}</span>` })}</li>`; }
   if (g.entries) return `<li class="mrow-fold${hero ? ' hero' : ''}${due ? ' pay-due' : ''}">${badge}${due ? `<span class="due-badge">${ico('euro')}Pagar</span>` : ''}${runnerRegCard(g, { cls: hero ? 'hero' : '', noPast: true, notes: true })}</li>`;
   // carrera ya disputada con mi resultado (la ficha de «resultados» + lo mío)
   const me = S.runnerData?.me?.id, race = S.team?.races?.find((x) => x.id === g.race_id), count = (race?.results || []).length;
@@ -1279,6 +1279,8 @@ const mrow = (g, { below = '', end = '', hero = false, side = '', noDue = false,
 const dayMon = (iso) => (iso ? `${Number(iso.slice(8, 10))} ${['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'][Number(iso.slice(5, 7)) - 1]}` : '');
 /** Mi entrada en una carrera (la del corredor que mira). */
 const myEntry = (g) => (g.entries || []).find((e) => e.runner_id === S.runnerData?.me?.id);
+/** Semáforo de una carrera mía que aún no se ha corrido (por cuántos días faltan y si falta el pago). */
+const raceLightOf = (g) => preLight(daysTo(g.date), { paid: !!myEntry(g)?.paid });
 /** Resumen rápido: cuántas de mis próximas carreras están pagadas y cuántas no. */
 function payLine(list) {
   const mine = list.map(myEntry).filter(Boolean);
@@ -1368,6 +1370,13 @@ function pairInviteCount(d) {
   const mine = new Set([...(d.registrations || []).filter((g) => (g.entries || []).some((e) => e.runner_id === d.me.id)).map((g) => postKeyOf(g)), ...(d.my_results || []).map((r) => postKeyOf(r))]);
   return S.pairInvites.filter((x) => mine.has(x.key)).length;
 }
+/** ¿Hay algo en rojo? Una tarea urgente (pago a punto, resultado o crónica a punto de pasarse el plazo) o una carrera mía dentro de 2 días o menos. */
+function myUrgent() {
+  const d = S.runnerData; if (!d?.me || !d.registrations || S.preview) return false;
+  const today = d.today || todayISO();
+  const ad = alDia(d, S.chron instanceof Set ? S.chron : null, today, S.myYear || new Date().getFullYear());
+  return ad.items.some((x) => x.light === 'red') || d.registrations.some((g) => !g.suspended && g.date >= today && myEntry(g) && raceLightOf(g) === 'red');
+}
 function myTaskCount() {
   const d = S.runnerData; if (!d?.my_results || !d.me || !d.registrations || S.preview) return 0;
   const ad = alDia(d, S.chron instanceof Set ? S.chron : null, d.today || todayISO(), S.myYear || new Date().getFullYear());
@@ -1377,12 +1386,12 @@ function myTaskCount() {
 function nextHero(g, { dleft, myCat, due }) {
   if (!g) return '';
   const d = new Date(g.date + 'T12:00:00Z'), day = d.getUTCDate(), mon = d.toLocaleDateString('es-ES', { month: 'short', timeZone: 'UTC' }).replace('.', '').toUpperCase();
-  const left = dleft(g), soon = /^(hoy|mañana)$/.test(left), mates = Math.max(0, (g.entries || []).length - 1), e = myEntry(g), cat = myCat(g);
+  const left = dleft(g), light = raceLightOf(g), soon = light !== 'green', mates = Math.max(0, (g.entries || []).length - 1), e = myEntry(g), cat = myCat(g);
   const where = [g.place, g.province].filter(Boolean).join(' · '), modEmoji = g.modality === 'BTT' ? '🚵' : g.modality === 'Otra' ? '' : '🚴', what = [g.modality ? `${modEmoji ? modEmoji + ' ' : ''}${g.modality}` : '', g.subtype, g.km ? kmText(g.km) : ''].filter(Boolean).join(' · ');
   const days = g.end_date && g.end_date > g.date ? numDays(g.date, g.end_date) : 0;
-  return `<div class="nx-hero${soon ? ' soon' : ''}"><a class="nx-main" href="${runnerHref('carrera')}/${g.id}">
+  return `<div class="nx-hero lt-${light}${soon ? ' soon' : ''}"><a class="nx-main" href="${runnerHref('carrera')}/${g.id}">
       <span class="nx-date"><b>${day}</b><small>${esc(mon)}</small></span>
-      <span class="nx-txt"><small class="nx-k">🏁 Próxima · <em>${esc(left)}</em></small><b class="nx-n">${esc(g.name)}</b>
+      <span class="nx-txt"><small class="nx-k">${light === 'red' ? '🔴' : light === 'amber' ? '🟠' : '🏁'} Próxima · <em>${esc(left)}</em></small><b class="nx-n">${esc(g.name)}</b>
         <small class="nx-p">${esc(where)}${days ? ` · ${days} días` : ''}</small>${what ? `<small class="nx-p">${esc(what)}${cat ? ` · ${esc(cat)}` : ''}</small>` : ''}</span>${ico('go', 'nx-go')}</a>
     <div class="nx-chips"><span class="nx-chip">${ico('users')}${mates ? `Con ${mates} del club` : 'Solo tú del club'}</span>
       ${e ? (e.paid ? `<span class="nx-chip ok">${ico('euro')}Pagada</span>` : S.preview ? `<span class="nx-chip todo">${ico('euro')}Sin pagar</span>` : `<button type="button" class="nx-chip todo${due ? ' due' : ''}" data-act="r-paid" data-id="${g.id}">${ico('euro')}${due ? 'Marcar pago' : 'Sin pagar'}</button>`) : ''}</div></div>`;
@@ -1451,7 +1460,7 @@ function myRacesCard(d) {
     <div class="tiles">
       <a href="#" class="tile t-next" data-act="goto-sec" data-to="sec-cal" data-tab="prox"><span class="t-n">${upcoming.length}</span><span class="t-l">Próximas</span>${ico('cal', 't-ico')}<small>${upSub}</small></a>
       <a href="#" class="tile t-done" data-act="goto-sec" data-to="sec-cal" data-tab="hechas"><span class="t-n">${hechas.length}</span><span class="t-l">Hechas</span>${ico('ok', 't-ico')}<small>${days !== list.length ? `${days} días de competición` : 'con resultado'}</small></a>
-      <a href="#" class="tile t-pend${todoN ? ' alert' : ''}" data-act="goto-sec" data-to="${todoTo}"><span class="t-n">${todoN}</span><span class="t-l">Por hacer</span>${ico('flag', 't-ico')}<small>${todoTxt}</small></a>
+      <a href="#" class="tile t-pend${todoN ? ' alert' : ''}${ar.urgentN ? ' urgent' : ''}" data-act="goto-sec" data-to="${todoTo}"><span class="t-n">${todoN}</span><span class="t-l">Por hacer</span>${ico('flag', 't-ico')}<small>${todoTxt}</small></a>
     </div>
     ${nextHero(upcoming[0], { dleft, myCat, due: upcoming[0] && S.payDue.has(upcoming[0].id) })}
     ${(() => { const n = (() => { const its = ad.items || [], rank = { result: 0, cron: 1 };
@@ -1464,7 +1473,7 @@ function myRacesCard(d) {
       const txt = !n ? '🎉 Estás al día.'
         : n.type === 'result' ? `Pon tu puesto en <b>${esc(n.name)}</b> · ${ageTxt(n)}` : n.type === 'cron' ? (chroDataOf({ key: postKeyOf({ name: n.name, date: n.date }) })?.missRes?.length ? `Completa tu resultado en <b>${esc(n.name)}</b> · ${ageTxt(n)}` : `Pasa la crónica de <b>${esc(n.name)}</b> · ${ageTxt(n)}`) : `Marca el pago de <b>${esc(n.name)}</b> · ${n.in === 0 ? 'es hoy' : n.in === 1 ? 'es mañana' : `en ${n.in} días`}`;
       const to = !n ? (upcoming[0] ? 'sec-cal' : 'sec-after') : 'sec-after';
-      return `<div class="sum-todo"><a href="#" class="sum-next${n ? ' has' : ' ok'}" data-act="goto-sec" data-to="${to}"${!n && upcoming[0] ? ' data-tab="prox"' : ''}>${ico(n ? 'flag' : 'ok')}<span>${txt}</span>${ico('go')}</a>
+      return `<div class="sum-todo"><a href="#" class="sum-next${n ? ' has' : ' ok'}${n?.light === 'red' ? ' lt-red' : ''}" data-act="goto-sec" data-to="${to}"${!n && upcoming[0] ? ' data-tab="prox"' : ''}>${ico(n ? 'flag' : 'ok')}<span>${txt}</span>${ico('go')}</a>
         </div>`; })()}
     ${cancelled.length ? `<a href="#" class="canc-line" data-act="goto-sec" data-to="sec-canc">${ico('ban')}<span><b>${cancelled.length}</b> ${cancelled.length === 1 ? 'carrera suspendida' : 'carreras suspendidas'}</span>${ico('go')}</a>` : ''}
 
@@ -1597,7 +1606,7 @@ function afterRaceModel(d, { pending, noPos, sent, today, ad, results, upcoming,
     .map((r) => { if (r.res === 'done' && r.cron === false) { const dd = chroDataOf(r); if (dd && dd.missRes?.length) return { ...r, res: 'incomp', resHref: dd.resHref, missRes: dd.missRes }; } return r; })
     .map((r) => ({ ...r, todo: r.res === 'pend' || r.cron === false || !!r.pay || !!r.miss }))
     .sort((x, y) => (!!x.pay - !!y.pay) || (x.pay ? x.date.localeCompare(y.date) : y.date.localeCompare(x.date)) || x.name.localeCompare(y.name, 'es'));
-  const todo = list.filter((r) => r.todo), ok = list.filter((r) => !r.todo);
+  const todo0 = list.filter((r) => r.todo), ok = list.filter((r) => !r.todo);
   const tasksN = (ad?.total || 0) + (datosN || 0);
   // cada carrera: nombre arriba y, debajo, dos casillas tocables (Resultado y Crónica) que dicen su estado y son el botón para hacerlo
   // cada tarea es una píldora tocable: naranja = por hacer, verde = hecho, punteada = espera
@@ -1624,14 +1633,17 @@ function afterRaceModel(d, { pending, noPos, sent, today, ad, results, upcoming,
   };
   const payTask = (r) => task('todo', 'euro', 'Marcar pagado', S.preview ? '' : `data-act="r-paid" data-id="${r.id}"`);
   const datosTask = (r) => task('todo', 'pin', `Falta ${esc(r.miss.join(', '))}`, S.preview ? '' : `href="${r.missHref}"`);
+  // color de una tarea: el pago por su cuenta atrás; resultado y crónica por el plazo de una semana; los datos que faltan, naranja
+  const rowLight = (r) => { const post = (r.res === 'pend' || r.res === 'incomp' || r.cron === false) ? postLight(Math.round((Date.parse(today + 'T12:00:00Z') - Date.parse(String(r.end_date || r.date).slice(0, 10) + 'T12:00:00Z')) / 864e5)) : null;
+    const lights = [r.pay ? preLight(r.payIn, { paid: false }) : null, post, r.miss ? 'amber' : null].filter(Boolean); return lights.sort((a, b) => lightRank(a) - lightRank(b))[0] || 'none'; };
   const whenTxt = (r) => { if (r.pay) return r.payIn === 0 ? 'hoy' : `en ${r.payIn} ${r.payIn === 1 ? 'día' : 'días'}`;
     if (!(r.res === 'pend' || r.res === 'incomp' || r.cron === false)) return '';
     const n = Math.round((Date.parse(today + 'T12:00:00Z') - Date.parse(String(r.end_date || r.date).slice(0, 10) + 'T12:00:00Z')) / 864e5);
     return n < 0 ? '' : n < 7 ? `quedan ${7 - n} ${7 - n === 1 ? 'día' : 'días'}` : n === 7 ? 'último día' : 'pasó la semana'; };
   const rowHtml = (r, view = 'todo') => {
-    const when = view === 'todo' ? whenTxt(r) : '', urgent = r.pay && r.payIn <= 1;
+    const when = view === 'todo' ? whenTxt(r) : '', urgent = r.pay && r.payIn <= 1, lt = view === 'todo' ? rowLight(r) : 'none';
     const leave = r.res === 'pend' && r.leave && !S.preview ? `<button type="button" class="mt-leave" data-act="r-leave" data-id="${r.leave}">No fui</button>` : '';
-    return `<li class="mt-row"><div class="mt-rt"><a class="mt-name" href="${runnerHref('carrera')}/${r.kind === 'race' ? 'race_' + r.id : r.id}" aria-label="Abrir la carrera ${esc(r.name)}">${esc(r.name)}</a>${when ? `<small class="mt-when${urgent ? ' urg' : ''}">${when}</small>` : ''}</div>
+    return `<li class="mt-row lt-${lt}"><div class="mt-rt"><a class="mt-name" href="${runnerHref('carrera')}/${r.kind === 'race' ? 'race_' + r.id : r.id}" aria-label="Abrir la carrera ${esc(r.name)}">${esc(r.name)}</a>${when ? `<small class="mt-when${urgent ? ' urg' : ''}">${when}</small>` : ''}</div>
       <div class="mt-sub"><span>${esc(formatDate(r.date, false))}${r.place ? ' · ' + esc(r.place) : ''}</span>${leave}</div>
       <div class="mt-chips">${r.res === 'none' ? '' : resTask(r)}${cronTask(r)}${r.pay ? payTask(r) : ''}${r.miss ? datosTask(r) : ''}</div>${r.pay ? '' : pubsLine(r, view === 'hechas')}</li>`;
   };
@@ -1644,7 +1656,8 @@ function afterRaceModel(d, { pending, noPos, sent, today, ad, results, upcoming,
     }
     return chips.length ? `<div class="ar-pubs">${chips.join('')}</div>` : '';
   };
-  return { list, todo, ok, tasksN, rowHtml };
+  const todo = [...todo0].sort((a, b) => lightRank(rowLight(a)) - lightRank(rowLight(b)));   // lo más urgente primero
+  return { list, todo, ok, tasksN, rowHtml, urgentN: todo0.filter((r) => rowLight(r) === 'red').length };
 }
 /** «Por hacer»: la única lista de tareas (resultados, crónicas, pagos y datos). Abierta si hay algo por hacer. */
 function afterRaceCard(m) {
@@ -1652,7 +1665,7 @@ function afterRaceCard(m) {
   const { tasksN, rowHtml } = m;
   const todo = m.todo.filter((r) => !(r.pay && r.id === m.heroId));   // el pago de la próxima carrera ya está en su tarjeta de arriba
   const heroOnly = m.todo.length > 0 && todo.length === 0;
-  return `<section class="card ar-card ${tasksN ? 'st-todo' : 'st-ok'}" id="sec-after"><details class="chro-det" data-open-key="after"${(S.open?.after ?? todo.length > 0) ? ' open' : ''}>
+  return `<section class="card ar-card ${m.urgentN ? 'st-red' : tasksN ? 'st-todo' : 'st-ok'}" id="sec-after"><details class="chro-det" data-open-key="after"${(S.open?.after ?? todo.length > 0) ? ' open' : ''}>
     <summary class="mt-h"><h2>Por hacer</h2><span class="mt-cnt ${tasksN ? 'todo' : 'ok'}">${tasksN || 'Al día'}</span>${m.peek && tasksN ? `<small class="mt-hs peek">${esc(m.peek.replace(/<[^>]+>/g, ''))}</small>` : ''}<button type="button" class="mt-info" data-act="mt-info" data-k="todo" aria-label="Cómo funciona «Por hacer»" title="Cómo funciona">${ico('info')}</button>${ico('chevd', 'mt-chev')}</summary>
     ${todo.length ? `<ul class="mt-list">${todo.map((r) => rowHtml(r, 'todo')).join('')}</ul>` : heroOnly ? '<p class="empty small">Solo falta marcar el pago de tu próxima carrera: lo tienes arriba, en su tarjeta.</p>' : '<p class="empty small">No te falta nada. 🎉</p>'}
   </details></section>`;
@@ -6433,7 +6446,7 @@ const actions = {
   'eq-tab'(el) { S.eqTab = el.dataset.t === 'imp' ? 'imp' : 'res'; render(); },
   async 'mt-info'(el) {
     if (el.dataset.k === 'cal') return choose('Mi calendario', '<b>Próximas</b>: las carreras a las que estás apuntado; la primera es tu próxima cita. Toca una para abrirla: ves quién va, marcas el pago, añades una nota o te borras.<br><br><b>Hechas</b>: las de esta temporada con tu resultado. Toca «ver» para ver tu resultado o la crónica, y el nombre para la ficha completa. Si falta alguna carrera o un puesto, díselo a la dirección.', [{ label: 'Entendido', value: true, kind: 'primary' }]);
-    return choose('Por hacer', `Todo lo que te falta, carrera a carrera: <b>naranja</b> = por hacer, <b>verde</b> = hecho, <b>punteado</b> = espera a lo anterior.<br><br>${WEEK_RULE}<br><br>${CHRONICLE_RULE} Para la crónica <b>basta con 2 líneas y una foto</b>: los datos ya los tenemos y el resumen y la publicación los hacemos nosotros.`, [{ label: 'Entendido', value: true, kind: 'primary' }]);
+    return choose('Por hacer', `Todo lo que te falta, carrera a carrera: <b>naranja</b> = por hacer, <b>verde</b> = hecho, <b>punteado</b> = espera a lo anterior.<br><br><b>Semáforo:</b> 🔴 <b>urgente</b> = la carrera es dentro de 2 días o menos (o el pago sin marcar y faltan 3), o quedan 2 días o menos del plazo de una semana para el resultado y la crónica; 🟠 <b>pronto</b> = de 3 a 7 días; 🟢 <b>tranquilo</b> = más de 7 días o ya hecho.<br><br>${WEEK_RULE}<br><br>${CHRONICLE_RULE} Para la crónica <b>basta con 2 líneas y una foto</b>: los datos ya los tenemos y el resumen y la publicación los hacemos nosotros.`, [{ label: 'Entendido', value: true, kind: 'primary' }]);
   },
   async 'stages-edit'(el) {
     const kind = el.dataset.kind, id = el.dataset.id, admin = el.dataset.admin === '1';

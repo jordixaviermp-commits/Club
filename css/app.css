@@ -3166,9 +3166,34 @@ button.stg-pair { cursor: pointer; } .stg-pair .ico { width: 16px; height: 16px;
 .mt2 a.rlink .rc-main { grid-column: 2; grid-row: 1; min-width: 0; }
 .mt2 a.rlink .rc-chev.go { grid-column: 3; grid-row: 1; display: grid; place-items: center; color: var(--muted); width: 22px; height: 22px; } .mt2 a.rlink .rc-chev.go .ico { width: 18px; height: 18px; transform: none; }
 .mt2 a.rlink .rc-side { grid-column: 2 / 4; grid-row: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; justify-content: flex-start; }
-.mt2 .mrow-fold.mlink.pay-due a.card.rlink { border-color: var(--bad-2) !important; }
 .mt2 .mrow-fold.mlink .due-badge { position: absolute; top: -8px; right: 12px; z-index: 1; }
 /* Mi calendario > Hechas: también una tarjeta por carrera */
 .mt2 .cal-card .mt-list { display: grid; gap: 10px; margin-top: 8px; }
 .mt2 .cal-card .mt-list > li.mt-row { margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--mt-soft); box-shadow: 0 1px 3px rgba(0,0,0,.07); }
 .mt2 .cal-card .mt-list > li.mt-row + li.mt-row { border-top: 1px solid var(--line); }
+
+/* Semáforo: rojo = urgente (2 días o menos), naranja = pronto (hasta 7), verde = tranquilo */
+.mt2 { --lt-red: var(--bad-2); --lt-amber: var(--mt-todo); --lt-green: var(--ok); }
+/* tarjetas de Mi calendario: franja a la izquierda con el color del estado */
+.mt2 .mrow-fold.mlink a.card.rlink { border-left-width: 6px !important; }
+.mt2 .mrow-fold.mlink.lt-red a.card.rlink { border-left-color: var(--lt-red) !important; border-color: var(--lt-red) !important; background: color-mix(in srgb, var(--lt-red) 6%, var(--mt-soft)) !important; }
+.mt2 .mrow-fold.mlink.lt-amber a.card.rlink { border-left-color: var(--lt-amber) !important; }
+.mt2 .mrow-fold.mlink.lt-green a.card.rlink { border-left-color: var(--lt-green) !important; }
+.mt2 .mrow-fold.mlink.lt-red .rc-cd { color: var(--lt-red); font-size: 1rem; } .mt2 .mrow-fold.mlink.lt-amber .rc-cd { color: var(--lt-amber); }
+/* tarjeta de la próxima carrera */
+.mt2 .nx-hero.lt-red { box-shadow: 0 0 0 3px #ff5a4f, 0 6px 18px rgba(255,90,79,.35); }
+.mt2 .nx-hero.lt-red .nx-date { background: #ff5a4f; color: #fff; } .mt2 .nx-hero.lt-red .nx-k em { color: #ffb3ad; font-size: 1.02em; }
+.mt2 .nx-hero.lt-amber .nx-date { background: #ffd37a; color: #6b3f00; }
+.mt2 .nx-hero.lt-green .nx-date { background: #fff; color: #1d4a63; }
+/* filas de «Por hacer» */
+.mt2 .mt-row { position: relative; }
+.mt2 .mt-row.lt-red, .mt2 .mt-row.lt-amber { padding-left: 12px; border-radius: 8px; }
+.mt2 .mt-row.lt-red { box-shadow: inset 5px 0 0 var(--lt-red); background: color-mix(in srgb, var(--lt-red) 6%, transparent); }
+.mt2 .mt-row.lt-amber { box-shadow: inset 5px 0 0 var(--lt-amber); }
+.mt2 .mt-row.lt-red .mt-when { color: var(--lt-red); font-weight: 800; }
+/* resumen de arriba */
+.mt2 .sum-card .tile.t-pend.alert.urgent { background: color-mix(in srgb, var(--lt-red) 12%, var(--card)); } .mt2 .sum-card .tile.t-pend.alert.urgent .t-n, .mt2 .sum-card .tile.t-pend.alert.urgent .t-ico { color: var(--lt-red); }
+.mt2 .card.ar-card.st-red::before { background: var(--lt-red); } .mt2 .card.ar-card.st-red { background: color-mix(in srgb, var(--lt-red) 5%, var(--card)); }
+/* globo de la barra de abajo */
+.tab-n.todo.urgent { background: var(--bad-2); color: #fff; }
+.mt2 .sum-card .sum-next.has.lt-red { background: color-mix(in srgb, var(--lt-red) 12%, var(--card)); } .mt2 .sum-card .sum-next.has.lt-red > .ico:first-child { color: var(--lt-red); }
