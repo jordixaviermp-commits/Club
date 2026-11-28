@@ -1264,6 +1264,49 @@ insert into registration_entries (registration_id, runner_id, category, self_pos
   select '30000000-0000-0000-0000-0000000000e3', id, 'M40', 5, 12, 40000 from runners where code = 'codigo-valorador-uno-01';
 select auto_promote_registrations();
 select pg_temp.check((select jsonb_array_length(stage_info) = 2 and stages = '["Prólogo","Etapa 1"]'::jsonb and elevation = 8000 and url = 'https://ejemplo.org/y' from races where name = 'Etapas Pasada'), 'etapas: viajan a resultados con la carrera, con su desnivel y su web');
+-- ===== Resultado de cada etapa =====
+insert into registrations (id, name, date, end_date, place, province, modality, stage_info) values
+  ('30000000-0000-0000-0000-0000000000e5', 'Etapas Mixtas', current_date - 1, current_date + 2, 'Roses', 'Girona', 'BTT',
+   jsonb_build_array(jsonb_build_object('name', 'E1', 'date', (current_date - 1)::text), jsonb_build_object('name', 'E2', 'date', current_date::text),
+                     jsonb_build_object('name', 'E3', 'date', (current_date + 1)::text), jsonb_build_object('name', 'E4', 'date', (current_date + 2)::text)));
+insert into registration_entries (registration_id, runner_id, category) select '30000000-0000-0000-0000-0000000000e5', id, 'M40' from runners where code = 'codigo-valorador-uno-01';
+set role anon;
+select runner_set_stage_result('codigo-valorador-uno-01', 'reg', '30000000-0000-0000-0000-0000000000e5', 1, 3, 11, 7200);
+select runner_set_stage_result('codigo-valorador-uno-01', 'reg', '30000000-0000-0000-0000-0000000000e5', 2, null, null, 6900);
+select pg_temp.check(true, 'etapa: el corredor pone el puesto y el tiempo de una etapa ya corrida (también solo el tiempo)');
+select pg_temp.expect_fail($q$select runner_set_stage_result('codigo-valorador-uno-01', 'reg', '30000000-0000-0000-0000-0000000000e5', 3, 1, 1, 7000)$q$, 'etapa: una etapa que aún no se ha corrido no tiene resultado');
+select pg_temp.expect_fail($q$select runner_set_stage_result('codigo-valorador-uno-01', 'reg', '30000000-0000-0000-0000-0000000000e5', 1, 0, 1, 7000)$q$, 'etapa: puesto 0 no vale');
+select pg_temp.expect_fail($q$select runner_set_stage_result('codigo-valorador-uno-01', 'reg', '30000000-0000-0000-0000-0000000000e5', 9, 1, 1, 7000)$q$, 'etapa: una etapa que no existe no vale');
+select pg_temp.expect_fail($q$select runner_set_stage_result('codigo-valorador-dos-02', 'reg', '30000000-0000-0000-0000-0000000000e5', 1, 1, 1, 7000)$q$, 'etapa: solo quien está inscrito');
+select pg_temp.expect_fail($q$select runner_set_stage_result('codigo-falso', 'reg', '30000000-0000-0000-0000-0000000000e5', 1, 1, 1, 7000)$q$, 'etapa: enlace falso no vale');
+select pg_temp.check((select jsonb_array_length(runner_stage_results('codigo-valorador-uno-01')) = 2 and (runner_stage_results('codigo-valorador-uno-01')->0->>'position')::int = 3 and (runner_stage_results('codigo-valorador-uno-01')->1->>'time')::int = 6900), 'etapa: el corredor lee sus resultados de etapa');
+select pg_temp.check((select jsonb_array_length(runner_stage_results('codigo-valorador-dos-02')) = 0), 'etapa: y no ve los de otros');
+select runner_set_stage_result('codigo-valorador-uno-01', 'reg', '30000000-0000-0000-0000-0000000000e5', 2, null, null, null);
+select pg_temp.check((select jsonb_array_length(runner_stage_results('codigo-valorador-uno-01')) = 1), 'etapa: sin puesto ni tiempo se borra');
+reset role;
+-- llegan a las estadísticas con la carrera ya en resultados, y no se pierden si se vuelven a crear sus resultados
+select id as v_et3 from races where name = 'Etapas Pasada' \gset
+set role anon;
+select runner_set_stage_result('codigo-valorador-uno-01', 'race', :'v_et3', 1, 4, 9, 2000);
+select runner_set_stage_result('codigo-valorador-uno-01', 'race', :'v_et3', 2, 2, 5, 9000);
+select pg_temp.check((select r->'results'->0->'stage_positions' = '[4, 2]'::jsonb and r->'results'->0->'stage_times' = '[2000, 9000]'::jsonb and r->'results'->0->'stage_general' = '[9, 5]'::jsonb from jsonb_array_elements(runner_team('codigo-valorador-uno-01')->'races') r where r->>'id' = :'v_et3'), 'etapa: los puestos y tiempos de etapa llegan a las estadísticas del equipo');
+reset role;
+delete from results where race_id = :'v_et3';
+insert into results (race_id, runner_id, runner_name, category, position, self_reported) select :'v_et3', id, name, 'M40', 5, true from runners where code = 'codigo-valorador-uno-01';
+set role anon;
+select pg_temp.check((select (x->'stage_times') = '[2000, 9000]'::jsonb from jsonb_array_elements(runner_view('codigo-valorador-uno-01')->'my_results') x where x->>'race_id' = :'v_et3'), 'etapa: no se pierden cuando se vuelven a crear los resultados de la carrera');
+reset role;
+-- por parejas: con quién
+set role anon;
+select runner_set_pair('codigo-valorador-uno-01', 'reg', '30000000-0000-0000-0000-0000000000e5', '  Marta Ejemplo ');
+select pg_temp.check((select runner_pairs('codigo-valorador-uno-01')->0->>'partner' = 'Marta Ejemplo'), 'pareja: se guarda el compañero');
+select pg_temp.expect_fail($q$select runner_set_pair('codigo-valorador-dos-02', 'reg', '30000000-0000-0000-0000-0000000000e5', 'X')$q$, 'pareja: solo quien está inscrito');
+select runner_set_pair('codigo-valorador-uno-01', 'reg', '30000000-0000-0000-0000-0000000000e5', '');
+select pg_temp.check((select jsonb_array_length(runner_pairs('codigo-valorador-uno-01')) = 0), 'pareja: vacío la quita');
+reset role;
+-- las etapas se guardan siempre por orden de día
+select stages_apply('reg', '30000000-0000-0000-0000-0000000000e5', stages_clean(jsonb_build_array(jsonb_build_object('name', 'B', 'date', (current_date + 1)::text), jsonb_build_object('name', 'A', 'date', (current_date - 1)::text)), current_date - 1, current_date + 2));
+select pg_temp.check((select stage_info->0->>'name' = 'A' and stage_info->1->>'name' = 'B' from registrations where id = '30000000-0000-0000-0000-0000000000e5'), 'etapas: se guardan ordenadas por día');
 -- ===== Pasar a resultados conserva el puesto en la general =====
 insert into registrations (id, name, date) values ('20000000-0000-0000-0000-0000000000e1', 'Carrera General', current_date - 9);
 insert into registration_entries (registration_id, runner_id, category, self_position, self_general_position, self_time_seconds)

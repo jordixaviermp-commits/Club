@@ -24,3 +24,8 @@ test('etapas: el total solo existe si todas las etapas tienen el dato', () => {
   assert.equal(stageTotals(partial).km, null); assert.equal(stageTotals(partial).withKm, 1);
   assert.deepEqual(stageTotals(null), { n: 0, km: null, elevation: null, withKm: 0, withElevation: 0 });
 });
+
+test('cleanStages: se guardan siempre por orden de día (y a igual día, como llegaron)', () => {
+  const out = cleanStages([{ name: 'C', date: '2027-03-10' }, { name: 'A', date: '2027-03-08' }, { name: 'B', date: '2027-03-08' }], '2027-03-08', '2027-03-11');
+  assert.deepEqual(out.map((x) => x.name), ['A', 'B', 'C']);
+});

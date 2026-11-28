@@ -3089,3 +3089,12 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 .stg .stg-h small { order: 3; flex: 1 1 100%; }
 .stg .stg-h .btn.small { order: 2; }
 .stg-fields { grid-template-columns: 1.7fr .9fr 1fr; }
+
+.stg-list li { flex-wrap: wrap; }
+.stg-res { flex: 1 1 100%; display: inline-flex; align-items: center; gap: .35rem; justify-content: center; min-height: 36px; padding: .25rem .6rem; border-radius: 10px; border: 1.5px solid var(--warn); background: none; color: var(--warn-t); font: inherit; font-size: var(--fs-3); font-weight: 600; cursor: pointer; }
+.stg-res .ico { width: 16px; height: 16px; flex: none; }
+.stg-res.set { border-color: var(--ok); color: var(--ok); }
+span.stg-res.set { cursor: default; border-style: dashed; }
+.stg-pair { display: flex; align-items: center; gap: .4rem; width: 100%; min-height: 36px; padding: .25rem .6rem; border-radius: 10px; border: 1.5px dashed var(--line); background: none; color: var(--muted); font: inherit; font-size: var(--fs-3); text-align: left; margin: 0; }
+button.stg-pair { cursor: pointer; } .stg-pair .ico { width: 16px; height: 16px; flex: none; } .stg-pair.set { color: var(--ink, inherit); border-style: solid; }
+.stg-fields.res3 { grid-template-columns: 1fr 1fr; }
