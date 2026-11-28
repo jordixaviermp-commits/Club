@@ -3125,3 +3125,8 @@ button.stg-pair { cursor: pointer; } .stg-pair .ico { width: 16px; height: 16px;
 .mt2 details > summary.mt-h:has(.peek) { flex-wrap: wrap; row-gap: 0; }
 .mt2 .mt-hs.peek + .mt-info { margin-left: auto; }
 .mt2 details[open] > summary.mt-h .mt-hs.peek { display: none; }
+/* Mi temporada | Por valorar: más bajo y pegado arriba, para que la temporada empiece antes */
+.mt2 > .mi-seg { margin: -8px 0 -6px; padding: 2px; border-radius: 10px; }
+.mt2 > .mi-seg a { min-height: 34px; padding: 4px 6px; border-radius: 8px; font-size: var(--fs-3); }
+.mt2 > .mi-seg a .ico { width: 16px; height: 16px; }
+.mt2 > .mi-seg .seg-dot { top: 3px; right: 6px; width: 8px; height: 8px; }
