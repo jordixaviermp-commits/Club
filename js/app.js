@@ -1367,11 +1367,11 @@ function nextHero(g, { dleft, myCat, due }) {
   if (!g) return '';
   const d = new Date(g.date + 'T12:00:00Z'), day = d.getUTCDate(), mon = d.toLocaleDateString('es-ES', { month: 'short', timeZone: 'UTC' }).replace('.', '').toUpperCase();
   const left = dleft(g), soon = /^(hoy|mañana)$/.test(left), mates = Math.max(0, (g.entries || []).length - 1), e = myEntry(g), cat = myCat(g);
-  const where = [g.place, g.province].filter(Boolean).join(' · '), what = [g.modality, g.subtype, g.km ? kmText(g.km) : ''].filter(Boolean).join(' · ');
+  const where = [g.place, g.province].filter(Boolean).join(' · '), modEmoji = g.modality === 'BTT' ? '🚵' : g.modality === 'Otra' ? '' : '🚴', what = [g.modality ? `${modEmoji ? modEmoji + ' ' : ''}${g.modality}` : '', g.subtype, g.km ? kmText(g.km) : ''].filter(Boolean).join(' · ');
   const days = g.end_date && g.end_date > g.date ? numDays(g.date, g.end_date) : 0;
   return `<div class="nx-hero${soon ? ' soon' : ''}"><a class="nx-main" href="${runnerHref('carrera')}/${g.id}">
       <span class="nx-date"><b>${day}</b><small>${esc(mon)}</small></span>
-      <span class="nx-txt"><small class="nx-k">Tu próxima carrera <em>${esc(left)}</em></small><b class="nx-n">${esc(g.name)}</b>
+      <span class="nx-txt"><small class="nx-k">🏁 Tu próxima carrera <em>${esc(left)}</em></small><b class="nx-n">${esc(g.name)}</b>
         <small class="nx-p">${esc(where)}${days ? ` · ${days} días` : ''}</small>${what ? `<small class="nx-p">${esc(what)}${cat ? ` · ${esc(cat)}` : ''}</small>` : ''}</span>${ico('go', 'nx-go')}</a>
     <div class="nx-chips"><span class="nx-chip">${ico('users')}${mates ? `Con ${mates} del club` : 'Solo tú del club'}</span>
       ${e ? (e.paid ? `<span class="nx-chip ok">${ico('euro')}Pagada</span>` : S.preview ? `<span class="nx-chip todo">${ico('euro')}Sin pagar</span>` : `<button type="button" class="nx-chip todo${due ? ' due' : ''}" data-act="r-paid" data-id="${g.id}">${ico('euro')}${due ? 'Marcar pago' : 'Sin pagar'}</button>`) : ''}</div></div>`;
@@ -1450,7 +1450,7 @@ function myRacesCard(d) {
         return near || pay || late || null; })(), ageTxt = (x) => (x.age <= 7 ? `te ${7 - x.age === 1 ? 'queda 1 día' : `quedan ${7 - x.age} días`}` : `hace ${x.age} días`);
       if (!n && upcoming[0]) return '';                                                    // al día: la tarjeta de la próxima ya lo dice todo
       if (n?.type === 'pay' && n.id === upcoming[0]?.id) return '';                        // el pago de la próxima ya está en su tarjeta
-      const txt = !n ? 'Estás al día.'
+      const txt = !n ? '🎉 Estás al día.'
         : n.type === 'result' ? `Pon tu puesto en <b>${esc(n.name)}</b> · ${ageTxt(n)}` : n.type === 'cron' ? (chroDataOf({ key: postKeyOf({ name: n.name, date: n.date }) })?.missRes?.length ? `Completa tu resultado en <b>${esc(n.name)}</b> · ${ageTxt(n)}` : `Pasa la crónica de <b>${esc(n.name)}</b> · ${ageTxt(n)}`) : `Marca el pago de <b>${esc(n.name)}</b> · ${n.in === 0 ? 'es hoy' : n.in === 1 ? 'es mañana' : `en ${n.in} días`}`;
       const to = !n ? (upcoming[0] ? 'sec-cal' : 'sec-after') : 'sec-after';
       return `<div class="sum-todo"><a href="#" class="sum-next${n ? ' has' : ' ok'}" data-act="goto-sec" data-to="${to}"${!n && upcoming[0] ? ' data-tab="prox"' : ''}>${ico(n ? 'flag' : 'ok')}<span>${txt}</span>${ico('go')}</a>
