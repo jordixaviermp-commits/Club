@@ -1676,17 +1676,31 @@ export function teamMoves(moves, now = new Date(), weeks = 8) {
  *  · Racha: de la carrera más reciente hacia atrás, cuántas seguidas tienen resultado y crónica. Las de la última semana
  *    sin terminar no la rompen (hay una semana de plazo); la primera más antigua sin terminar sí.
  */
+/** Semáforo ANTES de la carrera. Rojo: faltan 2 días o menos (o el pago sin marcar y faltan 3 o menos). Naranja: de 3 a 7 días. Verde: más de 7 días. */
+export function preLight(daysLeft, { paid = true } = {}) {
+  const n = Number(daysLeft);
+  if (n <= 2 || (!paid && n <= 3)) return 'red';
+  return n <= 7 ? 'amber' : 'green';
+}
+/** Semáforo DESPUÉS de la carrera (resultado, crónica): hay una semana desde el último día. Rojo: quedan 2 días o menos o ya pasó el plazo. Naranja: el resto. Verde: hecho. */
+export function postLight(age, done = false) {
+  if (done) return 'green';
+  return 7 - Number(age) <= 2 ? 'red' : 'amber';
+}
+/** Orden de más a menos urgente: rojo, naranja, verde (y lo que no tiene color, al final). */
+export const lightRank = (l) => ({ red: 0, amber: 1, green: 2 }[l] ?? 3);
+
 export function alDia(d, chronDone, today, year = null, { payDays = 7, graceDays = 7 } = {}) {
   const me = d.me?.id, diff = (a, b) => Math.round((Date.parse(String(a).slice(0, 10) + 'T12:00:00Z') - Date.parse(String(b).slice(0, 10) + 'T12:00:00Z')) / 864e5);
   const mineReg = (d.registrations || []).filter((g) => (g.entries || []).some((e) => e.runner_id === me));
   const out = [];
-  for (const g of mineReg.filter((x) => x.date < today && !x.suspended && !x.my_result)) out.push({ type: 'result', id: g.id, kind: 'reg', name: g.name, date: g.date, age: diff(today, g.end_date || g.date) });
-  for (const r of (d.my_results || []).filter((x) => !x.position && !x.dnf)) out.push({ type: 'result', id: r.race_id, kind: 'race', name: r.name, date: r.date, age: diff(today, r.end_date || r.date) });
+  for (const g of mineReg.filter((x) => x.date < today && !x.suspended && !x.my_result)) out.push({ type: 'result', id: g.id, kind: 'reg', name: g.name, date: g.date, age: diff(today, g.end_date || g.date), light: postLight(diff(today, g.end_date || g.date)) });
+  for (const r of (d.my_results || []).filter((x) => !x.position && !x.dnf)) out.push({ type: 'result', id: r.race_id, kind: 'race', name: r.name, date: r.date, age: diff(today, r.end_date || r.date), light: postLight(diff(today, r.end_date || r.date)) });
   const status = chronDone instanceof Set ? chronicleStatus(d, chronDone, today, year) : { pending: [] };
-  for (const x of status.pending) out.push({ type: 'cron', id: x.id, kind: x.kind, name: x.name, date: x.date, age: diff(today, x.end_date || x.date) });
+  for (const x of status.pending) out.push({ type: 'cron', id: x.id, kind: x.kind, name: x.name, date: x.date, age: diff(today, x.end_date || x.date), light: postLight(diff(today, x.end_date || x.date)) });
   for (const g of mineReg.filter((x) => x.date >= today && !x.suspended)) {
     const e = g.entries.find((y) => y.runner_id === me), n = diff(g.date, today);
-    if (e && !e.paid && n <= payDays) out.push({ type: 'pay', id: g.id, kind: 'reg', name: g.name, date: g.date, in: n });
+    if (e && !e.paid && n <= payDays) out.push({ type: 'pay', id: g.id, kind: 'reg', name: g.name, date: g.date, in: n, light: preLight(n, { paid: false }) });
   }
   const counts = { result: out.filter((x) => x.type === 'result').length, cron: out.filter((x) => x.type === 'cron').length, pay: out.filter((x) => x.type === 'pay').length };
   // lo siguiente: primero lo que ya se ha pasado (la más antigua primero), luego los pagos más cercanos
