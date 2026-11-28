@@ -3197,3 +3197,14 @@ button.stg-pair { cursor: pointer; } .stg-pair .ico { width: 16px; height: 16px;
 /* globo de la barra de abajo */
 .tab-n.todo.urgent { background: var(--bad-2); color: #fff; }
 .mt2 .sum-card .sum-next.has.lt-red { background: color-mix(in srgb, var(--lt-red) 12%, var(--card)); } .mt2 .sum-card .sum-next.has.lt-red > .ico:first-child { color: var(--lt-red); }
+
+/* Mis números: casillas por grupos */
+.mt2 .nm { display: grid; gap: 4px; margin-top: 10px; }
+.mt2 .nm-h { margin: 8px 0 2px; font-size: var(--fs-2); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.mt2 .nm-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.mt2 .nm-t { position: relative; display: grid; gap: 0; padding: 8px 10px; border-radius: 12px; background: var(--mt-soft); }
+.mt2 .nm-t .ico { position: absolute; top: 8px; right: 8px; width: 16px; height: 16px; color: var(--mt-blue); opacity: .85; }
+.mt2 .nm-t b { font-size: 1.25rem; line-height: 1.15; font-weight: 800; color: var(--text); padding-right: 22px; overflow-wrap: anywhere; }
+.mt2 .nm-t small { color: var(--muted); font-size: var(--fs-2); line-height: 1.2; }
+.mt2 .nm-mods { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.mt2 .nm-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; background: var(--mt-blue-bg); color: var(--text); font-size: var(--fs-2); font-weight: 600; } .mt2 .nm-chip b { color: var(--mt-blue); }
