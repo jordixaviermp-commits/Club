@@ -3257,3 +3257,15 @@ button.stg-pair { cursor: pointer; } .stg-pair .ico { width: 16px; height: 16px;
 .nt-stack { padding-bottom: 36px; } .nt-stack[data-n="2"] { padding-bottom: 20px; }
 .nt-stack > .next-team[data-pos="1"] { transform: translateY(14px) scale(.95, 1); }
 .nt-stack > .next-team[data-pos="2"] { transform: translateY(28px) scale(.9, 1); }
+
+/* Últimos movimientos: tarjeta propia, siempre a la vista, con los últimos cuatro y el resto a un toque */
+.moves-card { padding: .65rem .8rem .55rem; margin: 0 0 .6rem; }
+.moves-card .mv-top { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .35rem; }
+.moves-card .mv-top h3 { display: flex; align-items: center; gap: .4rem; margin: 0; font-size: var(--fs-4); } .moves-card .mv-top h3 .ico { width: 18px; height: 18px; color: var(--sec); }
+.moves-card .mv-trw { font-size: var(--fs-2); color: var(--muted); white-space: nowrap; } .moves-card .mv-tr { font-weight: 800; } .moves-card .mv-tr.up { color: var(--ok); } .moves-card .mv-tr.down { color: var(--bad); }
+.moves-card .mv-list { margin: .1rem 0 0 .35rem; padding: 0; display: block; border-left: 2px solid var(--line); }
+.moves-card .mv-more { margin-top: .35rem; }
+.moves-card .mv-more > summary { list-style: none; display: flex; align-items: center; justify-content: center; gap: .35rem; min-height: 38px; border-radius: 10px; background: var(--bg); color: var(--sec); font-weight: 700; font-size: var(--fs-2); cursor: pointer; }
+.moves-card .mv-more > summary::-webkit-details-marker { display: none; }
+.moves-card .mv-chev { width: 16px; height: 16px; transition: transform .15s; } .moves-card .mv-more[open] .mv-chev { transform: rotate(180deg); }
+.moves-card .mv-more[open] > summary { margin-bottom: .5rem; }
