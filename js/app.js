@@ -1198,10 +1198,10 @@ function viewRunnerNew() {
       ${fsecD('rf3', 3, 'bars', 'Qué tipo de carrera es', pv[2], `<div class="disc-field"><span class="flabel">Modalidad</span>${modalityChips(d, 'data-rf')}</div>
         ${detailInputs(d, 'data-rf')}
         ${S.runnerData.circuits ? typeFields(d, 'data-rf') : ''}`, '#e07800', false, mk[2])}
-      ${fsecD('rf4', 4, 'mountain', 'Más datos (opcionales)', pv[3], `<div class="grid2"><label class="flabel-l">Desnivel positivo (m)<input type="text" inputmode="numeric" data-rf="elevation" value="${esc(d.elevation ?? '')}" maxlength="6" placeholder="1200" autocomplete="off"></label>
+      ${fsecD('rf4', 4, 'mountain', 'Más datos', pv[3], `<div class="grid2"><label class="flabel-l">Desnivel positivo (m)<input type="text" inputmode="numeric" data-rf="elevation" value="${esc(d.elevation ?? '')}" maxlength="6" placeholder="1200" autocomplete="off"></label>
         <label class="flabel-l">Precio inscripción (€)<input type="text" inputmode="decimal" data-rf="price" value="${esc(d.price ?? '')}" maxlength="8" placeholder="25" autocomplete="off"></label></div>
         ${isRace ? '' : `<label class="flabel-l">Web de la carrera<input type="text" inputmode="url" data-rf="url" value="${esc(d.url || '')}" maxlength="500" placeholder="https://…" autocomplete="off"></label>`}
-        <p class="hint">Los ven todos los corredores y salen en las estadísticas del club (metros de subida, coste de competir…). Si no los sabes, déjalos vacíos: cualquier compañero podrá completarlos después. Para el precio, 0 = gratis.</p>`, '#2f6fd6')}
+        <p class="hint">Los ven todos los corredores y salen en las estadísticas del club (metros de subida, coste de competir…). Pon todo lo que sepas: ayudas a todo el club. Si no sabes alguno, déjalo vacío y cualquier compañero podrá completarlo después. Para el precio, 0 = gratis.</p>`, '#2f6fd6')}
       ${fsecD('rf5', 5, 'users', editing ? 'Notas' : 'Tú', editing ? (d.notes ? 'con notas' : '') : d.category, editing ? `<label class="flabel-l">Notas<textarea data-rf="notes" rows="2" maxlength="500">${esc(d.notes || '')}</textarea></label>`
         : `<label class="flabel-l">Tu categoría${catSelect('data-rf="category" required', d.category, 'Elige tu categoría')}</label>
           <label class="check"><input type="checkbox" data-rf-paid ${d.paid ? 'checked' : ''}> Ya la he pagado${parsePrice(d.price) ? ` (${esc(String(d.price))} €)` : ''}</label>
