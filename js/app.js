@@ -2148,7 +2148,7 @@ function nextRacesBanner(d, list) {
     <div class="nt-foot"><span class="nt-me${going ? ' on' : ''}">${going ? `${ico('check')}Tú vas` : 'Tú no estás'} · ${club ? `${club} del club` : 'nadie del club aún'}</span><a class="btn nt-btn" href="${runnerHref('carrera')}/${esc(g.id)}/carreras">${going ? 'Ver carrera' : 'Apuntarme'}</a></div></section>`;
   };
   const n = week.length, idx = (S.ntIdx || 0) % n;
-  const head = `<p class="nt-deck-k">${ico('flag')}<span>Próximas carreras</span></p>`;
+  const head = `<p class="nt-deck-k">${ico('flag')}<span>Próximas carreras</span>${n > 1 ? `<small class="nt-cnt" title="Desliza la tarjeta de arriba para ver la siguiente"><b class="nt-idx">${idx + 1}</b> de ${n}</small>` : ''}</p>`;
   if (n < 2) return `<div class="nt-deck" role="region" aria-label="Próximas carreras">${head}${card(week[0])}</div>`;
   // varias carreras esa semana: una pila de tarjetas, con un trozo de la siguiente asomando por debajo
   return `<div class="nt-deck" role="region" aria-label="Próximas carreras">${head}
