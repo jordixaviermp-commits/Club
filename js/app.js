@@ -2120,32 +2120,39 @@ function teamPulse(d) {
 const rutaCard = () => `<a class="card ruta-card" href="ruta/">${ico('route', 'ruta-ic')}<span class="ruta-txt"><b>Planificar ruta <span class="new-tag">NUEVO</span></b><small class="muted">Sube tu track y mira viento, tiempo y subidas</small></span><span class="mrow-go" aria-hidden="true">${ico('go')}</span></a>`;
 
 /** La próxima carrera del equipo, bien resaltada: que se vea la semana en la que compite el club aunque quien mira no participe. */
-/** Ids de las carreras del equipo que salen en la tarjeta de arriba (la pila de «esta semana»): no se repiten en la lista de debajo. */
-function teamWeekIds(d) {
-  const today = d.today || todayISO(), last = (g) => g.end_date || g.date;
-  return new Set((d.registrations || []).filter((g) => !g.suspended && (g.entries || []).length && last(g) >= today && (g.date <= today || daysTo(g.date) <= 7)).map((g) => g.id));
+/** Las próximas carreras, por semanas: las de la primera semana (lunes a domingo) en la que hay carreras por delante, o la semana en curso si hay alguna que ya empezó. */
+function proxWeek(list, today) {
+  const addDay = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+  const mondayOf = (iso) => addDay(iso, -((new Date(iso + 'T12:00:00Z').getUTCDay() + 6) % 7));
+  const last = (g) => g.end_date || g.date;
+  const all = list.filter((g) => !g.suspended && last(g) >= today).sort((a, b) => a.date.localeCompare(b.date) || String(a.name).localeCompare(String(b.name), 'es'));
+  if (!all.length) return { races: [], label: '' };
+  const mon = mondayOf(all[0].date < today ? today : all[0].date), sun = addDay(mon, 6), thisMon = mondayOf(today);
+  // lo que cae en los próximos 2 días (semáforo rojo) se ve siempre, aunque ya sea de la semana siguiente
+  const races = all.filter((g) => g.date <= sun || (g.date >= today && daysTo(g.date) <= 2)), spill = races.some((g) => g.date > sun);
+  const label = spill ? 'próximos días' : mon === thisMon ? 'esta semana' : mon === addDay(thisMon, 7) ? 'la próxima semana' : `semana del ${mon.slice(5, 7) === sun.slice(5, 7) ? Number(mon.slice(8)) : dayMon(mon)} al ${dayMon(sun)}`;
+  return { races, label };
 }
-function nextTeamBanner(d) {
-  const today = d.today || todayISO(), last = (g) => g.end_date || g.date;
-  const all = (d.registrations || []).filter((g) => !g.suspended && (g.entries || []).length && last(g) >= today)
-    .sort((a, b) => a.date.localeCompare(b.date) || (b.entries.length - a.entries.length) || String(a.name).localeCompare(String(b.name), 'es'));
-  if (!all.length) return '';
-  const week = all.filter((g) => g.date <= today || daysTo(g.date) <= 7);
-  const card = (g, solo) => {
+/** Tarjeta de arriba de Carreras: «Próximas carreras» de esa semana, apiladas si hay varias (se desliza la de arriba; tocar una abre su ficha). */
+function nextRacesBanner(d, list) {
+  const today = d.today || todayISO(), { races: week, label } = proxWeek(list, today);
+  if (!week.length) return '';
+  const card = (g) => {
     const n = daysTo(g.date), going = (g.entries || []).some((e) => e.runner_id === d.me.id), live = g.date <= today;
-    const wk = live || n <= 7, light = preLight(live ? 0 : n);
+    const light = preLight(live ? 0 : n);
     const dot = light === 'red' ? '🔴 ' : light === 'amber' ? '🟠 ' : '';   // semáforo, igual que la próxima carrera de Mi temporada
-    const when = live ? 'En curso' : daysToText(n);
-    return `<section class="card next-team nt-mini lt-${light}${wk ? ' wk' : ''}" data-id="${esc(g.id)}" aria-label="Próxima carrera del equipo: ${esc(g.name)}. Toca para ver todos sus datos">
-    <div class="nt-head">${raceTile(g, { mine: !!going })}<div class="rh-main"><p class="nt-k">${wk ? (solo ? 'Equipo · esta semana' : 'Esta semana') : 'Equipo · próxima carrera'}</p><h2 class="nt-n">${esc(g.name)}</h2><p class="rh-sub">${esc(raceSub(g))}</p></div>
-      <span class="nt-pill nt-when">${wk ? dot : ''}${when}</span></div>
-    <div class="nt-foot"><span class="nt-me${going ? ' on' : ''}">${going ? `${ico('check')}Tú vas` : 'Tú no estás'} · ${g.entries.length} del club</span><a class="btn nt-btn" href="${runnerHref('carrera')}/${esc(g.id)}/carreras">${going ? 'Ver carrera' : 'Apuntarme'}</a></div></section>`;
+    const when = live ? 'En curso' : daysToText(n), club = (g.entries || []).length;
+    return `<section class="card next-team nt-mini lt-${light}${live || n <= 7 ? ' wk' : ''}" data-id="${esc(g.id)}" aria-label="Próxima carrera: ${esc(g.name)}. Toca para ver todos sus datos">
+    <div class="nt-head">${raceTile(g, { mine: !!going })}<div class="rh-main"><p class="nt-k">${esc([g.modality, g.subtype].filter(Boolean).join(' · '))}</p><h2 class="nt-n">${esc(g.name)}</h2><p class="rh-sub">${esc(raceSub(g))}</p></div>
+      <span class="nt-pill nt-when">${dot}${when}</span></div>
+    <div class="nt-foot"><span class="nt-me${going ? ' on' : ''}">${going ? `${ico('check')}Tú vas` : 'Tú no estás'} · ${club ? `${club} del club` : 'nadie del club aún'}</span><a class="btn nt-btn" href="${runnerHref('carrera')}/${esc(g.id)}/carreras">${going ? 'Ver carrera' : 'Apuntarme'}</a></div></section>`;
   };
-  if (week.length < 2) return card(week[0] || all[0], true);
-  // varias carreras del equipo esta semana: una pila de tarjetas, con un trozo de la siguiente asomando por debajo; se desliza la de arriba para ver la siguiente
   const n = week.length, idx = (S.ntIdx || 0) % n;
-  return `<div class="nt-deck" role="region" aria-label="Carreras del equipo esta semana"><p class="nt-deck-k">${ico('flag')}<span>Esta semana compite el equipo: <b>${n}</b></span><small><b class="nt-idx">${idx + 1}</b> de ${n} · desliza</small></p>
-    <div class="nt-stack" data-n="${n}">${week.map((g, i) => card(g, false).replace('<section class="card next-team', `<section data-pos="${(i - idx + n) % n}" class="card next-team`)).join('')}</div></div>`;
+  const head = `<p class="nt-deck-k">${ico('flag')}<span>Próximas carreras · <b>${esc(label)}</b></span>${n > 1 ? `<small title="Desliza la tarjeta de arriba para ver la siguiente"><b class="nt-idx">${idx + 1}</b>/${n} ↔</small>` : ''}</p>`;
+  if (n < 2) return `<div class="nt-deck" role="region" aria-label="Próximas carreras">${head}${card(week[0])}</div>`;
+  // varias carreras esa semana: una pila de tarjetas, con un trozo de la siguiente asomando por debajo
+  return `<div class="nt-deck" role="region" aria-label="Próximas carreras">${head}
+    <div class="nt-stack" data-n="${n}">${week.map((g, i) => card(g).replace('<section class="card next-team', `<section data-pos="${(i - idx + n) % n}" class="card next-team`)).join('')}</div></div>`;
 }
 
 function viewRunnerHome() {
@@ -2159,8 +2166,8 @@ function viewRunnerHome() {
   const body = S.regView === 'cal'
     ? calendarView(regs, card, isMine, { done, doneCard: (r) => doneRaceCard(r, { meId: me.id }), shiftGroup: S.myShift })
     : (() => {
-      // las carreras de esta semana con gente del club ya salen arriba, en la pila: aquí solo el resto, sin repetirlas
-      const stackOn = normalize(S.q.runner || '').length < 2, inStack = stackOn ? teamWeekIds(d) : new Set(), rest = upcoming.filter((g) => !inStack.has(g.id));
+      // las carreras de la semana de arriba (pila de «Próximas carreras») no se repiten aquí: solo el resto
+      const stackOn = normalize(S.q.runner || '').length < 2, inStack = stackOn ? new Set(proxWeek(regs, today).races.map((g) => g.id)) : new Set(), rest = upcoming.filter((g) => !inStack.has(g.id));
       return `${rest.length || !upcoming.length ? `<h2 class="section">${inStack.size ? 'Más carreras' : 'Próximas carreras'} (${rest.length})</h2>` : ''}
     ${upcoming.length ? monthList(rest, card) : `<p class="empty">${filtersOn(me) ? 'Ninguna carrera próxima con estos filtros. <button class="link" data-act="filters-clear">Quitar filtros</button>' : 'Todavía no hay carreras abiertas.'}</p>`}`;
     })();
@@ -2173,7 +2180,7 @@ function viewRunnerHome() {
       ${S.fd?.has ? `<button type="button" class="icon-btn fbtn${S.fd.active ? ' on' : ''}" data-act="r-filters" aria-label="Filtros${S.fd.active ? ' (activos)' : ''}" title="Filtros">${icon(ICON_FILTER)}${S.fd.active ? '<i class="fdot"></i>' : ''}</button>` : ''}
       <button type="button" class="icon-btn fbtn view-btn${S.regView === 'cal' ? ' on' : ''}" data-act="reg-view" aria-label="${S.regView === 'cal' ? 'Ver como lista' : 'Ver calendario'}" title="${S.regView === 'cal' ? 'Ver como lista' : 'Ver calendario'}">${icon(S.regView === 'cal' ? ICON_LIST : ICON_CAL)}</button>
     </div>
-    ${normalize(S.q.runner || '').length >= 2 ? '' : nextTeamBanner(d)}
+    ${normalize(S.q.runner || '').length >= 2 ? '' : nextRacesBanner(d, regs)}
     <div id="pulse-box">${S.regView === 'cal' || normalize(S.q.runner || '').length >= 2 ? '' : teamPulse(d)}</div>
     <div id="search-results">${runnerSearchResults(S.q.runner)}</div>
     ${body}</div>`,
