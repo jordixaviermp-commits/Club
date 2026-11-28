@@ -7215,34 +7215,45 @@ $app.addEventListener('change', async (ev) => {
   }
 });
 
-// Pila de carreras del equipo: se arrastra la de arriba hacia un lado y pasa al fondo; tocar una de las que asoman la trae delante.
+// Pila de carreras del equipo: se arrastra la de arriba hacia un lado (o se da un golpe rápido con el dedo) y pasa al fondo; tocar una de las que asoman la trae delante.
 (() => {
   let drag = null;
-  const stack = (el) => el.closest?.('.nt-stack');
+  const stack = (el) => el?.closest?.('.nt-stack');
   const setPos = (st, idx) => { const cards = [...st.children], n = cards.length; S.ntIdx = idx; cards.forEach((c, i) => { c.dataset.pos = String((i - idx + n) % n); });
     const k = st.parentElement.querySelector('.nt-idx'); if (k) k.textContent = String(idx + 1); };
-  const front = (st) => [...st.children].find((c) => c.dataset.pos === '0');
-  $app.addEventListener('pointerdown', (ev) => {
-    const st = stack(ev.target), card = st && ev.target.closest('.next-team'); if (!card) return;
-    drag = { st, card, x: ev.clientX, y: ev.clientY, dx: 0, moved: false, top: card.dataset.pos === '0' };
-  });
-  $app.addEventListener('pointermove', (ev) => {
-    if (!drag || !drag.top) return;
-    const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
-    if (!drag.moved && (Math.abs(dx) < 8 || Math.abs(dx) < Math.abs(dy))) return;
-    drag.moved = true; drag.dx = dx; drag.card.style.transition = 'none'; drag.card.style.transform = `translateX(${dx}px) rotate(${dx / 25}deg)`; drag.card.style.opacity = String(Math.max(.4, 1 - Math.abs(dx) / 400));
-  });
+  const begin = (target, x, y) => { const st = stack(target), card = st && target.closest('.next-team'); drag = card ? { st, card, x, y, dx: 0, moved: false, dir: '', top: card.dataset.pos === '0', t0: Date.now(), tx: x, tt: Date.now(), v: 0 } : null; };
+  // devuelve true si el gesto es horizontal (y hay que impedir que la página se desplace)
+  const move = (x, y) => {
+    if (!drag || !drag.top) return false;
+    const dx = x - drag.x, dy = y - drag.y;
+    if (!drag.dir) { if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return false; drag.dir = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v'; }
+    if (drag.dir !== 'h') return false;
+    const now = Date.now(); if (now - drag.tt > 30) { drag.v = (x - drag.tx) / (now - drag.tt); drag.tx = x; drag.tt = now; }
+    drag.moved = true; drag.dx = dx; drag.card.style.transition = 'none'; drag.card.style.transform = `translateX(${dx}px) rotate(${dx / 25}deg)`; drag.card.style.opacity = String(Math.max(.45, 1 - Math.abs(dx) / 420));
+    return true;
+  };
   const end = () => {
-    if (!drag) return; const { st, card, dx, moved, top } = drag; drag = null;
+    if (!drag) return; const { st, card, dx, moved, top, v } = drag; drag = null;
     if (!top) return;
     card.style.transition = '';
-    if (moved && Math.abs(dx) > 70) {
-      card.style.transform = `translateX(${dx > 0 ? 130 : -130}%) rotate(${dx > 0 ? 18 : -18}deg)`; card.style.opacity = '0';
+    const flick = Math.abs(v) > 0.35 && Math.abs(dx) > 12;   // un golpe rápido con el dedo también vale, aunque sea corto
+    if (moved && (Math.abs(dx) > 35 || flick)) {
+      const dir = (flick ? v : dx) > 0 ? 1 : -1;
+      card.style.transform = `translateX(${dir * 130}%) rotate(${dir * 18}deg)`; card.style.opacity = '0';
       setTimeout(() => { card.style.transition = 'none'; card.style.transform = ''; card.style.opacity = ''; setPos(st, ((S.ntIdx || 0) + 1) % st.children.length); void card.offsetWidth; card.style.transition = ''; }, 230);
     } else { card.style.transform = ''; card.style.opacity = ''; }
-    if (moved) st.dataset.justDragged = '1', setTimeout(() => { delete st.dataset.justDragged; }, 50);
+    if (moved) { st.dataset.justDragged = '1'; setTimeout(() => { delete st.dataset.justDragged; }, 60); }
   };
-  $app.addEventListener('pointerup', end); $app.addEventListener('pointercancel', end);
+  // ratón / lápiz
+  $app.addEventListener('pointerdown', (ev) => { if (ev.pointerType !== 'touch') begin(ev.target, ev.clientX, ev.clientY); });
+  $app.addEventListener('pointermove', (ev) => { if (ev.pointerType !== 'touch') move(ev.clientX, ev.clientY); });
+  $app.addEventListener('pointerup', (ev) => { if (ev.pointerType !== 'touch') end(); });
+  $app.addEventListener('pointercancel', (ev) => { if (ev.pointerType !== 'touch') end(); });
+  // dedo: con eventos táctiles, para poder impedir el desplazamiento de la página cuando el gesto es horizontal
+  $app.addEventListener('touchstart', (ev) => { const t = ev.touches[0]; if (ev.touches.length === 1 && t) begin(ev.target, t.clientX, t.clientY); else drag = null; }, { passive: true });
+  $app.addEventListener('touchmove', (ev) => { const t = ev.touches[0]; if (t && move(t.clientX, t.clientY) && ev.cancelable) ev.preventDefault(); }, { passive: false });
+  $app.addEventListener('touchend', end, { passive: true });
+  $app.addEventListener('touchcancel', end, { passive: true });
   // un clic tras arrastrar no debe pulsar el botón de la tarjeta; y tocar una tarjeta de detrás la trae delante
   $app.addEventListener('click', (ev) => {
     const st = stack(ev.target); if (!st) return;
