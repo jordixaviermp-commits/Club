@@ -2778,7 +2778,7 @@ async function setChronicleFor(runnerIds, key, done) {
   return ok;
 }
 
-/** Estado de la historia previa (la publica la tarea automática 2 días antes) de una inscripción o carrera. */
+/** Estado de la historia previa (la publica la tarea automática el día antes) de una inscripción o carrera. */
 const pubStory = (g) => (Array.isArray(g.entries) && !g.entries.length ? null : storyState(g, S.stories?.byKey ? S.stories : null, postedSet().has(postKey(g)), todayISO()));
 const shortDate = (iso) => formatDate(iso, false);
 const storyLabel = (s) => ({ ok: `Historia ✓ ${s.date ? shortDate(s.date) : ''}${s.n > 1 ? ` · ${s.n} páginas` : ''}`.trim(), manual: 'Historia ✓ (marcada a mano)', hoy: 'Historia: sale hoy',
@@ -2793,7 +2793,7 @@ function pubsBlock(d, done) {
   if (!g) return '';
   const s = pubStory(g);
   return `<section class="card pubs-card"><h3>📸 Redes</h3>
-    <p><b>Historia previa</b> <small class="muted">(la publica la tarea automática 2 días antes)</small><br>${s ? storyTag(g) : '<span class="muted">No toca o aún no hay datos.</span>'}</p>
+    <p><b>Historia previa</b> <small class="muted">(la publica la tarea automática el día antes de la carrera)</small><br>${s ? storyTag(g) : '<span class="muted">No toca o aún no hay datos.</span>'}</p>
     ${s?.state === 'falta' ? `<button class="btn small" data-act="pub-story-manual" data-key="${esc(postKey(g))}">Marcar como publicada (a mano)</button>` : ''}
     ${done && (g.results || []).length ? `<p><b>Post de resultados</b> <small class="muted">(lo publicas tú)</small></p><div class="row">${postCheck(g, resKey(g), 'Post de resultados publicado')}</div>` : ''}</section>`;
 }
