@@ -3153,3 +3153,22 @@ button.stg-pair { cursor: pointer; } .stg-pair .ico { width: 16px; height: 16px;
 .mt2 .card.ar-card::before, .mt2 .card.cal-card::before, .mt2 .card.nums-block::before { display: block; content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; }
 .mt2 .card.ar-card.st-todo::before { background: var(--mt-todo); } .mt2 .card.ar-card.st-ok::before { background: var(--ok); }
 .mt2 .card.ar-card.st-todo { background: color-mix(in srgb, var(--mt-todo) 6%, var(--card)); } .mt2 .card.cal-card::before { background: var(--mt-blue); } .mt2 .card.nums-block::before { background: var(--ok); }
+
+/* Mi calendario: cada carrera es una tarjeta propia, tocable, que abre su ficha en otra pantalla */
+.mt2 .cal-card .mini-list { display: grid; gap: 10px; margin: 8px 0 0; padding: 0; list-style: none; }
+.mt2 .cal-card .mini-list > li.mrow-fold.mlink { position: relative; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+.mt2 .cal-card .mini-list > li.mrow-fold.mlink + li, .mt2 .cal-card .mini-list > li.mrow-fold.mlink::before { border-top: 0; }
+.mt2 a.rlink, .mt2 a.rlink * { text-decoration: none; }
+.mt2 .cal-card a.card.rlink { display: block; margin: 0; padding: 10px 10px 10px 12px !important; border: 1px solid var(--line) !important; border-radius: 14px; background: var(--mt-soft) !important; color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.07) !important; }
+.mt2 .cal-card a.card.rlink:active { background: color-mix(in srgb, var(--kpi) 10%, var(--mt-soft)) !important; }
+.mt2 a.rlink .rc-sum { display: grid; grid-template-columns: auto minmax(0, 1fr) 22px; column-gap: 12px; row-gap: 6px; align-items: center; padding: 0; min-height: 0; border: 0; }
+.mt2 a.rlink .rc-sum > :first-child { grid-column: 1; grid-row: 1 / span 2; align-self: start; }
+.mt2 a.rlink .rc-main { grid-column: 2; grid-row: 1; min-width: 0; }
+.mt2 a.rlink .rc-chev.go { grid-column: 3; grid-row: 1; display: grid; place-items: center; color: var(--muted); width: 22px; height: 22px; } .mt2 a.rlink .rc-chev.go .ico { width: 18px; height: 18px; transform: none; }
+.mt2 a.rlink .rc-side { grid-column: 2 / 4; grid-row: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; justify-content: flex-start; }
+.mt2 .mrow-fold.mlink.pay-due a.card.rlink { border-color: var(--bad-2) !important; }
+.mt2 .mrow-fold.mlink .due-badge { position: absolute; top: -8px; right: 12px; z-index: 1; }
+/* Mi calendario > Hechas: también una tarjeta por carrera */
+.mt2 .cal-card .mt-list { display: grid; gap: 10px; margin-top: 8px; }
+.mt2 .cal-card .mt-list > li.mt-row { margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--mt-soft); box-shadow: 0 1px 3px rgba(0,0,0,.07); }
+.mt2 .cal-card .mt-list > li.mt-row + li.mt-row { border-top: 1px solid var(--line); }
