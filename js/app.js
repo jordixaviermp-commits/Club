@@ -1362,6 +1362,20 @@ function myTaskCount() {
   const ad = alDia(d, S.chron instanceof Set ? S.chron : null, d.today || todayISO(), S.myYear || new Date().getFullYear());
   return ad.total + d.my_results.filter((x) => missingFields(x).length).length + pairInviteCount(d);
 }
+/** Tarjeta grande de la próxima carrera en «Mi temporada»: fecha, nombre, lugar, cuánto falta, con cuántos compañeros vas y, si toca, el botón de marcar el pago. */
+function nextHero(g, { dleft, myCat, due }) {
+  if (!g) return '';
+  const d = new Date(g.date + 'T12:00:00Z'), day = d.getUTCDate(), mon = d.toLocaleDateString('es-ES', { month: 'short', timeZone: 'UTC' }).replace('.', '').toUpperCase();
+  const left = dleft(g), soon = /^(hoy|mañana)$/.test(left), mates = Math.max(0, (g.entries || []).length - 1), e = myEntry(g), cat = myCat(g);
+  const where = [g.place, g.province].filter(Boolean).join(' · '), what = [g.modality, g.subtype, g.km ? kmText(g.km) : ''].filter(Boolean).join(' · ');
+  const days = g.end_date && g.end_date > g.date ? numDays(g.date, g.end_date) : 0;
+  return `<div class="nx-hero${soon ? ' soon' : ''}"><a class="nx-main" href="${runnerHref('carrera')}/${g.id}">
+      <span class="nx-date"><b>${day}</b><small>${esc(mon)}</small></span>
+      <span class="nx-txt"><small class="nx-k">Tu próxima carrera <em>${esc(left)}</em></small><b class="nx-n">${esc(g.name)}</b>
+        <small class="nx-p">${esc(where)}${days ? ` · ${days} días` : ''}</small>${what ? `<small class="nx-p">${esc(what)}${cat ? ` · ${esc(cat)}` : ''}</small>` : ''}</span>${ico('go', 'nx-go')}</a>
+    <div class="nx-chips"><span class="nx-chip">${ico('users')}${mates ? `Con ${mates} del club` : 'Solo tú del club'}</span>
+      ${e ? (e.paid ? `<span class="nx-chip ok">${ico('euro')}Pagada</span>` : S.preview ? `<span class="nx-chip todo">${ico('euro')}Sin pagar</span>` : `<button type="button" class="nx-chip todo${due ? ' due' : ''}" data-act="r-paid" data-id="${g.id}">${ico('euro')}${due ? 'Marcar pago' : 'Sin pagar'}</button>`) : ''}</div></div>`;
+}
 function myRacesCard(d) {
   const results = d.my_results;
   if (!results) return ''; // base de datos aún sin actualizar
@@ -1413,7 +1427,7 @@ function myRacesCard(d) {
     return [...pod.map((n, i) => (n ? `${n} ${N[i][n === 1 ? 0 : 1]}` : '')), km ? kmText(Math.round(km)) : ''].filter(Boolean).join(' · '); })();
   const upYears = (() => { const by = new Map(); for (const g of upcoming) by.set(yearOf(g.date), (by.get(yearOf(g.date)) || 0) + 1); return by.size > 1 || (by.size === 1 && !by.has(S.myYear)) ? [...by].sort((x, y) => x[0] - y[0]).map(([y, n]) => `${n} de ${y}`).join(' + ') : ''; })();
   const calendar = `<section class="card cal-card" id="sec-cal"><details class="chro-det" data-open-key="cal"${(S.open?.cal ?? true) ? ' open' : ''}>
-    <summary class="mt-h"><h2>Mi calendario</h2><button type="button" class="mt-info" data-act="mt-info" data-k="cal" aria-label="Cómo funciona «Mi calendario»" title="Cómo funciona">${ico('info')}</button>${ico('chevd', 'mt-chev')}</summary>
+    <summary class="mt-h"><h2>Mi calendario</h2><small class="mt-hs peek">${upcoming.length ? `${upcoming.length} próxima${upcoming.length === 1 ? '' : 's'} · ${hechas.length} hecha${hechas.length === 1 ? '' : 's'}` : `${hechas.length} hecha${hechas.length === 1 ? '' : 's'} · ninguna próxima`}</small><button type="button" class="mt-info" data-act="mt-info" data-k="cal" aria-label="Cómo funciona «Mi calendario»" title="Cómo funciona">${ico('info')}</button>${ico('chevd', 'mt-chev')}</summary>
     <div class="mt-seg sm" role="tablist"><button type="button" role="tab" aria-selected="${calTab === 'prox'}" class="${calTab === 'prox' ? 'on' : ''}" data-act="cal-tab" data-t="prox">Próximas <b>${upcoming.length}</b></button><button type="button" role="tab" aria-selected="${calTab === 'hechas'}" class="${calTab === 'hechas' ? 'on' : ''}" data-act="cal-tab" data-t="hechas">Hechas <b>${hechas.length}</b></button></div>
     ${calTab === 'prox'
       ? `${upcoming.length ? `<p class="cal-pay"><span class="desp-sub">${payLineInline(upcoming)}${upcoming.some((g) => S.payDue.has(g.id)) ? `<span class="due">${upcoming.filter((g) => S.payDue.has(g.id)).length} por pagar ya</span>` : ''}</span></p>
@@ -1428,12 +1442,15 @@ function myRacesCard(d) {
       <a href="#" class="tile t-done" data-act="goto-sec" data-to="sec-cal" data-tab="hechas"><span class="t-n">${hechas.length}</span><span class="t-l">Hechas</span>${ico('ok', 't-ico')}<small>${days !== list.length ? `${days} días de competición` : 'con resultado'}</small></a>
       <a href="#" class="tile t-pend${todoN ? ' alert' : ''}" data-act="goto-sec" data-to="${todoTo}"><span class="t-n">${todoN}</span><span class="t-l">Por hacer</span>${ico('flag', 't-ico')}<small>${todoTxt}</small></a>
     </div>
+    ${nextHero(upcoming[0], { dleft, myCat, due: upcoming[0] && S.payDue.has(upcoming[0].id) })}
     ${(() => { const n = (() => { const its = ad.items || [], rank = { result: 0, cron: 1 };
         const near = its.filter((x) => x.type !== 'pay' && x.age <= 7).sort((a, b) => rank[a.type] - rank[b.type] || b.age - a.age)[0];
         const pay = its.filter((x) => x.type === 'pay').sort((a, b) => a.in - b.in)[0];
         const late = its.filter((x) => x.type !== 'pay').sort((a, b) => a.age - b.age)[0];   // si no hay nada de esta semana, lo más reciente (no lo de hace meses)
         return near || pay || late || null; })(), ageTxt = (x) => (x.age <= 7 ? `te ${7 - x.age === 1 ? 'queda 1 día' : `quedan ${7 - x.age} días`}` : `hace ${x.age} días`);
-      const txt = !n ? (upcoming[0] ? `Estás al día. Lo próximo: <b>${esc(upcoming[0].name)}</b> · ${dleft(upcoming[0])}` : 'Estás al día.')
+      if (!n && upcoming[0]) return '';                                                    // al día: la tarjeta de la próxima ya lo dice todo
+      if (n?.type === 'pay' && n.id === upcoming[0]?.id) return '';                        // el pago de la próxima ya está en su tarjeta
+      const txt = !n ? 'Estás al día.'
         : n.type === 'result' ? `Pon tu puesto en <b>${esc(n.name)}</b> · ${ageTxt(n)}` : n.type === 'cron' ? (chroDataOf({ key: postKeyOf({ name: n.name, date: n.date }) })?.missRes?.length ? `Completa tu resultado en <b>${esc(n.name)}</b> · ${ageTxt(n)}` : `Pasa la crónica de <b>${esc(n.name)}</b> · ${ageTxt(n)}`) : `Marca el pago de <b>${esc(n.name)}</b> · ${n.in === 0 ? 'es hoy' : n.in === 1 ? 'es mañana' : `en ${n.in} días`}`;
       const to = !n ? (upcoming[0] ? 'sec-cal' : 'sec-after') : 'sec-after';
       return `<div class="sum-todo"><a href="#" class="sum-next${n ? ' has' : ' ok'}" data-act="goto-sec" data-to="${to}"${!n && upcoming[0] ? ' data-tab="prox"' : ''}>${ico(n ? 'flag' : 'ok')}<span>${txt}</span>${ico('go')}</a>
@@ -1442,7 +1459,7 @@ function myRacesCard(d) {
 
   </section>
 
-  ${afterRaceCard(ar)}
+  ${afterRaceCard({ ...ar, peek: todoTxt })}
 
 
   ${calendar}
@@ -1623,7 +1640,7 @@ function afterRaceCard(m) {
   if (!m.list.length) return '';
   const { todo, tasksN, rowHtml } = m;
   return `<section class="card ar-card" id="sec-after"><details class="chro-det" data-open-key="after"${(S.open?.after ?? todo.length > 0) ? ' open' : ''}>
-    <summary class="mt-h"><h2>Por hacer</h2><span class="mt-cnt ${tasksN ? 'todo' : 'ok'}">${tasksN || 'Al día'}</span><button type="button" class="mt-info" data-act="mt-info" data-k="todo" aria-label="Cómo funciona «Por hacer»" title="Cómo funciona">${ico('info')}</button>${ico('chevd', 'mt-chev')}</summary>
+    <summary class="mt-h"><h2>Por hacer</h2><span class="mt-cnt ${tasksN ? 'todo' : 'ok'}">${tasksN || 'Al día'}</span>${m.peek && tasksN ? `<small class="mt-hs peek">${esc(m.peek.replace(/<[^>]+>/g, ''))}</small>` : ''}<button type="button" class="mt-info" data-act="mt-info" data-k="todo" aria-label="Cómo funciona «Por hacer»" title="Cómo funciona">${ico('info')}</button>${ico('chevd', 'mt-chev')}</summary>
     ${todo.length ? `<ul class="mt-list">${todo.map((r) => rowHtml(r, 'todo')).join('')}</ul>` : '<p class="empty small">No te falta nada. 🎉</p>'}
   </details></section>`;
 }

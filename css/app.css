@@ -3102,3 +3102,26 @@ button.stg-pair { cursor: pointer; } .stg-pair .ico { width: 16px; height: 16px;
 .stg-ar.add { border: 1px dashed var(--line); justify-content: center; } .stg-ar.add .ico { margin-left: 0; }
 .stg-pairs { display: grid; gap: .25rem; margin: .4rem 0; }
 .stg-inv { display: grid; gap: .4rem; padding: .55rem .65rem; margin: .4rem 0; border-radius: 12px; border: 1.5px solid var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--card)); } .stg-inv p { display: flex; gap: .4rem; margin: 0; align-items: flex-start; } .stg-inv .ico { width: 16px; height: 16px; flex: none; margin-top: 3px; } .stg-inv .row { display: flex; gap: .4rem; flex-wrap: wrap; }
+
+/* Mi temporada: tarjeta de la próxima carrera */
+.mt2 .nx-hero { display: grid; gap: 8px; margin-top: 10px; padding: 12px; border-radius: 14px; background: linear-gradient(135deg, color-mix(in srgb, var(--kpi) 14%, var(--card)), color-mix(in srgb, var(--kpi) 4%, var(--card))); border: 1px solid color-mix(in srgb, var(--kpi) 25%, var(--line)); }
+.mt2 .nx-main { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--text); min-width: 0; }
+.mt2 .nx-date { flex: none; display: grid; place-items: center; width: 56px; height: 60px; border-radius: 12px; background: var(--kpi); color: #fff; line-height: 1; }
+.mt2 .nx-date b { font-size: 1.6rem; font-weight: 800; } .mt2 .nx-date small { font-size: .72rem; font-weight: 700; letter-spacing: .04em; margin-top: -6px; }
+.mt2 .nx-hero.soon .nx-date { background: var(--mt-todo); }
+.mt2 .nx-txt { display: grid; gap: 1px; flex: 1; min-width: 0; }
+.mt2 .nx-k { color: var(--muted); font-size: var(--fs-2); } .mt2 .nx-k em { font-style: normal; font-weight: 700; color: var(--kpi); } .mt2 .nx-hero.soon .nx-k em { color: var(--mt-todo); }
+.mt2 .nx-n { font-size: 1.12rem; line-height: 1.2; font-weight: 800; overflow-wrap: anywhere; }
+.mt2 .nx-p { color: var(--muted); font-size: var(--fs-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mt2 .nx-go { width: 18px; height: 18px; flex: none; color: var(--muted); }
+.mt2 .nx-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.mt2 .nx-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 34px; padding: 4px 10px; white-space: nowrap; border-radius: 999px; border: 0; background: var(--card); color: var(--text); font: inherit; font-size: var(--fs-2); font-weight: 600; }
+.mt2 .nx-chip .ico { width: 15px; height: 15px; flex: none; }
+.mt2 .nx-chip.ok { background: var(--mt-ok-bg); color: var(--ok); }
+.mt2 button.nx-chip.todo { cursor: pointer; border: 1.5px dashed var(--mt-todo-line); color: var(--mt-todo); background: var(--mt-todo-bg); }
+.mt2 button.nx-chip.todo.due { border-style: solid; border-color: var(--mt-todo); }
+/* resumen en las secciones plegadas */
+.mt2 details > summary.mt-h .mt-hs.peek { order: 5; flex-basis: 100%; margin-top: -2px; }
+.mt2 details > summary.mt-h:has(.peek) { flex-wrap: wrap; row-gap: 0; }
+.mt2 .mt-hs.peek + .mt-info { margin-left: auto; }
+.mt2 details[open] > summary.mt-h .mt-hs.peek { display: none; }
