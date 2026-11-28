@@ -235,22 +235,31 @@ const circuitNames = () => circuitCatalog().map((c) => c.name).sort((a, b) => a.
 /** Nombre del circuito tal y como ya está creado (misma escritura para todas sus pruebas); si es nuevo, tal cual lo escribió. */
 const canonCircuit = (name) => { const v = cleanName(name); return circuitCatalog().find((c) => normCirc(c.name) === normCirc(v))?.name || v; };
 /** Ayuda bajo la casilla del circuito: si ya existe, lo dice; si se le parece, lo sugiere; si es nuevo, avisa de que se creará. */
+/** ¿Encaja lo escrito con el nombre de un circuito? Vale un trozo del nombre («arag»), el principio de cada palabra («open ara») o las iniciales («oax» = Open Aragón XCO). */
+function circuitMatches(name, typed) {
+  const k = normCirc(typed); if (!k) return false;
+  const nk = normCirc(name); if (nk.includes(k) || k.includes(nk)) return true;
+  const words = normalize(name).split(/[^a-z0-9]+/).filter(Boolean), toks = normalize(typed).split(/[^a-z0-9]+/).filter(Boolean);
+  if (words.map((w) => w[0]).join('').startsWith(k)) return true;
+  return toks.length > 0 && toks.every((t) => words.some((w) => w.startsWith(t)));
+}
 function circuitAssist(value) {
   const cat = circuitCatalog(), v = String(value || '').trim(), key = normCirc(v), pl = (n) => `${n} prueba${n === 1 ? '' : 's'}`;
   const chips = (l) => `<div class="circ-chips">${l.map((c) => `<button type="button" class="chip" data-act="circuit-pick" data-v="${esc(c.name)}">${esc(c.name)} <small>${pl(c.n)}</small></button>`).join('')}</div>`;
-  if (!cat.length) return `<p class="circ-st new">${ico('plus')}<span>Aún no hay ningún circuito creado: este se creará al guardar la carrera y saldrá en las próximas pruebas.</span></p>`;
+  const create = (ifNone) => `<p class="circ-new">${ico('plus')}<span>${ifNone ? 'Si no es ninguno de estos: ' : ''}<b>${ifNone ? 'crear' : 'Crear'} «${esc(v)}»</b> como circuito nuevo. Se guarda con esta carrera y lo verán los demás corredores en las próximas pruebas.</span></p>`;
+  if (!cat.length) return v ? create(false) : `<p class="circ-st"><span>Aún no hay ningún circuito creado. Escribe el nombre del tuyo (la copa, el open o la liga) y se creará al guardar.</span></p>`;
   const exact = key && cat.find((c) => normCirc(c.name) === key);
   if (exact) return `<p class="circ-st ok">${ico('check')}<span>Circuito ya creado: <b>${esc(exact.name)}</b> · ${pl(exact.n)}.${exact.name !== v ? ` Se guardará como «${esc(exact.name)}».` : ''}</span></p>`;
-  const near = key ? cat.filter((c) => normCirc(c.name).includes(key) || key.includes(normCirc(c.name))) : [];
-  if (near.length) return `<p class="circ-st"><span>¿Es uno de estos?</span></p>${chips(near.slice(0, 6))}<p class="circ-st new">${ico('plus')}<span>Si no, se creará un circuito nuevo con ese nombre.</span></p>`;
-  if (v) return `<p class="circ-st new">${ico('plus')}<span>Circuito nuevo: se creará al guardar esta carrera y saldrá en las próximas pruebas.</span></p>`;
-  return `<p class="circ-st"><span>Circuitos ya creados, toca para elegir:</span></p>${chips(cat.slice(0, 8))}`;
+  const near = v ? cat.filter((c) => circuitMatches(c.name, v)) : [];
+  if (near.length) return `<p class="circ-st"><span>Ya creados por otros corredores, toca para elegir:</span></p>${chips(near.slice(0, 6))}${create(true)}`;
+  if (v) return `${cat.length ? `<p class="circ-st"><span>Ninguno de los ${cat.length} circuitos creados encaja.</span></p>` : ''}${create(false)}`;
+  return `<p class="circ-st"><span>Escribe las iniciales o el nombre: salen los circuitos ya creados. Si el tuyo no está, se crea con lo que escribas.</span></p>${chips(cat.slice(0, 8))}`;
 }
 const circuitList = () => `<datalist id="dl-circuit">${circuitNames().map((c) => `<option value="${esc(c)}">`).join('')}</datalist>`;
 /** Campos «Tipo de carrera» de los formularios. `attr` = data-f (dirección) o data-rf (corredor). */
 const typeFields = (d, attr, { compact = false } = {}) => `
     ${compact ? `<label class="flabel-l">Tipo de carrera<select ${attr}="race_type" data-retype>${RACE_TYPES.map((t) => `<option value="${t.id}"${(d.race_type || 'suelta') === t.id ? ' selected' : ''}>${esc(RACE_TYPE_SHORT[t.id] || t.label)}</option>`).join('')}</select></label>` : `<div class="disc-field"><span class="flabel">Tipo de carrera</span>${radioChips(attr, 'race_type', RACE_TYPES.map((t) => [t.id, esc(RACE_TYPE_SHORT[t.id] || t.label)]), d.race_type || 'suelta', { extra: ' data-retype' })}</div>`}
-    ${d.race_type === 'circuito' ? `<label>Nombre del circuito<input ${attr}="circuit" list="dl-circuit" value="${esc(d.circuit || '')}" placeholder="Copa Aragón XCM" maxlength="120" required autocomplete="off"></label>${circuitList()}<div class="circ-assist" data-circ-assist>${circuitAssist(d.circuit)}</div>
+    ${d.race_type === 'circuito' ? `${compact ? `<label>Circuito, copa u open<input ${attr}="circuit" value="${esc(d.circuit || '')}" placeholder="Escribe las iniciales o el nombre" maxlength="120" required autocomplete="off"></label><div class="circ-assist" data-circ-assist>${circuitAssist(d.circuit)}</div>` : `<label>Nombre del circuito<input ${attr}="circuit" list="dl-circuit" value="${esc(d.circuit || '')}" placeholder="Copa Aragón XCM" maxlength="120" required autocomplete="off"></label>${circuitList()}<div class="circ-assist" data-circ-assist>${circuitAssist(d.circuit)}</div>`}
       <p class="hint">Escríbelo igual en todas sus pruebas. El podio en la <b>general final</b> de la liga da el <b>plus de bonificación</b> (carreras extra para la bonificación, no para el mínimo).</p>` : ''}
     ${d.race_type === 'campeonato' ? '<p class="hint">Los podios de esta carrera se guardarán como podios de campeonato.</p>' : ''}`;
 const scopeLabel = (id) => (CIRCUIT_SCOPES.find((x) => x.id === id) || CIRCUIT_SCOPES[0]).label.toLowerCase();
