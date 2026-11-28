@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError, cleanWeb } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, disciplineKey, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   teamMoves, parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  preLight, postLight, lightRank, directorBoard, defaultStages, cleanStages, stageTotals, seasonRaces, mediaStats, MEDIA_KINDS, raceImpact, alDia, tierRanges, nextTeamRace, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, projectLeagueRaces, WATCH_TBC, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, igHeadline, importantOf, IMPORTANT_KINDS, generalOf, uspacShift, USPAC_GROUPS, USPAC_NAMES, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
+  isLapRace, circuitTotals, preLight, postLight, lightRank, directorBoard, defaultStages, cleanStages, stageTotals, seasonRaces, mediaStats, MEDIA_KINDS, raceImpact, alDia, tierRanges, nextTeamRace, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, projectLeagueRaces, WATCH_TBC, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, igHeadline, importantOf, IMPORTANT_KINDS, generalOf, uspacShift, USPAC_GROUPS, USPAC_NAMES, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -175,10 +175,23 @@ const racePreview = (d) => [
 const rfPreview = (d, editing) => [
   d.name,
   [d.date ? formatDate(d.date) : '', d.place || d.province].filter(Boolean).join(' · '),
-  [d.modality, d.subtype, d.km ? kmText(d.km) : '', d.elevation ? elevText(d.elevation) : ''].filter(Boolean).join(' · '),
+  [d.modality, d.subtype, d.km ? kmText(d.km) : '', d.elevation ? elevText(d.elevation) : '', isLapRace(d.subtype) && d.laps ? `${d.laps} vueltas` : ''].filter(Boolean).join(' · '),
   [d.price !== '' && d.price != null ? (Number(d.price) === 0 ? 'Gratis' : `${d.price} €`) : '', d.url ? 'con web' : ''].filter(Boolean).join(' · '),
   editing ? (d.notes ? 'con notas' : '') : [d.category, d.paid ? 'pagada' : ''].filter(Boolean).join(' · '),
 ];
+/** Texto del total de una carrera de circuito cerrado (vuelta × vueltas). */
+const lapTotalText = (d) => {
+  const t = circuitTotals(d.lap_km, d.lap_elev, d.laps), parts = (km, el) => [km ? kmText(km) : '', el ? elevText(el) : ''].filter(Boolean).join(' · ');
+  if (t.laps && (t.km || t.elevation)) return `Total de la carrera: ${parts(t.km, t.elevation)}`;
+  const cur = parts(parseKm(d.km), parseElev(d.elevation));
+  return cur ? `Total guardado: ${cur}. Pon las vueltas para recalcularlo.` : 'El total (km y desnivel) se calcula solo: vuelta × vueltas. Si no sabes las vueltas, pon 1 vuelta con la distancia total.';
+};
+/** XCO y Critérium se corren dando vueltas a un circuito cerrado: se pide una vuelta y cuántas vueltas son, y el total sale solo. */
+const lapBlock = (d) => `<div class="lap-box"><p class="lap-h">${ico('refresh')}Circuito cerrado: se corre a vueltas</p>
+  <div class="grid2 top-align"><label class="flabel-l">Km del circuito<input type="text" inputmode="decimal" data-rf="lap_km" value="${esc(d.lap_km ?? '')}" maxlength="6" placeholder="10" autocomplete="off"></label>
+    <label class="flabel-l">Desnivel (m)<input type="text" inputmode="numeric" data-rf="lap_elev" value="${esc(d.lap_elev ?? '')}" maxlength="5" placeholder="50" autocomplete="off"></label></div>
+  <label class="flabel-l">Vueltas al circuito<input type="text" inputmode="numeric" data-rf="laps" value="${esc(d.laps ?? '')}" maxlength="3" placeholder="8" autocomplete="off"></label>
+  <p class="lap-total" id="lap-total">${esc(lapTotalText(d))}</p></div>`;
 /** Qué le falta al formulario de carrera: una marca por sección (✓ completa, «Falta» obligatoria sin rellenar, vacía = opcional). */
 const formMarks = (d, editing) => {
   const nameOk = cleanName(d.name).length >= 3, dateOk = !!d.date && (!d.multi || !!d.end_date), typeOk = !SUBTYPES[d.modality] || !!d.subtype, catOk = editing || !!d.category;
@@ -1141,7 +1154,7 @@ const isPastReg = (id) => { const g = S.runnerData?.registrations.find((x) => x.
 /** Pantalla para poner el resultado: de una inscripción (reg_) o de una carrera ya en resultados (race_). */
 const resultHref = (id) => (S.runnerData?.registrations.some((g) => g.id === id) ? `#/resultado/reg_${id}` : `#/resultado/race_${id}`);
 const emptyRunnerDraft = (pre = {}) => ({ name: '', date: '', multi: false, end_date: '', place: '', province: '', country: DEFAULT_COUNTRY,
-  modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', category: '', url: '', elevation: '', price: '', paid: false, paid_on: '', paid_amount: '', pair: false, partner: '', partner_id: '', ...pre });
+  modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', category: '', url: '', elevation: '', price: '', paid: false, paid_on: '', paid_amount: '', lap_km: '', lap_elev: '', laps: '', pair: false, partner: '', partner_id: '', ...pre });
 
 /** «Gral. 12º»: el puesto en la clasificación general (todas las categorías), si se conoce. */
 const genTag = (g) => (g ? `<small class="gen-tag" title="Puesto en la general (todas las categorías)">Gral. ${g}º</small>` : '');
@@ -1205,8 +1218,8 @@ function viewRunnerNew() {
           ${editing ? `<label class="flabel-l">País<input data-rf="country" list="dl-country" value="${esc(d.country || '')}" maxlength="60"></label>` : '<span></span>'}</div>`, '#0f9d8a', false, mk[1])}
       ${fsecD('rf3', 3, 'bars', 'Qué tipo de carrera es', pv[2], `<div class="grid2 top-align"><label class="flabel-l">Modalidad<select data-rf="modality">${MODALITIES.map((m) => `<option value="${esc(m)}"${m === d.modality ? ' selected' : ''}>${MOD_ICON[m] || '🏁'} ${esc(m)}</option>`).join('')}</select></label>
           ${SUBTYPES[d.modality] ? `<label class="flabel-l">Disciplina *<select data-rf="subtype" required><option value="">Elige…</option>${SUBTYPES[d.modality].map((x) => `<option value="${esc(x)}"${x === d.subtype ? ' selected' : ''}>${esc(x)}</option>`).join('')}</select></label>` : '<span></span>'}</div>
-        <div class="grid2 top-align"><label class="flabel-l">Distancia (km)<input type="number" inputmode="decimal" step="0.1" min="0.1" max="1000" data-rf="km" value="${esc(d.km ?? '')}" placeholder="85"></label>
-          <label class="flabel-l">Desnivel (m)<input type="text" inputmode="numeric" data-rf="elevation" value="${esc(d.elevation ?? '')}" maxlength="6" placeholder="1200" autocomplete="off"></label></div>
+        ${isLapRace(d.subtype) ? lapBlock(d) : `<div class="grid2 top-align"><label class="flabel-l">Distancia (km)<input type="number" inputmode="decimal" step="0.1" min="0.1" max="1000" data-rf="km" value="${esc(d.km ?? '')}" placeholder="85"></label>
+          <label class="flabel-l">Desnivel (m)<input type="text" inputmode="numeric" data-rf="elevation" value="${esc(d.elevation ?? '')}" maxlength="6" placeholder="1200" autocomplete="off"></label></div>`}
         ${S.runnerData.circuits ? typeFields(d, 'data-rf', { compact: true }) : ''}
         ${editing ? '' : `<label class="check"><input type="checkbox" data-rf-pair ${d.pair ? 'checked' : ''}> La hago por parejas</label>
           ${d.pair ? `${(S.team?.runners || []).filter((r) => r.id !== S.runnerData?.me?.id).length ? `<label class="flabel-l">Tu compañero o compañera<select data-rf="partner_id"><option value="">Otra persona (no es del club)</option>${(S.team.runners || []).filter((r) => r.id !== S.runnerData?.me?.id).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')).map((r) => `<option value="${esc(r.id)}"${r.id === d.partner_id ? ' selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>` : ''}
@@ -6825,6 +6838,13 @@ const forms = {
       const rawAmt = String(d.paid_amount ?? '').trim().replace(',', '.');
       if (rawAmt !== '' && !(Number(rawAmt) >= 0 && Number(rawAmt) <= 10000)) return toast('Lo que has pagado tiene que ser un número entre 0 y 10 000 euros.', true);
     }
+    if (isLapRace(d.subtype) && [d.lap_km, d.lap_elev, d.laps].some((v) => String(v ?? '').trim() !== '')) {   // circuito cerrado: vueltas obligatorias si se ha empezado a rellenar
+      const tt = circuitTotals(d.lap_km, d.lap_elev, d.laps);
+      if (!tt.laps) return toast('Pon cuántas vueltas son (un número entero).', true);
+      if (String(d.lap_km ?? '').trim() !== '' && !tt.km) return toast('Revisa los km del circuito: el total no puede pasar de 1000 km.', true);
+      if (String(d.lap_elev ?? '').trim() !== '' && !tt.elevation) return toast('Revisa el desnivel del circuito: el total no puede pasar de 10 000 m.', true);
+      d.km = tt.km ?? d.km; d.elevation = tt.elevation ?? d.elevation;
+    }
     if (d.date < pastLimit()) return toast('Esa fecha es demasiado antigua: solo se pueden añadir carreras desde el 1 de enero del año pasado.', true);
     if (d.multi && d.end_date < d.date) return toast('El último día no puede ser anterior al primero.', true);
     if (d.race_type === 'circuito' && !cleanName(d.circuit)) return toast('Falta el nombre del circuito.', true);
@@ -7134,6 +7154,11 @@ $app.addEventListener('input', (ev) => {
       if (g) { S.rdraft.subtype = g; const sel = [...$app.querySelectorAll('input[data-rf="subtype"]')].find((x) => x.value === g); if (sel) sel.checked = true; }
     }
     if (t.dataset.rf === 'name') updateSearch('rname');
+    if (t.dataset.rf === 'lap_km' || t.dataset.rf === 'lap_elev' || t.dataset.rf === 'laps') {   // circuito cerrado: el total sale de vuelta × vueltas
+      const r = S.rdraft, tt = circuitTotals(r.lap_km, r.lap_elev, r.laps);
+      if (tt.laps) { r.km = tt.km ?? ''; r.elevation = tt.elevation ?? ''; }
+      const box = $app.querySelector('#lap-total'); if (box) box.textContent = lapTotalText(r);
+    }
     refreshRaceForm();
     return;
   }
@@ -7184,6 +7209,7 @@ $app.addEventListener('change', async (ev) => {
   if (t.dataset.f === 'modality' && S.draft) { // cambia la modalidad: el formato depende de ella
     S.draft.modality = t.value; if (!SUBTYPES[t.value]?.includes(S.draft.subtype)) S.draft.subtype = guessSubtype(S.draft.name, t.value); render(); return;
   }
+  if (t.dataset.rf === 'subtype' && S.rdraft) { S.rdraft.subtype = t.value; render(); return; }   // XCO y Critérium abren los datos del circuito
   if (t.dataset.rf === 'modality' && S.rdraft) {
     S.rdraft.modality = t.value; if (!SUBTYPES[t.value]?.includes(S.rdraft.subtype)) S.rdraft.subtype = guessSubtype(S.rdraft.name, t.value); render(); return;
   }

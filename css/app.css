@@ -3296,3 +3296,8 @@ button.stg-pair { cursor: pointer; } .stg-pair .ico { width: 16px; height: 16px;
 .team-act .ta-rest { margin-bottom: .2rem; }
 .next-team[data-id] { cursor: pointer; }
 a.nt-btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+
+/* Circuito cerrado (XCO, Critérium): vuelta × vueltas */
+.lap-box { display: grid; gap: .5rem; padding: .6rem .65rem; border-radius: 12px; background: color-mix(in srgb, var(--sec, #0a7fa6) 7%, var(--card)); border: 1px dashed color-mix(in srgb, var(--sec, #0a7fa6) 40%, var(--line)); }
+.lap-h { display: flex; align-items: center; gap: .4rem; margin: 0; font-weight: 800; font-size: var(--fs-3); } .lap-h .ico { width: 16px; height: 16px; color: var(--sec); }
+.lap-total { margin: 0; font-size: var(--fs-2); color: var(--muted); } .lap-total:not(:empty) { font-weight: 600; }
