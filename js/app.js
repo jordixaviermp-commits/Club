@@ -1371,7 +1371,7 @@ function nextHero(g, { dleft, myCat, due }) {
   const days = g.end_date && g.end_date > g.date ? numDays(g.date, g.end_date) : 0;
   return `<div class="nx-hero${soon ? ' soon' : ''}"><a class="nx-main" href="${runnerHref('carrera')}/${g.id}">
       <span class="nx-date"><b>${day}</b><small>${esc(mon)}</small></span>
-      <span class="nx-txt"><small class="nx-k">🏁 Tu próxima carrera <em>${esc(left)}</em></small><b class="nx-n">${esc(g.name)}</b>
+      <span class="nx-txt"><small class="nx-k">🏁 Próxima carrera <em>${esc(left)}</em></small><b class="nx-n">${esc(g.name)}</b>
         <small class="nx-p">${esc(where)}${days ? ` · ${days} días` : ''}</small>${what ? `<small class="nx-p">${esc(what)}${cat ? ` · ${esc(cat)}` : ''}</small>` : ''}</span>${ico('go', 'nx-go')}</a>
     <div class="nx-chips"><span class="nx-chip">${ico('users')}${mates ? `Con ${mates} del club` : 'Solo tú del club'}</span>
       ${e ? (e.paid ? `<span class="nx-chip ok">${ico('euro')}Pagada</span>` : S.preview ? `<span class="nx-chip todo">${ico('euro')}Sin pagar</span>` : `<button type="button" class="nx-chip todo${due ? ' due' : ''}" data-act="r-paid" data-id="${g.id}">${ico('euro')}${due ? 'Marcar pago' : 'Sin pagar'}</button>`) : ''}</div></div>`;
