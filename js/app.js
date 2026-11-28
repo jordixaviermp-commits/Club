@@ -1671,7 +1671,7 @@ function afterRaceModel(d, { pending, noPos, sent, today, ad, results, upcoming,
   const rowHtml = (r, view = 'todo') => {
     const when = view === 'todo' ? whenTxt(r) : '', urgent = r.pay && r.payIn <= 1, lt = view === 'todo' ? rowLight(r) : 'none';
     const leave = r.res === 'pend' && r.leave && !S.preview ? `<button type="button" class="mt-leave" data-act="r-leave" data-id="${r.leave}">No fui</button>` : '';
-    return `<li class="mt-row lt-${lt}"><div class="mt-rt"><a class="mt-name" href="${runnerHref('carrera')}/${r.kind === 'race' ? 'race_' + r.id : r.id}" aria-label="Abrir la carrera ${esc(r.name)}">${esc(r.name)}</a>${when ? `<small class="mt-when${urgent ? ' urg' : ''}">${when}</small>` : ''}</div>
+    return `<li class="mt-row lt-${lt}"><div class="mt-rt"><a class="mt-name" href="${runnerHref('carrera')}/${r.kind === 'race' ? 'race_' + r.id : r.id}" aria-label="Abrir la carrera ${esc(r.name)}">${esc(r.name)}</a>${when ? `<small class="mt-when${urgent ? ' urg' : ''}">${when}</small>` : ''}<span class="mt-go" aria-hidden="true">${ico('go')}</span></div>
       <div class="mt-sub"><span>${esc(formatDate(r.date, false))}${r.place ? ' · ' + esc(r.place) : ''}</span>${leave}</div>
       <div class="mt-chips">${r.res === 'none' ? '' : resTask(r)}${cronTask(r)}${r.pay ? payTask(r) : ''}${r.miss ? datosTask(r) : ''}</div>${r.pay ? '' : pubsLine(r, view === 'hechas')}</li>`;
   };

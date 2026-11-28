@@ -3208,3 +3208,12 @@ button.stg-pair { cursor: pointer; } .stg-pair .ico { width: 16px; height: 16px;
 .mt2 .nm-t small { color: var(--muted); font-size: var(--fs-2); line-height: 1.2; }
 .mt2 .nm-mods { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .mt2 .nm-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; background: var(--mt-blue-bg); color: var(--text); font-size: var(--fs-2); font-weight: 600; } .mt2 .nm-chip b { color: var(--mt-blue); }
+
+/* Mi temporada: toda la tarjeta de Pendiente y Hechas abre la carrera (los botones de dentro siguen funcionando) */
+.mt2 li.mt-row { position: relative; cursor: pointer; }
+.mt2 li.mt-row .mt-name::after { content: ''; position: absolute; inset: 0; z-index: 0; border-radius: inherit; }
+.mt2 li.mt-row .mt-chips, .mt2 li.mt-row .mt-leave, .mt2 li.mt-row .ar-pubs, .mt2 li.mt-row .mt-sub > * { position: relative; z-index: 1; }
+.mt2 li.mt-row .mt-rt { display: flex; align-items: center; gap: 8px; }
+.mt2 li.mt-row .mt-rt .mt-name { flex: 1; min-width: 0; }
+.mt2 li.mt-row .mt-go { flex: none; display: grid; place-items: center; width: 22px; height: 22px; color: var(--muted); } .mt2 li.mt-row .mt-go .ico { width: 18px; height: 18px; }
+.mt2 li.mt-row:active { background: color-mix(in srgb, var(--kpi) 10%, var(--mt-soft)); }
