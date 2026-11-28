@@ -165,11 +165,14 @@ const typeTag = (x) => {
 /** Sección plegable de un formulario: título con su resumen a la derecha; se abre al tocar (y recuerda si estaba abierta). */
 const fsecD = (key, n, icon, title, preview, body, color, openDefault = false, mark = null) => `<details class="fsec fsec-d" style="--sc:${color}" data-open-key="${key}"${(S.open?.[key] ?? openDefault) ? ' open' : ''}><summary class="fsec-h"><span class="fsec-n">${n}</span>${ico(icon)}<span class="fsec-tx"><span class="fsec-t">${title}</span><span class="fsec-p">${preview ? esc(preview) : ''}</span></span>${mark !== null ? `<span class="fsec-mk ${mark}" data-mk>${mark === 'ok' ? '✓' : mark === 'todo' ? 'Falta' : ''}</span>` : ''}${ico('chevd', 'fsec-chev')}</summary><div class="fsec-b">${body}</div></details>`;
 /** Resumen de una línea de cada sección del formulario de carrera (lo que se ve con la sección plegada). */
-const racePreview = (d) => [
+const priceText = (d) => (d.price !== '' && d.price != null ? (Number(d.price) === 0 ? 'Gratis' : `${d.price} €`) : '');
+/** Resumen de una línea de cada sección. Al AÑADIR una carrera (`creating`) el precio va con la inscripción, abajo, en «Tú»: no se pide dos veces. */
+const racePreview = (d, creating = false) => [
   d.name,
   [d.date ? formatDate(d.date) : '', d.place || d.province].filter(Boolean).join(' · '),
   [d.modality, d.subtype, d.km ? kmText(d.km) : ''].filter(Boolean).join(' · '),
-  [d.elevation ? elevText(d.elevation) : '', d.price !== '' && d.price != null ? (Number(d.price) === 0 ? 'Gratis' : `${d.price} €`) : '', d.url ? 'con web' : ''].filter(Boolean).join(' · '),
+  [d.elevation ? elevText(d.elevation) : '', creating ? '' : priceText(d), d.url ? 'con web' : ''].filter(Boolean).join(' · '),
+  [d.category, priceText(d)].filter(Boolean).join(' · '),
 ];
 /** Qué le falta al formulario de carrera: una marca por sección (✓ completa, «Falta» obligatoria sin rellenar, vacía = opcional). */
 const formMarks = (d, editing) => {
@@ -180,11 +183,11 @@ const formMissing = (d, editing) => { const m = formMarks(d, editing), L = ['el 
 /** Pone al día las marcas y los resúmenes del formulario de carrera mientras se escribe. */
 function refreshRaceForm() {
   const d = S.rdraft; if (!d || !$app.querySelector('.rform')) return;
-  const mk = formMarks(d, !!d.id), pv = racePreview(d);
+  const mk = formMarks(d, !!d.id), pv = racePreview(d, !d.id);
   for (let i = 1; i <= 5; i++) {
     const sec = $app.querySelector(`[data-open-key="rf${i}"]`); if (!sec) continue;
     const m = sec.querySelector('[data-mk]'); if (m) { m.className = `fsec-mk ${mk[i - 1] || ''}`; m.textContent = mk[i - 1] === 'ok' ? '✓' : mk[i - 1] === 'todo' ? 'Falta' : ''; }
-    const pe = sec.querySelector('.fsec-p'); if (pe && i <= 4) pe.textContent = pv[i - 1] || '';
+    const pe = sec.querySelector('.fsec-p'); if (pe && (i <= 4 || !d.id)) pe.textContent = pv[i - 1] || '';
   }
 }
 const fsec = (n, icon, title, body, color = '#1f6fd1') => `<section class="fsec" style="--sc:${color}"><h3 class="fsec-h"><span class="fsec-n">${n}</span>${ico(icon)}<span>${title}</span></h3><div class="fsec-b">${body}</div></section>`;
@@ -1179,7 +1182,7 @@ function viewRunnerNew() {
   const editing = !!d.id, isRace = d.kind === 'race';
   const reg = editing && !isRace ? S.runnerData.registrations.find((x) => x.id === d.id) : null;
   const mineCreated = editing && (isRace ? !!(S.runnerData.my_results || []).find((x) => x.race_id === d.id)?.mine_created : !!reg?.mine_created);
-  const pv = racePreview(d), mk = formMarks(d, editing);
+  const pv = racePreview(d, !editing), mk = formMarks(d, editing);
   const others = isRace ? d.others || 0 : reg ? reg.entries.filter((e) => e.runner_id !== S.runnerData.me.id).length : 0;
   if (!S.fed && !editing) loadFed().then(() => updateSearch('rname'));
   return frame(editing ? 'Editar mi carrera' : 'Añadir carrera', `<div class="ds2">
@@ -1198,16 +1201,17 @@ function viewRunnerNew() {
       ${fsecD('rf3', 3, 'bars', 'Qué tipo de carrera es', pv[2], `<div class="disc-field"><span class="flabel">Modalidad</span>${modalityChips(d, 'data-rf')}</div>
         ${detailInputs(d, 'data-rf')}
         ${S.runnerData.circuits ? typeFields(d, 'data-rf') : ''}`, '#e07800', false, mk[2])}
-      ${fsecD('rf4', 4, 'mountain', 'Más datos', pv[3], `<div class="grid2"><label class="flabel-l">Desnivel positivo (m)<input type="text" inputmode="numeric" data-rf="elevation" value="${esc(d.elevation ?? '')}" maxlength="6" placeholder="1200" autocomplete="off"></label>
-        <label class="flabel-l">Precio inscripción (€)<input type="text" inputmode="decimal" data-rf="price" value="${esc(d.price ?? '')}" maxlength="8" placeholder="25" autocomplete="off"></label></div>
+      ${fsecD('rf4', 4, 'mountain', 'Más datos', pv[3], `<div class="${editing ? 'grid2' : ''}"><label class="flabel-l">Desnivel positivo (m)<input type="text" inputmode="numeric" data-rf="elevation" value="${esc(d.elevation ?? '')}" maxlength="6" placeholder="1200" autocomplete="off"></label>
+        ${editing ? `<label class="flabel-l">Precio inscripción (€)<input type="text" inputmode="decimal" data-rf="price" value="${esc(d.price ?? '')}" maxlength="8" placeholder="25" autocomplete="off"></label>` : ''}</div>
         ${isRace ? '' : `<label class="flabel-l">Web de la carrera<input type="text" inputmode="url" data-rf="url" value="${esc(d.url || '')}" maxlength="500" placeholder="https://…" autocomplete="off"></label>`}
-        <p class="hint">Los ven todos los corredores y salen en las estadísticas del club (metros de subida, coste de competir…). Pon todo lo que sepas: ayudas a todo el club. Si no sabes alguno, déjalo vacío y cualquier compañero podrá completarlo después. Para el precio, 0 = gratis.</p>`, '#2f6fd6')}
-      ${fsecD('rf5', 5, 'users', editing ? 'Notas' : 'Tú', editing ? (d.notes ? 'con notas' : '') : d.category, editing ? `<label class="flabel-l">Notas<textarea data-rf="notes" rows="2" maxlength="500">${esc(d.notes || '')}</textarea></label>`
+        <p class="hint">Los ven todos los corredores y salen en las estadísticas del club (metros de subida, coste de competir…). Pon todo lo que sepas: ayudas a todo el club. Si no sabes alguno, déjalo vacío y cualquier compañero podrá completarlo después.${editing ? ' Para el precio, 0 = gratis.' : ''}</p>`, '#2f6fd6')}
+      ${fsecD('rf5', 5, 'users', editing ? 'Notas' : 'Tu inscripción', editing ? (d.notes ? 'con notas' : '') : pv[4], editing ? `<label class="flabel-l">Notas<textarea data-rf="notes" rows="2" maxlength="500">${esc(d.notes || '')}</textarea></label>`
         : `<label class="flabel-l">Tu categoría${catSelect('data-rf="category" required', d.category, 'Elige tu categoría')}</label>
-          <label class="check"><input type="checkbox" data-rf-paid ${d.paid ? 'checked' : ''}> Ya la he pagado</label>
-          ${d.paid ? `<div class="grid2 paid-fields"><label class="flabel-l">Día del pago<input type="date" data-rf="paid_on" value="${esc(d.paid_on || todayISO())}" max="${todayISO()}"></label>
-            <label class="flabel-l">Importe pagado (€)<input type="text" inputmode="decimal" data-rf="paid_amount" value="${esc(d.paid_amount ?? '')}" maxlength="8" placeholder="${esc(String(d.price || '25'))}" autocomplete="off"></label></div>
-            <p class="hint">El día y el importe solo los ves tú; tus compañeros solo ven que está pagada.</p>` : ''}
+          <label class="flabel-l">Precio de la inscripción (€)<input type="text" inputmode="decimal" data-rf="price" value="${esc(d.price ?? '')}" maxlength="8" placeholder="25" autocomplete="off"></label>
+          <p class="hint">Lo ven todos los corredores: así saben lo que cuesta apuntarse. 0 = gratis. Si no lo sabes, déjalo vacío y cualquier compañero podrá completarlo.</p>
+          <label class="check"><input type="checkbox" data-rf-paid ${d.paid ? 'checked' : ''}> Ya la he pagado${parsePrice(d.price) ? ` (${esc(String(d.price))} €)` : ''}</label>
+          ${d.paid ? `<label class="flabel-l">Día del pago<input type="date" data-rf="paid_on" value="${esc(d.paid_on || todayISO())}" max="${todayISO()}"></label>
+            <p class="hint">El día solo lo ves tú; tus compañeros solo ven que está pagada y lo que cuesta.</p>` : ''}
           <label class="check"><input type="checkbox" data-rf-pair ${d.pair ? 'checked' : ''}> La hago por parejas</label>
           ${d.pair ? `${(S.team?.runners || []).filter((r) => r.id !== S.runnerData?.me?.id).length ? `<label class="flabel-l">Tu compañero o compañera<select data-rf="partner_id"><option value="">Otra persona (no es del club)</option>${(S.team.runners || []).filter((r) => r.id !== S.runnerData?.me?.id).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')).map((r) => `<option value="${esc(r.id)}"${r.id === d.partner_id ? ' selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>` : ''}
             ${d.partner_id ? '' : `<label class="flabel-l">Nombre del compañero<input data-rf="partner" value="${esc(d.partner || '')}" maxlength="60" placeholder="Nombre (aunque no sea del club)" autocomplete="off"></label>`}` : ''}`, '#8e44ad', false, mk[4])}
@@ -6813,8 +6817,6 @@ const forms = {
     }
     if (!d.id && d.paid) {
       if (!d.paid_on || d.paid_on > todayISO()) return toast('El día del pago no puede ser posterior a hoy.', true);
-      const rawAmt = String(d.paid_amount ?? '').trim().replace(',', '.');
-      if (rawAmt !== '' && !(Number(rawAmt) >= 0 && Number(rawAmt) <= 10000)) return toast('El importe pagado tiene que ser un número entre 0 y 10 000 euros.', true);
     }
     if (d.date < pastLimit()) return toast('Esa fecha es demasiado antigua: solo se pueden añadir carreras desde el 1 de enero del año pasado.', true);
     if (d.multi && d.end_date < d.date) return toast('El último día no puede ser anterior al primero.', true);
@@ -6869,7 +6871,7 @@ const forms = {
       await loadRunner(); return newId || true;
     }, past ? 'Carrera añadida: ahora pon tu resultado' : 'Carrera añadida y te has apuntado');
     if (id && typeof id === 'string') {   // lo que se marcó en «Tú»: pagada y por parejas
-      if (d.paid) { const raw = String(d.paid_amount ?? '').trim().replace(',', '.'); await api.runnerSetPaid(S.code, id, true, raw === '' ? null : Math.round(Number(raw) * 100) / 100, d.paid_on || todayISO()).catch((e) => toast(friendlyError(e), true)); }
+      if (d.paid) await api.runnerSetPaid(S.code, id, true, parsePrice(d.price) ?? null, d.paid_on || todayISO()).catch((e) => toast(friendlyError(e), true));   // el importe es el precio de la inscripción
       if (d.pair && (d.partner_id || String(d.partner || '').trim())) await api.runnerSetPair(S.code, 'reg', id, d.partner_id ? '' : String(d.partner).trim(), d.partner_id || null).catch((e) => toast(friendlyError(e), true));
       await loadRunner(); await loadStageResults().catch(() => {});
       if (d.multi) {   // carrera de varios días: se ofrecen ya las etapas (una por día, para completar)
@@ -7183,7 +7185,7 @@ $app.addEventListener('change', async (ev) => {
     if (d) { d.race_type = t.value; render(); $app.querySelector('[list="dl-circuit"]')?.focus(); }
     return;
   }
-  if ('rfPaid' in t.dataset && S.rdraft) { const r = S.rdraft; r.paid = t.checked; if (t.checked) { r.paid_on = r.paid_on || todayISO(); if (r.paid_amount === '' || r.paid_amount == null) r.paid_amount = parsePrice(r.price) ? String(r.price) : ''; } render(); return; }
+  if ('rfPaid' in t.dataset && S.rdraft) { const r = S.rdraft; r.paid = t.checked; if (t.checked) r.paid_on = r.paid_on || todayISO(); render(); return; }
   if ('rfPair' in t.dataset && S.rdraft) { S.rdraft.pair = t.checked; if (t.checked && !S.team) await ensureTeamQuiet(); render(); return; }
   if (t.dataset.rf === 'partner_id' && S.rdraft) { S.rdraft.partner_id = t.value; if (t.value) S.rdraft.partner = ''; render(); return; }
   if ('rfMulti' in t.dataset && S.rdraft) {
@@ -7297,8 +7299,8 @@ $app.addEventListener('toggle', (ev) => {
   const k = ev.target.dataset?.toggleKey; if (k) S[k] = ev.target.open;
   const o = ev.target.dataset?.openKey; if (o) (S.open ||= {})[o] = ev.target.open;
   if (ev.target.classList?.contains('fsec-d') && /^(rf|af)\d$/.test(o || '')) {   // al plegar una sección de carrera, los resúmenes se ponen al día con lo escrito
-    const dr = o.startsWith('rf') ? S.rdraft : S.draft, pv = dr && racePreview(dr);
-    if (pv) pv.forEach((t, i) => { const el = ev.target.parentElement.querySelector(`[data-open-key="${o.slice(0, 2)}${i + 1}"] .fsec-p`); if (el) el.textContent = t; });
+    const dr = o.startsWith('rf') ? S.rdraft : S.draft, pv = dr && racePreview(dr, o.startsWith('rf') && !dr.id);
+    if (pv) pv.slice(0, o.startsWith('rf') && !dr.id ? 5 : 4).forEach((t, i) => { const el = ev.target.parentElement.querySelector(`[data-open-key="${o.slice(0, 2)}${i + 1}"] .fsec-p`); if (el) el.textContent = t; });
   }
 }, true);
 // ---------- Textos explicativos plegados ----------
