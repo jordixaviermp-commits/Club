@@ -1693,7 +1693,7 @@ function afterRaceCard(m) {
   const { tasksN, rowHtml } = m;
   const todo = m.todo.filter((r) => !(r.pay && r.id === m.heroId));   // el pago de la próxima carrera ya está en su tarjeta de arriba
   const heroOnly = m.todo.length > 0 && todo.length === 0;
-  return `<section class="card ar-card ${m.urgentN ? 'st-red' : tasksN ? 'st-todo' : 'st-ok'}" id="sec-after"><details class="chro-det" data-open-key="after"${(S.open?.after ?? todo.length > 0) ? ' open' : ''}>
+  return `<section class="card ar-card ${m.urgentN ? 'st-red' : tasksN ? 'st-todo' : 'st-ok'}" id="sec-after"><details class="chro-det" data-open-key="after"${(S.open?.after ?? true) ? ' open' : ''}>
     <summary class="mt-h"><h2>Por hacer</h2><span class="mt-cnt ${tasksN ? 'todo' : 'ok'}">${tasksN || 'Al día'}</span>${m.peek && tasksN ? `<small class="mt-hs peek">${esc(m.peek.replace(/<[^>]+>/g, ''))}</small>` : ''}<button type="button" class="mt-info" data-act="mt-info" data-k="todo" aria-label="Cómo funciona «Por hacer»" title="Cómo funciona">${ico('info')}</button>${ico('chevd', 'mt-chev')}</summary>
     ${todo.length ? `<ul class="mt-list">${todo.map((r) => rowHtml(r, 'todo')).join('')}</ul>` : heroOnly ? '<p class="empty small">Solo falta marcar el pago de tu próxima carrera: lo tienes arriba, en su tarjeta.</p>' : '<p class="empty small">No te falta nada. 🎉</p>'}
   </details></section>`;
