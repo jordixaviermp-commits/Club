@@ -2120,22 +2120,18 @@ function teamPulse(d) {
 const rutaCard = () => `<a class="card ruta-card" href="ruta/">${ico('route', 'ruta-ic')}<span class="ruta-txt"><b>Planificar ruta <span class="new-tag">NUEVO</span></b><small class="muted">Sube tu track y mira viento, tiempo y subidas</small></span><span class="mrow-go" aria-hidden="true">${ico('go')}</span></a>`;
 
 /** La próxima carrera del equipo, bien resaltada: que se vea la semana en la que compite el club aunque quien mira no participe. */
-/** Las próximas carreras, por semanas: las de la primera semana (lunes a domingo) en la que hay carreras por delante, o la semana en curso si hay alguna que ya empezó. */
+/** Las próximas carreras de la tarjeta de arriba: todas las que caen en los 7 días siguientes (contando desde hoy, o desde la primera carrera si hasta entonces no hay ninguna), incluidas las que ya han empezado. No se corta por semanas de calendario: una carrera a 3 días sale aunque sea de la semana que viene. */
 function proxWeek(list, today) {
   const addDay = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
-  const mondayOf = (iso) => addDay(iso, -((new Date(iso + 'T12:00:00Z').getUTCDay() + 6) % 7));
   const last = (g) => g.end_date || g.date;
   const all = list.filter((g) => !g.suspended && last(g) >= today).sort((a, b) => a.date.localeCompare(b.date) || String(a.name).localeCompare(String(b.name), 'es'));
-  if (!all.length) return { races: [], label: '' };
-  const mon = mondayOf(all[0].date < today ? today : all[0].date), sun = addDay(mon, 6), thisMon = mondayOf(today);
-  // lo que cae en los próximos 2 días (semáforo rojo) se ve siempre, aunque ya sea de la semana siguiente
-  const races = all.filter((g) => g.date <= sun || (g.date >= today && daysTo(g.date) <= 2)), spill = races.some((g) => g.date > sun);
-  const label = spill ? 'próximos días' : mon === thisMon ? 'esta semana' : mon === addDay(thisMon, 7) ? 'la próxima semana' : `semana del ${mon.slice(5, 7) === sun.slice(5, 7) ? Number(mon.slice(8)) : dayMon(mon)} al ${dayMon(sun)}`;
-  return { races, label };
+  if (!all.length) return { races: [] };
+  const from = all[0].date <= addDay(today, 7) ? today : all[0].date, to = addDay(from, 7);
+  return { races: all.filter((g) => g.date <= to) };
 }
 /** Tarjeta de arriba de Carreras: «Próximas carreras» de esa semana, apiladas si hay varias (se desliza la de arriba; tocar una abre su ficha). */
 function nextRacesBanner(d, list) {
-  const today = d.today || todayISO(), { races: week, label } = proxWeek(list, today);
+  const today = d.today || todayISO(), { races: week } = proxWeek(list, today);
   if (!week.length) return '';
   const card = (g) => {
     const n = daysTo(g.date), going = (g.entries || []).some((e) => e.runner_id === d.me.id), live = g.date <= today;
