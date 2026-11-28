@@ -317,6 +317,7 @@ async function reload() {
   if (S.stories === undefined && S.session?.isAdmin) loadStories();
   try { await api.autoPromote(); } catch { /* aún falta su SQL */ } // pasa solas a resultados las carreras ya disputadas con puestos
   S.data = await api.loadAll();
+  try { S.stageAll = S.session?.isAdmin ? await api.adminStageData() : null; } catch { S.stageAll = null; }   // null = falta el SQL de resultados por etapa
   try { S.docs = await api.listDocuments(); } catch { S.docs = null; } // null = falta el SQL de contratos
   try { S.tpls = await api.listContractTemplates(); } catch { S.tpls = null; } // null = falta el SQL de contratos por tipo
 }
@@ -1750,17 +1751,35 @@ const runnerTitle = () => (S.session?.isAdmin && S.preview ? `Vista de ${S.previ
 
 /** Tarjeta de una carrera ya disputada (con resultados), para el calendario. */
 /** Etapas de una carrera de varios días: la lista (día, nombre, km y desnivel) y el botón para ponerlas. Cada etapa tendrá su historia el día que se corra. */
+/** Nombre del corredor para las listas de la dirección. */
+const runnerNameOf = (id) => S.data?.runners?.find((r) => r.id === id)?.name || 'Corredor';
+/** Texto corto de un resultado de etapa: «3º cat. · 11º gral. · 2:15:40». */
+const stageResText = (r) => [r.position ? `${r.position}º cat.` : '', r.general ? `${r.general}º gral.` : '', r.time ? formatTime(r.time) : ''].filter(Boolean).join(' · ');
+/** Por parejas: el corredor ve y cambia con quién hizo la carrera; la dirección ve la lista de parejas. Sirve para carreras de un día y de varios. */
+function pairBlock(g, kind, { admin = false, mine = false } = {}) {
+  const key = postKeyOf(g);
+  if (admin) {
+    const list = (S.stageAll?.pairs || []).filter((x) => x.race_key === key);
+    return list.length ? `<div class="stg-pairs">${list.map((x) => `<p class="stg-pair set">${ico('users')}<span><b>${esc(runnerNameOf(x.runner_id))}</b> · por parejas con <b>${esc(x.partner)}</b></span></p>`).join('')}</div>` : '';
+  }
+  if (!mine) return '';
+  const partner = S.myPairs?.get(key);
+  if (S.preview) return partner ? `<p class="stg-pair set">${ico('users')}<span>Por parejas · con <b>${esc(partner)}</b></span></p>` : '';
+  return `<button type="button" class="stg-pair${partner ? ' set' : ''}" data-act="pair-edit" data-kind="${kind}" data-id="${g.id}">${ico('users')}<span>${partner ? `Por parejas · con <b>${esc(partner)}</b>` : 'Individual · ¿por parejas?'}</span></button>`;
+}
+/** En las carreras de un solo día el botón de parejas va suelto (en las de varios días va dentro del bloque de etapas). */
+const soloPairs = (g, kind, o) => (g?.end_date && g.end_date > g.date ? '' : pairBlock(g, kind, o));
 function stagesBlock(g, kind = 'reg', { admin = false, mine = false } = {}) {
   if (!g?.end_date || g.end_date <= g.date) return '';
   const st = Array.isArray(g.stage_info) ? g.stage_info : [], tot = stageTotals(st), canEdit = admin || !S.preview;
   const dayName = (iso) => `${new Date(iso + 'T12:00:00Z').toLocaleDateString('es-ES', { weekday: 'short', timeZone: 'UTC' }).replace('.', '')} ${dayMon(iso)}`;
-  const today = todayISO(), canRes = mine && !admin && !S.preview, partner = mine ? S.myPairs?.get(postKeyOf(g)) : null;
-  const pairLine = mine && !admin ? (canRes ? `<button type="button" class="stg-pair${partner ? ' set' : ''}" data-act="pair-edit" data-kind="${kind}" data-id="${g.id}">${ico('users')}<span>${partner ? `Por parejas · con <b>${esc(partner)}</b>` : 'Individual · ¿por parejas?'}</span></button>` : partner ? `<p class="stg-pair set">${ico('users')}<span>Por parejas · con <b>${esc(partner)}</b></span></p>` : '') : '';
+  const today = todayISO(), canRes = mine && !admin && !S.preview, pairLine = pairBlock(g, kind, { admin, mine });
+  const adminRes = (n) => admin ? (S.stageAll?.results || []).filter((x) => x.race_key === postKeyOf(g) && x.stage === n).map((x) => `<small class="stg-ar"><b>${esc(runnerNameOf(x.runner_id))}</b>: ${esc(stageResText({ position: x.position, general: x.general_position, time: x.time_seconds }))}</small>`).join('') : '';
   const row = (x, i) => {
     const r = S.myStages?.get(`${postKeyOf(g)}|${i + 1}`), done = x.date <= today;
-    const txt = r ? [r.position ? `${r.position}º cat.` : '', r.general ? `${r.general}º gral.` : '', r.time ? formatTime(r.time) : ''].filter(Boolean).join(' · ') : '';
+    const txt = r ? stageResText(r) : '';
     const chip = canRes && done ? `<button type="button" class="stg-res${r ? ' set' : ''}" data-act="stage-res" data-kind="${kind}" data-id="${g.id}" data-n="${i + 1}">${ico(r ? 'check' : 'plus')}${r ? esc(txt) : 'Mi resultado'}</button>` : (mine && r ? `<span class="stg-res set">${esc(txt)}</span>` : '');
-    return `<li><span class="stg-n"><b>${esc(x.name)}</b><small>${esc(dayName(x.date))}</small></span><span class="stg-d">${x.km ? esc(kmText(x.km)) : '—'}${x.elevation ? ` · ${esc(elevText(x.elevation))}` : ''}</span>${chip}</li>`;
+    return `<li><span class="stg-n"><b>${esc(x.name)}</b><small>${esc(dayName(x.date))}</small></span><span class="stg-d">${x.km ? esc(kmText(x.km)) : '—'}${x.elevation ? ` · ${esc(elevText(x.elevation))}` : ''}</span>${chip}${adminRes(i + 1)}</li>`;
   };
   return `<div class="stg"><div class="stg-h">${ico('layers')}<b>Etapas</b><small>${st.length ? `${st.length} etapa${st.length === 1 ? '' : 's'}${tot.km ? ` · ${esc(kmText(tot.km))}` : ''}${tot.elevation ? ` · ${esc(elevText(tot.elevation))}` : ''}` : `${numDays(g.date, g.end_date)} días`}</small>
     ${canEdit ? `<button type="button" class="btn small ghost" data-act="stages-edit" data-kind="${kind}" data-id="${g.id}"${admin ? ' data-admin="1"' : ''}>${ico('pen')}${st.length ? 'Cambiar' : 'Poner las etapas'}</button>` : ''}</div>
@@ -1849,7 +1868,8 @@ function doneRaceBody(r, { admin = false, meId = null } = {}) {
   return `${typeTag(r)}
     <p class="count">🏁 Disputada · ${res.length} del club${res.length ? ': ' + esc(res.map((x) => x.runner_name).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p>
     ${pods.length ? `<p class="pods">${pods.map((x) => `${medal(x.position)} ${esc(x.runner_name)}`).join(' · ')}</p>` : ''}
-    ${mine || admin ? stagesBlock(r, 'race', { admin }) : ''}
+    ${mine || admin ? stagesBlock(r, 'race', { admin, mine: !!mine }) : ''}
+    ${mine || admin ? soloPairs(r, 'race', { admin, mine: !!mine }) : ''}
     ${mine ? `<p class="joined-done">✓ Participaste${mine.position ? ` · ${mine.position}º` : ''}${mine.general_position ? ` · Gral. ${mine.general_position}º` : ''}</p>` : ''}
     ${!admin && meId && !mine && r.date >= pastLimit() && !S.preview ? `<p><button class="btn small" data-act="r-join-race" data-id="${r.id}">La hice y no salgo: añadirme</button></p>` : ''}${admin ? `<a class="btn small ghost" href="#/carreras/${r.id}">${ico('pen')}Editar${ico('go')}</a>` : ''}`;
 }
@@ -1913,6 +1933,7 @@ function runnerRegCard(g, opts = {}) {
            <button class="btn primary" data-act="r-join" data-id="${g.id}">La hice: apuntarme</button></div>` : ''}`}
       ${g.notes ? `<p class="notes">${esc(g.notes)}</p>` : ''}
       ${mine || open ? stagesBlock(g, 'reg', { mine: !!mine }) : ''}
+      ${mine ? soloPairs(g, 'reg', { mine: true }) : ''}
       ${myPubLine(g)}
       ${opts.notes && mine && !S.preview && !notesInRow ? noteBlock(g) : ''}
       ${opts.notes ? completeBox(g, 'reg', g.id) : ''}
@@ -2478,7 +2499,7 @@ function viewRegistrationEdit() {
     <form class="card stack" data-form="save-reg">
       ${raceFields(d)}
       ${d.id ? '' : `<div id="dup-admin">${dupSuggestions(d.name, S.data.registrations, false)}</div>`}
-      ${d.id && d.end_date && d.end_date > d.date ? stagesBlock(S.data.registrations.find((x) => x.id === d.id) || d, 'reg', { admin: true }) : ''}
+      ${d.id && d.end_date && d.end_date > d.date ? stagesBlock(S.data.registrations.find((x) => x.id === d.id) || d, 'reg', { admin: true }) : d.id ? soloPairs(S.data.registrations.find((x) => x.id === d.id) || d, 'reg', { admin: true }) : ''}
       <label>Notas<textarea data-f="notes" rows="2">${esc(d.notes || '')}</textarea></label>
       <label class="check"><input type="checkbox" data-act-change="suspended" ${d.suspended ? 'checked' : ''}> ⛔ Carrera suspendida</label>
       <h3>Inscritos (${d.people.length})</h3>
