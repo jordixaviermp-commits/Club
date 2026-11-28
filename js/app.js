@@ -2122,14 +2122,13 @@ function nextTeamBanner(d) {
   const week = all.filter((g) => g.date <= today || daysTo(g.date) <= 7);
   const card = (g, solo) => {
     const n = daysTo(g.date), going = (g.entries || []).some((e) => e.runner_id === d.me.id), live = g.date <= today;
-    const wk = live || n <= 7, light = preLight(live ? 0 : n), names = g.entries.map((e) => e.name.split(' ')[0]), shown = names.slice(0, 6);
+    const wk = live || n <= 7, light = preLight(live ? 0 : n);
     const dot = light === 'red' ? '🔴 ' : light === 'amber' ? '🟠 ' : '';   // semáforo, igual que la próxima carrera de Mi temporada
-    return `<section class="card next-team lt-${light}${wk ? ' wk' : ''} compact" aria-label="Próxima carrera del equipo">
-    <p class="nt-k">${wk ? `${dot || ico('flag')}${solo ? 'Esta semana compite el equipo' : 'Esta semana'}` : `${ico('flag')}Próxima carrera del equipo`}</p>
-    <div class="nt-head">${raceTile(g, { mine: !!going })}<div class="rh-main"><h2 class="nt-n">${esc(g.name)}</h2><p class="rh-sub">${esc(raceSub(g))}</p><p class="rc-meta">${raceMeta(g)}</p></div>
-      <div class="rc-side"><span class="nt-pill nt-when">${live ? 'En curso' : daysToText(n)}</span><span class="nt-pill">${g.entries.length} del club</span></div></div>
-    <p class="nt-people">${shown.map(esc).join(' · ')}${names.length > shown.length ? ` · +${names.length - shown.length}` : ''}</p>
-    <div class="nt-foot"><span class="nt-me${going ? ' on' : ''}">${going ? `${ico('check')}Tú vas` : 'Tú no estás apuntado'}</span><button type="button" class="btn nt-btn" data-act="goto-sec" data-to="rc-${esc(g.id)}">${going ? 'Ver carrera' : 'Apuntarme'}</button></div></section>`;
+    const when = live ? 'En curso' : daysToText(n);
+    return `<section class="card next-team nt-mini lt-${light}${wk ? ' wk' : ''}" aria-label="Próxima carrera del equipo">
+    <div class="nt-head">${raceTile(g, { mine: !!going })}<div class="rh-main"><p class="nt-k">${wk ? (solo ? 'Equipo · esta semana' : 'Esta semana') : 'Equipo · próxima carrera'}</p><h2 class="nt-n">${esc(g.name)}</h2><p class="rh-sub">${esc(raceSub(g))}</p></div>
+      <span class="nt-pill nt-when">${wk ? dot : ''}${when}</span></div>
+    <div class="nt-foot"><span class="nt-me${going ? ' on' : ''}">${going ? `${ico('check')}Tú vas` : 'Tú no estás'} · ${g.entries.length} del club</span><button type="button" class="btn nt-btn" data-act="goto-sec" data-to="rc-${esc(g.id)}">${going ? 'Ver carrera' : 'Apuntarme'}</button></div></section>`;
   };
   if (week.length < 2) return card(week[0] || all[0], true);
   // varias carreras del equipo esta semana: una pila de tarjetas, con un trozo de la siguiente asomando por debajo; se desliza la de arriba para ver la siguiente
