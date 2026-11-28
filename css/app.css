@@ -3241,3 +3241,31 @@ button.stg-pair { cursor: pointer; } .stg-pair .ico { width: 16px; height: 16px;
 .nt-stack > .next-team:not([data-pos="0"]):not([data-pos="1"]):not([data-pos="2"]) { z-index: 1; opacity: 0; transform: translateY(36px) scale(.9, 1); pointer-events: none; }
 .nt-stack > .next-team:not([data-pos="0"]) > * { pointer-events: none; }
 .nt-stack > .next-team:not([data-pos="0"]) { filter: saturate(.85) brightness(.96); }
+
+/* Tarjeta del equipo compacta: fecha, nombre y lugar, cuenta atrás y un pie con «Tú vas · N del club» y el botón */
+.next-team.nt-mini { padding: .5rem .7rem .55rem; margin-bottom: .4rem; border-radius: 16px; }
+.next-team.nt-mini::after { width: 90px; height: 90px; right: -22px; bottom: -30px; border-width: 10px; }
+.next-team.nt-mini .nt-head { align-items: center; gap: .55rem; }
+.next-team.nt-mini .rc-date { transform: scale(.82); transform-origin: left center; margin-right: -.55rem; }
+.next-team.nt-mini .nt-k { margin: 0; font-size: var(--fs-1); font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: rgba(255, 255, 255, .8); }
+.next-team.nt-mini .nt-n { margin: 0; font-size: var(--fs-4); line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.next-team.nt-mini .rh-main { min-width: 0; flex: 1; gap: 0; }
+.next-team.nt-mini .rh-sub { margin: 0; font-size: var(--fs-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.next-team.nt-mini .nt-when { flex: none; align-self: flex-start; }
+.next-team.nt-mini .nt-foot { margin-top: .3rem; align-items: center; }
+.next-team.nt-mini .nt-me { font-size: var(--fs-2); } .next-team.nt-mini .nt-btn { min-height: 32px; padding: .15rem .8rem; font-size: var(--fs-2); }
+.nt-stack { padding-bottom: 36px; } .nt-stack[data-n="2"] { padding-bottom: 20px; }
+.nt-stack > .next-team[data-pos="1"] { transform: translateY(14px) scale(.95, 1); }
+.nt-stack > .next-team[data-pos="2"] { transform: translateY(28px) scale(.9, 1); }
+
+/* Últimos movimientos: tarjeta propia, siempre a la vista, con los últimos cuatro y el resto a un toque */
+.moves-card { padding: .65rem .8rem .55rem; margin: 0 0 .6rem; }
+.moves-card .mv-top { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .35rem; }
+.moves-card .mv-top h3 { display: flex; align-items: center; gap: .4rem; margin: 0; font-size: var(--fs-4); } .moves-card .mv-top h3 .ico { width: 18px; height: 18px; color: var(--sec); }
+.moves-card .mv-trw { font-size: var(--fs-2); color: var(--muted); white-space: nowrap; } .moves-card .mv-tr { font-weight: 800; } .moves-card .mv-tr.up { color: var(--ok); } .moves-card .mv-tr.down { color: var(--bad); }
+.moves-card .mv-list { margin: .1rem 0 0 .35rem; padding: 0; display: block; border-left: 2px solid var(--line); }
+.moves-card .mv-more { margin-top: .35rem; }
+.moves-card .mv-more > summary { list-style: none; display: flex; align-items: center; justify-content: center; gap: .35rem; min-height: 38px; border-radius: 10px; background: var(--bg); color: var(--sec); font-weight: 700; font-size: var(--fs-2); cursor: pointer; }
+.moves-card .mv-more > summary::-webkit-details-marker { display: none; }
+.moves-card .mv-chev { width: 16px; height: 16px; transition: transform .15s; } .moves-card .mv-more[open] .mv-chev { transform: rotate(180deg); }
+.moves-card .mv-more[open] > summary { margin-bottom: .5rem; }
