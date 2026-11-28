@@ -497,8 +497,9 @@ export function mediaStats(mentions, raceList, year) {
 
 export const postKeyOf = (g) => `${g.date}|${normalize(g.name)}`;
 export const resKeyOf = (g) => 'res|' + postKeyOf(g);
-/** Día en que se publica la historia previa (automática): dos días antes de la carrera. */
-export const storyDateOf = (g) => { const d = new Date(String(g.date).slice(0, 10) + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() - 2); return d.toISOString().slice(0, 10); };
+/** Día en que se publica la historia previa (automática): el día antes de la carrera (así entran los que se apuntan a última hora). */
+export const STORY_DAYS_BEFORE = 1;
+export const storyDateOf = (g) => { const d = new Date(String(g.date).slice(0, 10) + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() - STORY_DAYS_BEFORE); return d.toISOString().slice(0, 10); };
 /** Interpreta el registro de historias publicadas (lo escribe la tarea automática): { desde, byKey: Map(clave → {n, publicada, ids}) }. */
 export function parseStoryLog(json) {
   const byKey = new Map();
@@ -1254,7 +1255,7 @@ export function uspacShift(group, iso) {
 
 /**
  * Para cada carrera con inscritos (o ya con resultados) cerca de hoy, el estado de sus tres publicaciones:
- *  - story: historia previa (automática, 2 días antes)   - aviso: post antes de la carrera   - res: post de resultados.
+ *  - story: historia previa (automática, el día antes)   - aviso: post antes de la carrera   - res: post de resultados.
  * Cada pieza: { k, st: 'ok'|'curso'|'pend'|'late'|'na', text, key?, date?, days? }.
  * `status` de la carrera: 'pend' (hay algo por hacer), 'curso' (programado o a la espera) o 'hecho'.
  * `posted`: Set de claves marcadas como publicadas; `log`: parseStoryLog (o null).
