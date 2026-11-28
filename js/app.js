@@ -2018,7 +2018,7 @@ function runnerRegCard(g, opts = {}) {
         : `<button type="button" class="rc-tool susp" data-act="r-suspend" data-id="${g.id}" data-v="1" aria-label="Marcar como suspendida" title="Marcar como suspendida">${ico('ban')}</button>`) : ''}</div>`;
     const matesFull = g.entries.length ? `<div class="club-row"><span class="count">${ico('users')}${g.entries.length} del club</span><ul class="people">${g.entries.map((e) =>
       `<li class="${e.runner_id === me.id ? 'me' : ''}${e.paid ? ' paid' : ''}">${esc(e.name)}${e.category ? ` <small>${esc(e.category)}</small>` : ''}${e.paid ? `<span class="paid-mark" title="Ha pagado la inscripción" aria-label="ha pagado la inscripción">${ico('euro')}</span>` : ''}</li>`).join('')}</ul></div>` : '';
-    const matesCompact = g.entries.length ? `<details class="club-det" data-open-key="club-${g.id}"${S.open?.['club-' + g.id] ? ' open' : ''}><summary>${ico('users')}${g.entries.length} del club${ico('chevd', 'cd-chev')}</summary><ul class="people">${g.entries.map((e) =>
+    const matesCompact = g.entries.length ? `<details class="club-det" data-open-key="club-${g.id}"${(S.open?.['club-' + g.id] ?? opts.clubOpen) ? ' open' : ''}><summary>${ico('users')}${g.entries.length} del club${ico('chevd', 'cd-chev')}</summary><ul class="people">${g.entries.map((e) =>
       `<li class="${e.runner_id === me.id ? 'me' : ''}${e.paid ? ' paid' : ''}">${esc(e.name)}${e.category ? ` <small>${esc(e.category)}</small>` : ''}${e.paid ? `<span class="paid-mark" title="Ha pagado la inscripción" aria-label="ha pagado la inscripción">${ico('euro')}</span>` : ''}</li>`).join('')}</ul></details>` : '';
     const mates = opts.notes ? matesCompact : matesFull;
     const key = `rc-${g.id}`, isOpen = !!opts.open || !!S.open?.[key];
@@ -2077,7 +2077,7 @@ function movesData() {
   const trend = m.trend > 0 ? `<span class="up">▲ ${m.trend} más que las 4 semanas previas</span>` : m.trend < 0 ? `<span class="down">▼ ${-m.trend} menos que las 4 semanas previas</span>` : '<span>= igual que las 4 semanas previas</span>';
   const tr = m.trend > 0 ? `<span class="mv-tr up">▲ ${m.trend}</span>` : m.trend < 0 ? `<span class="mv-tr down">▼ ${-m.trend}</span>` : '';
   const bars = `<h4 class="ta-h4">Inscripciones por semana</h4><div class="mv-bars" role="img" aria-label="Inscripciones por semana, últimas 8 semanas">${m.bars.map((b, i) => { const d = new Date(b.start); return `<div class="mv-b${i === m.bars.length - 1 ? ' now' : ''}"><em>${b.n || ''}</em><span style="height:${Math.max(b.n ? 8 : 2, (b.n / mx) * 100)}%"></span><small>${d.getUTCDate()} ${MES[d.getUTCMonth()]}</small></div>`; }).join('')}</div><p class="mv-trend">${trend}</p>`;
-  return { rows: items.map(row).join(''), n: items.length, tr, bars };
+  return { head: items.slice(0, 3).map(row).join(''), rest: items.slice(3).map(row).join(''), nRest: Math.max(0, items.length - 3), tr, bars };
 }
 function teamPulse(d) {
   ensureMoves();
@@ -2112,8 +2112,8 @@ function teamPulse(d) {
   // una sola tarjeta: cifras del equipo, los últimos movimientos siempre abiertos (en una caja de alto fijo) y los gráficos a un toque
   return `<section class="card team-act" id="sec-moves"><div class="ta-top"><span class="pulse-t">${ico('users')}El equipo ya está apuntado</span>${chips}</div>
     ${mv ? `<div class="mv-top"><h3>${ico('clock')}Últimos movimientos</h3>${mv.tr ? `<span class="mv-trw" title="Inscripciones de las últimas 4 semanas respecto a las 4 anteriores">${mv.tr} esta semana</span>` : ''}</div>
-      <ul class="mv-list ta-list" tabindex="0" aria-label="Últimos movimientos del equipo">${mv.rows}</ul>` : ''}
-    <details class="ta-more" data-open-key="pulse"${S.open?.pulse ? ' open' : ''}><summary>Ver gráficos por mes y por semana${ico('chevd', 'mv-chev')}</summary>${months}${mv ? mv.bars : ''}</details></section>`;
+      <ul class="mv-list ta-list" aria-label="Últimos movimientos del equipo">${mv.head}</ul>` : ''}
+    <details class="ta-more" data-open-key="pulse"${S.open?.pulse ? ' open' : ''}><summary>${mv && mv.nRest ? `Ver ${mv.nRest} más y los gráficos` : 'Ver los gráficos'}${ico('chevd', 'mv-chev')}</summary>${mv && mv.nRest ? `<ul class="mv-list ta-list ta-rest">${mv.rest}</ul>` : ''}${months}${mv ? mv.bars : ''}</details></section>`;
 }
 
 /** Tarjeta «Planificar ruta» (herramienta ruta/): va en Carreras, justo bajo el buscador. */
@@ -2136,10 +2136,10 @@ function nextTeamBanner(d) {
     const wk = live || n <= 7, light = preLight(live ? 0 : n);
     const dot = light === 'red' ? '🔴 ' : light === 'amber' ? '🟠 ' : '';   // semáforo, igual que la próxima carrera de Mi temporada
     const when = live ? 'En curso' : daysToText(n);
-    return `<section class="card next-team nt-mini lt-${light}${wk ? ' wk' : ''}" aria-label="Próxima carrera del equipo">
+    return `<section class="card next-team nt-mini lt-${light}${wk ? ' wk' : ''}" data-id="${esc(g.id)}" aria-label="Próxima carrera del equipo: ${esc(g.name)}. Toca para ver todos sus datos">
     <div class="nt-head">${raceTile(g, { mine: !!going })}<div class="rh-main"><p class="nt-k">${wk ? (solo ? 'Equipo · esta semana' : 'Esta semana') : 'Equipo · próxima carrera'}</p><h2 class="nt-n">${esc(g.name)}</h2><p class="rh-sub">${esc(raceSub(g))}</p></div>
       <span class="nt-pill nt-when">${wk ? dot : ''}${when}</span></div>
-    <div class="nt-foot"><span class="nt-me${going ? ' on' : ''}">${going ? `${ico('check')}Tú vas` : 'Tú no estás'} · ${g.entries.length} del club</span><button type="button" class="btn nt-btn" data-act="goto-sec" data-to="rc-${esc(g.id)}">${going ? 'Ver carrera' : 'Apuntarme'}</button></div></section>`;
+    <div class="nt-foot"><span class="nt-me${going ? ' on' : ''}">${going ? `${ico('check')}Tú vas` : 'Tú no estás'} · ${g.entries.length} del club</span><a class="btn nt-btn" href="${runnerHref('carrera')}/${esc(g.id)}/carreras">${going ? 'Ver carrera' : 'Apuntarme'}</a></div></section>`;
   };
   if (week.length < 2) return card(week[0] || all[0], true);
   // varias carreras del equipo esta semana: una pila de tarjetas, con un trozo de la siguiente asomando por debajo; se desliza la de arriba para ver la siguiente
@@ -2223,9 +2223,9 @@ function viewRunnerDoneRace(raceId) {
 function viewRunnerRace(id) {
   if (String(id || '').startsWith('race_')) return viewRunnerDoneRace(String(id).slice(5));
   const g = S.runnerData.registrations.find((x) => x.id === id);
-  const back = runnerHref('mi');
+  const back = !(S.session?.isAdmin && S.preview) && parseRoute().rest === 'carreras' ? runnerHref('') : runnerHref('mi');   // se vuelve a donde se vino
   if (!g) return frame('Carrera', `${previewBanner()}<p class="empty">Esta carrera ya no está entre las inscripciones: puede que la dirección ya la haya pasado a resultados. Mírala en «Carreras hechas».</p>`, { back });
-  return frame(cleanName(g.name), `${previewBanner()}${runnerRegCard(g, { open: true, notes: true, noPast: true })}
+  return frame(cleanName(g.name), `${previewBanner()}${runnerRegCard(g, { open: true, notes: true, noPast: true, clubOpen: true })}
 `, { back });
 }
 
@@ -7273,6 +7273,13 @@ $app.addEventListener('change', async (ev) => {
     const card = ev.target.closest('.next-team');
     if (card && card.dataset.pos !== '0') { ev.preventDefault(); ev.stopPropagation(); setPos(st, [...st.children].indexOf(card)); }
   }, true);
+  // tocar una carrera del equipo (la de arriba de la pila o la tarjeta suelta) abre su ficha con todos los datos
+  $app.addEventListener('click', (ev) => {
+    const card = ev.target.closest?.('.next-team[data-id]');
+    if (!card || ev.target.closest('a, button, input, select, textarea')) return;
+    if (card.closest('.nt-stack') && card.dataset.pos !== '0') return;
+    go(`${runnerHref('carrera')}/${card.dataset.id}/carreras`);
+  });
 })();
 
 // Recordar si un desplegable estaba abierto (p. ej. «Mis carreras») al volver a pintar la pantalla.

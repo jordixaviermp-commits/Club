@@ -3289,3 +3289,10 @@ button.stg-pair { cursor: pointer; } .stg-pair .ico { width: 16px; height: 16px;
 .team-act .ta-more[open] > summary { margin-bottom: .4rem; }
 .team-act .ta-h4 { margin: .6rem 0 .25rem; font-size: var(--fs-2); font-weight: 700; color: var(--muted); }
 .team-act .pulse-months { height: 90px; }
+
+/* Últimos movimientos: tres a la vista; el resto, en el desplegable (sin caja de alto fijo) */
+.team-act .ta-list { max-height: none; overflow: visible; }
+.team-act .ta-list .mv-dot { left: .3rem; }
+.team-act .ta-rest { margin-bottom: .2rem; }
+.next-team[data-id] { cursor: pointer; }
+a.nt-btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
