@@ -2030,8 +2030,8 @@ function runnerRegCard(g, opts = {}) {
              <button class="btn joined-btn" data-act="r-joined" data-id="${g.id}" aria-label="Estás inscrito${mine.category ? ' en ' + esc(mine.category) : ''}: cambiar categoría o borrarme">${ico('check')}<span>Inscrito</span>${ico('chevd', 'jb-more')}</button>
              <a class="btn ghost small" href="pacing/?fecha=${esc(g.date)}" aria-label="Pacing de esta carrera: vatios por tramo y nutrición">⚡ Pacing</a>
              <button class="btn ghost small" data-act="r-ics" data-id="${g.id}" aria-label="Añadir al calendario del móvil" title="Añadir al calendario del móvil">${ico('calplus')}<span class="lab">Calendario</span></button>
-             ${notesInRow ? `<button class="btn ghost small${noteOf(g) ? ' has-note' : ''}" data-act="note-edit" data-id="${g.id}" title="${noteOf(g) ? 'Editar mis notas' : 'Añadir una nota personal (hotel, coche…)'}" aria-label="${noteOf(g) ? 'Editar mis notas' : 'Añadir una nota personal (hotel, coche…)'}">${ico('pen')}<span class="lab">Notas</span></button>` : ''}</div>
-           ${notesInRow && noteOf(g) ? `<button type="button" class="rc-note-line" data-act="note-edit" data-id="${g.id}">${ico('pen')}<span>${esc(noteOf(g))}</span></button>` : ''}`
+             ${notesInRow ? `<button class="btn ghost small${noteOf(g) ? ' has-note' : ''}" data-act="note-edit" data-id="${g.id}" title="${noteOf(g) ? 'Editar mis notas' : 'Añadir una nota personal (hotel, coche…)'}" aria-label="${noteOf(g) ? 'Editar mis notas' : 'Añadir una nota personal (hotel, coche…)'}">${ico('book')}<span class="lab">Notas</span></button>` : ''}</div>
+           ${notesInRow && noteOf(g) ? `<button type="button" class="rc-note-line" data-act="note-edit" data-id="${g.id}">${ico('book')}<span>${esc(noteOf(g))}</span></button>` : ''}`
         : `<div class="row join-row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, me.category || '', 'Elige tu categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">Apuntarme</button></div>`}
     `;
@@ -2233,8 +2233,8 @@ const noteBlock = (g) => {
   if (!S.notes) return '';
   const t = noteOf(g);
   // sin nota: una sola línea (botón); con nota: el texto y un botón para editarla
-  return t ? `<div class="rc-note has"><div class="rc-note-h">${ico('pen')}<b>Mis notas</b><button type="button" class="btn small ghost" data-act="note-edit" data-id="${g.id}">Editar</button></div><p class="rc-note-t">${esc(t)}</p></div>`
-    : `<button type="button" class="rc-note-add" data-act="note-edit" data-id="${g.id}">${ico('pen')}<span>Mis notas <small>· hotel, coche…</small></span><b>＋</b></button>`;
+  return t ? `<div class="rc-note has"><div class="rc-note-h">${ico('book')}<b>Mis notas</b><button type="button" class="btn small ghost" data-act="note-edit" data-id="${g.id}">Editar</button></div><p class="rc-note-t">${esc(t)}</p></div>`
+    : `<button type="button" class="rc-note-add" data-act="note-edit" data-id="${g.id}">${ico('book')}<span>Mis notas <small>· hotel, coche…</small></span><b>＋</b></button>`;
 };
 async function loadWatch() {
   if (S.preview || !S.code) return;
