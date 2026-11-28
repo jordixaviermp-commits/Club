@@ -1396,6 +1396,34 @@ function nextHero(g, { dleft, myCat, due }) {
     <div class="nx-chips"><span class="nx-chip">${ico('users')}${mates ? `Con ${mates} del club` : 'Solo tú del club'}</span>
       ${e ? (e.paid ? `<span class="nx-chip ok">${ico('euro')}Pagada</span>` : S.preview ? `<span class="nx-chip todo">${ico('euro')}Sin pagar</span>` : `<button type="button" class="nx-chip todo${due ? ' due' : ''}" data-act="r-paid" data-id="${g.id}">${ico('euro')}${due ? 'Marcar pago' : 'Sin pagar'}</button>`) : ''}</div></div>`;
 }
+/** «Mis números»: todas mis estadísticas de la temporada en casillas (carreras, puestos, esfuerzo, dónde he ido y compromiso con el club). */
+function numbersGrid({ d, year, list, sent, ad, upN }) {
+  const me = d.me, sentY = sent.filter((g) => yearOf(g.date) === year);
+  const racesLike = [...list.map((r) => ({ ...r, results: [{ runner_id: me.id, position: r.position, time_seconds: r.time_seconds, category: r.category, podium_type: r.podium_type }] })),
+    ...sentY.map((g) => ({ ...g, results: [{ runner_id: me.id, position: g.my_result.position, time_seconds: g.my_result.time_seconds, podium_type: g.my_result.podium_type }] }))];
+  if (!racesLike.length) return '';
+  const st = seasonStats(year, racesLike, [me])[0] || { races: 0, days: 0, mods: {}, km: 0, elev: 0, trip: 0, time: 0, timed: 0, provinces: [], countries: [] };
+  const all = [...list, ...sentY.map((g) => ({ ...g, position: g.my_result.position, dnf: g.my_result.dnf, time_seconds: g.my_result.time_seconds }))];
+  const dnf = all.filter((x) => x.dnf).length, pos = all.filter((x) => x.position > 0 && !x.dnf).map((x) => x.position);
+  const best = pos.length ? Math.min(...pos) : null, avg = pos.length ? Math.round((pos.reduce((a, b) => a + b, 0) / pos.length) * 10) / 10 : null;
+  const speed = avgSpeed(all), stagesRun = list.reduce((n, r) => n + ((r.stage_info || []).length || 0), 0);
+  const stageBest = Math.min(...list.flatMap((r) => (r.stage_positions || []).filter((x) => x > 0)).concat([Infinity]));
+  const chro = S.chron instanceof Set ? list.filter((r) => S.chron.has(postKeyOf(r))).length : null;
+  const paid = (d.registrations || []).filter((g) => yearOf(g.date) === year).reduce((n, g) => { const e = (g.entries || []).find((x) => x.runner_id === me.id); return n + (e?.paid && e.paid_amount > 0 ? Number(e.paid_amount) : 0); }, 0);
+  const T = (ic, v, l, tip = '') => `<div class="nm-t"${tip ? ` title="${esc(tip)}"` : ''}>${ico(ic)}<b>${v}</b><small>${l}</small></div>`;
+  const MODE = (m) => (m === 'BTT' ? '🚵' : m === 'Otra' ? '' : '🚴');
+  const mods = Object.entries(st.mods).sort((a, b) => b[1] - a[1]);
+  const sec = (title, tiles) => (tiles.filter(Boolean).length ? `<h4 class="nm-h">${title}</h4><div class="nm-grid">${tiles.filter(Boolean).join('')}</div>` : '');
+  return `<div class="nm">
+    ${sec('Carreras', [T('flag', st.races, st.races === 1 ? 'carrera' : 'carreras'), st.days !== st.races ? T('cal', st.days, 'días de competición') : '', upN ? T('calplus', upN, 'por correr') : '', dnf ? T('ban', dnf, dnf === 1 ? 'abandono' : 'abandonos') : ''])}
+    ${sec('Puestos', [best ? T('trophy', `${best}º`, 'mejor puesto') : '', avg ? T('bars', `${String(avg).replace('.', ',')}º`, 'puesto medio') : '', stageBest !== Infinity ? T('medal', `${stageBest}º`, 'mejor etapa') : '', stagesRun ? T('layers', stagesRun, stagesRun === 1 ? 'etapa corrida' : 'etapas corridas') : ''])}
+    ${sec('Esfuerzo', [st.timed ? T('timer', formatTime(st.time, true), 'en carrera') : '', st.km ? T('ruler', kmText(Math.round(st.km)), 'en carrera') : '', st.elev ? T('mountain', elevText(st.elev), 'de desnivel') : '', speed.pace ? T('route', paceText(speed.pace), 'de media por km', `${kmText(Math.round(speed.km))} en ${formatTime(speed.sec, true)}`) : '', st.trip ? T('car', kmText(Math.round(st.trip)), 'de viaje (aprox.)', 'Kilómetros de viaje a las carreras, ida y vuelta (aproximado)') : ''])}
+    ${sec('Dónde', [st.provinces.length ? T('map', st.provinces.length, st.provinces.length === 1 ? 'provincia' : 'provincias', st.provinces.join(', ')) : '', st.countries.length > 1 ? T('compass', st.countries.length, 'países', st.countries.join(', ')) : ''])}
+    ${mods.length ? `<div class="nm-mods">${mods.map(([m, n]) => `<span class="nm-chip">${MODE(m) ? MODE(m) + ' ' : ''}${esc(m)} <b>${n}</b></span>`).join('')}</div>` : ''}
+    ${sec('Con el club', [chro !== null ? T('pen', chro, chro === 1 ? 'crónica pasada' : 'crónicas pasadas') : '', ad.streak ? T('act', ad.streak, ad.streak === 1 ? 'carrera seguida al día' : 'carreras seguidas al día', 'Racha: carreras seguidas con resultado y crónica') : '', paid ? T('euro', euros(paid), 'en inscripciones pagadas') : ''])}
+  </div>`;
+}
+
 function myRacesCard(d) {
   const results = d.my_results;
   if (!results) return ''; // base de datos aún sin actualizar
@@ -1505,7 +1533,7 @@ function myRacesCard(d) {
       const IMP_L = { campeonato: 'Campeonato', circuito: 'Circuito', general: 'General', absoluto: 'Absoluto' };
       const impBlock = imp.length ? `<details class="imp-det" data-open-key="imp"${S.open?.imp ? ' open' : ''}><summary><span class="pod-pill imp" title="Toca para ver cuáles son">${ico('star')}${imp.length} ${imp.length === 1 ? 'podio importante' : 'podios importantes'}${ico('chevd')}</span></summary>
         <ul class="imp-list">${imp.map((x) => `<li>${medalBadge(x.position && x.position <= 3 ? x.position : x.general)}<span><b>${esc(x.race.name)}</b><small>${x.kinds.map((k) => IMP_L[k] + (k === 'absoluto' ? ` (general ${x.general}.º)` : '')).join(' · ')}${x.race.date ? ` · ${formatDate(x.race.date, false)}` : ''}</small></span></li>`).join('')}</ul></details>` : '';
-      return (pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}"><i class="medal m${i + 1}"></i>${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : '') + genRow + impBlock + road; })()}
+      return (pod.some(Boolean) ? `<div class="pod-row" aria-label="Podios ${S.myYear}"><b class="pod-title">Podios ${S.myYear}:</b>${pod.map((n, i) => (n ? `<span class="pod-pill m${i + 1}"><i class="medal m${i + 1}"></i>${n} ${NAMES[i][n === 1 ? 0 : 1]}</span>` : '')).join('')}</div>` : '') + genRow + impBlock + numbersGrid({ d, year: S.myYear, list, sent, ad, upN: upcomingYear.length }); })()}
   </details>`;
 }
 
