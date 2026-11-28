@@ -865,15 +865,16 @@ export const defaultStages = (start, end) => (end && end > start ? daysOf(start,
 export function cleanStages(stages, start, end) {
   if (!Array.isArray(stages) || !stages.length) return null;
   if (!end || end <= start || stages.length > 30) throw new Error('datos_no_validos');
-  return stages.map((e, i) => {
+  const list = stages.map((e, i) => {
     const date = String(e?.date || '').slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < start || date > end) throw new Error('datos_no_validos');
     const km = Number(String(e?.km ?? '').replace(',', '.')), ele = Number(String(e?.elevation ?? '').replace(/[.\s]/g, ''));
     const out = { name: String(e?.name || '').trim().slice(0, 60) || `Etapa ${i + 1}`, date };
     if (Number.isFinite(km) && km > 0 && km <= 1000 && String(e?.km ?? '').trim() !== '') out.km = Math.round(km * 10) / 10;
     if (Number.isInteger(ele) && ele > 0 && ele <= 10000) out.elevation = ele;
-    return out;
+    return { out, i };
   });
+  return list.sort((a, b) => (a.out.date < b.out.date ? -1 : a.out.date > b.out.date ? 1 : a.i - b.i)).map((x) => x.out);   // siempre por orden de día
 }
 /** Totales de las etapas: solo hay total de km (o de desnivel) si TODAS las etapas lo tienen. */
 export function stageTotals(stages) {

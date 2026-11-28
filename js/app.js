@@ -452,9 +452,14 @@ async function loadShift() {
   let g = null; try { g = await api.runnerMyShift(code); } catch { g = null; }   // sin el SQL de «turnos propios»: solo se ve el escamot que haya puesto la dirección
   S.myShift = g || null; S.shiftOn = false;
 }
+/** Mis resultados por etapa: clave «carrera|n» → {position, time}. Sin el SQL de etapas queda vacío. */
+async function loadStageResults() {
+  S.myStages = new Map();
+  try { const l = await api.runnerStageResults(S.code || S.previewCode); for (const x of Array.isArray(l) ? l : []) S.myStages.set(`${x.key}|${x.stage}`, { position: x.position, time: x.time }); } catch { /* sin el SQL de resultados por etapa */ }
+}
 async function loadRunner() {
   if (!S.session?.isAdmin) api.runnerPing?.(S.code).catch(() => {});   // actividad: última vez que abrió la app
-  try { S.moves = undefined; S.runnerData = await api.runnerView(S.code); await loadNews(); await loadCorrections(); await loadChron(); await loadWatch(); await loadNotes(); await loadShift(); await loadKit(); await loadCars(); }
+  try { S.moves = undefined; S.runnerData = await api.runnerView(S.code); await loadNews(); await loadCorrections(); await loadChron(); await loadWatch(); await loadNotes(); await loadShift(); await loadKit(); await loadCars(); await loadStageResults(); }
   catch (e) {
     S.runnerData = null;
     if (/enlace_no_valido/.test(String(e?.message))) { store.del(CODE_KEY); S.code = null; }
@@ -1744,14 +1749,44 @@ const runnerTitle = () => (S.session?.isAdmin && S.preview ? `Vista de ${S.previ
 
 /** Tarjeta de una carrera ya disputada (con resultados), para el calendario. */
 /** Etapas de una carrera de varios días: la lista (día, nombre, km y desnivel) y el botón para ponerlas. Cada etapa tendrá su historia el día que se corra. */
-function stagesBlock(g, kind = 'reg', { admin = false } = {}) {
+function stagesBlock(g, kind = 'reg', { admin = false, mine = false } = {}) {
   if (!g?.end_date || g.end_date <= g.date) return '';
   const st = Array.isArray(g.stage_info) ? g.stage_info : [], tot = stageTotals(st), canEdit = admin || !S.preview;
   const dayName = (iso) => `${new Date(iso + 'T12:00:00Z').toLocaleDateString('es-ES', { weekday: 'short', timeZone: 'UTC' }).replace('.', '')} ${dayMon(iso)}`;
-  const row = (x) => `<li><span class="stg-n"><b>${esc(x.name)}</b><small>${esc(dayName(x.date))}</small></span><span class="stg-d">${x.km ? esc(kmText(x.km)) : '—'}${x.elevation ? ` · ${esc(elevText(x.elevation))}` : ''}</span></li>`;
+  const today = todayISO(), canRes = mine && !admin && !S.preview;
+  const row = (x, i) => {
+    const r = S.myStages?.get(`${postKeyOf(g)}|${i + 1}`), done = x.date <= today;
+    const txt = r ? [r.position ? `${r.position}º` : '', r.time ? formatTime(r.time) : ''].filter(Boolean).join(' · ') : '';
+    const chip = canRes && done ? `<button type="button" class="stg-res${r ? ' set' : ''}" data-act="stage-res" data-kind="${kind}" data-id="${g.id}" data-n="${i + 1}">${ico(r ? 'check' : 'plus')}${r ? esc(txt) : 'Mi resultado'}</button>` : (mine && r ? `<span class="stg-res set">${esc(txt)}</span>` : '');
+    return `<li><span class="stg-n"><b>${esc(x.name)}</b><small>${esc(dayName(x.date))}</small></span><span class="stg-d">${x.km ? esc(kmText(x.km)) : '—'}${x.elevation ? ` · ${esc(elevText(x.elevation))}` : ''}</span>${chip}</li>`;
+  };
   return `<div class="stg"><div class="stg-h">${ico('layers')}<b>Etapas</b><small>${st.length ? `${st.length} etapa${st.length === 1 ? '' : 's'}${tot.km ? ` · ${esc(kmText(tot.km))}` : ''}${tot.elevation ? ` · ${esc(elevText(tot.elevation))}` : ''}` : `${numDays(g.date, g.end_date)} días`}</small>
     ${canEdit ? `<button type="button" class="btn small ghost" data-act="stages-edit" data-kind="${kind}" data-id="${g.id}"${admin ? ' data-admin="1"' : ''}>${ico('pen')}${st.length ? 'Cambiar' : 'Poner las etapas'}</button>` : ''}</div>
-    ${st.length ? `<ul class="stg-list">${st.map(row).join('')}</ul>` : '<p class="stg-empty">Sin datos por etapa: ponlas con su día, km y desnivel y cada una tendrá su historia.</p>'}</div>`;
+    ${st.length ? `<ul class="stg-list">${st.map((x, i) => row(x, i)).join('')}</ul>` : '<p class="stg-empty">Sin datos por etapa: ponlas con su día, km y desnivel y cada una tendrá su historia.</p>'}</div>`;
+}
+/** Ventana para poner mi puesto y mi tiempo en una etapa. Devuelve {position, time}, {position:null,time:null} para quitarlos, o null si cancela. */
+function askStageResult(t, st, n, cur) {
+  return new Promise((resolve) => {
+    const dlg = document.getElementById('dialog');
+    dlg.innerHTML = `<form method="dialog" class="dlg stg-dlg"><h2>${ico('flag')} Mi resultado</h2><p><b>${esc(st.name || 'Etapa ' + n)}</b> · ${esc(t.name)}</p>
+      <label>Puesto en la etapa<input name="pos" inputmode="numeric" maxlength="3" value="${esc(cur?.position ?? '')}" placeholder="—" autocomplete="off"></label>
+      <label>Tiempo (h:mm:ss)<input name="time" inputmode="text" maxlength="9" value="${esc(cur?.time ? formatTime(cur.time) : '')}" placeholder="2:15:40" autocomplete="off"></label>
+      <p class="muted small">Pon lo que sepas: basta con el puesto o con el tiempo.</p>
+      <div class="dlg-actions"><button value="ok" class="btn primary">Guardar</button>${cur ? '<button value="clear" class="btn danger ghost" formnovalidate>Quitar</button>' : ''}<button value="" class="btn ghost" formnovalidate>Cancelar</button></div></form>`;
+    dlg.querySelector('form').addEventListener('submit', (ev) => {
+      if (ev.submitter?.value !== 'ok') return;
+      const f = dlg.querySelector('form'), pos = f.pos.value.trim(), tm = f.time.value.trim();
+      const bad = (pos && !(Number(pos) >= 1 && Number(pos) <= 999 && Number.isInteger(Number(pos)))) || (tm && !(parseTime(tm) >= 1 && parseTime(tm) <= 86400)) || (!pos && !tm);
+      if (bad) { ev.preventDefault(); toast(!pos && !tm ? 'Pon el puesto o el tiempo.' : 'Revisa el puesto (1–999) y el tiempo (por ejemplo 2:15:40).', true); }
+    });
+    dlg.onclose = () => {
+      if (dlg.returnValue === 'clear') return resolve({ position: null, time: null });
+      if (dlg.returnValue !== 'ok') return resolve(null);
+      const f = dlg.querySelector('form'), pos = f.pos.value.trim(), tm = f.time.value.trim();
+      resolve({ position: pos ? Number(pos) : null, time: tm ? parseTime(tm) : null });
+    };
+    dlg.returnValue = ''; dlg.showModal();
+  });
 }
 /** Ventana para poner las etapas de una carrera de varios días. Devuelve la lista limpia, [] para quitarlas todas, o null si cancela. */
 function askStages(t) {
@@ -1861,7 +1896,7 @@ function runnerRegCard(g, opts = {}) {
         ${!mine && g.date >= pastLimit() ? `<div class="row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, me.category || '', 'Elige tu categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">La hice: apuntarme</button></div>` : ''}`}
       ${g.notes ? `<p class="notes">${esc(g.notes)}</p>` : ''}
-      ${mine || open ? stagesBlock(g, 'reg') : ''}
+      ${mine || open ? stagesBlock(g, 'reg', { mine: !!mine }) : ''}
       ${myPubLine(g)}
       ${opts.notes && mine && !S.preview && !notesInRow ? noteBlock(g) : ''}
       ${opts.notes ? completeBox(g, 'reg', g.id) : ''}
@@ -6328,6 +6363,15 @@ const actions = {
     const ok = await run(async () => { await (admin ? api.adminSetStages(kind, id, list) : api.runnerSetStages(S.code, kind, id, list)); if (admin) await reload(); else { await loadRunner(); if (kind === 'race') { S.team = null; await loadTeam(); } } return true; }, list.length ? 'Etapas guardadas' : 'Etapas quitadas');
     if (ok) render();
   },
+  async 'stage-res'(el) {
+    const kind = el.dataset.kind, id = el.dataset.id, n = Number(el.dataset.n);
+    const t = kind === 'reg' ? S.runnerData?.registrations?.find((x) => x.id === id) : (S.team?.races || []).find((x) => x.id === id) || (S.runnerData?.my_results || []).find((x) => x.race_id === id);
+    const st = t?.stage_info?.[n - 1]; if (!st) return;
+    const base = { ...t, name: t.name, date: t.date }, cur = S.myStages?.get(`${postKeyOf(base)}|${n}`) || null;
+    const r = await askStageResult(base, st, n, cur); if (r === null) return;
+    const ok = await run(async () => { await api.runnerSetStageResult(S.code, kind, id, n, r.position, r.time); await loadStageResults(); if (kind === 'race') { S.team = null; await loadTeam(); } return true; }, r.position == null && r.time == null ? 'Resultado quitado' : 'Resultado de la etapa guardado');
+    if (ok) render();
+  },
   'cal-tab'(el) { S.calTab = el.dataset.t === 'hechas' ? 'hechas' : 'prox'; render(); },
   async 'r-suspend'(el) {
     const susp = el.dataset.v === '1', g = (S.runnerData?.registrations || []).find((x) => x.id === el.dataset.id);
@@ -6817,7 +6861,7 @@ document.addEventListener('visibilitychange', async () => {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['stages-edit', 'chro-write', 'ar-open', 'cal-tab', 'eq-tab', 'circuit-pick', 'r-web', 'note-edit', 'car-open', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
+const RUNNER_ACTIONS = new Set(['stages-edit', 'stage-res', 'chro-write', 'ar-open', 'cal-tab', 'eq-tab', 'circuit-pick', 'r-web', 'note-edit', 'car-open', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
 // los enlaces de la ventana emergente (p. ej. las carreras de un compañero) cierran la ventana al navegar
 document.getElementById('dialog').addEventListener('click', (ev) => { if (ev.target.closest('a[href^="#/"]')) ev.currentTarget.close(); });
 $app.addEventListener('click', (ev) => {
