@@ -325,6 +325,8 @@ export function supabaseApi(url, key) {
     async runnerSetDetails(code, id, subtype, km) { ok(await sb.rpc('runner_set_race_details', { p_code: code, p_id: id, p_subtype: subtype || null, p_km: parseKm(km) })); },
     async runnerSetStages(code, kind, id, stages) { ok(await sb.rpc('runner_set_stages', { p_code: code, p_kind: kind, p_id: id, p_stages: stages })); },
     async runnerSetStageResult(code, kind, id, stage, position, general, time) { ok(await sb.rpc('runner_set_stage_result', { p_code: code, p_kind: kind, p_id: id, p_stage: stage, p_position: position, p_general: general, p_time: time })); },
+    /** Dirección: los resultados por etapa y las parejas de todos (null si aún falta el SQL). */
+    async adminStageData() { try { return { results: await all('stage_results'), pairs: await all('race_pairs') }; } catch { return null; } },
     async runnerSetPair(code, kind, id, partner) { ok(await sb.rpc('runner_set_pair', { p_code: code, p_kind: kind, p_id: id, p_partner: partner || '' })); },
     async runnerPairs(code) { return ok(await sb.rpc('runner_pairs', { p_code: code })) || []; },
     async runnerStageResults(code) { return ok(await sb.rpc('runner_stage_results', { p_code: code })) || []; },
@@ -1134,6 +1136,10 @@ export function demoApi(storage = globalThis.localStorage) {
       const key = `${t.date}|${normalize(t.name)}`, p = String(partner || '').trim().slice(0, 60); d.race_pairs = (d.race_pairs || []).filter((x) => !(x.key === key && x.runner_id === me.id));
       if (p) d.race_pairs.push({ key, runner_id: me.id, partner: p });
       save();
+    },
+    async adminStageData() {
+      requireAdmin(); const d = load();
+      return { results: (d.stage_results || []).map((x) => ({ race_key: x.key, runner_id: x.runner_id, stage: x.stage, position: x.position, general_position: x.general ?? null, time_seconds: x.time })), pairs: (d.race_pairs || []).map((x) => ({ race_key: x.key, runner_id: x.runner_id, partner: x.partner })) };
     },
     async runnerPairs(code) { const me = byCode(code), d = load(); return (d.race_pairs || []).filter((x) => x.runner_id === me.id).map((x) => ({ key: x.key, partner: x.partner })); },
     async adminSetStages(kind, id, stages) {
