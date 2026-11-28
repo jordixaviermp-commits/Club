@@ -261,6 +261,16 @@ function raceFold(x, { key, mine = false, side = '', body = '', today, open = fa
     </details>`;
 }
 
+/** Fila de «Mi calendario»: tarjeta tocable que abre la ficha de la carrera en su propia pantalla (sin desplegarse debajo). */
+function raceLink(x, { href, side = '', mine = false } = {}) {
+  const t = S.runnerData?.today || todayISO();
+  return `<a class="card race rcard rlink ${modClass(x.modality)}" href="${href}" aria-label="Abrir la carrera ${esc(x.name)}">
+      <span class="rc-sum">${raceTile(x, { mine })}
+        <span class="rc-main"><b class="rc-name${nameFit(x.name)}">${esc(x.name)}</b><span class="rc-sub">${esc(raceSub(x))}</span><span class="rc-meta">${raceMeta(x)}</span></span>
+        <span class="rc-side">${raceCd(x, t)}${side}</span><span class="rc-chev go" aria-hidden="true">${ico('go')}</span>
+      </span></a>`;
+}
+
 // ---------- utilidades de interfaz ----------
 
 let toastTimer;
@@ -1253,10 +1263,11 @@ const ico = (k, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-h
 /** Medalla de podio dibujada (sin emoji): círculo oro / plata / bronce con el puesto. */
 const medalBadge = (p) => `<i class="medal m${p}" aria-label="Puesto ${p}">${p}</i>`;
 /** Fila de carrera de Mi temporada: nombre y etiqueta («en 2 días · M40»), fecha en negrita · lugar y modalidad; flecha › a la derecha. */
-const mrow = (g, { below = '', end = '', hero = false, side = '', noDue = false } = {}) => {
+const mrow = (g, { below = '', end = '', hero = false, side = '', noDue = false, href = '', link = false } = {}) => {
   // Mi temporada usa la misma ficha desplegable que Carreras: al abrirla sale ya toda la información, sin otro menú
   const badge = hero ? '<span class="hero-badge">Próxima cita</span>' : '';
   const due = !noDue && g.entries && S.payDue?.has(g.id);   // pago que ya toca (la carrera es dentro de una semana): en rojo, como la casilla de Pendientes
+  if (g.entries && link) { const m = myEntry(g); return `<li class="mrow-fold mlink${due ? ' pay-due' : ''}">${due ? `<span class="due-badge">${ico('euro')}Pagar</span>` : ''}${raceLink(g, { href, mine: !!(m && !g.suspended), side: `${myPubChip(g)}${payBadge(g, { notes: true })}${carBadge(g)}<span class="rc-n" title="Inscritos del club" aria-label="${g.entries.length} del club inscrito${g.entries.length === 1 ? '' : 's'}">${ico('users')}${g.entries.length}</span>` })}</li>`; }
   if (g.entries) return `<li class="mrow-fold${hero ? ' hero' : ''}${due ? ' pay-due' : ''}">${badge}${due ? `<span class="due-badge">${ico('euro')}Pagar</span>` : ''}${runnerRegCard(g, { cls: hero ? 'hero' : '', noPast: true, notes: true })}</li>`;
   // carrera ya disputada con mi resultado (la ficha de «resultados» + lo mío)
   const me = S.runnerData?.me?.id, race = S.team?.races?.find((x) => x.id === g.race_id), count = (race?.results || []).length;
@@ -1431,7 +1442,7 @@ function myRacesCard(d) {
     <div class="mt-seg sm" role="tablist"><button type="button" role="tab" aria-selected="${calTab === 'prox'}" class="${calTab === 'prox' ? 'on' : ''}" data-act="cal-tab" data-t="prox">Próximas <b>${upcoming.length}</b></button><button type="button" role="tab" aria-selected="${calTab === 'hechas'}" class="${calTab === 'hechas' ? 'on' : ''}" data-act="cal-tab" data-t="hechas">Hechas <b>${hechas.length}</b></button></div>
     ${calTab === 'prox'
       ? `${upcoming.length ? `<p class="cal-pay"><span class="desp-sub">${payLineInline(upcoming)}${upcoming.some((g) => S.payDue.has(g.id)) ? `<span class="due">${upcoming.filter((g) => S.payDue.has(g.id)).length} por pagar ya</span>` : ''}</span></p>
-        <ul class="mini-list">${upcoming.map((g, i) => mrow(g, { hero: i === 0, href: `${runnerHref('carrera')}/${g.id}`, pill: `${dleft(g)}${myCat(g) ? ` · ${esc(myCat(g))}` : ''}`, edit: editMine(g), below: payChips(g) })).join('')}</ul>`
+        <ul class="mini-list">${upcoming.map((g, i) => mrow(g, { link: true, href: `${runnerHref('carrera')}/${g.id}`, pill: `${dleft(g)}${myCat(g) ? ` · ${esc(myCat(g))}` : ''}`, edit: editMine(g), below: payChips(g) })).join('')}</ul>`
         : '<p class="empty small">No estás apuntado a ninguna. Búscalas en la pestaña Carreras.</p>'}`
       : `${hechas.length ? `<ul class="mt-list">${hechas.map((r) => ar.rowHtml(r, 'hechas')).join('')}</ul>` : `<p class="empty small">Todavía no hay carreras tuyas con resultado en ${S.myYear}.</p>`}`}
   </details></section>`;
@@ -2130,8 +2141,7 @@ function viewRunnerRace(id) {
   const g = S.runnerData.registrations.find((x) => x.id === id);
   const back = runnerHref('mi');
   if (!g) return frame('Carrera', `${previewBanner()}<p class="empty">Esta carrera ya no está entre las inscripciones: puede que la dirección ya la haya pasado a resultados. Mírala en «Carreras hechas».</p>`, { back });
-  return frame('Carrera', `${previewBanner()}${runnerRegCard(g, { open: true })}
-    ${completeBox(g, 'reg', g.id)}
+  return frame(cleanName(g.name), `${previewBanner()}${runnerRegCard(g, { open: true, notes: true, noPast: true })}
 `, { back });
 }
 
