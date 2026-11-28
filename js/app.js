@@ -2148,7 +2148,7 @@ function nextRacesBanner(d, list) {
     <div class="nt-foot"><span class="nt-me${going ? ' on' : ''}">${going ? `${ico('check')}Tú vas` : 'Tú no estás'} · ${club ? `${club} del club` : 'nadie del club aún'}</span><a class="btn nt-btn" href="${runnerHref('carrera')}/${esc(g.id)}/carreras">${going ? 'Ver carrera' : 'Apuntarme'}</a></div></section>`;
   };
   const n = week.length, idx = (S.ntIdx || 0) % n;
-  const head = `<p class="nt-deck-k">${ico('flag')}<span>Próximas carreras · <b>${esc(label)}</b></span>${n > 1 ? `<small title="Desliza la tarjeta de arriba para ver la siguiente"><b class="nt-idx">${idx + 1}</b>/${n} ↔</small>` : ''}</p>`;
+  const head = `<p class="nt-deck-k">${ico('flag')}<span>Próximas carreras</span></p>`;
   if (n < 2) return `<div class="nt-deck" role="region" aria-label="Próximas carreras">${head}${card(week[0])}</div>`;
   // varias carreras esa semana: una pila de tarjetas, con un trozo de la siguiente asomando por debajo
   return `<div class="nt-deck" role="region" aria-label="Próximas carreras">${head}
@@ -2168,8 +2168,7 @@ function viewRunnerHome() {
     : (() => {
       // las carreras de la semana de arriba (pila de «Próximas carreras») no se repiten aquí: solo el resto
       const stackOn = normalize(S.q.runner || '').length < 2, inStack = stackOn ? new Set(proxWeek(regs, today).races.map((g) => g.id)) : new Set(), rest = upcoming.filter((g) => !inStack.has(g.id));
-      return `${rest.length || !upcoming.length ? `<h2 class="section">${inStack.size ? 'Más carreras' : 'Próximas carreras'} (${rest.length})</h2>` : ''}
-    ${upcoming.length ? monthList(rest, card) : `<p class="empty">${filtersOn(me) ? 'Ninguna carrera próxima con estos filtros. <button class="link" data-act="filters-clear">Quitar filtros</button>' : 'Todavía no hay carreras abiertas.'}</p>`}`;
+      return `${upcoming.length ? monthList(rest, card) : `<p class="empty">${filtersOn(me) ? 'Ninguna carrera próxima con estos filtros. <button class="link" data-act="filters-clear">Quitar filtros</button>' : 'Todavía no hay carreras abiertas.'}</p>`}`;
     })();
   return frame(runnerTitle(), `
     ${previewBanner()}
