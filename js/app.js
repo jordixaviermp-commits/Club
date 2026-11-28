@@ -2132,9 +2132,10 @@ function nextTeamBanner(d) {
     <div class="nt-foot"><span class="nt-me${going ? ' on' : ''}">${going ? `${ico('check')}Tú vas` : 'Tú no estás apuntado'}</span><button type="button" class="btn nt-btn" data-act="goto-sec" data-to="rc-${esc(g.id)}">${going ? 'Ver carrera' : 'Apuntarme'}</button></div></section>`;
   };
   if (week.length < 2) return card(week[0] || all[0], true);
-  // varias carreras del equipo esta semana: se deslizan de lado y se ve un trozo de la siguiente
-  return `<div class="nt-deck" role="region" aria-label="Carreras del equipo esta semana"><p class="nt-deck-k">${ico('flag')}<span>Esta semana compite el equipo: <b>${week.length}</b></span><small>desliza →</small></p>
-    <div class="nt-track" tabindex="0">${week.map((g) => card(g, false)).join('')}</div></div>`;
+  // varias carreras del equipo esta semana: una pila de tarjetas, con un trozo de la siguiente asomando por debajo; se desliza la de arriba para ver la siguiente
+  const n = week.length, idx = (S.ntIdx || 0) % n;
+  return `<div class="nt-deck" role="region" aria-label="Carreras del equipo esta semana"><p class="nt-deck-k">${ico('flag')}<span>Esta semana compite el equipo: <b>${n}</b></span><small><b class="nt-idx">${idx + 1}</b> de ${n} · desliza</small></p>
+    <div class="nt-stack" data-n="${n}">${week.map((g, i) => card(g, false).replace('<section class="card next-team', `<section data-pos="${(i - idx + n) % n}" class="card next-team`)).join('')}</div></div>`;
 }
 
 function viewRunnerHome() {
@@ -7213,6 +7214,43 @@ $app.addEventListener('change', async (ev) => {
     await fileHandlers[t.dataset.file](file);
   }
 });
+
+// Pila de carreras del equipo: se arrastra la de arriba hacia un lado y pasa al fondo; tocar una de las que asoman la trae delante.
+(() => {
+  let drag = null;
+  const stack = (el) => el.closest?.('.nt-stack');
+  const setPos = (st, idx) => { const cards = [...st.children], n = cards.length; S.ntIdx = idx; cards.forEach((c, i) => { c.dataset.pos = String((i - idx + n) % n); });
+    const k = st.parentElement.querySelector('.nt-idx'); if (k) k.textContent = String(idx + 1); };
+  const front = (st) => [...st.children].find((c) => c.dataset.pos === '0');
+  $app.addEventListener('pointerdown', (ev) => {
+    const st = stack(ev.target), card = st && ev.target.closest('.next-team'); if (!card) return;
+    drag = { st, card, x: ev.clientX, y: ev.clientY, dx: 0, moved: false, top: card.dataset.pos === '0' };
+  });
+  $app.addEventListener('pointermove', (ev) => {
+    if (!drag || !drag.top) return;
+    const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
+    if (!drag.moved && (Math.abs(dx) < 8 || Math.abs(dx) < Math.abs(dy))) return;
+    drag.moved = true; drag.dx = dx; drag.card.style.transition = 'none'; drag.card.style.transform = `translateX(${dx}px) rotate(${dx / 25}deg)`; drag.card.style.opacity = String(Math.max(.4, 1 - Math.abs(dx) / 400));
+  });
+  const end = () => {
+    if (!drag) return; const { st, card, dx, moved, top } = drag; drag = null;
+    if (!top) return;
+    card.style.transition = '';
+    if (moved && Math.abs(dx) > 70) {
+      card.style.transform = `translateX(${dx > 0 ? 130 : -130}%) rotate(${dx > 0 ? 18 : -18}deg)`; card.style.opacity = '0';
+      setTimeout(() => { card.style.transition = 'none'; card.style.transform = ''; card.style.opacity = ''; setPos(st, ((S.ntIdx || 0) + 1) % st.children.length); void card.offsetWidth; card.style.transition = ''; }, 230);
+    } else { card.style.transform = ''; card.style.opacity = ''; }
+    if (moved) st.dataset.justDragged = '1', setTimeout(() => { delete st.dataset.justDragged; }, 50);
+  };
+  $app.addEventListener('pointerup', end); $app.addEventListener('pointercancel', end);
+  // un clic tras arrastrar no debe pulsar el botón de la tarjeta; y tocar una tarjeta de detrás la trae delante
+  $app.addEventListener('click', (ev) => {
+    const st = stack(ev.target); if (!st) return;
+    if (st.dataset.justDragged) { ev.preventDefault(); ev.stopPropagation(); return; }
+    const card = ev.target.closest('.next-team');
+    if (card && card.dataset.pos !== '0') { ev.preventDefault(); ev.stopPropagation(); setPos(st, [...st.children].indexOf(card)); }
+  }, true);
+})();
 
 // Recordar si un desplegable estaba abierto (p. ej. «Mis carreras») al volver a pintar la pantalla.
 $app.addEventListener('toggle', (ev) => {
