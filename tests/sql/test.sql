@@ -1233,6 +1233,37 @@ select pg_temp.check((select (e->>'pub_at') is not null from jsonb_array_element
 select pg_temp.check((select (e->>'pub') = 'true' and e ? 'text' from jsonb_array_elements(runner_chronicles_team('codigo-valorador-uno-01')) e where e->>'key' = :'k_cer'), 'crónicas del equipo: incluye el campo del texto publicado');
 select pg_temp.check((select e ? 'url' from jsonb_array_elements(runner_chronicles_team('codigo-valorador-uno-01')) e where e->>'key' = :'k_cer'), 'crónicas del equipo: incluye el enlace del post');
 reset role;
+-- ===== Etapas de una carrera de varios días =====
+insert into registrations (id, name, date, end_date, place, province, modality, km, elevation, price, url) values
+  ('30000000-0000-0000-0000-0000000000e1', 'Etapas Prueba', current_date + 20, current_date + 23, 'Roses', 'Girona', 'BTT', 300, 9000, 120, 'https://ejemplo.org/x'),
+  ('30000000-0000-0000-0000-0000000000e2', 'Un solo dia', current_date + 20, null, 'Roses', 'Girona', 'BTT', 50, null, null, null);
+set role anon;
+select runner_set_stages('codigo-valorador-uno-01', 'reg', '30000000-0000-0000-0000-0000000000e1', jsonb_build_array(
+  jsonb_build_object('name', 'Etapa 1', 'date', (current_date + 20)::text, 'km', 80.5, 'elevation', 2100),
+  jsonb_build_object('name', 'Etapa 2', 'date', (current_date + 21)::text, 'km', 75, 'elevation', 1900),
+  jsonb_build_object('name', '', 'date', (current_date + 22)::text, 'km', 90, 'elevation', 2500),
+  jsonb_build_object('name', 'Etapa 4', 'date', (current_date + 23)::text, 'km', 65, 'elevation', 1500)));
+select pg_temp.check(true, 'etapas: un corredor puede poner las etapas de una inscripción');
+select pg_temp.expect_fail($q$select runner_set_stages('codigo-valorador-uno-01', 'reg', '30000000-0000-0000-0000-0000000000e1', jsonb_build_array(jsonb_build_object('name', 'X', 'date', (current_date + 40)::text)))$q$, 'etapas: un día fuera de la carrera no vale');
+select pg_temp.expect_fail($q$select runner_set_stages('codigo-valorador-uno-01', 'reg', '30000000-0000-0000-0000-0000000000e2', jsonb_build_array(jsonb_build_object('name', 'X', 'date', (current_date + 20)::text)))$q$, 'etapas: solo en carreras de varios días');
+select pg_temp.expect_fail($q$select runner_set_stages('codigo-falso', 'reg', '30000000-0000-0000-0000-0000000000e1', '[]'::jsonb)$q$, 'etapas: enlace falso no vale');
+reset role;
+select pg_temp.check((select jsonb_array_length(stage_info) = 4 and stage_info->2->>'name' = 'Etapa 3' from registrations where id = '30000000-0000-0000-0000-0000000000e1'), 'etapas: se guardan las 4 (el nombre vacío pasa a «Etapa 3»)');
+select pg_temp.check((select km = 310.5 and elevation = 8000 from registrations where id = '30000000-0000-0000-0000-0000000000e1'), 'etapas: los km y el desnivel totales salen de la suma');
+set role anon;
+select runner_set_stages('codigo-valorador-uno-01', 'reg', '30000000-0000-0000-0000-0000000000e1', jsonb_build_array(
+  jsonb_build_object('name', 'Etapa 1', 'date', (current_date + 20)::text, 'km', 80.5), jsonb_build_object('name', 'Etapa 2', 'date', (current_date + 21)::text)));
+select pg_temp.check((select (e->'stage_info') is not null and jsonb_array_length(e->'stage_info') = 2 from jsonb_array_elements(runner_view('codigo-valorador-uno-01')->'registrations') e where e->>'id' = '30000000-0000-0000-0000-0000000000e1'), 'etapas: la pantalla del corredor las recibe');
+reset role;
+select pg_temp.check((select km = 310.5 from registrations where id = '30000000-0000-0000-0000-0000000000e1'), 'etapas: si no todas tienen km, el total no se toca');
+-- pasan a resultados con la carrera (y el pase automático ya no pierde el desnivel)
+insert into registrations (id, name, date, end_date, place, province, modality, km, elevation, price, url, stage_info) values
+  ('30000000-0000-0000-0000-0000000000e3', 'Etapas Pasada', current_date - 20, current_date - 17, 'Roses', 'Girona', 'BTT', 300, 8000, 90, 'https://ejemplo.org/y',
+   jsonb_build_array(jsonb_build_object('name', 'Prólogo', 'date', (current_date - 20)::text, 'km', 8), jsonb_build_object('name', 'Etapa 1', 'date', (current_date - 19)::text, 'km', 90)));
+insert into registration_entries (registration_id, runner_id, category, self_position, self_general_position, self_time_seconds)
+  select '30000000-0000-0000-0000-0000000000e3', id, 'M40', 5, 12, 40000 from runners where code = 'codigo-valorador-uno-01';
+select auto_promote_registrations();
+select pg_temp.check((select jsonb_array_length(stage_info) = 2 and stages = '["Prólogo","Etapa 1"]'::jsonb and elevation = 8000 and url = 'https://ejemplo.org/y' from races where name = 'Etapas Pasada'), 'etapas: viajan a resultados con la carrera, con su desnivel y su web');
 -- ===== Pasar a resultados conserva el puesto en la general =====
 insert into registrations (id, name, date) values ('20000000-0000-0000-0000-0000000000e1', 'Carrera General', current_date - 9);
 insert into registration_entries (registration_id, runner_id, category, self_position, self_general_position, self_time_seconds)

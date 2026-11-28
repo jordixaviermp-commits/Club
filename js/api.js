@@ -1,7 +1,7 @@
 // Acceso a datos. Dos versiones con la misma interfaz:
 //  - Supabase (real), cuando config.js tiene URL y clave.
 //  - Demostración, guardada solo en este navegador, para probar la app sin montar nada.
-import { streakCount, newCode, todayISO, pastLimit, numDays, yearOf, SUBTYPES, parseKm, normalize, parseElev, parsePrice } from './logic.js';
+import { streakCount, newCode, todayISO, pastLimit, numDays, yearOf, SUBTYPES, parseKm, normalize, parseElev, parsePrice, cleanStages, stageTotals } from './logic.js';
 
 /** Demo: «corrige» una crónica ordenando espacios y poniendo mayúscula y punto (la corrección real la hace Claude desde la base de datos). */
 const demoPolish = (t) => { const x = String(t).trim().replace(/\s+/g, ' '); return x.charAt(0).toUpperCase() + x.slice(1) + (/[.!?]$/.test(x) ? '' : '.'); };
@@ -61,6 +61,12 @@ export function friendlyError(e) {
 /** Web de una carrera lista para guardar: añade https:// si falta; null si está vacía; '!' si no es una dirección válida. */
 export const cleanWeb = (u) => { let t = String(u ?? '').trim(); if (!t) return null; if (!/^https?:\/\//i.test(t)) t = 'https://' + t; return /^https?:\/\/[^\s]+\.[^\s]+$/i.test(t) && t.length <= 500 ? t : '!'; };
 const normName = (s) => normalize(String(s || '')).replace(/[^a-z0-9]/g, '');
+/** (demo) Pone las etapas en una carrera o inscripción y recalcula los totales, igual que la base de datos. */
+function applyStages(t, stages, isRace = false) {
+  const clean = cleanStages(stages, t.date, t.end_date), tot = stageTotals(clean);
+  t.stage_info = clean;
+  if (clean) { if (tot.km) t.km = tot.km; if (tot.elevation) t.elevation = tot.elevation; if (isRace) t.stages = clean.map((x) => x.name); }
+}
 const detailFields = (o) => ({ subtype: SUBTYPES[o.modality]?.includes(o.subtype) ? o.subtype : null, km: parseKm(o.km) });
 
 /** Tipo de carrera y nombre del circuito, listos para guardar. */
@@ -316,6 +322,8 @@ export function supabaseApi(url, key) {
     async runnerCancelCorrection(code, id) { ok(await sb.rpc('runner_cancel_correction', { p_code: code, p_id: id })); },
     async resolveCorrection(id, accept, reply) { ok(await sb.rpc('resolve_correction', { p_id: id, p_accept: !!accept, p_reply: reply || null })); },
     async runnerSetDetails(code, id, subtype, km) { ok(await sb.rpc('runner_set_race_details', { p_code: code, p_id: id, p_subtype: subtype || null, p_km: parseKm(km) })); },
+    async runnerSetStages(code, kind, id, stages) { ok(await sb.rpc('runner_set_stages', { p_code: code, p_kind: kind, p_id: id, p_stages: stages })); },
+    async adminSetStages(kind, id, stages) { ok(await sb.rpc('admin_set_stages', { p_kind: kind, p_id: id, p_stages: stages })); },
     async runnerSetType(code, id, type, circuit) { ok(await sb.rpc('runner_set_race_type', { p_code: code, p_id: id, p_type: type, p_circuit: circuit || null })); },
     async runnerProposeCircuit(code, circuit, year, position, scope) {
       return ok(await sb.rpc('runner_propose_circuit', { p_code: code, p_circuit: circuit, p_year: year, p_position: position, p_scope: scope }));
@@ -584,7 +592,7 @@ export function demoApi(storage = globalThis.localStorage) {
       requireAdmin(); const d = load();
       const g = d.registrations.find((x) => x.id === id);
       if (g?.suspended) throw new Error('carrera_suspendida');
-      const race = { ...g, id: uuid() };
+      const race = { ...g, id: uuid(), ...(g.stage_info ? { stages: g.stage_info.map((x) => x.name) } : {}) };
       d.races.push(race);
       for (const e of d.registration_entries.filter((x) => x.registration_id === id)) {
         const rn = d.runners.find((r) => r.id === e.runner_id);
@@ -1090,6 +1098,16 @@ export function demoApi(storage = globalThis.localStorage) {
         logc(me.name, 'la_hizo', `se añadió a ${race.name} (la hizo)`);
       }
       save();
+    },
+    async runnerSetStages(code, kind, id, stages) {
+      const me = byCode(code), d = load(), t = kind === 'reg' ? d.registrations.find((x) => x.id === id) : d.races.find((x) => x.id === id);
+      if (!t) throw new Error('no_existe');
+      if (kind === 'race' && !(d.results || []).some((x) => x.race_id === id && x.runner_id === me.id)) throw new Error('no_es_tuya');
+      applyStages(t, stages, kind === 'race'); save();
+    },
+    async adminSetStages(kind, id, stages) {
+      requireAdmin(); const d = load(), t = kind === 'reg' ? d.registrations.find((x) => x.id === id) : d.races.find((x) => x.id === id);
+      if (!t) throw new Error('no_existe'); applyStages(t, stages, kind === 'race'); save();
     },
     async runnerSetDetails(code, id, subtype, km) {
       byCode(code); const g = load().registrations.find((x) => x.id === id);
