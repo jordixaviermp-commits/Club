@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { socialBoard, postKeyOf, resKeyOf, parseStoryLog, chronicleStatus } from '../js/logic.js';
+import { socialBoard, postKeyOf, resKeyOf, parseStoryLog, chronicleStatus, stageKeyOf, storyStageState } from '../js/logic.js';
 
 const reg = (id, name, date, extra = {}) => ({ id, name, date, entries: [{ runner_id: 'r1' }], modality: 'BTT', ...extra });
 const race = (id, name, date, extra = {}) => ({ id, name, date, results: [{ runner_id: 'r1', position: 1 }], modality: 'BTT', ...extra });
@@ -71,4 +71,46 @@ test('panel de redes: la crónica de una carrera la pasa uno solo y vale para to
   const old = race('co', 'Antigua', '2026-11-01', { results: [{ runner_id: 'p1', runner_name: 'Pere' }] });
   assert.equal(piece(socialBoard([old], [], new Set(), TODAY, null, { chron: { done: new Map() } }).items[0], 'cro').st, 'late');   // más de 7 días sin crónica
   assert.equal(piece(socialBoard([r], [], new Set(), TODAY, null).items[0], 'cro'), undefined);                              // sin el SQL no hay pieza
+});
+
+// ---- carreras por etapas: una historia por etapa (de la 2.ª en adelante), la mañana de cada una ----
+const epic = (extra = {}) => reg('e', 'Mediterranean Epic', '2026-11-18', { end_date: '2026-11-21', stage_info: [
+  { name: 'Etapa 1', date: '2026-11-18' }, { name: 'Etapa 2', date: '2026-11-19' }, { name: 'Etapa 3', date: '2026-11-20' }, { name: 'Etapa 4', date: '2026-11-21' }], ...extra });
+const stories = (it) => it.pieces.filter((p) => p.k === 'story');
+
+test('etapas: el registro distingue la historia de una etapa de la previa', () => {
+  const log = parseStoryLog({ desde: '2026-11-01', historias: [
+    { carrera: 'Mediterranean Epic', fecha: '2026-11-18', pagina: 1, publicada: '2026-11-17', media_id: '1' },
+    { carrera: 'Mediterranean Epic', fecha: '2026-11-18', etapa: 2, pagina: 1, publicada: '2026-11-19', media_id: '2' }] });
+  assert.ok(log.byKey.has(postKeyOf({ date: '2026-11-18', name: 'Mediterranean Epic' })));
+  assert.ok(log.byKey.has(stageKeyOf({ date: '2026-11-18', name: 'Mediterranean Epic' }, 2)));
+  assert.equal(log.byKey.get(postKeyOf({ date: '2026-11-18', name: 'Mediterranean Epic' })).n, 1);     // la de la etapa 2 no se suma a la previa
+});
+
+test('etapas: estado de la historia de una etapa', () => {
+  const g = { date: '2026-11-18', name: 'Epic' }, log = parseStoryLog({ desde: '2026-11-01', historias: [{ carrera: 'Epic', fecha: '2026-11-18', etapa: 2, publicada: '2026-11-19' }] });
+  assert.equal(storyStageState(g, 2, '2026-11-19', log, false, '2026-11-19').state, 'ok');
+  assert.equal(storyStageState(g, 3, '2026-11-20', log, false, '2026-11-19').state, 'programada');
+  assert.equal(storyStageState(g, 3, '2026-11-20', log, false, '2026-11-20').state, 'hoy');
+  assert.equal(storyStageState(g, 3, '2026-11-20', log, false, '2026-11-21').state, 'falta');
+  assert.equal(storyStageState(g, 3, '2026-11-20', log, true, '2026-11-21').state, 'manual');
+  assert.equal(storyStageState({ ...g, suspended: true }, 3, '2026-11-20', log, false, '2026-11-21'), null);
+  assert.equal(storyStageState(g, 3, '2026-10-20', log, false, '2026-11-21'), null);                    // antes de que existiera el registro
+});
+
+test('etapas: el panel de Redes lleva una historia por etapa (de la 2.ª), además de la previa', () => {
+  const log = parseStoryLog({ desde: '2026-11-01', historias: [{ carrera: 'Mediterranean Epic', fecha: '2026-11-18', etapa: 2, publicada: '2026-11-19' }] });
+  const b = socialBoard([], [epic()], new Set(), '2026-11-20', log);
+  const it = by(b, 'e'), st = stories(it);
+  assert.deepEqual(st.filter((p) => p.stage).map((p) => [p.stage, p.st]), [[2, 'ok'], [3, 'curso'], [4, 'curso']]);
+  assert.match(st.find((p) => p.stage === 3).text, /sale hoy/); assert.match(st.find((p) => p.stage === 4).text, /sale el/);
+  assert.equal(st.filter((p) => !p.stage).length, 1);                                                      // y la previa sigue siendo una sola
+});
+
+test('etapas: una etapa sin historia (ya pasada) aparece como pendiente; sin etapas, todo igual que antes', () => {
+  const log = parseStoryLog({ desde: '2026-11-01', historias: [] });
+  const it = by(socialBoard([], [epic()], new Set(), '2026-11-21', log), 'e');
+  assert.equal(stories(it).filter((p) => p.stage === 2)[0].st, 'pend'); assert.equal(stories(it).filter((p) => p.stage === 2)[0].text, 'Historia etapa 2: no consta');
+  assert.equal(stories(by(socialBoard([], [epic({ stage_info: null })], new Set(), '2026-11-20', log), 'e')).filter((p) => p.stage).length, 0);
+  assert.equal(stories(by(socialBoard([], [epic({ stage_info: [{ name: 'Única', date: '2026-11-18' }] })], new Set(), '2026-11-20', log), 'e')).filter((p) => p.stage).length, 0);
 });

@@ -497,6 +497,8 @@ export function mediaStats(mentions, raceList, year) {
 
 export const postKeyOf = (g) => `${g.date}|${normalize(g.name)}`;
 export const resKeyOf = (g) => 'res|' + postKeyOf(g);
+/** Clave de la historia de una etapa (de la 2.ª en adelante): la de la carrera + «|e2». La previa (día antes de la salida) es la de la carrera a secas. */
+export const stageKeyOf = (g, n) => `${postKeyOf(g)}|e${n}`;
 /** Día en que se publica la historia previa (automática): el día antes de la carrera (así entran los que se apuntan a última hora). */
 export const STORY_DAYS_BEFORE = 1;
 export const storyDateOf = (g) => { const d = new Date(String(g.date).slice(0, 10) + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() - STORY_DAYS_BEFORE); return d.toISOString().slice(0, 10); };
@@ -505,7 +507,7 @@ export function parseStoryLog(json) {
   const byKey = new Map();
   for (const h of Array.isArray(json?.historias) ? json.historias : []) {
     if (!h?.carrera || !h?.fecha) continue;
-    const k = postKeyOf({ date: String(h.fecha).slice(0, 10), name: h.carrera });
+    const et = Number(h.etapa), k = postKeyOf({ date: String(h.fecha).slice(0, 10), name: h.carrera }) + (Number.isInteger(et) && et >= 2 ? `|e${et}` : '');   // la historia de una etapa no cuenta como la previa
     const e = byKey.get(k) || { n: 0, publicada: null, ids: [] };
     e.n++; if (h.publicada && (!e.publicada || h.publicada < e.publicada)) e.publicada = String(h.publicada).slice(0, 10); if (h.media_id) e.ids.push(String(h.media_id));
     byKey.set(k, e);
@@ -528,6 +530,18 @@ export function storyState(g, log, marked, today) {
   if (sd === today) return { state: 'hoy', date: sd };
   if (log?.desde && sd >= log.desde) return { state: 'falta', date: sd };  // debía publicarse y no consta
   return null;                                   // de antes de que existiera el registro: no se sabe
+}
+
+/** Estado de la historia de una etapa (de la 2.ª en adelante), que sale la mañana del día en que se corre: { state: 'ok'|'manual'|'hoy'|'programada'|'falta', date, n } o null. */
+export function storyStageState(g, n, date, log, marked, today) {
+  const hit = log?.byKey.get(stageKeyOf(g, n));
+  if (hit) return { state: 'ok', date: hit.publicada, n: hit.n };
+  if (marked) return { state: 'manual' };
+  if (g.suspended || !date) return null;
+  if (date > today) return { state: 'programada', date };
+  if (date === today) return { state: 'hoy', date };
+  if (log?.desde && date >= log.desde) return { state: 'falta', date };   // debía salir y no consta
+  return null;
 }
 
 /**
@@ -1312,6 +1326,18 @@ export function socialBoard(races, registrations, posted, today, log = null, { b
         : s.state === 'hoy' ? { st: 'curso', text: 'Historia: sale hoy', date: s.date }
         : s.state === 'programada' ? { st: 'curso', text: `Historia: sale el ${short(s.date)}`, date: s.date }
         : { st: 'pend', text: 'Historia: no consta', date: s.date }), key: pk });
+      // una historia por etapa (de la 2.ª en adelante, la mañana de cada una): la 1.ª ya tiene la previa
+      const etapas = (Array.isArray(g.stage_info) ? [...g.stage_info] : []).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      if (etapas.length >= 2 && people(g)) etapas.forEach((e, i) => {
+        if (i < 1) return;
+        const n = i + 1, sk = stageKeyOf(g, n), t = storyStageState(g, n, e.date, log, posted.has(sk), today);
+        if (t) pieces.push({ k: 'story', stage: n, key: sk, ...(
+          t.state === 'ok' ? { st: 'ok', text: `Historia etapa ${n} ✓ ${t.date ? short(t.date) : ''}`.trim() }
+          : t.state === 'manual' ? { st: 'ok', text: `Historia etapa ${n} ✓ (marcada a mano)` }
+          : t.state === 'hoy' ? { st: 'curso', text: `Historia etapa ${n}: sale hoy`, date: t.date }
+          : t.state === 'programada' ? { st: 'curso', text: `Historia etapa ${n}: sale el ${short(t.date)}`, date: t.date }
+          : { st: 'pend', text: `Historia etapa ${n}: no consta`, date: t.date }) });
+      });
       // aviso
       if (kind === 'reg') {
         if (posted.has(pk)) pieces.push({ k: 'aviso', st: 'ok', text: 'Aviso ✓', key: pk });
