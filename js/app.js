@@ -175,10 +175,15 @@ const racePreview = (d) => [
 const rfPreview = (d, editing) => [
   d.name,
   [d.date ? formatDate(d.date) : '', d.place || d.province].filter(Boolean).join(' · '),
-  [d.modality, d.subtype, d.km ? kmText(d.km) : '', d.elevation ? elevText(d.elevation) : '', isLapRace(d.subtype) && d.laps ? `${d.laps} vueltas` : ''].filter(Boolean).join(' · '),
+  [d.modality, d.subtype, d.multi && d.stages?.length ? `${d.stages.length} etapas` : '', d.km ? kmText(d.km) : '', d.elevation ? elevText(d.elevation) : '', isLapRace(d.subtype) && d.laps ? `${d.laps} vueltas` : ''].filter(Boolean).join(' · '),
   [d.price !== '' && d.price != null ? (Number(d.price) === 0 ? 'Gratis' : `${d.price} €`) : '', d.url ? 'con web' : ''].filter(Boolean).join(' · '),
   editing ? (d.notes ? 'con notas' : '') : [d.category, d.paid ? 'pagada' : ''].filter(Boolean).join(' · '),
 ];
+/** Carrera de varios días en el formulario: en lugar de la distancia y el desnivel totales, un botón para poner las etapas (el total sale de ellas). */
+const stagesBtn = (d) => {
+  const st = d.stages || [], tot = stageTotals(st);
+  return `<button type="button" class="btn ghost stg-form-btn" data-act="rf-stages">${ico('layers')}<span><b>${st.length ? `${st.length} etapa${st.length === 1 ? '' : 's'}${tot.km ? ` · ${kmText(tot.km)}` : ''}${tot.elevation ? ` · ${elevText(tot.elevation)}` : ''}` : 'Poner las etapas'}</b><small>${st.length ? 'Toca para cambiarlas' : 'Nombre, km y desnivel de cada una (opcional)'}</small></span>${ico('go')}</button>`;
+};
 /** Texto del total de una carrera de circuito cerrado (vuelta × vueltas). */
 const lapTotalText = (d) => {
   const t = circuitTotals(d.lap_km, d.lap_elev, d.laps), parts = (km, el) => [km ? kmText(km) : '', el ? elevText(el) : ''].filter(Boolean).join(' · ');
@@ -1163,7 +1168,7 @@ const isPastReg = (id) => { const g = S.runnerData?.registrations.find((x) => x.
 /** Pantalla para poner el resultado: de una inscripción (reg_) o de una carrera ya en resultados (race_). */
 const resultHref = (id) => (S.runnerData?.registrations.some((g) => g.id === id) ? `#/resultado/reg_${id}` : `#/resultado/race_${id}`);
 const emptyRunnerDraft = (pre = {}) => ({ name: '', date: '', multi: false, end_date: '', place: '', province: '', country: DEFAULT_COUNTRY,
-  modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', category: '', url: '', elevation: '', price: '', paid: false, paid_on: '', paid_amount: '', lap_km: '', lap_elev: '', laps: '', pair: false, partner: '', partner_id: '', ...pre });
+  modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', category: '', url: '', elevation: '', price: '', paid: false, paid_on: '', paid_amount: '', lap_km: '', lap_elev: '', laps: '', stages: [], pair: false, partner: '', partner_id: '', ...pre });
 
 /** «Gral. 12º»: el puesto en la clasificación general (todas las categorías), si se conoce. */
 const genTag = (g) => (g ? `<small class="gen-tag" title="Puesto en la general (todas las categorías)">Gral. ${g}º</small>` : '');
@@ -1227,7 +1232,7 @@ function viewRunnerNew() {
           ${editing ? `<label class="flabel-l">País<input data-rf="country" list="dl-country" value="${esc(d.country || '')}" maxlength="60"></label>` : '<span></span>'}</div>`, '#0f9d8a', false, mk[1])}
       ${fsecD('rf3', 3, 'bars', 'Qué tipo de carrera es', pv[2], `<div class="grid2 top-align"><label class="flabel-l">Modalidad<select data-rf="modality">${MODALITIES.map((m) => `<option value="${esc(m)}"${m === d.modality ? ' selected' : ''}>${MOD_ICON[m] || '🏁'} ${esc(m)}</option>`).join('')}</select></label>
           ${SUBTYPES[d.modality] ? `<label class="flabel-l">Disciplina *<select data-rf="subtype" required><option value="">Elige…</option>${SUBTYPES[d.modality].map((x) => `<option value="${esc(x)}"${x === d.subtype ? ' selected' : ''}>${esc(x)}</option>`).join('')}</select></label>` : '<span></span>'}</div>
-        ${isLapRace(d.subtype) ? lapBlock(d) : `<div class="grid2 top-align"><label class="flabel-l">Distancia (km)<input type="number" inputmode="decimal" step="0.1" min="0.1" max="1000" data-rf="km" value="${esc(d.km ?? '')}" placeholder="85"></label>
+        ${d.multi && !editing ? stagesBtn(d) : isLapRace(d.subtype) ? lapBlock(d) : `<div class="grid2 top-align"><label class="flabel-l">Distancia (km)<input type="number" inputmode="decimal" step="0.1" min="0.1" max="1000" data-rf="km" value="${esc(d.km ?? '')}" placeholder="85"></label>
           <label class="flabel-l">Desnivel (m)<input type="text" inputmode="numeric" data-rf="elevation" value="${esc(d.elevation ?? '')}" maxlength="6" placeholder="1200" autocomplete="off"></label></div>`}
         ${S.runnerData.circuits ? typeFields(d, 'data-rf', { compact: true }) : ''}
         ${editing ? '' : `<label class="check"><input type="checkbox" data-rf-pair ${d.pair ? 'checked' : ''}> La hago por parejas</label>
@@ -6585,6 +6590,14 @@ const actions = {
     const ok = await run(async () => { await api.adminSetStageResult(key, r.who, n, r.position, r.general, r.time); await reload(); return true; }, r.position == null && r.general == null && r.time == null ? 'Resultado quitado' : 'Resultado de la etapa guardado');
     if (ok) render();
   },
+  async 'rf-stages'() {   // «Añadir carrera»: etapas de una carrera de varios días, antes de guardarla
+    const d = S.rdraft; if (!d) return;
+    if (!d.date || !d.end_date || d.end_date <= d.date) return toast('Pon primero el primer y el último día de la carrera (en «Cuándo y dónde»).', true);
+    const list = await askStages({ name: d.name || 'Etapas', date: d.date, end_date: d.end_date, stage_info: d.stages?.length ? d.stages : null }); if (list === null) return;
+    d.stages = list; const tot = stageTotals(list);
+    if (list.length) { d.km = tot.km ?? ''; d.elevation = tot.elevation ?? ''; }
+    render();
+  },
   async 'pair-edit'(el) {
     const kind = el.dataset.kind, id = el.dataset.id;
     const t = kind === 'reg' ? S.runnerData?.registrations?.find((x) => x.id === id) : (S.team?.races || []).find((x) => x.id === id) || (S.runnerData?.my_results || []).find((x) => x.race_id === id);
@@ -6854,6 +6867,7 @@ const forms = {
       if (String(d.lap_elev ?? '').trim() !== '' && !tt.elevation) return toast('Revisa el desnivel del circuito: el total no puede pasar de 10 000 m.', true);
       d.km = tt.km ?? d.km; d.elevation = tt.elevation ?? d.elevation;
     }
+    if (d.multi && d.stages?.length) { try { cleanStages(d.stages, d.date, d.end_date); } catch { return toast('Las etapas no encajan con los días de la carrera: revísalas.', true); } }
     if (d.date < pastLimit()) return toast('Esa fecha es demasiado antigua: solo se pueden añadir carreras desde el 1 de enero del año pasado.', true);
     if (d.multi && d.end_date < d.date) return toast('El último día no puede ser anterior al primero.', true);
     if (d.race_type === 'circuito' && !cleanName(d.circuit)) return toast('Falta el nombre del circuito.', true);
@@ -6910,10 +6924,8 @@ const forms = {
       if (d.paid) { const raw = String(d.paid_amount ?? '').trim().replace(',', '.'); await api.runnerSetPaid(S.code, id, true, raw === '' ? null : Math.round(Number(raw) * 100) / 100, d.paid_on || todayISO()).catch((e) => toast(friendlyError(e), true)); }   // lo pagado de verdad (puede ser distinto del precio de referencia)
       if (d.pair && (d.partner_id || String(d.partner || '').trim())) await api.runnerSetPair(S.code, 'reg', id, d.partner_id ? '' : String(d.partner).trim(), d.partner_id || null).catch((e) => toast(friendlyError(e), true));
       await loadRunner(); await loadStageResults().catch(() => {});
-      if (d.multi) {   // carrera de varios días: se ofrecen ya las etapas (una por día, para completar)
-        const g = (S.runnerData?.registrations || []).find((x) => x.id === id);
-        const list = g ? await askStages({ ...g }) : null;
-        if (list && list.length) await run(async () => { await api.runnerSetStages(S.code, 'reg', id, list); await loadRunner(); return true; }, 'Etapas guardadas');
+      if (d.multi && d.stages?.length) {   // las etapas puestas en el formulario se guardan con la carrera
+        await api.runnerSetStages(S.code, 'reg', id, d.stages).catch((e) => toast(friendlyError(e), true)); await loadRunner();
       }
     }
     if (id) { S.rdraft = null; S.q.runner = ''; go(past ? resultHref(id) : '#/'); }
@@ -7231,7 +7243,7 @@ $app.addEventListener('change', async (ev) => {
   if ('rfPair' in t.dataset && S.rdraft) { S.rdraft.pair = t.checked; if (t.checked && !S.team) await ensureTeamQuiet(); render(); return; }
   if (t.dataset.rf === 'partner_id' && S.rdraft) { S.rdraft.partner_id = t.value; if (t.value) S.rdraft.partner = ''; render(); return; }
   if ('rfMulti' in t.dataset && S.rdraft) {
-    S.rdraft.multi = t.checked; if (!t.checked) S.rdraft.end_date = ''; render(); return;
+    S.rdraft.multi = t.checked; if (!t.checked) { S.rdraft.end_date = ''; S.rdraft.stages = []; } render(); return;
   }
   if (t.dataset.actChange === 'socpost') { // el encargado de redes marca lo publicado
     const key = t.dataset.key, v = t.checked, d = S.socialData;
