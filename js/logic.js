@@ -19,6 +19,17 @@ export const SUBTYPES = {
   Carretera: ['Critérium', 'Ciclodeportiva', 'Máster', 'Contrarreloj', 'Ultradistancia', 'Otra'],
   BTT: ['XCO', 'XCM', 'UXCM', 'Rally', 'Descenso', 'Otra'],
 };
+/** Formatos que se corren dando vueltas a un circuito cerrado: se piden los km y el desnivel de UNA vuelta y el número de vueltas. */
+export const LAP_SUBTYPES = ['XCO', 'Critérium'];
+export const isLapRace = (subtype) => LAP_SUBTYPES.includes(subtype);
+/** Totales de una carrera de circuito: km y desnivel de una vuelta × número de vueltas. Cada total es null si falta o no es válido (vueltas: entero de 1 a 500; total de km hasta 1000; desnivel hasta 10 000). */
+export function circuitTotals(lapKm, lapElev, laps) {
+  const num = (v) => { const s = String(v ?? '').trim().replace(',', '.'); return s === '' ? NaN : Number(s); };
+  const n = num(laps), k = num(lapKm), e = num(lapElev);
+  if (!Number.isInteger(n) || n < 1 || n > 500) return { laps: null, km: null, elevation: null };
+  const km = Number.isFinite(k) && k > 0 ? Math.round(k * n * 10) / 10 : null, elevation = Number.isFinite(e) && e > 0 ? Math.round(e * n) : null;
+  return { laps: n, km: km !== null && km <= 1000 ? km : null, elevation: elevation !== null && elevation <= 10000 ? elevation : null };
+}
 /** Km de un valor de formulario: número entre 0 y 1000 con un decimal, o null. */
 export function parseKm(v) {
   const n = Number(String(v ?? '').replace(',', '.'));
