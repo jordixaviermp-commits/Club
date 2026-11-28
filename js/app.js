@@ -2018,7 +2018,7 @@ function runnerRegCard(g, opts = {}) {
         : `<button type="button" class="rc-tool susp" data-act="r-suspend" data-id="${g.id}" data-v="1" aria-label="Marcar como suspendida" title="Marcar como suspendida">${ico('ban')}</button>`) : ''}</div>`;
     const matesFull = g.entries.length ? `<div class="club-row"><span class="count">${ico('users')}${g.entries.length} del club</span><ul class="people">${g.entries.map((e) =>
       `<li class="${e.runner_id === me.id ? 'me' : ''}${e.paid ? ' paid' : ''}">${esc(e.name)}${e.category ? ` <small>${esc(e.category)}</small>` : ''}${e.paid ? `<span class="paid-mark" title="Ha pagado la inscripción" aria-label="ha pagado la inscripción">${ico('euro')}</span>` : ''}</li>`).join('')}</ul></div>` : '';
-    const matesCompact = g.entries.length ? `<details class="club-det" data-open-key="club-${g.id}"${S.open?.['club-' + g.id] ? ' open' : ''}><summary>${ico('users')}${g.entries.length} del club${ico('chevd', 'cd-chev')}</summary><ul class="people">${g.entries.map((e) =>
+    const matesCompact = g.entries.length ? `<details class="club-det" data-open-key="club-${g.id}"${(S.open?.['club-' + g.id] ?? opts.clubOpen) ? ' open' : ''}><summary>${ico('users')}${g.entries.length} del club${ico('chevd', 'cd-chev')}</summary><ul class="people">${g.entries.map((e) =>
       `<li class="${e.runner_id === me.id ? 'me' : ''}${e.paid ? ' paid' : ''}">${esc(e.name)}${e.category ? ` <small>${esc(e.category)}</small>` : ''}${e.paid ? `<span class="paid-mark" title="Ha pagado la inscripción" aria-label="ha pagado la inscripción">${ico('euro')}</span>` : ''}</li>`).join('')}</ul></details>` : '';
     const mates = opts.notes ? matesCompact : matesFull;
     const key = `rc-${g.id}`, isOpen = !!opts.open || !!S.open?.[key];
@@ -2067,55 +2067,64 @@ async function ensureMoves() {
   const box = $app.querySelector('#pulse-box');
   if (box && S.runnerData && !searchActive()) box.innerHTML = S.regView === 'cal' ? '' : teamPulse(S.runnerData);
 }
-function movesBlock() {
-  if (!Array.isArray(S.moves) || !S.moves.length) return '';
+/** Los movimientos del equipo (quién se apunta a qué), listos para pintar: filas, tendencia y gráfico por semanas. null si no hay. */
+function movesData() {
+  if (!Array.isArray(S.moves) || !S.moves.length) return null;
   const m = teamMoves(S.moves), MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   const mx = Math.max(1, ...m.bars.map((b) => b.n)), items = m.list.slice(0, 30);
   const ago = (n) => (n === 0 ? 'hoy' : n === 1 ? 'ayer' : n < 14 ? `hace ${n} días` : `hace ${Math.round(n / 7)} sem.`);
-  const row = (x) => `<li class="mv-i"><i class="mv-dot ${discClass(x.modality, x.subtype)}"></i><span class="mv-tx"><b>${esc(x.name.split(' ')[0])}</b> se apuntó a <b>${esc(x.race)}</b><small>${esc(dayMon(x.date))} · ${esc(x.subtype || x.modality)}</small></span><span class="mv-ago">${ago(x.ago)}</span></li>`;
+  const row = (x) => `<li class="mv-i" title="${esc(`${x.name.split(' ')[0]} se apuntó a ${x.race} · ${dayMon(x.date)} · ${x.subtype || x.modality}`)}"><i class="mv-dot ${discClass(x.modality, x.subtype)}"></i><span class="mv-tx"><b>${esc(x.name.split(' ')[0])}</b> se apuntó a <b>${esc(x.race)}</b></span><span class="mv-ago">${ago(x.ago)}</span></li>`;
   const trend = m.trend > 0 ? `<span class="up">▲ ${m.trend} más que las 4 semanas previas</span>` : m.trend < 0 ? `<span class="down">▼ ${-m.trend} menos que las 4 semanas previas</span>` : '<span>= igual que las 4 semanas previas</span>';
-  const head = items.slice(0, 3), rest = items.slice(3), tr = m.trend > 0 ? `<span class="mv-tr up">▲ ${m.trend}</span>` : m.trend < 0 ? `<span class="mv-tr down">▼ ${-m.trend}</span>` : '';
-  const bars = `<div class="mv-bars" role="img" aria-label="Inscripciones por semana, últimas 8 semanas">${m.bars.map((b, i) => { const d = new Date(b.start); return `<div class="mv-b${i === m.bars.length - 1 ? ' now' : ''}"><em>${b.n || ''}</em><span style="height:${Math.max(b.n ? 8 : 2, (b.n / mx) * 100)}%"></span><small>${d.getUTCDate()} ${MES[d.getUTCMonth()]}</small></div>`; }).join('')}</div>
-    <p class="mv-trend">${trend}</p>`;
-  // siempre a la vista: los últimos movimientos del equipo (quién se apunta a qué); el resto y el gráfico por semanas, a un toque
-  return `<section class="card moves-card" id="sec-moves"><div class="mv-top"><h3>${ico('clock')}Últimos movimientos</h3>${tr ? `<span class="mv-trw" title="Inscripciones de las últimas 4 semanas respecto a las 4 anteriores">${tr} esta semana</span>` : ''}</div>
-    <ul class="mv-list">${head.map(row).join('')}</ul>
-    <details class="mv-more" data-open-key="mvmore"${S.open?.mvmore ? ' open' : ''}><summary>${rest.length ? `Ver ${rest.length} más y el gráfico por semanas` : 'Ver el gráfico por semanas'}${ico('chevd', 'mv-chev')}</summary>${bars}${rest.length ? `<ul class="mv-list">${rest.map(row).join('')}</ul>` : ''}</details></section>`;
+  const tr = m.trend > 0 ? `<span class="mv-tr up">▲ ${m.trend}</span>` : m.trend < 0 ? `<span class="mv-tr down">▼ ${-m.trend}</span>` : '';
+  const bars = `<h4 class="ta-h4">Inscripciones por semana</h4><div class="mv-bars" role="img" aria-label="Inscripciones por semana, últimas 8 semanas">${m.bars.map((b, i) => { const d = new Date(b.start); return `<div class="mv-b${i === m.bars.length - 1 ? ' now' : ''}"><em>${b.n || ''}</em><span style="height:${Math.max(b.n ? 8 : 2, (b.n / mx) * 100)}%"></span><small>${d.getUTCDate()} ${MES[d.getUTCMonth()]}</small></div>`; }).join('')}</div><p class="mv-trend">${trend}</p>`;
+  return { head: items.slice(0, 3).map(row).join(''), rest: items.slice(3).map(row).join(''), nRest: Math.max(0, items.length - 3), tr, bars };
 }
 function teamPulse(d) {
   ensureMoves();
   const today = d.today || todayISO();
   const up = d.registrations.filter((g) => !g.suspended && g.date >= today && (g.entries || []).length);
-  if (!up.length) return movesBlock();
-  const parts = up.reduce((n, g) => n + g.entries.length, 0);
-  const people = new Set(up.flatMap((g) => g.entries.map((e) => e.runner_id))).size;
-  const mine = up.filter((g) => g.entries.some((e) => e.runner_id === d.me.id)).length;
-  const byMonth = new Map();
-  for (const g of up) {
-    const ym = g.date.slice(0, 7), m = byMonth.get(ym) || { total: 0, races: 0, discs: {} }, dk = disciplineKey(g.modality, g.subtype);
-    m.total += g.entries.length; m.races++; m.discs[dk] = (m.discs[dk] || 0) + g.entries.length; byMonth.set(ym, m);
-  }
-  const cols = [...byMonth].sort(([a], [b]) => a.localeCompare(b)).slice(0, 7);
-  const mx = Math.max(1, ...cols.map(([, m]) => m.total));
-  const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-  const tot = {};
-  for (const [, m] of cols) for (const [k, n] of Object.entries(m.discs)) tot[k] = (tot[k] || 0) + n;
-  const discs = Object.keys(tot).sort((a, b) => tot[b] - tot[a] || a.localeCompare(b, 'es'));
-  // plegado por defecto: una línea con las cifras; el gráfico por meses se abre al tocar
-  return `<details class="card pulse pulse-fold" data-open-key="pulse"${S.open?.pulse ? ' open' : ''}><summary><span class="pulse-t">${ico('users')}El equipo ya está apuntado</span>
-      <span class="pulse-chips"><span><b>${up.length}</b> carrera${up.length === 1 ? '' : 's'}</span><span><b>${people}</b> corredor${people === 1 ? '' : 'es'}</span>${mine ? `<span class="me">Tú en <b>${mine}</b></span>` : ''}</span><span class="pulse-chev" aria-hidden="true">${ico('chevd')}</span></summary>
-    <p class="pulse-sum">${parts} inscripci${parts === 1 ? 'ón' : 'ones'} en ${up.length} carrera${up.length === 1 ? '' : 's'} próxima${up.length === 1 ? '' : 's'}.</p>
+  const mv = movesData();
+  if (!up.length && !mv) return '';
+  let chips = '', months = '';
+  if (up.length) {
+    const parts = up.reduce((n, g) => n + g.entries.length, 0);
+    const people = new Set(up.flatMap((g) => g.entries.map((e) => e.runner_id))).size;
+    const mine = up.filter((g) => g.entries.some((e) => e.runner_id === d.me.id)).length;
+    const byMonth = new Map();
+    for (const g of up) {
+      const ym = g.date.slice(0, 7), m = byMonth.get(ym) || { total: 0, races: 0, discs: {} }, dk = disciplineKey(g.modality, g.subtype);
+      m.total += g.entries.length; m.races++; m.discs[dk] = (m.discs[dk] || 0) + g.entries.length; byMonth.set(ym, m);
+    }
+    const cols = [...byMonth].sort(([a], [b]) => a.localeCompare(b)).slice(0, 7);
+    const mx = Math.max(1, ...cols.map(([, m]) => m.total));
+    const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+    const tot = {};
+    for (const [, m] of cols) for (const [k, n] of Object.entries(m.discs)) tot[k] = (tot[k] || 0) + n;
+    const discs = Object.keys(tot).sort((a, b) => tot[b] - tot[a] || a.localeCompare(b, 'es'));
+    chips = `<span class="pulse-chips"><span><b>${up.length}</b> carrera${up.length === 1 ? '' : 's'}</span><span><b>${people}</b> corredor${people === 1 ? '' : 'es'}</span>${mine ? `<span class="me">Tú en <b>${mine}</b></span>` : ''}</span>`;
+    months = `<h4 class="ta-h4">Inscripciones por mes · ${parts} en ${up.length} carrera${up.length === 1 ? '' : 's'}</h4>
     <div class="months pulse-months" role="group" aria-label="Inscripciones del equipo por mes">${cols.map(([ym, m]) => `<button type="button" class="mcol pulse-col" data-act="pulse-month" data-m="${ym}" aria-label="${MES[Number(ym.slice(5)) - 1]}: ${m.total} inscripciones en ${m.races} carreras">
       <em>${m.total}</em><div class="mstack" style="height:${(m.total / mx) * 100}%">${discs.filter((k) => m.discs[k]).reverse().map((k) => { const [dm, ds] = k.split('|');
         return `<span class="${discClass(dm, ds)}" style="flex:${m.discs[k]}" title="${esc(discLabel(dm, ds))}: ${m.discs[k]}"></span>`; }).join('')}</div>
       <b>${MES[Number(ym.slice(5)) - 1]}</b></button>`).join('')}</div>
-    <p class="pulse-legend">${discs.map((k) => { const [dm, ds] = k.split('|'); return `<span class="${discClass(dm, ds)}"><i></i>${esc(discLabel(dm, ds))} <b>${tot[k]}</b></span>`; }).join('')}</p></details>${movesBlock()}`;
+    <p class="pulse-legend">${discs.map((k) => { const [dm, ds] = k.split('|'); return `<span class="${discClass(dm, ds)}"><i></i>${esc(discLabel(dm, ds))} <b>${tot[k]}</b></span>`; }).join('')}</p>`;
+  }
+  // una sola tarjeta: cifras del equipo, los últimos movimientos siempre abiertos (en una caja de alto fijo) y los gráficos a un toque
+  return `<section class="card team-act" id="sec-moves"><div class="ta-top"><span class="pulse-t">${ico('users')}El equipo ya está apuntado</span>${chips}</div>
+    ${mv ? `<div class="mv-top"><h3>${ico('clock')}Últimos movimientos</h3>${mv.tr ? `<span class="mv-trw" title="Inscripciones de las últimas 4 semanas respecto a las 4 anteriores">${mv.tr} esta semana</span>` : ''}</div>
+      <ul class="mv-list ta-list" aria-label="Últimos movimientos del equipo">${mv.head}</ul>` : ''}
+    <details class="ta-more" data-open-key="pulse"${S.open?.pulse ? ' open' : ''}><summary>${mv && mv.nRest ? `Ver ${mv.nRest} más y los gráficos` : 'Ver los gráficos'}${ico('chevd', 'mv-chev')}</summary>${mv && mv.nRest ? `<ul class="mv-list ta-list ta-rest">${mv.rest}</ul>` : ''}${months}${mv ? mv.bars : ''}</details></section>`;
 }
 
 /** Tarjeta «Planificar ruta» (herramienta ruta/): va en Carreras, justo bajo el buscador. */
 const rutaCard = () => `<a class="card ruta-card" href="ruta/">${ico('route', 'ruta-ic')}<span class="ruta-txt"><b>Planificar ruta <span class="new-tag">NUEVO</span></b><small class="muted">Sube tu track y mira viento, tiempo y subidas</small></span><span class="mrow-go" aria-hidden="true">${ico('go')}</span></a>`;
 
 /** La próxima carrera del equipo, bien resaltada: que se vea la semana en la que compite el club aunque quien mira no participe. */
+/** Ids de las carreras del equipo que salen en la tarjeta de arriba (la pila de «esta semana»): no se repiten en la lista de debajo. */
+function teamWeekIds(d) {
+  const today = d.today || todayISO(), last = (g) => g.end_date || g.date;
+  return new Set((d.registrations || []).filter((g) => !g.suspended && (g.entries || []).length && last(g) >= today && (g.date <= today || daysTo(g.date) <= 7)).map((g) => g.id));
+}
 function nextTeamBanner(d) {
   const today = d.today || todayISO(), last = (g) => g.end_date || g.date;
   const all = (d.registrations || []).filter((g) => !g.suspended && (g.entries || []).length && last(g) >= today)
@@ -2127,10 +2136,10 @@ function nextTeamBanner(d) {
     const wk = live || n <= 7, light = preLight(live ? 0 : n);
     const dot = light === 'red' ? '🔴 ' : light === 'amber' ? '🟠 ' : '';   // semáforo, igual que la próxima carrera de Mi temporada
     const when = live ? 'En curso' : daysToText(n);
-    return `<section class="card next-team nt-mini lt-${light}${wk ? ' wk' : ''}" aria-label="Próxima carrera del equipo">
+    return `<section class="card next-team nt-mini lt-${light}${wk ? ' wk' : ''}" data-id="${esc(g.id)}" aria-label="Próxima carrera del equipo: ${esc(g.name)}. Toca para ver todos sus datos">
     <div class="nt-head">${raceTile(g, { mine: !!going })}<div class="rh-main"><p class="nt-k">${wk ? (solo ? 'Equipo · esta semana' : 'Esta semana') : 'Equipo · próxima carrera'}</p><h2 class="nt-n">${esc(g.name)}</h2><p class="rh-sub">${esc(raceSub(g))}</p></div>
       <span class="nt-pill nt-when">${wk ? dot : ''}${when}</span></div>
-    <div class="nt-foot"><span class="nt-me${going ? ' on' : ''}">${going ? `${ico('check')}Tú vas` : 'Tú no estás'} · ${g.entries.length} del club</span><button type="button" class="btn nt-btn" data-act="goto-sec" data-to="rc-${esc(g.id)}">${going ? 'Ver carrera' : 'Apuntarme'}</button></div></section>`;
+    <div class="nt-foot"><span class="nt-me${going ? ' on' : ''}">${going ? `${ico('check')}Tú vas` : 'Tú no estás'} · ${g.entries.length} del club</span><a class="btn nt-btn" href="${runnerHref('carrera')}/${esc(g.id)}/carreras">${going ? 'Ver carrera' : 'Apuntarme'}</a></div></section>`;
   };
   if (week.length < 2) return card(week[0] || all[0], true);
   // varias carreras del equipo esta semana: una pila de tarjetas, con un trozo de la siguiente asomando por debajo; se desliza la de arriba para ver la siguiente
@@ -2149,10 +2158,12 @@ function viewRunnerHome() {
   const done = byMod((S.team?.races || []).filter((r) => (r.results || []).length));
   const body = S.regView === 'cal'
     ? calendarView(regs, card, isMine, { done, doneCard: (r) => doneRaceCard(r, { meId: me.id }), shiftGroup: S.myShift })
-    : `${(() => { const wk = upcoming.filter((g) => daysTo(g.date) <= 7); return wk.length ? `<h2 class="section">📅 Esta semana (${wk.length})</h2>${wk.map(card).join('')}` : ''; })()}
-    <h2 class="section">${upcoming.some((g) => daysTo(g.date) <= 7) ? 'Más adelante' : 'Próximas carreras'} (${upcoming.filter((g) => daysTo(g.date) > 7).length || (upcoming.some((g) => daysTo(g.date) <= 7) ? 0 : upcoming.length)})</h2>
-    ${upcoming.length ? monthList(upcoming.filter((g) => daysTo(g.date) > 7), card) : `<p class="empty">${filtersOn(me) ? 'Ninguna carrera próxima con estos filtros. <button class="link" data-act="filters-clear">Quitar filtros</button>' : 'Todavía no hay carreras abiertas.'}</p>`}
-    `;
+    : (() => {
+      // las carreras de esta semana con gente del club ya salen arriba, en la pila: aquí solo el resto, sin repetirlas
+      const stackOn = normalize(S.q.runner || '').length < 2, inStack = stackOn ? teamWeekIds(d) : new Set(), rest = upcoming.filter((g) => !inStack.has(g.id));
+      return `${rest.length || !upcoming.length ? `<h2 class="section">${inStack.size ? 'Más carreras' : 'Próximas carreras'} (${rest.length})</h2>` : ''}
+    ${upcoming.length ? monthList(rest, card) : `<p class="empty">${filtersOn(me) ? 'Ninguna carrera próxima con estos filtros. <button class="link" data-act="filters-clear">Quitar filtros</button>' : 'Todavía no hay carreras abiertas.'}</p>`}`;
+    })();
   return frame(runnerTitle(), `
     ${previewBanner()}
     <div class="ds2">
@@ -2212,9 +2223,9 @@ function viewRunnerDoneRace(raceId) {
 function viewRunnerRace(id) {
   if (String(id || '').startsWith('race_')) return viewRunnerDoneRace(String(id).slice(5));
   const g = S.runnerData.registrations.find((x) => x.id === id);
-  const back = runnerHref('mi');
+  const back = !(S.session?.isAdmin && S.preview) && parseRoute().rest === 'carreras' ? runnerHref('') : runnerHref('mi');   // se vuelve a donde se vino
   if (!g) return frame('Carrera', `${previewBanner()}<p class="empty">Esta carrera ya no está entre las inscripciones: puede que la dirección ya la haya pasado a resultados. Mírala en «Carreras hechas».</p>`, { back });
-  return frame(cleanName(g.name), `${previewBanner()}${runnerRegCard(g, { open: true, notes: true, noPast: true })}
+  return frame(cleanName(g.name), `${previewBanner()}${runnerRegCard(g, { open: true, notes: true, noPast: true, clubOpen: true })}
 `, { back });
 }
 
@@ -7262,6 +7273,13 @@ $app.addEventListener('change', async (ev) => {
     const card = ev.target.closest('.next-team');
     if (card && card.dataset.pos !== '0') { ev.preventDefault(); ev.stopPropagation(); setPos(st, [...st.children].indexOf(card)); }
   }, true);
+  // tocar una carrera del equipo (la de arriba de la pila o la tarjeta suelta) abre su ficha con todos los datos
+  $app.addEventListener('click', (ev) => {
+    const card = ev.target.closest?.('.next-team[data-id]');
+    if (!card || ev.target.closest('a, button, input, select, textarea')) return;
+    if (card.closest('.nt-stack') && card.dataset.pos !== '0') return;
+    go(`${runnerHref('carrera')}/${card.dataset.id}/carreras`);
+  });
 })();
 
 // Recordar si un desplegable estaba abierto (p. ej. «Mis carreras») al volver a pintar la pantalla.
