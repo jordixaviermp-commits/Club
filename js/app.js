@@ -1459,7 +1459,7 @@ function myRacesCard(d) {
 
   </section>
 
-  ${afterRaceCard({ ...ar, peek: todoTxt })}
+  ${afterRaceCard({ ...ar, peek: todoTxt, heroId: upcoming[0]?.id })}
 
 
   ${calendar}
@@ -1638,10 +1638,12 @@ function afterRaceModel(d, { pending, noPos, sent, today, ad, results, upcoming,
 /** «Por hacer»: la única lista de tareas (resultados, crónicas, pagos y datos). Abierta si hay algo por hacer. */
 function afterRaceCard(m) {
   if (!m.list.length) return '';
-  const { todo, tasksN, rowHtml } = m;
+  const { tasksN, rowHtml } = m;
+  const todo = m.todo.filter((r) => !(r.pay && r.id === m.heroId));   // el pago de la próxima carrera ya está en su tarjeta de arriba
+  const heroOnly = m.todo.length > 0 && todo.length === 0;
   return `<section class="card ar-card" id="sec-after"><details class="chro-det" data-open-key="after"${(S.open?.after ?? todo.length > 0) ? ' open' : ''}>
     <summary class="mt-h"><h2>Por hacer</h2><span class="mt-cnt ${tasksN ? 'todo' : 'ok'}">${tasksN || 'Al día'}</span>${m.peek && tasksN ? `<small class="mt-hs peek">${esc(m.peek.replace(/<[^>]+>/g, ''))}</small>` : ''}<button type="button" class="mt-info" data-act="mt-info" data-k="todo" aria-label="Cómo funciona «Por hacer»" title="Cómo funciona">${ico('info')}</button>${ico('chevd', 'mt-chev')}</summary>
-    ${todo.length ? `<ul class="mt-list">${todo.map((r) => rowHtml(r, 'todo')).join('')}</ul>` : '<p class="empty small">No te falta nada. 🎉</p>'}
+    ${todo.length ? `<ul class="mt-list">${todo.map((r) => rowHtml(r, 'todo')).join('')}</ul>` : heroOnly ? '<p class="empty small">Solo falta marcar el pago de tu próxima carrera: lo tienes arriba, en su tarjeta.</p>' : '<p class="empty small">No te falta nada. 🎉</p>'}
   </details></section>`;
 }
 
