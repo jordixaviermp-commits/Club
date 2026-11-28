@@ -3069,3 +3069,23 @@ details.rcard { margin: 0 0 .8rem; border-radius: 16px; border-top: 1px solid va
 /* v316 · globo de tareas en la pestaña Mi temporada: naranja = por hacer; el punto rojo es un plazo de inscripción que cierra */
 .tab-n.todo { background: var(--warn); color: #2b1d00; }
 .tabs a .tab-dot { position: absolute; top: 4px; left: calc(50% - 14px); width: 9px; height: 9px; border-radius: 50%; background: var(--bad-2); box-shadow: 0 0 0 2px var(--card); }
+
+/* v321 · etapas de una carrera de varios días */
+.stg { margin: .5rem 0; padding: .6rem .7rem; border-radius: 12px; background: color-mix(in srgb, var(--ink, #18211f) 4%, var(--card)); display: grid; gap: .45rem; }
+.stg-h { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; } .stg-h > .ico { width: 18px; height: 18px; color: var(--muted); flex: none; }
+.stg-h small { color: var(--muted); flex: 1; min-width: 0; } .stg-h .btn.small { min-height: 34px; margin-left: auto; }
+.stg-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .15rem; }
+.stg-list li { display: flex; align-items: baseline; justify-content: space-between; gap: .6rem; padding: .3rem 0; border-top: 1px solid var(--line); } .stg-list li:first-child { border-top: 0; }
+.stg-n { display: grid; min-width: 0; } .stg-n small { color: var(--muted); } .stg-d { color: var(--muted); font-size: var(--fs-3); white-space: nowrap; }
+.stg-empty { margin: 0; color: var(--muted); font-size: var(--fs-3); }
+.stg-dlg #stg-list { display: grid; gap: .6rem; max-height: 46vh; overflow: auto; margin: .4rem 0; }
+.stg-row { display: grid; gap: .35rem; padding: .5rem; border: 1px solid var(--line); border-radius: 12px; }
+.stg-top { display: flex; gap: .4rem; align-items: center; } .stg-top input { flex: 1; min-width: 0; }
+.stg-fields { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: .4rem; } .stg-fields label { display: grid; gap: .15rem; font-size: var(--fs-2); color: var(--muted); min-width: 0; } .stg-fields input, .stg-fields select { min-width: 0; width: 100%; }
+.stg-tools { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .3rem; } .stg-total { margin: .4rem 0 0; }
+.stg-dlg h2 svg, .stg-dlg h2 .ico { width: 22px; height: 22px; vertical-align: -3px; }
+.stg .stg-list li { border: 0; border-top: 1px solid var(--line); border-radius: 0; background: none; box-shadow: none; margin: 0; padding: .35rem 0; }
+.stg .stg-list li:first-child { border-top: 0; }
+.stg .stg-h small { order: 3; flex: 1 1 100%; }
+.stg .stg-h .btn.small { order: 2; }
+.stg-fields { grid-template-columns: 1.7fr .9fr 1fr; }

@@ -845,6 +845,31 @@ export function formatRange(start, end, withDay = true) {
   return `${a.slice(0, cut).join(' ')} – ${b}`;
 }
 
+/** Etapas de una carrera de varios días: una por día como punto de partida («Etapa 1», «Etapa 2»…). */
+export const defaultStages = (start, end) => (end && end > start ? daysOf(start, end).map((d, i) => ({ name: `Etapa ${i + 1}`, date: d })) : []);
+/** Limpia y valida las etapas (mismas reglas que la base de datos): nombre ≤ 60, día dentro de la carrera, km 0–1000 y desnivel 0–10000. null = sin etapas. */
+export function cleanStages(stages, start, end) {
+  if (!Array.isArray(stages) || !stages.length) return null;
+  if (!end || end <= start || stages.length > 30) throw new Error('datos_no_validos');
+  return stages.map((e, i) => {
+    const date = String(e?.date || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < start || date > end) throw new Error('datos_no_validos');
+    const km = Number(String(e?.km ?? '').replace(',', '.')), ele = Number(String(e?.elevation ?? '').replace(/[.\s]/g, ''));
+    const out = { name: String(e?.name || '').trim().slice(0, 60) || `Etapa ${i + 1}`, date };
+    if (Number.isFinite(km) && km > 0 && km <= 1000 && String(e?.km ?? '').trim() !== '') out.km = Math.round(km * 10) / 10;
+    if (Number.isInteger(ele) && ele > 0 && ele <= 10000) out.elevation = ele;
+    return out;
+  });
+}
+/** Totales de las etapas: solo hay total de km (o de desnivel) si TODAS las etapas lo tienen. */
+export function stageTotals(stages) {
+  const st = Array.isArray(stages) ? stages : [];
+  const all = (k) => st.length > 0 && st.every((x) => Number(x[k]) > 0);
+  const sum = (k) => st.reduce((n, x) => n + (Number(x[k]) || 0), 0);
+  const km = all('km') ? Math.round(sum('km') * 10) / 10 : null, elevation = all('elevation') ? Math.round(sum('elevation')) : null;
+  return { n: st.length, km: km && km <= 1000 ? km : null, elevation: elevation && elevation <= 10000 ? elevation : null, withKm: st.filter((x) => Number(x.km) > 0).length, withElevation: st.filter((x) => Number(x.elevation) > 0).length };
+}
+
 /** Días (AAAA-MM-DD) entre el primero y el último, ambos incluidos (máximo 60). */
 export function daysOf(start, end) {
   const out = [start];

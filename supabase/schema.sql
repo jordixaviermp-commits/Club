@@ -504,8 +504,9 @@ begin
             where not r.suspended and coalesce(r.end_date, r.date) < current_date - 7
               and exists (select 1 from registration_entries e where e.registration_id = r.id and (e.self_position is not null or e.self_dnf))
             for update skip locked loop
-    insert into races (name, date, end_date, place, province, country, modality, notes, race_type, circuit, subtype, km, created_by, url, elevation, price, lat, lon, geo_key)
-    values (g.name, g.date, g.end_date, g.place, g.province, g.country, g.modality, g.notes, g.race_type, g.circuit, g.subtype, g.km, g.created_by, g.url, g.elevation, g.price, g.lat, g.lon, g.geo_key)
+    insert into races (name, date, end_date, place, province, country, modality, notes, race_type, circuit, subtype, km, created_by, url, elevation, price, lat, lon, geo_key, stage_info, stages)
+    values (g.name, g.date, g.end_date, g.place, g.province, g.country, g.modality, g.notes, g.race_type, g.circuit, g.subtype, g.km, g.created_by, g.url, g.elevation, g.price, g.lat, g.lon, g.geo_key, g.stage_info,
+            (select jsonb_agg(x->>'name') from jsonb_array_elements(g.stage_info) x))
     returning id into v_race;
     insert into results (race_id, runner_id, runner_name, category, position, podium_type, self_reported, time_seconds, dnf)
     select v_race, e.runner_id, rn.name, e.category, e.self_position,
@@ -635,8 +636,9 @@ begin
   perform public.require_admin();
   if exists (select 1 from registrations where id = p_id and suspended) then raise exception 'carrera_suspendida'; end if;
   perform set_config('app.skip_log', 'on', true);
-  insert into races (name, date, end_date, place, province, country, modality, notes, race_type, circuit, subtype, km, created_by)
-  select name, date, end_date, place, province, country, modality, notes, race_type, circuit, subtype, km, created_by from registrations where id = p_id
+  insert into races (name, date, end_date, place, province, country, modality, notes, race_type, circuit, subtype, km, created_by, url, elevation, price, lat, lon, geo_key, stage_info, stages)
+  select name, date, end_date, place, province, country, modality, notes, race_type, circuit, subtype, km, created_by, url, elevation, price, lat, lon, geo_key, stage_info,
+         (select jsonb_agg(x->>'name') from jsonb_array_elements(stage_info) x) from registrations where id = p_id
   returning id into v_race;
   if v_race is null then raise exception 'no_existe'; end if;
   insert into results (race_id, runner_id, runner_name, category, position, podium_type, self_reported, time_seconds, dnf)
@@ -651,6 +653,81 @@ begin
   perform set_config('app.skip_log', 'off', true);
   return v_race;
 end $$;
+
+-- Etapas de una carrera de varios días (ver cambios/2026-12-13-etapas-datos.sql)
+create or replace function public.stages_clean(p_stages jsonb, p_first date, p_last date)
+returns jsonb language plpgsql stable set search_path = public as $$
+declare el jsonb; v_out jsonb := '[]'::jsonb; v_n int := 0; v_name text; v_date date; v_km numeric; v_ele int; v_item jsonb;
+begin
+  if p_stages is null or jsonb_typeof(p_stages) <> 'array' or jsonb_array_length(p_stages) = 0 then return null; end if;
+  if p_last is null or p_last <= p_first then raise exception 'datos_no_validos'; end if;          -- solo carreras de varios días
+  if jsonb_array_length(p_stages) > 30 then raise exception 'datos_no_validos'; end if;
+  for el in select value from jsonb_array_elements(p_stages) loop
+    v_n := v_n + 1;
+    v_name := coalesce(nullif(left(btrim(coalesce(el->>'name', '')), 60), ''), 'Etapa ' || v_n);
+    v_date := case when coalesce(el->>'date', '') ~ '^\d{4}-\d{2}-\d{2}$' then (el->>'date')::date end;
+    if v_date is null or v_date < p_first or v_date > p_last then raise exception 'datos_no_validos'; end if;
+    v_km := case when coalesce(el->>'km', '') ~ '^[0-9]{1,4}([.][0-9]+)?$' then round((el->>'km')::numeric, 1) end;
+    if v_km is not null and not (v_km > 0 and v_km <= 1000) then v_km := null; end if;
+    v_ele := case when coalesce(el->>'elevation', '') ~ '^[0-9]{1,5}$' then (el->>'elevation')::int end;
+    if v_ele is not null and not (v_ele > 0 and v_ele <= 10000) then v_ele := null; end if;
+    v_item := jsonb_build_object('name', v_name, 'date', v_date);
+    if v_km is not null then v_item := v_item || jsonb_build_object('km', v_km); end if;
+    if v_ele is not null then v_item := v_item || jsonb_build_object('elevation', v_ele); end if;
+    v_out := v_out || jsonb_build_array(v_item);
+  end loop;
+  return v_out;
+end $$;
+
+create or replace function public.stages_apply(p_kind text, p_id uuid, p_clean jsonb)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_km numeric; v_ele numeric; v_all_km boolean; v_all_ele boolean; v_names jsonb;
+begin
+  select sum((x->>'km')::numeric), sum((x->>'elevation')::numeric), coalesce(bool_and(x ? 'km'), false), coalesce(bool_and(x ? 'elevation'), false)
+    into v_km, v_ele, v_all_km, v_all_ele from jsonb_array_elements(coalesce(p_clean, '[]'::jsonb)) x;
+  if not v_all_km or v_km is null or v_km <= 0 or v_km > 1000 then v_km := null; end if;       -- el total solo si TODAS las etapas lo tienen
+  if not v_all_ele or v_ele is null or v_ele <= 0 or v_ele > 10000 then v_ele := null; end if;
+  select jsonb_agg(x->>'name') into v_names from jsonb_array_elements(coalesce(p_clean, '[]'::jsonb)) x;
+  if p_kind = 'reg' then
+    update registrations set stage_info = p_clean, km = coalesce(round(v_km, 1), km), elevation = coalesce(v_ele::int, elevation) where id = p_id;
+  elsif p_kind = 'race' then
+    update races set stage_info = p_clean, stages = coalesce(v_names, stages), km = coalesce(round(v_km, 1), km), elevation = coalesce(v_ele::int, elevation) where id = p_id;
+  else raise exception 'tipo_no_valido'; end if;
+end $$;
+revoke all on function public.stages_apply(text, uuid, jsonb) from public, anon, authenticated;
+
+-- ===== TROZO 3: poner las etapas (corredor y dirección) =====
+create or replace function public.runner_set_stages(p_code text, p_kind text, p_id uuid, p_stages jsonb)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_runner uuid; v_name text; v_first date; v_last date;
+begin
+  select id, name into v_runner, v_name from runners where code = p_code;
+  if v_runner is null then raise exception 'enlace_no_valido' using errcode = '28000'; end if;
+  if p_kind = 'reg' then select date, end_date into v_first, v_last from registrations where id = p_id;
+  elsif p_kind = 'race' then
+    if not exists (select 1 from results where race_id = p_id and runner_id = v_runner) then raise exception 'no_es_tuya' using errcode = '42501'; end if;
+    select date, end_date into v_first, v_last from races where id = p_id;
+  else raise exception 'tipo_no_valido'; end if;
+  if v_first is null then raise exception 'no_existe'; end if;
+  perform set_config('app.actor', v_name, true);
+  perform public.stages_apply(p_kind, p_id, public.stages_clean(p_stages, v_first, v_last));
+  perform set_config('app.actor', '', true);
+end $$;
+grant execute on function public.runner_set_stages(text, text, uuid, jsonb) to anon, authenticated;
+
+create or replace function public.admin_set_stages(p_kind text, p_id uuid, p_stages jsonb)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_first date; v_last date;
+begin
+  perform public.require_admin();
+  if p_kind = 'reg' then select date, end_date into v_first, v_last from registrations where id = p_id;
+  elsif p_kind = 'race' then select date, end_date into v_first, v_last from races where id = p_id;
+  else raise exception 'tipo_no_valido'; end if;
+  if v_first is null then raise exception 'no_existe'; end if;
+  perform public.stages_apply(p_kind, p_id, public.stages_clean(p_stages, v_first, v_last));
+end $$;
+revoke all on function public.admin_set_stages(text, uuid, jsonb) from public, anon;
+grant execute on function public.admin_set_stages(text, uuid, jsonb) to authenticated;
 
 -- Borrar un corredor. Su historial se conserva con su nombre;
 -- con p_anonymize = true el nombre del historial se sustituye (derecho de supresión).
@@ -745,7 +822,7 @@ begin
     'my_results', coalesce((
       select jsonb_agg(jsonb_build_object(
                'race_id', r.id, 'name', r.name, 'date', r.date, 'end_date', r.end_date, 'place', r.place,
-               'province', r.province, 'country', r.country, 'modality', r.modality, 'stages', r.stages,
+               'province', r.province, 'country', r.country, 'modality', r.modality, 'stages', r.stages, 'stage_info', r.stage_info,
                'race_type', r.race_type, 'circuit', r.circuit, 'subtype', r.subtype, 'km', r.km, 'elevation', r.elevation, 'price', r.price, 'lat', r.lat, 'lon', r.lon, 'geo_key', r.geo_key, 'notes', r.notes,
                'mine_created', r.created_by = me.id,
                'others', (select count(*) from results o where o.race_id = r.id and o.runner_id is distinct from me.id),
@@ -757,7 +834,7 @@ begin
     'registrations', coalesce((
       select jsonb_agg(jsonb_build_object(
                'id', g.id, 'name', g.name, 'date', g.date, 'end_date', g.end_date, 'place', g.place,
-               'mine_created', g.created_by = me.id, 'race_type', g.race_type, 'circuit', g.circuit, 'suspended', g.suspended, 'subtype', g.subtype, 'km', g.km, 'url', g.url, 'url_mine', coalesce(g.url_by = me.id, false), 'elevation', g.elevation, 'price', g.price, 'lat', g.lat, 'lon', g.lon, 'geo_key', g.geo_key,
+               'mine_created', g.created_by = me.id, 'race_type', g.race_type, 'circuit', g.circuit, 'suspended', g.suspended, 'stage_info', g.stage_info, 'subtype', g.subtype, 'km', g.km, 'url', g.url, 'url_mine', coalesce(g.url_by = me.id, false), 'elevation', g.elevation, 'price', g.price, 'lat', g.lat, 'lon', g.lon, 'geo_key', g.geo_key,
                'my_result', (select jsonb_build_object('position', e.self_position, 'podium_type', e.self_podium_type, 'time_seconds', e.self_time_seconds, 'dnf', e.self_dnf)
                                from registration_entries e where e.registration_id = g.id and e.runner_id = me.id and (e.self_position is not null or e.self_dnf)),
                'province', g.province, 'country', g.country, 'modality', g.modality, 'notes', g.notes,
@@ -913,7 +990,7 @@ begin
     'races', coalesce((
       select jsonb_agg(jsonb_build_object(
                'id', r.id, 'name', r.name, 'date', r.date, 'end_date', r.end_date, 'place', r.place,
-               'province', r.province, 'country', r.country, 'modality', r.modality, 'stages', r.stages,
+               'province', r.province, 'country', r.country, 'modality', r.modality, 'stages', r.stages, 'stage_info', r.stage_info,
                'race_type', r.race_type, 'circuit', r.circuit, 'subtype', r.subtype, 'km', r.km, 'elevation', r.elevation, 'price', r.price, 'lat', r.lat, 'lon', r.lon, 'geo_key', r.geo_key,
                'results', coalesce((
                   select jsonb_agg(jsonb_build_object('runner_id', x.runner_id, 'runner_name', x.runner_name, 'category', x.category,
@@ -2261,6 +2338,12 @@ alter table public.races add column if not exists price numeric(8,2);
 alter table public.runner_watch add column if not exists elevation integer;
 alter table public.registrations drop constraint if exists registrations_extra_check;
 alter table public.registrations add constraint registrations_extra_check check ((elevation is null or (elevation > 0 and elevation <= 10000)) and (price is null or (price >= 0 and price <= 10000)));
+alter table public.registrations add column if not exists stage_info jsonb;
+alter table public.races add column if not exists stage_info jsonb;
+alter table public.registrations drop constraint if exists registrations_stage_info_check;
+alter table public.registrations add constraint registrations_stage_info_check check (stage_info is null or (jsonb_typeof(stage_info) = 'array' and jsonb_array_length(stage_info) <= 30));
+alter table public.races drop constraint if exists races_stage_info_check;
+alter table public.races add constraint races_stage_info_check check (stage_info is null or (jsonb_typeof(stage_info) = 'array' and jsonb_array_length(stage_info) <= 30));
 alter table public.races drop constraint if exists races_extra_check;
 alter table public.races add constraint races_extra_check check ((elevation is null or (elevation > 0 and elevation <= 10000)) and (price is null or (price >= 0 and price <= 10000)));
 alter table public.runner_watch drop constraint if exists runner_watch_elev_check;
@@ -2358,7 +2441,7 @@ grant execute on function public.runner_set_registration_url(text, uuid, text), 
                           public.runner_update_race(text, uuid, jsonb), public.runner_delete_race(text, uuid), public.runner_set_suspended(text, uuid, boolean),
                           public.runner_report_result(text, text, uuid, int, text, text, int, boolean),
                           public.runner_documents_list(text), public.runner_get_document(text, uuid), public.runner_contract_template(text), public.runner_get_contract_template(text),
-                          public.runner_team(text), public.runner_streaks(text), public.runner_team_moves(text), public.runner_notes_list(text), public.runner_note_set(text, uuid, text), public.runner_chronicles(text), public.runner_chronicles_team(text), public.runner_social_impact(text), public.runner_cars(text), public.runner_car_save(text, uuid, int, text, text, text), public.runner_car_delete(text, uuid), public.runner_car_join(text, uuid), public.runner_car_leave(text, uuid), public.runner_set_general(text, text, uuid, int), public.runner_generals(text), public.runner_my_kit(text), public.runner_my_shift(text), public.runner_set_my_shift(text, text), public.runner_shift_info(text), public.runner_chronicle_set(text, text, boolean), public.runner_chronicle_send(text, text, text, date, text, text, text, text, uuid, jsonb), public.runner_race_group(text, text, uuid), public.runner_chronicle_posts(text),
+                          public.runner_team(text), public.runner_set_stages(text, text, uuid, jsonb), public.runner_streaks(text), public.runner_team_moves(text), public.runner_notes_list(text), public.runner_note_set(text, uuid, text), public.runner_chronicles(text), public.runner_chronicles_team(text), public.runner_social_impact(text), public.runner_cars(text), public.runner_car_save(text, uuid, int, text, text, text), public.runner_car_delete(text, uuid), public.runner_car_join(text, uuid), public.runner_car_leave(text, uuid), public.runner_set_general(text, text, uuid, int), public.runner_generals(text), public.runner_my_kit(text), public.runner_my_shift(text), public.runner_set_my_shift(text, text), public.runner_shift_info(text), public.runner_chronicle_set(text, text, boolean), public.runner_chronicle_send(text, text, text, date, text, text, text, text, uuid, jsonb), public.runner_race_group(text, text, uuid), public.runner_chronicle_posts(text),
                           public.runner_leave(text, uuid), public.runner_set_paid(text, uuid, boolean, numeric, date), public.runner_join_race(text, uuid, text),
                           public.runner_set_race_type(text, uuid, text, text), public.runner_propose_circuit(text, text, int, int, text),
                           public.runner_cancel_circuit(text, uuid), public.runner_news(text), public.runner_set_race_details(text, uuid, text, numeric), public.runner_complete_race(text, text, uuid, jsonb), public.auto_promote_registrations(),
@@ -2367,6 +2450,6 @@ grant execute on function public.runner_set_registration_url(text, uuid, text), 
                           public.social_view(text), public.social_mark(text, text, boolean), public.ig_save(jsonb), public.ping() to anon, authenticated;
 grant execute on function public.is_admin(), public.require_admin(),
                           public.save_registration(jsonb, jsonb), public.save_race(jsonb, jsonb),
-                          public.promote_registration(uuid), public.delete_runner(uuid, boolean),
+                          public.promote_registration(uuid), public.admin_set_stages(text, uuid, jsonb), public.delete_runner(uuid, boolean),
                           public.import_backup(jsonb), public.resolve_correction(uuid, boolean, text), public.upload_document(uuid, int, text, text, text, text),
                           public.get_document(uuid), public.upload_contract_template(text, text, text, text, text), public.get_contract_template(text) to authenticated;

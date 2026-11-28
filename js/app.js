@@ -4,7 +4,7 @@ import { supabaseApi, demoApi, friendlyError, cleanWeb } from './api.js';
 import {
   CATEGORIES, MODALITIES, PODIUM_TYPES, RACE_TYPES, CIRCUIT_SCOPES, SUBTYPES, disciplineKey, parseKm, kmText, socialAudit, resKeyOf, parseStoryLog, storyState, storyDateOf, daysTo, daysToText, icsEvent, parseTime, formatTime, seasonByRunner, seasonStats, seasonDetail, SEASON_COLUMNS, SEASON_BONUS_COLUMNS, SEASON_DETAIL_COLUMNS, guessSubtype, missingFields, PROVINCES, DEFAULT_COUNTRY, podiumLabel, normalize, cleanName, stageName, podiumsOf,
   teamMoves, parseBulkRunners, planRosterRenewal, isPodium, yearOf, availableYears, yearSummary, csvRows, toCsv, importResultsCsv,
-  directorBoard, seasonRaces, mediaStats, MEDIA_KINDS, raceImpact, alDia, tierRanges, nextTeamRace, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, projectLeagueRaces, WATCH_TBC, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, igHeadline, importantOf, IMPORTANT_KINDS, generalOf, uspacShift, USPAC_GROUPS, USPAC_NAMES, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
+  directorBoard, defaultStages, cleanStages, stageTotals, seasonRaces, mediaStats, MEDIA_KINDS, raceImpact, alDia, tierRanges, nextTeamRace, igLastUpdate, avgSpeed, postKeyOf, groupMessage, watchInfo, sortWatch, watchTbc, nextYearWatch, projectLeagueRaces, WATCH_TBC, watchMatch, parseElev, parsePrice, elevText, SOFT_GAPS, modalityTree, subLabel, fullLabel, yearInsights, WEEKDAYS, seenDays, seenText, seenLevel, extractCode, newCode, todayISO, pastLimit, formatDate, searchRaces, matchPeople, cleanGoogleLink, CONTRACTS, contractLabel, bonusConfigFor, bonusStatus, tiersFor, yearBonuses, MONTH_NAMES, igSummary, igPrevTotals, igPeriods, igHeadline, importantOf, IMPORTANT_KINDS, generalOf, uspacShift, USPAC_GROUPS, USPAC_NAMES, socialBoard, chronicleStatus, monthGrid, addMonths, formatRange, daysOf, numDays,
 } from './logic.js';
 
 const CODE_KEY = 'monzon-code';
@@ -1743,6 +1743,54 @@ const previewBanner = () => (S.session?.isAdmin && S.preview ? `<p class="card w
 const runnerTitle = () => (S.session?.isAdmin && S.preview ? `Vista de ${S.preview.name}` : S.runnerData?.me?.name ? `Hola, ${cleanName(S.runnerData.me.name)}` : 'CC Monzón');
 
 /** Tarjeta de una carrera ya disputada (con resultados), para el calendario. */
+/** Etapas de una carrera de varios días: la lista (día, nombre, km y desnivel) y el botón para ponerlas. Cada etapa tendrá su historia el día que se corra. */
+function stagesBlock(g, kind = 'reg', { admin = false } = {}) {
+  if (!g?.end_date || g.end_date <= g.date) return '';
+  const st = Array.isArray(g.stage_info) ? g.stage_info : [], tot = stageTotals(st), canEdit = admin || !S.preview;
+  const dayName = (iso) => `${new Date(iso + 'T12:00:00Z').toLocaleDateString('es-ES', { weekday: 'short', timeZone: 'UTC' }).replace('.', '')} ${dayMon(iso)}`;
+  const row = (x) => `<li><span class="stg-n"><b>${esc(x.name)}</b><small>${esc(dayName(x.date))}</small></span><span class="stg-d">${x.km ? esc(kmText(x.km)) : '—'}${x.elevation ? ` · ${esc(elevText(x.elevation))}` : ''}</span></li>`;
+  return `<div class="stg"><div class="stg-h">${ico('layers')}<b>Etapas</b><small>${st.length ? `${st.length} etapa${st.length === 1 ? '' : 's'}${tot.km ? ` · ${esc(kmText(tot.km))}` : ''}${tot.elevation ? ` · ${esc(elevText(tot.elevation))}` : ''}` : `${numDays(g.date, g.end_date)} días`}</small>
+    ${canEdit ? `<button type="button" class="btn small ghost" data-act="stages-edit" data-kind="${kind}" data-id="${g.id}"${admin ? ' data-admin="1"' : ''}>${ico('pen')}${st.length ? 'Cambiar' : 'Poner las etapas'}</button>` : ''}</div>
+    ${st.length ? `<ul class="stg-list">${st.map(row).join('')}</ul>` : '<p class="stg-empty">Sin datos por etapa: ponlas con su día, km y desnivel y cada una tendrá su historia.</p>'}</div>`;
+}
+/** Ventana para poner las etapas de una carrera de varios días. Devuelve la lista limpia, [] para quitarlas todas, o null si cancela. */
+function askStages(t) {
+  return new Promise((resolve) => {
+    const dlg = document.getElementById('dialog'), days = daysOf(t.date, t.end_date);
+    const dayName = (iso) => `${new Date(iso + 'T12:00:00Z').toLocaleDateString('es-ES', { weekday: 'short', timeZone: 'UTC' }).replace('.', '')} ${dayMon(iso)}`;
+    const had = Array.isArray(t.stage_info) && t.stage_info.length;
+    let rows = (had ? t.stage_info : defaultStages(t.date, t.end_date)).map((x) => ({ name: x.name || '', date: x.date, km: x.km ?? '', elevation: x.elevation ?? '' }));
+    const listHtml = () => rows.map((r, i) => `<div class="stg-row" data-i="${i}">
+        <div class="stg-top"><input data-f="name" value="${esc(r.name)}" maxlength="60" placeholder="Etapa ${i + 1}" aria-label="Nombre de la etapa ${i + 1}"><button type="button" class="icon-btn" data-del="${i}" aria-label="Quitar la etapa ${i + 1}">×</button></div>
+        <div class="stg-fields"><label>Día<select data-f="date">${days.map((d) => `<option value="${d}"${d === r.date ? ' selected' : ''}>${esc(dayName(d))}</option>`).join('')}</select></label>
+          <label>km<input data-f="km" inputmode="decimal" value="${esc(r.km)}" placeholder="—" autocomplete="off"></label>
+          <label>Desnivel (m)<input data-f="elevation" inputmode="numeric" value="${esc(r.elevation)}" placeholder="—" autocomplete="off"></label></div></div>`).join('');
+    const totalTxt = () => { let tot; try { tot = stageTotals(cleanStages(rows, t.date, t.end_date)); } catch { tot = null; } return tot && (tot.km || tot.elevation) ? `Total: ${[tot.km ? kmText(tot.km) : '', tot.elevation ? elevText(tot.elevation) : ''].filter(Boolean).join(' · ')} (se pone como datos de la carrera)` : 'Pon km y desnivel en todas las etapas para sacar el total.'; };
+    dlg.innerHTML = `<form method="dialog" class="dlg stg-dlg"><h2>${ico('layers')} Etapas</h2><p><b>${esc(t.name)}</b> · ${esc(when(t))}</p>
+      <p class="muted small">Cada etapa tendrá su historia el día que se corra. Lo que no sepas, déjalo vacío: lo podrá completar cualquier compañero.</p>
+      <div id="stg-list">${listHtml()}</div><p class="stg-total muted small" id="stg-total">${esc(totalTxt())}</p>
+      <div class="stg-tools"><button type="button" class="btn small ghost" data-add>＋ Añadir etapa</button><button type="button" class="btn small ghost" data-all>Una etapa por día</button></div>
+      <div class="dlg-actions"><button value="ok" class="btn primary">Guardar</button>${had ? '<button value="clear" class="btn danger ghost" formnovalidate>Quitar todas</button>' : ''}<button value="" class="btn ghost" formnovalidate>Cancelar</button></div></form>`;
+    const redraw = () => { dlg.querySelector('#stg-list').innerHTML = listHtml(); dlg.querySelector('#stg-total').textContent = totalTxt(); };
+    const upd = (el) => { const row = el.closest('.stg-row'); if (!row || !el.dataset.f) return; rows[Number(row.dataset.i)][el.dataset.f] = el.value; dlg.querySelector('#stg-total').textContent = totalTxt(); };
+    dlg.oninput = (ev) => upd(ev.target); dlg.onchange = (ev) => upd(ev.target);
+    dlg.onclick = (ev) => {
+      const del = ev.target.closest('[data-del]'), add = ev.target.closest('[data-add]'), all = ev.target.closest('[data-all]');
+      if (del) { rows.splice(Number(del.dataset.del), 1); redraw(); }
+      else if (add) { if (rows.length >= 30) return; const used = new Set(rows.map((r) => r.date)); rows.push({ name: '', date: days.find((d) => !used.has(d)) || days[days.length - 1], km: '', elevation: '' }); redraw(); }
+      else if (all) { rows = defaultStages(t.date, t.end_date).map((x) => ({ ...x, km: '', elevation: '' })); redraw(); }
+    };
+    dlg.querySelector('form').addEventListener('submit', (ev) => {
+      if (ev.submitter?.value !== 'ok') return;
+      try { cleanStages(rows, t.date, t.end_date); } catch { ev.preventDefault(); toast('Revisa los días de las etapas.', true); }
+    });
+    dlg.onclose = () => { dlg.oninput = null; dlg.onchange = null; dlg.onclick = null;
+      if (dlg.returnValue === 'clear') return resolve([]);
+      if (dlg.returnValue !== 'ok') return resolve(null);
+      try { resolve(cleanStages(rows, t.date, t.end_date) || []); } catch { resolve(null); } };
+    dlg.returnValue = ''; dlg.showModal();
+  });
+}
 function doneRaceBody(r, { admin = false, meId = null } = {}) {
   const res = r.results || [];
   const pods = res.filter((x) => isPodium(x.position)).sort((a, b) => a.position - b.position);
@@ -1750,6 +1798,7 @@ function doneRaceBody(r, { admin = false, meId = null } = {}) {
   return `${typeTag(r)}
     <p class="count">🏁 Disputada · ${res.length} del club${res.length ? ': ' + esc(res.map((x) => x.runner_name).sort((a, b) => a.localeCompare(b, 'es')).join(', ')) : ''}</p>
     ${pods.length ? `<p class="pods">${pods.map((x) => `${medal(x.position)} ${esc(x.runner_name)}`).join(' · ')}</p>` : ''}
+    ${mine || admin ? stagesBlock(r, 'race', { admin }) : ''}
     ${mine ? `<p class="joined-done">✓ Participaste${mine.position ? ` · ${mine.position}º` : ''}${mine.general_position ? ` · Gral. ${mine.general_position}º` : ''}</p>` : ''}
     ${!admin && meId && !mine && r.date >= pastLimit() && !S.preview ? `<p><button class="btn small" data-act="r-join-race" data-id="${r.id}">La hice y no salgo: añadirme</button></p>` : ''}${admin ? `<a class="btn small ghost" href="#/carreras/${r.id}">${ico('pen')}Editar${ico('go')}</a>` : ''}`;
 }
@@ -1812,6 +1861,7 @@ function runnerRegCard(g, opts = {}) {
         ${!mine && g.date >= pastLimit() ? `<div class="row">${catSelect(`data-cat="${g.id}" aria-label="Tu categoría"`, me.category || '', 'Elige tu categoría')}
            <button class="btn primary" data-act="r-join" data-id="${g.id}">La hice: apuntarme</button></div>` : ''}`}
       ${g.notes ? `<p class="notes">${esc(g.notes)}</p>` : ''}
+      ${mine || open ? stagesBlock(g, 'reg') : ''}
       ${myPubLine(g)}
       ${opts.notes && mine && !S.preview && !notesInRow ? noteBlock(g) : ''}
       ${opts.notes ? completeBox(g, 'reg', g.id) : ''}
@@ -2377,6 +2427,7 @@ function viewRegistrationEdit() {
     <form class="card stack" data-form="save-reg">
       ${raceFields(d)}
       ${d.id ? '' : `<div id="dup-admin">${dupSuggestions(d.name, S.data.registrations, false)}</div>`}
+      ${d.id && d.end_date && d.end_date > d.date ? stagesBlock(S.data.registrations.find((x) => x.id === d.id) || d, 'reg', { admin: true }) : ''}
       <label>Notas<textarea data-f="notes" rows="2">${esc(d.notes || '')}</textarea></label>
       <label class="check"><input type="checkbox" data-act-change="suspended" ${d.suspended ? 'checked' : ''}> ⛔ Carrera suspendida</label>
       <h3>Inscritos (${d.people.length})</h3>
@@ -6267,6 +6318,16 @@ const actions = {
     if (el.dataset.k === 'cal') return choose('Mi calendario', '<b>Próximas</b>: las carreras a las que estás apuntado; la primera es tu próxima cita. Toca una para abrirla: ves quién va, marcas el pago, añades una nota o te borras.<br><br><b>Hechas</b>: las de esta temporada con tu resultado. Toca «ver» para ver tu resultado o la crónica, y el nombre para la ficha completa. Si falta alguna carrera o un puesto, díselo a la dirección.', [{ label: 'Entendido', value: true, kind: 'primary' }]);
     return choose('Por hacer', `Todo lo que te falta, carrera a carrera: <b>naranja</b> = por hacer, <b>verde</b> = hecho, <b>punteado</b> = espera a lo anterior.<br><br>${WEEK_RULE}<br><br>${CHRONICLE_RULE} Para la crónica <b>basta con 2 líneas y una foto</b>: los datos ya los tenemos y el resumen y la publicación los hacemos nosotros.`, [{ label: 'Entendido', value: true, kind: 'primary' }]);
   },
+  async 'stages-edit'(el) {
+    const kind = el.dataset.kind, id = el.dataset.id, admin = el.dataset.admin === '1';
+    const t = admin ? (kind === 'reg' ? S.data?.registrations : S.data?.races)?.find((x) => x.id === id)
+      : kind === 'reg' ? S.runnerData?.registrations?.find((x) => x.id === id) : (S.team?.races || []).find((x) => x.id === id) || (S.runnerData?.my_results || []).find((x) => x.race_id === id);
+    if (!t) return;
+    const base = { ...t, id, date: t.date, end_date: t.end_date, name: t.name, stage_info: t.stage_info };
+    const list = await askStages(base); if (list === null) return;
+    const ok = await run(async () => { await (admin ? api.adminSetStages(kind, id, list) : api.runnerSetStages(S.code, kind, id, list)); if (admin) await reload(); else { await loadRunner(); if (kind === 'race') { S.team = null; await loadTeam(); } } return true; }, list.length ? 'Etapas guardadas' : 'Etapas quitadas');
+    if (ok) render();
+  },
   'cal-tab'(el) { S.calTab = el.dataset.t === 'hechas' ? 'hechas' : 'prox'; render(); },
   async 'r-suspend'(el) {
     const susp = el.dataset.v === '1', g = (S.runnerData?.registrations || []).find((x) => x.id === el.dataset.id);
@@ -6756,7 +6817,7 @@ document.addEventListener('visibilitychange', async () => {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['chro-write', 'ar-open', 'cal-tab', 'eq-tab', 'circuit-pick', 'r-web', 'note-edit', 'car-open', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
+const RUNNER_ACTIONS = new Set(['stages-edit', 'chro-write', 'ar-open', 'cal-tab', 'eq-tab', 'circuit-pick', 'r-web', 'note-edit', 'car-open', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
 // los enlaces de la ventana emergente (p. ej. las carreras de un compañero) cierran la ventana al navegar
 document.getElementById('dialog').addEventListener('click', (ev) => { if (ev.target.closest('a[href^="#/"]')) ev.currentTarget.close(); });
 $app.addEventListener('click', (ev) => {
