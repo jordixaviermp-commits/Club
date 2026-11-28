@@ -455,9 +455,10 @@ async function loadShift() {
 }
 /** Mis resultados por etapa: clave «carrera|n» → {position, time}. Sin el SQL de etapas queda vacío. */
 async function loadStageResults() {
-  S.myStages = new Map(); S.myPairs = new Map();
+  S.myStages = new Map(); S.myPairs = new Map(); S.myPairInfo = new Map(); S.pairInvites = [];
   try { const l = await api.runnerStageResults(S.code || S.previewCode); for (const x of Array.isArray(l) ? l : []) S.myStages.set(`${x.key}|${x.stage}`, { position: x.position, general: x.general ?? null, time: x.time }); } catch { /* sin el SQL de resultados por etapa */ }
-  try { const l = await api.runnerPairs(S.code || S.previewCode); for (const x of Array.isArray(l) ? l : []) S.myPairs.set(x.key, x.partner); } catch { /* sin el SQL de parejas */ }
+  try { const l = await api.runnerPairs(S.code || S.previewCode); for (const x of Array.isArray(l) ? l : []) { S.myPairs.set(x.key, x.partner); S.myPairInfo.set(x.key, { id: x.partner_id || null, status: x.status || null }); } } catch { /* sin el SQL de parejas */ }
+  try { const l = await api.runnerPairInvites(S.code || S.previewCode); S.pairInvites = Array.isArray(l) ? l : []; } catch { S.pairInvites = []; }   // sin el SQL de parejas del club
 }
 async function loadRunner() {
   if (!S.session?.isAdmin) api.runnerPing?.(S.code).catch(() => {});   // actividad: última vez que abrió la app
@@ -1763,9 +1764,13 @@ function pairBlock(g, kind, { admin = false, mine = false } = {}) {
     return list.length ? `<div class="stg-pairs">${list.map((x) => `<p class="stg-pair set">${ico('users')}<span><b>${esc(runnerNameOf(x.runner_id))}</b> · por parejas con <b>${esc(x.partner)}</b></span></p>`).join('')}</div>` : '';
   }
   if (!mine) return '';
-  const partner = S.myPairs?.get(key);
-  if (S.preview) return partner ? `<p class="stg-pair set">${ico('users')}<span>Por parejas · con <b>${esc(partner)}</b></span></p>` : '';
-  return `<button type="button" class="stg-pair${partner ? ' set' : ''}" data-act="pair-edit" data-kind="${kind}" data-id="${g.id}">${ico('users')}<span>${partner ? `Por parejas · con <b>${esc(partner)}</b>` : 'Individual · ¿por parejas?'}</span></button>`;
+  const partner = S.myPairs?.get(key), info = S.myPairInfo?.get(key) || {}, inv = (S.pairInvites || []).filter((x) => x.key === key);
+  const invites = S.preview ? '' : inv.map((x) => `<div class="stg-inv"><p>${ico('users')}<span><b>${esc(x.from_name)}</b> te ha marcado como su pareja${x.stages ? ` y trae <b>${x.stages}</b> etapa${x.stages === 1 ? '' : 's'} con resultado` : ''}.</span></p>
+      <div class="row"><button type="button" class="btn small primary" data-act="pair-answer" data-key="${esc(key)}" data-from="${esc(x.from_id)}" data-ok="1">Aceptar y copiar resultados</button><button type="button" class="btn small ghost" data-act="pair-answer" data-key="${esc(key)}" data-from="${esc(x.from_id)}" data-ok="0">No fue mi pareja</button></div></div>`).join('');
+  const state = partner && info.id ? (info.status === 'confirmada' ? ' ✓' : info.status === 'rechazada' ? ' (no lo ha confirmado)' : ' (pendiente de que lo confirme)') : '';
+  const line = `<span>${partner ? `Por parejas · con <b>${esc(partner)}</b>${esc(state)}` : 'Individual · ¿por parejas?'}</span>`;
+  if (S.preview) return partner ? `<p class="stg-pair set">${ico('users')}${line}</p>` : '';
+  return `${invites}<button type="button" class="stg-pair${partner ? ' set' : ''}" data-act="pair-edit" data-kind="${kind}" data-id="${g.id}">${ico('users')}${line}</button>`;
 }
 /** En las carreras de un solo día el botón de parejas va suelto (en las de varios días va dentro del bloque de etapas). */
 const soloPairs = (g, kind, o) => (g?.end_date && g.end_date > g.date ? '' : pairBlock(g, kind, o));
@@ -1811,15 +1816,19 @@ function askStageResult(t, st, n, cur, partner) {
   });
 }
 /** Ventana para decir con quién se ha hecho una carrera por parejas. Devuelve el nombre, '' para quitarlo (individual) o null si cancela. */
-function askPair(t, cur) {
+function askPair(t, cur, curId) {
   return new Promise((resolve) => {
-    const dlg = document.getElementById('dialog');
+    const dlg = document.getElementById('dialog'), meId = S.runnerData?.me?.id, club = (S.team?.runners || []).filter((r) => r.id !== meId).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
     dlg.innerHTML = `<form method="dialog" class="dlg stg-dlg"><h2>${ico('users')} Por parejas</h2><p><b>${esc(t.name)}</b></p>
-      <label>Tu compañero o compañera<input name="p" maxlength="60" value="${esc(cur || '')}" placeholder="Nombre (aunque no sea del club)" autocomplete="off"></label>
-      <p class="muted small">Si la hicisteis en pareja, los puestos y el tiempo que pongas son los de la pareja.</p>
+      ${club.length ? `<label>Tu compañero o compañera<select name="c"><option value="">Otra persona (no es del club)</option>${club.map((r) => `<option value="${esc(r.id)}"${r.id === curId ? ' selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>` : ''}
+      <label id="pair-free">Nombre<input name="p" maxlength="60" value="${esc(curId ? '' : cur || '')}" placeholder="Nombre de tu compañero" autocomplete="off"></label>
+      <p class="muted small" id="pair-hint"></p>
       <div class="dlg-actions"><button value="ok" class="btn primary">Guardar</button>${cur ? '<button value="clear" class="btn danger ghost" formnovalidate>Era individual</button>' : ''}<button value="" class="btn ghost" formnovalidate>Cancelar</button></div></form>`;
-    dlg.querySelector('form').addEventListener('submit', (ev) => { if (ev.submitter?.value === 'ok' && !dlg.querySelector('[name=p]').value.trim()) { ev.preventDefault(); toast('Pon el nombre de tu compañero.', true); } });
-    dlg.onclose = () => { if (dlg.returnValue === 'clear') return resolve(''); if (dlg.returnValue !== 'ok') return resolve(null); resolve(dlg.querySelector('[name=p]').value.trim()); };
+    const f = dlg.querySelector('form'), sel = f.c, sync = () => { const club = !!sel?.value; dlg.querySelector('#pair-free').hidden = club; dlg.querySelector('#pair-hint').textContent = club ? 'Le saldrá un aviso en la carrera para aceptarlo: si acepta, se le copian tus resultados por etapa. Solo si también está apuntado.' : 'Si la hicisteis en pareja, los puestos y el tiempo son los de la pareja.'; };
+    sel?.addEventListener('change', sync); sync();
+    f.addEventListener('submit', (ev) => { if (ev.submitter?.value === 'ok' && !sel?.value && !f.p.value.trim()) { ev.preventDefault(); toast('Escoge a tu compañero o pon su nombre.', true); } });
+    dlg.onclose = () => { if (dlg.returnValue === 'clear') return resolve({ name: '', id: null }); if (dlg.returnValue !== 'ok') return resolve(null);
+      const id = sel?.value || null; resolve({ name: id ? club.find((r) => r.id === id)?.name || '' : f.p.value.trim(), id }); };
     dlg.returnValue = ''; dlg.showModal();
   });
 }
@@ -6413,8 +6422,14 @@ const actions = {
     const kind = el.dataset.kind, id = el.dataset.id;
     const t = kind === 'reg' ? S.runnerData?.registrations?.find((x) => x.id === id) : (S.team?.races || []).find((x) => x.id === id) || (S.runnerData?.my_results || []).find((x) => x.race_id === id);
     if (!t) return;
-    const base = { ...t, name: t.name, date: t.date }, name = await askPair(base, S.myPairs?.get(postKeyOf(base))); if (name === null) return;
-    const ok = await run(async () => { await api.runnerSetPair(S.code, kind, id, name); await loadStageResults(); return true; }, name ? 'Guardado: por parejas' : 'Marcada como individual');
+    if (!S.team) { try { await loadTeam(); } catch { /* sin lista del club: solo se podrá escribir el nombre */ } }
+    const base = { ...t, name: t.name, date: t.date }, r = await askPair(base, S.myPairs?.get(postKeyOf(base)), S.myPairInfo?.get(postKeyOf(base))?.id); if (r === null) return;
+    const ok = await run(async () => { await api.runnerSetPair(S.code, kind, id, r.name, r.id); await loadStageResults(); return true; }, !r.name ? 'Marcada como individual' : r.id ? `Guardado: por parejas con ${cleanName(r.name)}. Le saldrá un aviso para confirmarlo` : 'Guardado: por parejas');
+    if (ok) render();
+  },
+  async 'pair-answer'(el) {
+    const accept = el.dataset.ok === '1';
+    const ok = await run(async () => { await api.runnerAnswerPair(S.code, el.dataset.key, el.dataset.from, accept); await loadStageResults(); return true; }, accept ? 'Pareja confirmada: resultados copiados' : 'Hecho: no era tu pareja');
     if (ok) render();
   },
   'cal-tab'(el) { S.calTab = el.dataset.t === 'hechas' ? 'hechas' : 'prox'; render(); },
@@ -6906,7 +6921,7 @@ document.addEventListener('visibilitychange', async () => {
 
 // ---------- eventos (delegados) ----------
 
-const RUNNER_ACTIONS = new Set(['stages-edit', 'stage-res', 'pair-edit', 'chro-write', 'ar-open', 'cal-tab', 'eq-tab', 'circuit-pick', 'r-web', 'note-edit', 'car-open', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
+const RUNNER_ACTIONS = new Set(['stages-edit', 'stage-res', 'pair-edit', 'pair-answer', 'chro-write', 'ar-open', 'cal-tab', 'eq-tab', 'circuit-pick', 'r-web', 'note-edit', 'car-open', 'w-sign', 'w-del', 'w-repeat', 'w-add-fed', 'w-add-reg', 'r-join', 'r-leave', 'r-new', 'r-new-fed', 'r-forget', 'r-refresh', 'r-joined', 'r-paid', 'r-join-go', 'r-delete-mine', 'r-join-race', 'circ-cancel', 'news-reply']);
 // los enlaces de la ventana emergente (p. ej. las carreras de un compañero) cierran la ventana al navegar
 document.getElementById('dialog').addEventListener('click', (ev) => { if (ev.target.closest('a[href^="#/"]')) ev.currentTarget.close(); });
 $app.addEventListener('click', (ev) => {
