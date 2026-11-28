@@ -1133,7 +1133,7 @@ const isPastReg = (id) => { const g = S.runnerData?.registrations.find((x) => x.
 /** Pantalla para poner el resultado: de una inscripción (reg_) o de una carrera ya en resultados (race_). */
 const resultHref = (id) => (S.runnerData?.registrations.some((g) => g.id === id) ? `#/resultado/reg_${id}` : `#/resultado/race_${id}`);
 const emptyRunnerDraft = (pre = {}) => ({ name: '', date: '', multi: false, end_date: '', place: '', province: '', country: DEFAULT_COUNTRY,
-  modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', category: '', url: '', elevation: '', price: '', paid: false, pair: false, partner: '', partner_id: '', ...pre });
+  modality: 'Carretera', race_type: 'suelta', circuit: '', subtype: '', km: '', category: '', url: '', elevation: '', price: '', paid: false, paid_on: '', paid_amount: '', pair: false, partner: '', partner_id: '', ...pre });
 
 /** «Gral. 12º»: el puesto en la clasificación general (todas las categorías), si se conoce. */
 const genTag = (g) => (g ? `<small class="gen-tag" title="Puesto en la general (todas las categorías)">Gral. ${g}º</small>` : '');
@@ -1204,7 +1204,10 @@ function viewRunnerNew() {
         <p class="hint">Los ven todos los corredores y salen en las estadísticas del club (metros de subida, coste de competir…). Pon todo lo que sepas: ayudas a todo el club. Si no sabes alguno, déjalo vacío y cualquier compañero podrá completarlo después. Para el precio, 0 = gratis.</p>`, '#2f6fd6')}
       ${fsecD('rf5', 5, 'users', editing ? 'Notas' : 'Tú', editing ? (d.notes ? 'con notas' : '') : d.category, editing ? `<label class="flabel-l">Notas<textarea data-rf="notes" rows="2" maxlength="500">${esc(d.notes || '')}</textarea></label>`
         : `<label class="flabel-l">Tu categoría${catSelect('data-rf="category" required', d.category, 'Elige tu categoría')}</label>
-          <label class="check"><input type="checkbox" data-rf-paid ${d.paid ? 'checked' : ''}> Ya la he pagado${parsePrice(d.price) ? ` (${esc(String(d.price))} €)` : ''}</label>
+          <label class="check"><input type="checkbox" data-rf-paid ${d.paid ? 'checked' : ''}> Ya la he pagado</label>
+          ${d.paid ? `<div class="grid2 paid-fields"><label class="flabel-l">Día del pago<input type="date" data-rf="paid_on" value="${esc(d.paid_on || todayISO())}" max="${todayISO()}"></label>
+            <label class="flabel-l">Importe pagado (€)<input type="text" inputmode="decimal" data-rf="paid_amount" value="${esc(d.paid_amount ?? '')}" maxlength="8" placeholder="${esc(String(d.price || '25'))}" autocomplete="off"></label></div>
+            <p class="hint">El día y el importe solo los ves tú; tus compañeros solo ven que está pagada.</p>` : ''}
           <label class="check"><input type="checkbox" data-rf-pair ${d.pair ? 'checked' : ''}> La hago por parejas</label>
           ${d.pair ? `${(S.team?.runners || []).filter((r) => r.id !== S.runnerData?.me?.id).length ? `<label class="flabel-l">Tu compañero o compañera<select data-rf="partner_id"><option value="">Otra persona (no es del club)</option>${(S.team.runners || []).filter((r) => r.id !== S.runnerData?.me?.id).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')).map((r) => `<option value="${esc(r.id)}"${r.id === d.partner_id ? ' selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>` : ''}
             ${d.partner_id ? '' : `<label class="flabel-l">Nombre del compañero<input data-rf="partner" value="${esc(d.partner || '')}" maxlength="60" placeholder="Nombre (aunque no sea del club)" autocomplete="off"></label>`}` : ''}`, '#8e44ad', false, mk[4])}
@@ -6808,6 +6811,11 @@ const forms = {
       const sec = $app.querySelector(`[data-open-key="${miss[0].sec}"]`); if (sec) { sec.open = true; (S.open ||= {})[miss[0].sec] = true; sec.scrollIntoView({ block: 'center', behavior: 'smooth' }); sec.querySelector('input:not([type=radio]):not([type=checkbox]), select')?.focus({ preventScroll: true }); }
       return toast(`Falta ${miss.map((x) => x.txt).join(', ').replace(/, ([^,]*)$/, ' y $1')}.`, true);
     }
+    if (!d.id && d.paid) {
+      if (!d.paid_on || d.paid_on > todayISO()) return toast('El día del pago no puede ser posterior a hoy.', true);
+      const rawAmt = String(d.paid_amount ?? '').trim().replace(',', '.');
+      if (rawAmt !== '' && !(Number(rawAmt) >= 0 && Number(rawAmt) <= 10000)) return toast('El importe pagado tiene que ser un número entre 0 y 10 000 euros.', true);
+    }
     if (d.date < pastLimit()) return toast('Esa fecha es demasiado antigua: solo se pueden añadir carreras desde el 1 de enero del año pasado.', true);
     if (d.multi && d.end_date < d.date) return toast('El último día no puede ser anterior al primero.', true);
     if (d.race_type === 'circuito' && !cleanName(d.circuit)) return toast('Falta el nombre del circuito.', true);
@@ -6861,7 +6869,7 @@ const forms = {
       await loadRunner(); return newId || true;
     }, past ? 'Carrera añadida: ahora pon tu resultado' : 'Carrera añadida y te has apuntado');
     if (id && typeof id === 'string') {   // lo que se marcó en «Tú»: pagada y por parejas
-      if (d.paid) await api.runnerSetPaid(S.code, id, true, parsePrice(d.price) ?? null, todayISO()).catch((e) => toast(friendlyError(e), true));
+      if (d.paid) { const raw = String(d.paid_amount ?? '').trim().replace(',', '.'); await api.runnerSetPaid(S.code, id, true, raw === '' ? null : Math.round(Number(raw) * 100) / 100, d.paid_on || todayISO()).catch((e) => toast(friendlyError(e), true)); }
       if (d.pair && (d.partner_id || String(d.partner || '').trim())) await api.runnerSetPair(S.code, 'reg', id, d.partner_id ? '' : String(d.partner).trim(), d.partner_id || null).catch((e) => toast(friendlyError(e), true));
       await loadRunner(); await loadStageResults().catch(() => {});
       if (d.multi) {   // carrera de varios días: se ofrecen ya las etapas (una por día, para completar)
@@ -7175,7 +7183,7 @@ $app.addEventListener('change', async (ev) => {
     if (d) { d.race_type = t.value; render(); $app.querySelector('[list="dl-circuit"]')?.focus(); }
     return;
   }
-  if ('rfPaid' in t.dataset && S.rdraft) { S.rdraft.paid = t.checked; return; }
+  if ('rfPaid' in t.dataset && S.rdraft) { const r = S.rdraft; r.paid = t.checked; if (t.checked) { r.paid_on = r.paid_on || todayISO(); if (r.paid_amount === '' || r.paid_amount == null) r.paid_amount = parsePrice(r.price) ? String(r.price) : ''; } render(); return; }
   if ('rfPair' in t.dataset && S.rdraft) { S.rdraft.pair = t.checked; if (t.checked && !S.team) await ensureTeamQuiet(); render(); return; }
   if (t.dataset.rf === 'partner_id' && S.rdraft) { S.rdraft.partner_id = t.value; if (t.value) S.rdraft.partner = ''; render(); return; }
   if ('rfMulti' in t.dataset && S.rdraft) {
