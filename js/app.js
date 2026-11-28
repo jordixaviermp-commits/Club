@@ -1351,10 +1351,16 @@ function payChips(g) {
 }
 
 /** Tareas que le faltan al corredor (la misma cuenta que el recuadro «Por hacer» de Mi temporada): resultados, crónicas, pagos y datos. Sirve para el globo de la pestaña. */
+/** Avisos de «X te ha marcado como su pareja» de carreras en las que también estás: cuentan como algo por hacer. */
+function pairInviteCount(d) {
+  if (S.preview || !S.pairInvites?.length || !d?.me) return 0;
+  const mine = new Set([...(d.registrations || []).filter((g) => (g.entries || []).some((e) => e.runner_id === d.me.id)).map((g) => postKeyOf(g)), ...(d.my_results || []).map((r) => postKeyOf(r))]);
+  return S.pairInvites.filter((x) => mine.has(x.key)).length;
+}
 function myTaskCount() {
   const d = S.runnerData; if (!d?.my_results || !d.me || !d.registrations || S.preview) return 0;
   const ad = alDia(d, S.chron instanceof Set ? S.chron : null, d.today || todayISO(), S.myYear || new Date().getFullYear());
-  return ad.total + d.my_results.filter((x) => missingFields(x).length).length;
+  return ad.total + d.my_results.filter((x) => missingFields(x).length).length + pairInviteCount(d);
 }
 function myRacesCard(d) {
   const results = d.my_results;
@@ -1367,11 +1373,11 @@ function myRacesCard(d) {
   // «al día»: resultados sin poner, crónicas sin pasar y pagos que ya tocan (carrera dentro de una semana), lo siguiente y la racha
   const ad = alDia(d, S.chron instanceof Set ? S.chron : null, today, S.myYear || new Date().getFullYear());
   S.payDue = new Set(ad.items.filter((x) => x.type === 'pay').map((x) => x.id));
-  const datosN = S.preview ? 0 : results.filter((x) => missingFields(x).length).length, todoN = ad.total + datosN, pl = (n, a, b) => (n === 1 ? a : b);
-  const parts = [ad.counts.result ? `${ad.counts.result} resultado${pl(ad.counts.result, '', 's')}` : '', ad.counts.cron ? `${ad.counts.cron} crónica${pl(ad.counts.cron, '', 's')}` : '', ad.counts.pay ? `${ad.counts.pay} pago${pl(ad.counts.pay, '', 's')}` : '', datosN ? `${datosN} ${pl(datosN, 'carrera sin datos', 'carreras sin datos')}` : ''].filter(Boolean);
+  const datosN = S.preview ? 0 : results.filter((x) => missingFields(x).length).length, pairN = pairInviteCount(d), todoN = ad.total + datosN + pairN, pl = (n, a, b) => (n === 1 ? a : b);
+  const parts = [ad.counts.result ? `${ad.counts.result} resultado${pl(ad.counts.result, '', 's')}` : '', ad.counts.cron ? `${ad.counts.cron} crónica${pl(ad.counts.cron, '', 's')}` : '', ad.counts.pay ? `${ad.counts.pay} pago${pl(ad.counts.pay, '', 's')}` : '', datosN ? `${datosN} ${pl(datosN, 'carrera sin datos', 'carreras sin datos')}` : '', pairN ? `${pairN} ${pl(pairN, 'pareja por confirmar', 'parejas por confirmar')}` : ''].filter(Boolean);
   const todoTxt = !parts.length ? 'todo al día' : parts.length === 1 ? `falta${pl(todoN, '', 'n')} ${parts[0]}` : `${parts.slice(0, -1).join(', ')} y ${parts[parts.length - 1]}`;
   const heroId = mineReg.filter((g) => g.date >= today && !g.suspended).sort((a, b) => a.date.localeCompare(b.date))[0]?.id;
-  const todoTo = 'sec-after';
+  const todoTo = ad.total + datosN === 0 && pairN ? 'sec-cal' : 'sec-after';   // si solo hay parejas por confirmar, el aviso está en la carrera
   const sent = pastReg.filter((g) => g.my_result);        // ya puso su puesto: cuenta para el bono aunque la dirección aún no la haya pasado a resultados
   const upcoming = mineReg.filter((g) => g.date >= today && !g.suspended).sort((a, b) => a.date.localeCompare(b.date));
   const cancelled = mineReg.filter((g) => g.suspended).sort((a, b) => a.date.localeCompare(b.date));
@@ -1779,7 +1785,8 @@ function stagesBlock(g, kind = 'reg', { admin = false, mine = false } = {}) {
   const st = Array.isArray(g.stage_info) ? g.stage_info : [], tot = stageTotals(st), canEdit = admin || !S.preview;
   const dayName = (iso) => `${new Date(iso + 'T12:00:00Z').toLocaleDateString('es-ES', { weekday: 'short', timeZone: 'UTC' }).replace('.', '')} ${dayMon(iso)}`;
   const today = todayISO(), canRes = mine && !admin && !S.preview, pairLine = pairBlock(g, kind, { admin, mine });
-  const adminRes = (n) => admin ? (S.stageAll?.results || []).filter((x) => x.race_key === postKeyOf(g) && x.stage === n).map((x) => `<small class="stg-ar"><b>${esc(runnerNameOf(x.runner_id))}</b>: ${esc(stageResText({ position: x.position, general: x.general_position, time: x.time_seconds }))}</small>`).join('') : '';
+  const adminRes = (n) => !admin ? '' : (S.stageAll?.results || []).filter((x) => x.race_key === postKeyOf(g) && x.stage === n).map((x) => `<button type="button" class="stg-ar" data-act="stage-res-admin" data-kind="${kind}" data-id="${g.id}" data-n="${n}" data-r="${esc(x.runner_id)}"><span><b>${esc(runnerNameOf(x.runner_id))}</b>: ${esc(stageResText({ position: x.position, general: x.general_position, time: x.time_seconds }))}</span>${ico('pen')}</button>`).join('')
+    + (S.stageAll ? `<button type="button" class="stg-ar add" data-act="stage-res-admin" data-kind="${kind}" data-id="${g.id}" data-n="${n}">${ico('plus')}Resultado de un corredor</button>` : '');
   const row = (x, i) => {
     const r = S.myStages?.get(`${postKeyOf(g)}|${i + 1}`), done = x.date <= today;
     const txt = r ? stageResText(r) : '';
@@ -1792,10 +1799,10 @@ function stagesBlock(g, kind = 'reg', { admin = false, mine = false } = {}) {
     ${st.length ? `<ul class="stg-list">${st.map((x, i) => row(x, i)).join('')}</ul>` : '<p class="stg-empty">Sin datos por etapa: ponlas con su día, km y desnivel y cada una tendrá su historia.</p>'}</div>`;
 }
 /** Ventana para poner mi puesto y mi tiempo en una etapa. Devuelve {position, time}, {position:null,time:null} para quitarlos, o null si cancela. */
-function askStageResult(t, st, n, cur, partner) {
+function askStageResult(t, st, n, cur, partner, pick = null) {
   return new Promise((resolve) => {
     const dlg = document.getElementById('dialog'), num = (v) => { const s = String(v).trim(); return s === '' ? null : /^\d{1,4}$/.test(s) && Number(s) >= 1 ? Number(s) : NaN; };
-    dlg.innerHTML = `<form method="dialog" class="dlg stg-dlg"><h2>${ico('flag')} Mi resultado</h2><p><b>${esc(st.name || 'Etapa ' + n)}</b> · ${esc(t.name)}${partner ? `<br><small class="muted">Por parejas, con ${esc(partner)}: pon los datos de la pareja.</small>` : ''}</p>
+    dlg.innerHTML = `<form method="dialog" class="dlg stg-dlg"><h2>${ico('flag')} Mi resultado</h2><p><b>${esc(st.name || 'Etapa ' + n)}</b> · ${esc(t.name)}</p>${pick ? `<label>Corredor<select name="who"${pick.fixed ? ' disabled' : ''}>${pick.list.map((r) => `<option value="${esc(r.id)}"${r.id === pick.cur ? ' selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>` : ''}<p>${partner ? `<br><small class="muted">Por parejas, con ${esc(partner)}: pon los datos de la pareja.</small>` : ''}</p>
       <div class="stg-fields res3"><label>Puesto en tu categoría<input name="pos" inputmode="numeric" maxlength="4" value="${esc(cur?.position ?? '')}" placeholder="—" autocomplete="off"></label>
         <label>Puesto en la general<input name="gen" inputmode="numeric" maxlength="4" value="${esc(cur?.general ?? '')}" placeholder="—" autocomplete="off"></label></div>
       <label>Tiempo (h:mm:ss)<input name="time" inputmode="text" maxlength="9" value="${esc(cur?.time ? formatTime(cur.time) : '')}" placeholder="2:15:40" autocomplete="off"></label>
@@ -1808,9 +1815,9 @@ function askStageResult(t, st, n, cur, partner) {
       if (bad || empty) { ev.preventDefault(); toast(empty && !bad ? 'Pon al menos un dato.' : 'Revisa los puestos y el tiempo (por ejemplo 2:15:40).', true); }
     });
     dlg.onclose = () => {
-      if (dlg.returnValue === 'clear') return resolve({ position: null, general: null, time: null });
+      if (dlg.returnValue === 'clear') return resolve({ position: null, general: null, time: null, who: pick ? dlg.querySelector('[name=who]').value : null });
       if (dlg.returnValue !== 'ok') return resolve(null);
-      const r = read(); resolve({ position: r.position, general: r.general, time: r.time });
+      const r = read(); resolve({ position: r.position, general: r.general, time: r.time, who: pick ? dlg.querySelector('[name=who]').value : null });
     };
     dlg.returnValue = ''; dlg.showModal();
   });
@@ -6416,6 +6423,17 @@ const actions = {
     const base = { ...t, name: t.name, date: t.date }, cur = S.myStages?.get(`${postKeyOf(base)}|${n}`) || null;
     const r = await askStageResult(base, st, n, cur, S.myPairs?.get(postKeyOf(base))); if (r === null) return;
     const ok = await run(async () => { await api.runnerSetStageResult(S.code, kind, id, n, r.position, r.general, r.time); await loadStageResults(); if (kind === 'race') { S.team = null; await loadTeam(); } return true; }, r.position == null && r.general == null && r.time == null ? 'Resultado quitado' : 'Resultado de la etapa guardado');
+    if (ok) render();
+  },
+  async 'stage-res-admin'(el) {
+    const kind = el.dataset.kind, id = el.dataset.id, n = Number(el.dataset.n), cur0 = el.dataset.r || null;
+    const t = (kind === 'reg' ? S.data?.registrations : S.data?.races)?.find((x) => x.id === id), st = t?.stage_info?.[n - 1]; if (!st) return;
+    const ids = [...new Set((kind === 'reg' ? t.entries : t.results || []).map((x) => x.runner_id))], list = ids.map((rid) => ({ id: rid, name: runnerNameOf(rid) })).sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    if (!list.length) return toast('Todavía no hay corredores del club apuntados a esta carrera.', true);
+    const key = postKeyOf(t), find = (rid) => (S.stageAll?.results || []).find((x) => x.race_key === key && x.runner_id === rid && x.stage === n);
+    const c = cur0 ? find(cur0) : null;
+    const r = await askStageResult({ ...t }, st, n, c ? { position: c.position, general: c.general_position, time: c.time_seconds } : null, null, { list, cur: cur0 || list[0].id, fixed: !!cur0 }); if (r === null) return;
+    const ok = await run(async () => { await api.adminSetStageResult(key, r.who, n, r.position, r.general, r.time); await reload(); return true; }, r.position == null && r.general == null && r.time == null ? 'Resultado quitado' : 'Resultado de la etapa guardado');
     if (ok) render();
   },
   async 'pair-edit'(el) {
