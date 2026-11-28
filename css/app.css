@@ -3151,4 +3151,5 @@ button.stg-pair { cursor: pointer; } .stg-pair .ico { width: 16px; height: 16px;
 /* cada sección con su franja de color */
 .mt2 .sum-card, .mt2 .ar-card, .mt2 .cal-card, .mt2 .nums-block { position: relative; overflow: hidden; }
 .mt2 .card.ar-card::before, .mt2 .card.cal-card::before, .mt2 .card.nums-block::before { display: block; content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; }
-.mt2 .card.ar-card::before { background: var(--mt-todo); } .mt2 .card.cal-card::before { background: var(--mt-blue); } .mt2 .card.nums-block::before { background: var(--ok); }
+.mt2 .card.ar-card.st-todo::before { background: var(--mt-todo); } .mt2 .card.ar-card.st-ok::before { background: var(--ok); }
+.mt2 .card.ar-card.st-todo { background: color-mix(in srgb, var(--mt-todo) 6%, var(--card)); } .mt2 .card.cal-card::before { background: var(--mt-blue); } .mt2 .card.nums-block::before { background: var(--ok); }
